@@ -26,7 +26,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities) -> None:
 
         for select_info in STORAGE_SELECT_TYPES:
             select = FroniusModbusSelect(
-                platform_name = hub.entity_prefix,,
+                platform_name = hub.entity_prefix,
                 hub=hub,
                 device_info=hub.device_info_storage,
                 name = select_info[0],
@@ -37,7 +37,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities) -> None:
     # Add inverter select entities (export limit enable)
     for select_info in INVERTER_SELECT_TYPES:
         select = FroniusModbusSelect(
-            platform_name = hub.entity_prefix,,
+            platform_name = hub.entity_prefix,
             hub=hub,
             device_info=hub.device_info_inverter,
             name = select_info[0],

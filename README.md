@@ -12,8 +12,7 @@ Home assistant Custom Component for reading data from Fronius Gen24 Inverter and
 > You are using this module (and it's prerequisites/dependencies) at your own risk. Not me neither any of contributors to this or any prerequired/dependency project are responsible for damage in any kind caused by this project or any of its prerequsites/dependencies.
 
 # Installation
-
-HACS installation
+## HACS installation
 * Go to HACS
 * Click on the 3 dots in the top right corner.
 * Select "Custom repositories"
@@ -21,10 +20,11 @@ HACS installation
 * Select the 'integration' type.
 * Click the "ADD" button.
 
-Manual installation
+## Manual installation
 Copy contents of custom_components folder to your home-assistant config/custom_components folder.
 After reboot of Home-Assistant, this integration can be configured through the integration setup UI.
 
+## Inverter Setup
 Make sure modbus is enabled on the inverter. You can check by going into the web interface of the inverter and go to:
 "Communication" -> "Modbus"
 
@@ -35,6 +35,11 @@ And turn on:
 
 ![modbus settings](images/modbus_settings.png?raw=true "modbus")
 
+## Charging From Grid
+For Charging from Grid to work you must have it enabled in the Inverter. 
+Energy Management -> Battery Management -> SoC Settings
+Battery Charging from Other Sources: Enabled
+From other generators in the home network and from Public Grid: Checked
 
 > [!IMPORTANT]
 > Turn off scheduled (dis)charging in the web UI to avoid unexpected behavior.
@@ -43,12 +48,11 @@ And turn on:
 > When using multiple integrations that use pymodbus package it can lead to version conflicts as they will share 1 package in HA. This can be fixed by removing ALL integrations using pymodbus and modbus configuratio.yaml (for the build in integration into HA), rebooting HA and then reinstalling the integrations and the modbus configuration yaml.
 
 > [!IMPORTANT]
-> Update your GEN24 inverter firmware to 1.34.6-1 or higher otherwise battery charging might be limited.
+> Update your GEN24 inverter firmware to 1.34.6-1 or higher otherwise battery charging might be limited. Its recommended to keep the inverter up to date, this integration will only be tested on recent firmwares.
 
 # Usage
 
 ### Battery Storage
-
 ### Controls
 | Entity  | Description |
 | --- | --- |
@@ -65,7 +69,7 @@ And turn on:
 | PV Charge Limit | The storage can be charged with PV power at a limited rate. Limit will be set to maximum power after change.  |
 | Discharge Limit | The storage can be charged with PV power and discharged at a limited rate.  in Fronius Web UI. Limit will be set to maximum power after change. |
 | PV Charge and Discharge Limit | Allows setting both PV charge and discharge limits. Limits will be set to maximum power after change. |
-| Charge from Grid | The storage will be charged from the grid using the charge rate from 'Grid Charge Power'. Power will be set 0 after change. |
+| Charge from Grid | The storage will be charged from the grid using the charge rate from 'Grid Charge Power'. Power will be set 0 after change. Set the Grid Charge Power to a number in Watts, in a multiple of '10'. If the number is not rounded to 10, it will not work and does odd things like charging at 500W. If you need to press 'increment' to get it to charge, its likely the 10 issue. You do not need to fiddle with the 'Minimum Reserve' setting. |
 | Discharge to Grid | The storage will discharge to the gird using the discharge rate from 'Gird Discharge Power'. Power will be set 0 after change. |
 | Block discharging | The storage can only be charged with PV power. Charge limit will be set to maximum power. |
 | Block charging | The can only be discharged and won't be charged with PV power. Discharge limit will be set to maximum power. |

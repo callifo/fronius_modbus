@@ -24,7 +24,7 @@ STORAGE_CONTROL_MODE = {
     0: 'Auto',
     1: 'Charge',
     2: 'Discharge',
-    3: 'Change and Discharge',
+    3: 'Charge and Discharge',
 }
 
 CHARGE_STATUS = {

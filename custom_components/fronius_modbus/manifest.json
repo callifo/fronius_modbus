@@ -4,9 +4,9 @@
     "codeowners": ["@callifo"],
     "config_flow": true,
     "dependencies": [],
-    "documentation": "https://github.com/redpomodoro/fronius_modbus/",
+    "documentation": "https://github.com/callifo/fronius_modbus",
     "iot_class": "local_polling",
-    "issue_tracker": "https://github.com/redpomodoro/fronius_modbus/issues",
+    "issue_tracker": "https://github.com/callifo/fronius_modbus/issues",
     "requirements": ["pymodbus>=3.11.1"],
-    "version": "0.2.0"
+    "version": "0.2.3"
   }

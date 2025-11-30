@@ -635,37 +635,43 @@ class FroniusModbusClient(ExtModbusClient):
         await self.set_charge_rate(charge_rate)
 
     async def set_grid_charge_power(self, value):
+        """value is in W from HA, store percent internally."""
         if self.storage_extended_control_mode == 4:
             await self.set_discharge_rate_w(value * -1)
-            self.data['grid_charge_power'] = value
+            percent = (value / self.max_charge_rate_w) * 100 if self.max_charge_rate_w else 0
+            self.data['grid_charge_power'] = percent
         else:
             return
 
     async def set_grid_discharge_power(self, value):
+        """value is in W from HA, store percent internally."""
         if self.storage_extended_control_mode == 5:
             await self.set_charge_rate_w(value * -1)
-            self.data['grid_discharge_power'] = value
+            percent = (value / self.max_discharge_rate_w) * 100 if self.max_discharge_rate_w else 0
+            self.data['grid_discharge_power'] = percent
         else:
             return
         
     async def set_charge_limit(self, value):
-        if self.storage_extended_control_mode in [1,3,6]:
-            # only change when charge limit is used
+        """value is in W from HA, store percent internally."""
+        if self.storage_extended_control_mode in [1, 3, 6]:
             await self.set_charge_rate_w(value)
-            self.data['charge_limit'] = value
-        elif self.storage_extended_control_mode in [4,5,7]:
+            percent = (value / self.max_charge_rate_w) * 100 if self.max_charge_rate_w else 0
+            self.data['charge_limit'] = percent
+        elif self.storage_extended_control_mode in [4, 5, 7]:
             return
-        elif self.storage_extended_control_mode in [0,2]:
+        elif self.storage_extended_control_mode in [0, 2]:
             return
 
     async def set_discharge_limit(self, value):
-        if self.storage_extended_control_mode in [2,3,7]:
-            # only change when discharge limit is used
+        """value is in W from HA, store percent internally."""
+        if self.storage_extended_control_mode in [2, 3, 7]:
             await self.set_discharge_rate_w(value)
-            self.data['discharge_limit'] = value
-        elif self.storage_extended_control_mode in [4,5,6]:
+            percent = (value / self.max_discharge_rate_w) * 100 if self.max_discharge_rate_w else 0
+            self.data['discharge_limit'] = percent
+        elif self.storage_extended_control_mode in [1, 4, 5, 6]:
             return
-        elif self.storage_extended_control_mode in [0,1]:
+        elif self.storage_extended_control_mode in [0]:
             return
 
     async def set_charge_rate(self, charge_rate):

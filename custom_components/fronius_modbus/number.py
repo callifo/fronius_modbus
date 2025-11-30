@@ -73,7 +73,12 @@ class FroniusModbusNumber(FroniusModbusBaseEntity, NumberEntity):
     def state(self):
         """Return the state of the sensor."""
         if self._key in self._hub.data:
-            return self._hub.data[self._key]
+            if self._key in ['grid_discharge_power', 'discharge_limit']:
+                return round(self._hub.data[self._key] / 100.0 * self._hub.max_discharge_rate_w, 0)
+            elif self._key in ['grid_charge_power', 'charge_limit']:
+                return round(self._hub.data[self._key] / 100.0 * self._hub.max_charge_rate_w, 0)
+            else:
+                return self._hub.data[self._key]
         return None
 
     async def async_set_native_value(self, value: float) -> None:

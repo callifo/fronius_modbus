@@ -22,8 +22,8 @@ CONN_ADDRESS = 40231
 
 STORAGE_CONTROL_MODE = {
     0: 'Auto',
-    1: 'Charge',
-    2: 'Discharge',
+    1: 'Discharge',
+    2: 'Charge',
     3: 'Charge and Discharge',
 }
 

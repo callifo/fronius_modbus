@@ -728,7 +728,7 @@ class FroniusModbusClient(ExtModbusClient):
         grid_charge_power = self.data.get('grid_charge_power', 0)
 
         await self.change_settings(
-            mode=1,                # Charge
+            mode=2,                # Charge
             charge_limit=100,      # allow charging up to 100%
             discharge_limit=0,     # no discharging in this mode
             grid_charge_power=grid_charge_power,
@@ -742,7 +742,7 @@ class FroniusModbusClient(ExtModbusClient):
         grid_discharge_power = self.data.get('grid_discharge_power', 0)
 
         await self.change_settings(
-            mode=2,                # Discharge
+            mode=1,                # Discharge
             charge_limit=0,        # no charging in this mode
             discharge_limit=100,   # allow discharging up to 100%
             grid_discharge_power=grid_discharge_power,

@@ -35,6 +35,12 @@ And turn on:
 
 ![modbus settings](images/modbus_settings.png?raw=true "modbus")
 
+Where the inverter has an 'Insulation Warning' page, Insulation Measurement Mode must be set to 'Exact' (or Accurate) depending on the translation. If this is not set correctly, the integration will generate a lot of error messages and not function.
+
+"ValueError: Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit"
+
+![modbus settings](images/resistance.png?raw=true "resistance")
+
 ## Charging From Grid
 For Charging from Grid to work you must have it enabled in the Inverter. 
 Energy Management -> Battery Management -> SoC Settings

@@ -1035,7 +1035,7 @@ class Hub:
             if current < required:
                 raise Exception(f"pymodbus {current_version} found, please update to {self.PYMODBUS_VERSION} or higher")
             elif current > required:
-                _LOGGER.warning(f"newer pymodbus {current_version} found")
+                _LOGGER.info(f"newer pymodbus {current_version} found")
             _LOGGER.debug(f"pymodbus {current_version}")
         except Exception as e:
             _LOGGER.error(f"Error checking pymodbus version: {e}")

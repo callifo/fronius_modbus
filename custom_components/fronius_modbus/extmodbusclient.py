@@ -7,16 +7,16 @@ import struct
 import asyncio
 
 from pymodbus.client import AsyncModbusTcpClient
-try:
-    # For newer pymodbus versions (3.9.x+)
-    from pymodbus.pdu.pdu import unpack_bitstring
-except ImportError:
-    # For older pymodbus versions (3.8.x and below)
-    from pymodbus.utilities import unpack_bitstring
 from pymodbus.exceptions import ModbusIOException, ConnectionException
 from pymodbus import ExceptionResponse
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def unpack_bitstring(data: bytes | bytearray) -> list[bool]:
+    """Return pymodbus-compatible LSB-first bit values for each byte."""
+    return [bool(byte & (1 << bit)) for byte in data for bit in range(8)]
+
 
 class ExtModbusClient:
 
@@ -66,6 +66,36 @@ class ExtModbusClient:
     def connected(self) -> bool:
         return self._client.connected
 
+    async def _read_holding_registers_compat(self, address: int, count: int, unit_id: int):
+        try:
+            return await self._client.read_holding_registers(address=address, count=count, device_id=unit_id)
+        except TypeError as err:
+            if "device_id" not in str(err):
+                raise
+
+        try:
+            return await self._client.read_holding_registers(address=address, count=count, slave=unit_id)
+        except TypeError as err:
+            if "slave" not in str(err):
+                raise
+
+        return await self._client.read_holding_registers(address=address, count=count, unit=unit_id)
+
+    async def _write_registers_compat(self, address: int, payload: list[int], unit_id: int):
+        try:
+            return await self._client.write_registers(address=address, values=payload, device_id=unit_id)
+        except TypeError as err:
+            if "device_id" not in str(err):
+                raise
+
+        try:
+            return await self._client.write_registers(address=address, values=payload, slave=unit_id)
+        except TypeError as err:
+            if "slave" not in str(err):
+                raise
+
+        return await self._client.write_registers(address=address, values=payload, unit=unit_id)
+
     def validate(self, value, comparison, against):
         ops = {
             ">": operator.gt,
@@ -85,7 +115,7 @@ class ExtModbusClient:
         for attempt in range(retries+1):
             await self._check_and_reconnect()
             try:
-                data = await self._client.read_holding_registers(address=address, count=count, device_id=unit_id)
+                data = await self._read_holding_registers_compat(address=address, count=count, unit_id=unit_id)
             except ModbusIOException as e:
                 self._close_after_transport_error()
                 _LOGGER.debug(f'error reading registers. IO error retries: {attempt}/{retries} connected: {self._client.connected} address: {address} count: {count} unit id: {unit_id} error: {e}')
@@ -142,7 +172,7 @@ class ExtModbusClient:
         await self._check_and_reconnect()
 
         try:
-            result = await self._client.write_registers(address=address, values=payload, device_id=unit_id)
+            result = await self._write_registers_compat(address=address, payload=payload, unit_id=unit_id)
         except ModbusIOException as e:
             self._close_after_transport_error()
             raise Exception(f'write_registers: IO error {self._client.connected} {e.fcode} {e}')
@@ -187,6 +217,7 @@ class ExtModbusClient:
         if not (data_len := data_type.value[1]):
             byte_list = bytearray()
             if word_order == "little":
+                registers = list(registers)
                 registers.reverse()
             for x in registers:
                 byte_list.extend(int.to_bytes(x, 2, "big"))
@@ -206,6 +237,7 @@ class ExtModbusClient:
         for i in range(0, reg_len, data_len):
             regs = registers[i:i+data_len]
             if word_order == "little":
+                regs = list(regs)
                 regs.reverse()
             byte_list = bytearray()
             for x in regs:
@@ -282,4 +314,4 @@ class ExtModbusClient:
         return False
 
     def get_string_from_registers(self, regs):
-        return self.strip_escapes(self._client.convert_from_registers(regs, data_type = self._client.DATATYPE.STRING))
+        return self.strip_escapes(self.convert_from_registers(regs, data_type = self._client.DATATYPE.STRING))

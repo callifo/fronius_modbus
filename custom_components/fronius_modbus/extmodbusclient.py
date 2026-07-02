@@ -8,11 +8,18 @@ import asyncio
 
 from pymodbus.client import AsyncModbusTcpClient
 try:
-    # For newer pymodbus versions (3.9.x+)
     from pymodbus.pdu.pdu import unpack_bitstring
 except ImportError:
-    # For older pymodbus versions (3.8.x and below)
-    from pymodbus.utilities import unpack_bitstring
+    try:
+        from pymodbus.utilities import unpack_bitstring
+    except ImportError:
+        def unpack_bitstring(data: bytes) -> list[bool]:
+            result = []
+            for byte in data:
+                for i in range(8):
+                    result.append(bool(byte & (1 << i)))
+            return result
+
 from pymodbus.exceptions import ModbusIOException, ConnectionException
 from pymodbus import ExceptionResponse
 

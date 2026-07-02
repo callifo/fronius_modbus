@@ -221,7 +221,7 @@ class ExtModbusClient:
                 registers.reverse()
             for x in registers:
                 byte_list.extend(int.to_bytes(x, 2, "big"))
-            if data_type == cls.DATATYPE.STRING:
+            if getattr(data_type, "name", None) == "STRING":
                 trailing_nulls_begin = len(byte_list)
                 while trailing_nulls_begin > 0 and not byte_list[trailing_nulls_begin - 1]:
                     trailing_nulls_begin -= 1

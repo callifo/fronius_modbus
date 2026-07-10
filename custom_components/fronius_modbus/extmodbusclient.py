@@ -8,11 +8,18 @@ import asyncio
 
 from pymodbus.client import AsyncModbusTcpClient
 try:
-    # For newer pymodbus versions (3.9.x+)
-    from pymodbus.pdu.pdu import unpack_bitstring
+    # For pymodbus 3.13.x+
+    from pymodbus.pdu.utils import unpack_bitstring
 except ImportError:
-    # For older pymodbus versions (3.8.x and below)
-    from pymodbus.utilities import unpack_bitstring
+    try:
+        # For pymodbus 3.9.x-3.12.x
+        from pymodbus.pdu.pdu import unpack_bitstring
+    except ImportError:
+        try:
+            # For pymodbus 3.8.x and below
+            from pymodbus.utilities import unpack_bitstring
+        except ImportError as exc:
+            raise ImportError("cannot import unpack_bitstring from pymodbus") from exc
 from pymodbus.exceptions import ModbusIOException, ConnectionException
 from pymodbus import ExceptionResponse
 

@@ -67,6 +67,11 @@ class ExtModbusClient:
         return self._client.connected
 
     async def _read_holding_registers_compat(self, address: int, count: int, unit_id: int):
+        """Read registers using the device-address keyword supported by pymodbus.
+
+        pymodbus 3.10+ uses ``device_id``, versions 3.8 and 3.9 use
+        ``slave``, and older versions use ``unit``.
+        """
         try:
             return await self._client.read_holding_registers(address=address, count=count, device_id=unit_id)
         except TypeError as err:
@@ -82,6 +87,11 @@ class ExtModbusClient:
         return await self._client.read_holding_registers(address=address, count=count, unit=unit_id)
 
     async def _write_registers_compat(self, address: int, payload: list[int], unit_id: int):
+        """Write registers using the device-address keyword supported by pymodbus.
+
+        pymodbus 3.10+ uses ``device_id``, versions 3.8 and 3.9 use
+        ``slave``, and older versions use ``unit``.
+        """
         try:
             return await self._client.write_registers(address=address, values=payload, device_id=unit_id)
         except TypeError as err:

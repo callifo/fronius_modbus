@@ -11,7 +11,7 @@ from homeassistant.core import HomeAssistant
 from . import hub, migrations
 from .const import (
     API_USERNAME,
-    TECHNICIAN_USERNAME,
+    CONF_API_USERNAME,
     CONF_INVERTER_UNIT_ID,
     CONF_RESTRICT_MODBUS_TO_THIS_IP,
     DEFAULT_INVERTER_UNIT_ID,
@@ -49,6 +49,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubConfigEntry) -> bool:
     port = _entry_value(entry, CONF_PORT, DEFAULT_PORT)
     inverter_unit_id = _entry_value(entry, CONF_INVERTER_UNIT_ID, DEFAULT_INVERTER_UNIT_ID)
     scan_interval = _entry_value(entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+    api_username = _entry_value(entry, CONF_API_USERNAME, API_USERNAME)
     restrict_modbus_to_this_ip = _entry_value(
         entry,
         CONF_RESTRICT_MODBUS_TO_THIS_IP,
@@ -60,10 +61,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubConfigEntry) -> bool:
     api_token = await migrations.async_prepare_entry_token(hass, entry, host)
     await migrations.async_sync_reconfigure_issue(hass, entry, has_token=api_token is not None)
 
-    from .token_store import async_get_token_store
-    tech_token = await async_get_token_store(hass).async_load_token(host, TECHNICIAN_USERNAME)
-    _LOGGER.debug("Technician token for %s: %s", host, "found" if tech_token else "not found")
-
     entry.runtime_data = hub.Hub(
         hass=hass,
         name=name,
@@ -72,9 +69,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubConfigEntry) -> bool:
         inverter_unit_id=inverter_unit_id,
         meter_unit_ids=list(DEFAULT_METER_UNIT_IDS),
         scan_interval=scan_interval,
-        api_username=API_USERNAME if api_token else None,
+        api_username=api_username if api_token else None,
         api_token=api_token,
-        tech_token=tech_token,
         auto_enable_modbus=False,
         restrict_modbus_to_this_ip=restrict_modbus_to_this_ip,
     )

@@ -9,7 +9,14 @@ import voluptuous as vol
 from homeassistant import config_entries, exceptions
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.selector import TextSelector, TextSelectorConfig, TextSelectorType
+from homeassistant.helpers.selector import (
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
+)
 
 from .const import (
     CONF_API_PASSWORD,
@@ -27,6 +34,7 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     API_USERNAME,
+    API_USERNAMES,
     TECHNICIAN_USERNAME,
     SUPPORTED_MANUFACTURERS,
     SUPPORTED_MODELS,
@@ -116,7 +124,9 @@ def _expand_settings_input(
             payload[CONF_RESTRICT_MODBUS_TO_THIS_IP],
         )
     )
-    payload[CONF_API_USERNAME] = API_USERNAME
+    payload[CONF_API_USERNAME] = str(
+        user_input.get(CONF_API_USERNAME, payload[CONF_API_USERNAME])
+    ).strip().lower()
     payload.pop(CONF_API_PASSWORD, None)
     payload.pop("meter_modbus_unit_id", None)
     payload.pop("meter_modbus_unit_ids", None)
@@ -162,6 +172,16 @@ def _build_settings_schema(defaults: dict[str, Any]) -> vol.Schema:
                 default=defaults.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
             ): vol.Coerce(int),
             vol.Required(
+                CONF_API_USERNAME,
+                default=defaults.get(CONF_API_USERNAME, API_USERNAME),
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=list(API_USERNAMES),
+                    mode=SelectSelectorMode.LIST,
+                    translation_key="api_username",
+                )
+            ),
+            vol.Required(
                 CONF_RESTRICT_MODBUS_TO_THIS_IP,
                 default=defaults.get(
                     CONF_RESTRICT_MODBUS_TO_THIS_IP,
@@ -176,12 +196,6 @@ def _build_password_schema() -> vol.Schema:
     return vol.Schema(
         {
             vol.Required(CONF_API_PASSWORD): TextSelector(
-                TextSelectorConfig(
-                    type=TextSelectorType.PASSWORD,
-                    autocomplete="current-password",
-                )
-            ),
-            vol.Optional("technician_password", default=""): TextSelector(
                 TextSelectorConfig(
                     type=TextSelectorType.PASSWORD,
                     autocomplete="current-password",
@@ -222,7 +236,6 @@ def _validate_static_input(data: dict[str, Any]) -> None:
         raise _InvalidPort
     if data[CONF_SCAN_INTERVAL] < 5:
         raise _ScanIntervalTooShort
-
     all_addresses = [DEFAULT_METER_UNIT_IDS[0], data[CONF_INVERTER_UNIT_ID]]
     if len(all_addresses) > len(set(all_addresses)):
         _LOGGER.error("Modbus addresses are not unique %s", all_addresses)
@@ -249,16 +262,25 @@ def _should_apply_modbus_config(
     )
 
 
-async def _async_load_token(hass: HomeAssistant, host: str) -> dict[str, str] | None:
-    return await async_get_token_store(hass).async_load_token(host, API_USERNAME)
+async def _async_load_token(
+    hass: HomeAssistant,
+    host: str,
+    username: str,
+) -> dict[str, str] | None:
+    return await async_get_token_store(hass).async_load_token(host, username)
 
 
-async def _async_save_token(hass: HomeAssistant, host: str, token: dict[str, str]) -> None:
+async def _async_save_token(
+    hass: HomeAssistant,
+    host: str,
+    username: str,
+    token: dict[str, str],
+) -> None:
     await async_get_token_store(hass).async_save_token(
         host,
         realm=token["realm"],
         token=token["token"],
-        user=API_USERNAME,
+        user=username,
     )
 
 
@@ -316,7 +338,7 @@ async def _validate_input(
         data[CONF_INVERTER_UNIT_ID],
         list(DEFAULT_METER_UNIT_IDS),
         data[CONF_SCAN_INTERVAL],
-        api_username=API_USERNAME,
+        api_username=data[CONF_API_USERNAME],
         api_password=api_password or None,
         api_token=api_token,
         auto_enable_modbus=data.get(CONF_AUTO_ENABLE_MODBUS, DEFAULT_AUTO_ENABLE_MODBUS),
@@ -433,7 +455,11 @@ class TokenFlowMixin:
                     settings,
                     previous_settings,
                 )
-                token = await _async_load_token(self.hass, settings[CONF_HOST])
+                token = await _async_load_token(
+                    self.hass,
+                    settings[CONF_HOST],
+                    settings[CONF_API_USERNAME],
+                )
                 if token is None:
                     self._pending_flow_state = _PendingFlowState(
                         settings,
@@ -485,25 +511,14 @@ class TokenFlowMixin:
                     self.hass,
                     state.settings[CONF_HOST],
                     user_input.get(CONF_API_PASSWORD, ""),
+                    username=state.settings[CONF_API_USERNAME],
                 )
-                await _async_save_token(self.hass, state.settings[CONF_HOST], token)
-                tech_password = str(user_input.get("technician_password", "")).strip()
-                if tech_password:
-                    try:
-                        tech_token = await _async_mint_token(
-                            self.hass,
-                            state.settings[CONF_HOST],
-                            tech_password,
-                            username=TECHNICIAN_USERNAME,
-                        )
-                        await async_get_token_store(self.hass).async_save_token(
-                            state.settings[CONF_HOST],
-                            realm=tech_token["realm"],
-                            token=tech_token["token"],
-                            user=TECHNICIAN_USERNAME,
-                        )
-                    except Exception:
-                        _LOGGER.warning("Failed to store technician token, export limit control will be unavailable")
+                await _async_save_token(
+                    self.hass,
+                    state.settings[CONF_HOST],
+                    state.settings[CONF_API_USERNAME],
+                    token,
+                )
                 info = await _validate_input(
                     self.hass,
                     state.settings,

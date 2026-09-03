@@ -15,6 +15,7 @@ from homeassistant.helpers import issue_registry as ir
 from . import hub
 from .const import (
     API_USERNAME,
+    CONF_API_USERNAME,
     CONF_METER_UNIT_ID,
     CONF_METER_UNIT_IDS,
     CONF_RECONFIGURE_REQUIRED,
@@ -254,6 +255,8 @@ def _expected_entity_unique_ids(runtime_data: hub.Hub) -> set[str]:
     if runtime_data.web_api_configured:
         for definitions in _WEB_INVERTER_ENTITY_DEFINITIONS:
             _add_expected_keys(expected, runtime_data, _definition_keys(definitions))
+        if not runtime_data.tech_configured:
+            expected.discard(_entity_unique_id(runtime_data, "export_soft_limit"))
 
     if runtime_data.storage_configured:
         for definitions in _STORAGE_ENTITY_DEFINITIONS:
@@ -330,7 +333,8 @@ async def async_prepare_entry_token(
     entry: ConfigEntry,
     host: str,
 ) -> dict[str, str] | None:
-    token = await async_get_token_store(hass).async_load_token(host, API_USERNAME)
+    api_username = str(_entry_value(entry, CONF_API_USERNAME, API_USERNAME))
+    token = await async_get_token_store(hass).async_load_token(host, api_username)
     await _async_set_reconfigure_required(hass, entry, not bool(token))
     return token
 

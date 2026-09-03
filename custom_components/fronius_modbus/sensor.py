@@ -81,6 +81,8 @@ async def async_setup_entry(
 
     if hub.web_api_configured:
         for sensor_info in INVERTER_WEB_SENSOR_TYPES.values():
+            if sensor_info[1] == "export_soft_limit" and not hub.tech_configured:
+                continue
             translation_key = sensor_info[0]
             options = SENSOR_STATE_OPTIONS.get(translation_key)
             sensor = FroniusModbusSensor(

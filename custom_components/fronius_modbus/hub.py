@@ -23,6 +23,7 @@ from .const import (
     DOMAIN,
     ENTITY_PREFIX,
     API_USERNAME,
+    TECHNICIAN_USERNAME,
     SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX,
     MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX,
 )
@@ -227,7 +228,6 @@ class Hub:
         api_username: str | None = None,
         api_password: str | None = None,
         api_token: dict[str, str] | None = None,
-        tech_token: dict[str, str] | None = None,
         auto_enable_modbus: bool = True,
         restrict_modbus_to_this_ip: bool = False,
     ) -> None:
@@ -242,8 +242,8 @@ class Hub:
         self._config_entry: ConfigEntry | None = None
         self._auto_enable_modbus = auto_enable_modbus
         self._restrict_modbus_to_this_ip = restrict_modbus_to_this_ip
+        self._api_username = api_username
         self._webclient: FroniusWebClient | None = None
-        self._tech_webclient: FroniusWebClient | None = None
 
         self._id = f'{name.lower()}_{host.lower().replace('.','')}'
         self.online = True
@@ -255,13 +255,6 @@ class Hub:
                 username=api_username,
                 password=api_password or "",
                 token=api_token,
-            )
-        if tech_token:
-            from .const import TECHNICIAN_USERNAME
-            self._tech_webclient = FroniusWebClient(
-                host=host,
-                username=TECHNICIAN_USERNAME,
-                token=tech_token,
             )
         self._scan_interval = timedelta(seconds=scan_interval)
         self.coordinator = None
@@ -714,7 +707,10 @@ class Hub:
         _LOGGER.warning("Disabling Fronius web API for %s after auth failure: %s", self._host, err)
         self._webclient = None
         self._clear_web_api_data()
-        await async_get_token_store(self._hass).async_delete_token(self._host, API_USERNAME)
+        await async_get_token_store(self._hass).async_delete_token(
+            self._host,
+            self._api_username or API_USERNAME,
+        )
         await self._async_sync_solar_api_warning()
 
         if self._config_entry is not None:
@@ -729,18 +725,6 @@ class Hub:
                 translation_placeholders={"entry_title": self._config_entry.title or self._name},
                 data={"entry_id": self._config_entry.entry_id},
             )
-
-    async def _async_tech_web_job(self, func, *args):
-        """Run a tech-client job; on auth failure clear only _tech_webclient."""
-        if not self._tech_webclient:
-            return None
-        try:
-            return await self._hass.async_add_executor_job(func, *args)
-        except FroniusWebAuthError as err:
-            _LOGGER.warning("Disabling Fronius technician web API for %s after auth failure: %s", self._host, err)
-            self._tech_webclient = None
-            self.data["export_soft_limit"] = None
-            return None
 
     async def _async_web_job(
         self,
@@ -891,9 +875,7 @@ class Hub:
             if isinstance(battery_config, dict):
                 self._apply_web_battery_config(battery_config)
 
-        if self._tech_webclient:
-            export_limit_config = await self._async_tech_web_job(self._tech_webclient.get_export_limit_config)
-        elif self._webclient:
+        if self.tech_configured:
             export_limit_config = await self._async_web_job(self._webclient.get_export_limit_config)
         else:
             export_limit_config = None
@@ -1142,7 +1124,7 @@ class Hub:
 
     @property
     def tech_configured(self) -> bool:
-        return self._tech_webclient is not None
+        return self.web_api_configured and self._api_username == TECHNICIAN_USERNAME
 
     @property
     def meter_configured(self):
@@ -1348,10 +1330,13 @@ class Hub:
         await self._client.set_conn_status(enable)
 
     async def set_export_soft_limit(self, value: float) -> None:
-        if not self._tech_webclient:
-            raise RuntimeError("Technician credentials not configured — enter the technician password via Configure")
-        await self._async_tech_web_job(
-            self._tech_webclient.set_export_soft_limit,
+        if not self.tech_configured:
+            raise RuntimeError(
+                "Technician access is not selected — select it via Configure"
+            )
+        await self._async_web_job(
+            self._webclient.set_export_soft_limit,
             int(round(value)),
+            raise_on_auth_failure=True,
         )
         self.data["export_soft_limit"] = int(round(value))

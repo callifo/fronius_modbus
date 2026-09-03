@@ -39,6 +39,7 @@ from .const import (
     STORAGE_MODBUS_NUMBER_TYPES,
     STORAGE_MODBUS_SELECT_TYPES,
     STORAGE_SENSOR_TYPES,
+    TECHNICIAN_USERNAME,
 )
 from .token_store import async_get_token_store
 
@@ -47,7 +48,7 @@ _TRANSLATIONS_DIR = Path(__file__).resolve().parent / "translations"
 _TRANSLATION_CACHE: dict[str, dict] = {}
 
 _TARGET_VERSION = 1
-_TARGET_MINOR_VERSION = 9
+_TARGET_MINOR_VERSION = 10
 
 _LEGACY_METER_DEVICE_RE = re.compile(r".*_meter_?\d+")
 _V019_MPPT_UNIQUE_ID_MAPPINGS = (
@@ -305,7 +306,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.error("Unsupported config entry version: %s", entry.version)
         return False
 
-    if entry.version == _TARGET_VERSION and entry.minor_version < _TARGET_MINOR_VERSION:
+    if entry.version == _TARGET_VERSION and entry.minor_version < 9:
         new_data = dict(entry.data)
         new_options = dict(entry.options)
 
@@ -321,8 +322,28 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             data=new_data,
             options=new_options,
             version=_TARGET_VERSION,
-            minor_version=_TARGET_MINOR_VERSION,
+            minor_version=9,
             title=_updated_entry_title(entry),
+        )
+
+    if entry.version == _TARGET_VERSION and entry.minor_version < _TARGET_MINOR_VERSION:
+        host = str(_entry_value(entry, CONF_HOST, "")).strip()
+        api_username = API_USERNAME
+        if host and await async_get_token_store(hass).async_has_token(
+            host, TECHNICIAN_USERNAME
+        ):
+            api_username = TECHNICIAN_USERNAME
+
+        new_data = dict(entry.data)
+        new_options = dict(entry.options)
+        new_data[CONF_API_USERNAME] = api_username
+        new_options[CONF_API_USERNAME] = api_username
+        hass.config_entries.async_update_entry(
+            entry,
+            data=new_data,
+            options=new_options,
+            version=_TARGET_VERSION,
+            minor_version=_TARGET_MINOR_VERSION,
         )
 
     return True

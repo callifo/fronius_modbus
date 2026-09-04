@@ -4,34 +4,36 @@
     "step": {
       "user": {
         "title": "Fronius-System einrichten",
-        "description": "Gib den Host, das Aktualisierungsintervall und die Modbus-IP-Beschränkung ein. Mindestintervall: 5 Sekunden. Wenn für diesen Host kein gespeicherter Token existiert, wird im nächsten Schritt nach dem Kundenpasswort gefragt.",
+        "description": "Gib den Host ein, wähle die lokale Web-API-Zugriffsrolle und konfiguriere das Aktualisierungsintervall sowie die Modbus-IP-Beschränkung. Der Technikerzugriff aktiviert zusätzlich die Export-Soft-Limit-Steuerung. Mindestintervall: 5 Sekunden.",
         "data": {
           "host": "Host",
+          "api_username": "Web-API-Zugriffsrolle",
           "scan_interval": "Aktualisierungsintervall (Sekunden)",
           "restrict_modbus_to_this_ip": "Modbus auf diese IP beschränken"
         }
       },
       "user_password": {
-        "title": "Kundenpasswort",
-        "description": "Gib das Kundenpasswort fuer {entry_title} ({host}) ein, um den gespeicherten Token zu erstellen oder zu aktualisieren. Das Passwort wird nicht im Konfigurationseintrag gespeichert.",
+        "title": "Web-API-Passwort",
+        "description": "Gib das Passwort für die ausgewählte Web-API-Rolle auf {entry_title} ({host}) ein, um den gespeicherten Token zu erstellen oder zu aktualisieren. Das Passwort wird nicht im Konfigurationseintrag gespeichert.",
         "data": {
-          "api_password": "Kundenpasswort"
+          "api_password": "Passwort"
         }
       },
       "reconfigure": {
         "title": "Fronius-System prüfen",
-        "description": "Prüfe Host, Aktualisierungsintervall und Modbus-IP-Beschränkung. Mindestintervall: 5 Sekunden. Wenn der gespeicherte Token fehlt oder ungültig ist, wird im nächsten Schritt nach dem Kundenpasswort gefragt.",
+        "description": "Prüfe Host, lokale Web-API-Zugriffsrolle, Aktualisierungsintervall und Modbus-IP-Beschränkung. Der Technikerzugriff aktiviert zusätzlich die Export-Soft-Limit-Steuerung. Mindestintervall: 5 Sekunden.",
         "data": {
           "host": "Host",
+          "api_username": "Web-API-Zugriffsrolle",
           "scan_interval": "Aktualisierungsintervall (Sekunden)",
           "restrict_modbus_to_this_ip": "Modbus auf diese IP beschränken"
         }
       },
       "reconfigure_password": {
-        "title": "Kundenpasswort",
-        "description": "Gib das Kundenpasswort fuer {entry_title} ({host}) ein, um den gespeicherten Token zu erstellen oder zu aktualisieren. Das Passwort wird nicht im Konfigurationseintrag gespeichert.",
+        "title": "Web-API-Passwort",
+        "description": "Gib das Passwort für die ausgewählte Web-API-Rolle auf {entry_title} ({host}) ein, um den gespeicherten Token zu erstellen oder zu aktualisieren. Das Passwort wird nicht im Konfigurationseintrag gespeichert.",
         "data": {
-          "api_password": "Kundenpasswort"
+          "api_password": "Passwort"
         }
       }
     },
@@ -46,9 +48,17 @@
       "unknown": "Unbekannter Fehler",
       "scan_interval_too_short": "Das Mindestintervall für die Aktualisierung beträgt 5 Sekunden.",
       "modbus_address_conflict": "Modbus-IDs sind nicht eindeutig",
-      "missing_api_password": "Das Kundenpasswort ist erforderlich.",
-      "invalid_api_credentials": "Kundenanmeldung fehlgeschlagen.",
+      "missing_api_password": "Für die ausgewählte Web-API-Rolle ist ein Passwort erforderlich.",
+      "invalid_api_credentials": "Die Anmeldung für die ausgewählte Web-API-Rolle ist fehlgeschlagen.",
       "cannot_resolve_local_ip": "Die Home-Assistant-IP konnte nicht ermittelt werden."
+    }
+  },
+  "selector": {
+    "api_username": {
+      "options": {
+        "customer": "Kunde",
+        "technician": "Techniker"
+      }
     }
   },
   "entity": {
@@ -475,18 +485,19 @@
         "step": {
           "init": {
             "title": "Fronius-System prüfen",
-            "description": "Der Eintrag \"{entry_title}\" benötigt einen gültigen Kundentoken. Prüfe Host, Aktualisierungsintervall und Modbus-IP-Beschränkung. Im nächsten Schritt wird nur bei Bedarf nach dem Kundenpasswort gefragt.",
+            "description": "Der Eintrag \"{entry_title}\" benötigt einen gültigen Token für die ausgewählte Web-API-Rolle. Prüfe Host, Zugriffsrolle, Aktualisierungsintervall und Modbus-IP-Beschränkung. Im nächsten Schritt wird nur bei Bedarf nach dem entsprechenden Passwort gefragt.",
             "data": {
               "host": "Host",
+              "api_username": "Web-API-Zugriffsrolle",
               "scan_interval": "Aktualisierungsintervall (Sekunden)",
               "restrict_modbus_to_this_ip": "Modbus auf diese IP beschränken"
             }
           },
           "password": {
-            "title": "Kundenpasswort",
-            "description": "Gib das Kundenpasswort fuer {entry_title} ({host}) ein, um den gespeicherten Token zu erstellen oder zu aktualisieren. Das Passwort wird nicht im Konfigurationseintrag gespeichert.",
+            "title": "Web-API-Passwort",
+            "description": "Gib das Passwort für die ausgewählte Web-API-Rolle auf {entry_title} ({host}) ein, um den gespeicherten Token zu erstellen oder zu aktualisieren. Das Passwort wird nicht im Konfigurationseintrag gespeichert.",
             "data": {
-              "api_password": "Kundenpasswort"
+              "api_password": "Passwort"
             }
           }
         },
@@ -498,8 +509,8 @@
           "unknown": "Unbekannter Fehler",
           "scan_interval_too_short": "Das Mindestintervall für die Aktualisierung beträgt 5 Sekunden.",
           "modbus_address_conflict": "Modbus-IDs sind nicht eindeutig",
-          "missing_api_password": "Das Kundenpasswort ist erforderlich.",
-          "invalid_api_credentials": "Kundenanmeldung fehlgeschlagen.",
+          "missing_api_password": "Für die ausgewählte Web-API-Rolle ist ein Passwort erforderlich.",
+          "invalid_api_credentials": "Die Anmeldung für die ausgewählte Web-API-Rolle ist fehlgeschlagen.",
           "cannot_resolve_local_ip": "Die Home-Assistant-IP konnte nicht ermittelt werden."
         },
         "abort": {
@@ -535,7 +546,7 @@
         },
         "error": {
           "cannot_connect": "Verbindung zum Wechselrichter fehlgeschlagen.",
-          "invalid_api_credentials": "Kundenanmeldung fehlgeschlagen.",
+          "invalid_api_credentials": "Die Anmeldung für die ausgewählte Web-API-Rolle ist fehlgeschlagen.",
           "unknown": "Unbekannter Fehler"
         },
         "abort": {
@@ -552,18 +563,19 @@
     "step": {
       "init": {
         "title": "Fronius-System einrichten",
-        "description": "Lege Host, Aktualisierungsintervall und Modbus-IP-Beschränkung fest. Mindestintervall: 5 Sekunden. Wenn der gespeicherte Token fehlt oder ungültig ist, wird im nächsten Schritt nach dem Kundenpasswort gefragt.",
+        "description": "Lege Host, lokale Web-API-Zugriffsrolle, Aktualisierungsintervall und Modbus-IP-Beschränkung fest. Der Technikerzugriff aktiviert zusätzlich die Export-Soft-Limit-Steuerung. Mindestintervall: 5 Sekunden.",
         "data": {
           "host": "Host",
+          "api_username": "Web-API-Zugriffsrolle",
           "scan_interval": "Aktualisierungsintervall (Sekunden)",
           "restrict_modbus_to_this_ip": "Modbus auf diese IP beschränken"
         }
       },
       "password": {
-        "title": "Kundenpasswort",
-        "description": "Gib das Kundenpasswort fuer {entry_title} ({host}) ein, um den gespeicherten Token zu erstellen oder zu aktualisieren. Das Passwort wird nicht im Konfigurationseintrag gespeichert.",
+        "title": "Web-API-Passwort",
+        "description": "Gib das Passwort für die ausgewählte Web-API-Rolle auf {entry_title} ({host}) ein, um den gespeicherten Token zu erstellen oder zu aktualisieren. Das Passwort wird nicht im Konfigurationseintrag gespeichert.",
         "data": {
-          "api_password": "Kundenpasswort"
+          "api_password": "Passwort"
         }
       }
     },
@@ -575,8 +587,8 @@
       "unknown": "Unbekannter Fehler",
       "scan_interval_too_short": "Das Mindestintervall für die Aktualisierung beträgt 5 Sekunden.",
       "modbus_address_conflict": "Modbus-IDs sind nicht eindeutig",
-      "missing_api_password": "Das Kundenpasswort ist erforderlich.",
-      "invalid_api_credentials": "Kundenanmeldung fehlgeschlagen.",
+      "missing_api_password": "Für die ausgewählte Web-API-Rolle ist ein Passwort erforderlich.",
+      "invalid_api_credentials": "Die Anmeldung für die ausgewählte Web-API-Rolle ist fehlgeschlagen.",
       "cannot_resolve_local_ip": "Die Home-Assistant-IP konnte nicht ermittelt werden."
     }
   }

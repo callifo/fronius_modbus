@@ -6,6 +6,7 @@ import logging
 import re
 import time
 from datetime import timedelta
+from functools import wraps
 from typing import Any
 from importlib.metadata import version
 from homeassistant.config_entries import ConfigEntry
@@ -34,6 +35,15 @@ _SOLAR_API_WARNING_TRANSLATION_KEY = "solar_api_low_firmware"
 _SOLAR_API_MINIMUM_VERSION = (1, 40, 7, 1)
 _SOLAR_API_MINIMUM_VERSION_TEXT = "1.40.7-1"
 _SOLAR_API_FIRMWARE_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)(?:-(\d+))?$")
+
+
+def _serialized_write(func):
+    @wraps(func)
+    async def wrapper(self, *args, **kwargs):
+        async with self._write_lock:
+            return await func(self, *args, **kwargs)
+
+    return wrapper
 
 
 def _export_limit_summary(config: dict[str, Any] | None) -> dict[str, Any]:
@@ -258,7 +268,7 @@ class Hub:
             )
         self._scan_interval = timedelta(seconds=scan_interval)
         self.coordinator = None
-        self._busy = False
+        self._write_lock = asyncio.Lock()
         self._battery_write_transition_until = 0.0
         self._battery_write_transition_warned = False
         self._delayed_web_refresh_task: asyncio.Task | None = None
@@ -266,23 +276,6 @@ class Hub:
         self._last_good_load_w: float | None = None
         self._last_good_inverter_power_w: float | None = None
         self._consecutive_bad_load_polls = 0
-
-    def toggle_busy(func):
-        async def wrapper(self, *args, **kwargs):
-            if self._busy:
-                return
-            self._busy = True
-            error = None
-            try:
-                result = await func(self, *args, **kwargs)
-            except Exception as e:
-                _LOGGER.warning(f'Exception in wrapper {e}')
-                error = e
-            self._busy = False
-            if not error is None:
-                raise error
-            return result
-        return wrapper
 
     def _meter_prefix(self, unit_id: int) -> str:
         return f"meter_{int(unit_id)}_"
@@ -896,7 +889,7 @@ class Hub:
 
         await self._async_sync_solar_api_warning()
 
-    @toggle_busy
+    @_serialized_write
     async def set_solar_api_enabled(self, enabled: bool) -> None:
         if not self._webclient:
             return
@@ -909,7 +902,7 @@ class Hub:
         self.data["api_solar_api_enabled"] = bool(enabled)
         await self._async_sync_solar_api_warning()
 
-    @toggle_busy
+    @_serialized_write
     async def reset_modbus_control(self) -> None:
         if not self._webclient:
             return
@@ -1146,7 +1139,7 @@ class Hub:
     def storage_extended_control_mode(self):
         return self._client.storage_extended_control_mode
 
-    @toggle_busy
+    @_serialized_write
     async def set_mode(self, mode):
         if mode == 0:
             await self._client.set_auto_mode()
@@ -1176,7 +1169,7 @@ class Hub:
         elif mode == 7:
             await self._client.set_block_charge_mode()
 
-    @toggle_busy
+    @_serialized_write
     async def set_soc_minimum(self, value):
         soc_minimum = self._require_whole_number(value, 'SoC Minimum')
         if soc_minimum < 5 or soc_minimum > 100:
@@ -1188,23 +1181,23 @@ class Hub:
         if self._webclient and self._api_battery_mode_is_manual():
             await self._set_api_soc_manual(soc_min=soc_minimum, control_name='SoC Minimum')
 
-    @toggle_busy
+    @_serialized_write
     async def set_charge_limit(self, value):
         await self._client.set_charge_limit(value)
 
-    @toggle_busy
+    @_serialized_write
     async def set_discharge_limit(self, value):
         await self._client.set_discharge_limit(value)
 
-    @toggle_busy
+    @_serialized_write
     async def set_grid_charge_power(self, value):
         await self._client.set_grid_charge_power(value)
            
-    @toggle_busy
+    @_serialized_write
     async def set_grid_discharge_power(self, value):
         await self._client.set_grid_discharge_power(value)
 
-    @toggle_busy
+    @_serialized_write
     async def set_api_battery_mode(self, mode: int):
         if not self._webclient:
             return
@@ -1234,7 +1227,7 @@ class Hub:
             self.data['soc_maximum'] = 100
         self._start_battery_write_transition('Battery API mode')
 
-    @toggle_busy
+    @_serialized_write
     async def set_api_battery_power(self, value: float):
         if not self._webclient:
             return
@@ -1251,7 +1244,7 @@ class Hub:
         self._set_effective_api_battery_mode(1, 'manual')
         self._start_battery_write_transition('Target feed in')
 
-    @toggle_busy
+    @_serialized_write
     async def set_api_soc_values(
         self,
         soc_max: int | None = None,
@@ -1300,7 +1293,7 @@ class Hub:
         self.data['api_charge_from_ac'] = next_charge_from_ac
         self._start_battery_write_transition('battery charge source')
 
-    @toggle_busy
+    @_serialized_write
     async def set_api_charge_sources(
         self,
         *,
@@ -1312,23 +1305,27 @@ class Hub:
             charge_from_ac=charge_from_ac,
         )
 
+    @_serialized_write
     async def set_ac_limit_rate(self, value):
         await self._client.set_ac_limit_rate(value)
 
+    @_serialized_write
     async def set_ac_limit_enable(self, value):
         await self._client.set_ac_limit_enable(value)
 
-    @toggle_busy
+    @_serialized_write
     async def set_power_factor(self, value):
         await self._client.set_power_factor(value)
 
-    @toggle_busy
+    @_serialized_write
     async def set_power_factor_enable(self, value):
         await self._client.set_power_factor_enable(value)
 
+    @_serialized_write
     async def set_conn_status(self, enable):
         await self._client.set_conn_status(enable)
 
+    @_serialized_write
     async def set_export_soft_limit(self, value: float) -> None:
         if not self.tech_configured:
             raise RuntimeError(

@@ -155,10 +155,17 @@ async def test_derived_values_need_a_fresh_inverter_reading(coordinator, inverte
     assert coordinator.data.grid_status is None
 
 
+# Model 124 WChaMax and the model 120 rate ratings in the captured fixture.
+STORAGE_WCHAMAX_ADDRESS = 40345
+NAMEPLATE_MAX_CHA_RTE_ADDRESS = 40144
+NAMEPLATE_MAX_DIS_CHA_RTE_ADDRESS = 40146
+
+
 async def test_the_nameplate_rates_replace_the_fallback_once_read(
     coordinator, inverter_unit, monkeypatch
 ):
     """Audit F09: a first poll without model 120 fixed the storage control on 11000 W."""
+    inverter_unit.load_raw({"holding": {STORAGE_WCHAMAX_ADDRESS: 0}})
     original_update = Nameplate.async_update
     calls = {"failed": False}
 
@@ -175,6 +182,32 @@ async def test_the_nameplate_rates_replace_the_fallback_once_read(
     await coordinator.async_refresh()
     assert coordinator.storage_control.max_charge_rate_w == 10240
     assert coordinator.storage_control.max_discharge_rate_w == 10240
+
+
+async def test_the_rate_percentages_are_relative_to_wchamax(coordinator, inverter_unit):
+    """Fronius: InWRte/OutWRte are percentages of WChaMax (model 124), not of the nameplate ratings."""
+    inverter_unit.load_raw({"holding": {STORAGE_WCHAMAX_ADDRESS: 8000}})
+    await coordinator.async_refresh()
+    assert coordinator.storage_control.max_charge_rate_w == 8000
+    assert coordinator.storage_control.max_discharge_rate_w == 8000
+
+
+async def test_a_missing_wchamax_falls_back_to_the_nameplate(
+    coordinator, inverter_unit
+):
+    inverter_unit.load_raw({"holding": {STORAGE_WCHAMAX_ADDRESS: 0}})
+    await coordinator.async_refresh()
+    assert coordinator.storage_control.max_charge_rate_w == 10240
+    inverter_unit.load_raw(
+        {
+            "holding": {
+                NAMEPLATE_MAX_CHA_RTE_ADDRESS: 0,
+                NAMEPLATE_MAX_DIS_CHA_RTE_ADDRESS: 0,
+            }
+        }
+    )
+    await coordinator.async_refresh()
+    assert coordinator.storage_control.max_charge_rate_w == DEFAULT_MAX_RATE_W
 
 
 # A register inside the model-160 block of the captured fixture: the block read fails,

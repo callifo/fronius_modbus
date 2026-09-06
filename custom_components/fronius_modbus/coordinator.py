@@ -241,20 +241,27 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
     def _refresh_storage_control(self) -> None:
         """Build the storage control once, then keep its rate maxima current.
 
-        A first poll without model 120 built it on the fallback maximum; every
-        later nameplate read refreshes it (audit F09), the same way
-        max_power_w follows the settings.
+        Fronius defines InWRte/OutWRte as percentages of WChaMax (model 124);
+        the nameplate ratings only stand in for a device that reports no
+        WChaMax. A first poll without either built it on the fallback maximum;
+        every later read refreshes it (audit F09), the same way max_power_w
+        follows the settings.
         """
         device = self.device
         if device.storage is None:
             return
         nameplate = device.nameplate
+        reference = device.storage.w_cha_max
         max_charge = (
-            nameplate.max_cha_rte if nameplate else None
-        ) or DEFAULT_MAX_RATE_W
+            reference
+            or (nameplate.max_cha_rte if nameplate else None)
+            or DEFAULT_MAX_RATE_W
+        )
         max_discharge = (
-            nameplate.max_dis_cha_rte if nameplate else None
-        ) or DEFAULT_MAX_RATE_W
+            reference
+            or (nameplate.max_dis_cha_rte if nameplate else None)
+            or DEFAULT_MAX_RATE_W
+        )
         if self.storage_control is None:
             self.storage_control = StorageControl(
                 device.storage,

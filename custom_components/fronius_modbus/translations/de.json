@@ -16,7 +16,8 @@
         "title": "Kundenpasswort",
         "description": "Gib das Kundenpasswort fuer {entry_title} ({host}) ein, um den gespeicherten Token zu erstellen oder zu aktualisieren. Das Passwort wird nicht im Konfigurationseintrag gespeichert.",
         "data": {
-          "api_password": "Kundenpasswort"
+          "api_password": "Kundenpasswort",
+          "technician_password": "Technikerpasswort (optional)"
         }
       },
       "reconfigure": {
@@ -33,7 +34,8 @@
         "title": "Kundenpasswort",
         "description": "Gib das Kundenpasswort fuer {entry_title} ({host}) ein, um den gespeicherten Token zu erstellen oder zu aktualisieren. Das Passwort wird nicht im Konfigurationseintrag gespeichert.",
         "data": {
-          "api_password": "Kundenpasswort"
+          "api_password": "Kundenpasswort",
+          "technician_password": "Technikerpasswort (optional)"
         }
       }
     },
@@ -50,7 +52,8 @@
       "modbus_address_conflict": "Modbus-IDs sind nicht eindeutig",
       "missing_api_password": "Das Kundenpasswort ist erforderlich.",
       "invalid_api_credentials": "Kundenanmeldung fehlgeschlagen.",
-      "cannot_resolve_local_ip": "Die Home-Assistant-IP konnte nicht ermittelt werden."
+      "cannot_resolve_local_ip": "Die Home-Assistant-IP konnte nicht ermittelt werden.",
+      "already_configured": "Ein anderer Eintrag verwendet diesen Host bereits."
     }
   },
   "entity": {
@@ -509,7 +512,8 @@
           "modbus_address_conflict": "Modbus-IDs sind nicht eindeutig",
           "missing_api_password": "Das Kundenpasswort ist erforderlich.",
           "invalid_api_credentials": "Kundenanmeldung fehlgeschlagen.",
-          "cannot_resolve_local_ip": "Die Home-Assistant-IP konnte nicht ermittelt werden."
+          "cannot_resolve_local_ip": "Die Home-Assistant-IP konnte nicht ermittelt werden.",
+          "already_configured": "Ein anderer Eintrag verwendet diesen Host bereits."
         },
         "abort": {
           "entry_not_found": "Der Fronius-Eintrag existiert nicht mehr."
@@ -545,7 +549,8 @@
         "error": {
           "cannot_connect": "Verbindung zum Wechselrichter fehlgeschlagen.",
           "invalid_api_credentials": "Kundenanmeldung fehlgeschlagen.",
-          "unknown": "Unbekannter Fehler"
+          "unknown": "Unbekannter Fehler",
+          "already_configured": "Ein anderer Eintrag verwendet diesen Host bereits."
         },
         "abort": {
           "entry_not_found": "Der Fronius-Eintrag existiert nicht mehr.",
@@ -571,9 +576,10 @@
       },
       "password": {
         "title": "Kundenpasswort",
-        "description": "Gib das Kundenpasswort fuer {entry_title} ({host}) ein, um den gespeicherten Token zu erstellen oder zu aktualisieren. Das Passwort wird nicht im Konfigurationseintrag gespeichert.",
+        "description": "Gib das Kundenpasswort für {entry_title} ({host}) ein, um den gespeicherten Token zu erstellen oder zu erneuern, oder lass das Feld leer, um den gespeicherten zu behalten. Das Technikerpasswort schaltet die Einspeisebegrenzung frei. Passwörter werden nicht im Konfigurationseintrag gespeichert.",
         "data": {
-          "api_password": "Kundenpasswort"
+          "api_password": "Kundenpasswort",
+          "technician_password": "Technikerpasswort (optional)"
         }
       }
     },
@@ -587,7 +593,8 @@
       "modbus_address_conflict": "Modbus-IDs sind nicht eindeutig",
       "missing_api_password": "Das Kundenpasswort ist erforderlich.",
       "invalid_api_credentials": "Kundenanmeldung fehlgeschlagen.",
-      "cannot_resolve_local_ip": "Die Home-Assistant-IP konnte nicht ermittelt werden."
+      "cannot_resolve_local_ip": "Die Home-Assistant-IP konnte nicht ermittelt werden.",
+      "already_configured": "Ein anderer Eintrag verwendet diesen Host bereits."
     }
   }
 }

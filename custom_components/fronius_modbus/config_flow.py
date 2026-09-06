@@ -61,6 +61,9 @@ class _PendingFlowState:
     settings: dict[str, Any]
     previous_host: str | None
     apply_modbus_config: bool
+    # Set when the password step is shown although a token exists (Configure):
+    # an empty password then keeps this token (audit F11).
+    existing_token: dict[str, str] | None = None
 
 
 class _CannotConnect(exceptions.HomeAssistantError):
@@ -81,6 +84,10 @@ class _UnsupportedHardware(exceptions.HomeAssistantError):
 
 class _AddressesNotUnique(exceptions.HomeAssistantError):
     """Error to indicate that the modbus addresses are not unique."""
+
+
+class _AlreadyConfigured(exceptions.HomeAssistantError):
+    """Another entry already serves the host being configured."""
 
 
 class _ScanIntervalTooShort(exceptions.HomeAssistantError):
@@ -195,10 +202,15 @@ def _build_settings_schema(defaults: dict[str, Any]) -> vol.Schema:
     )
 
 
-def _build_password_schema() -> vol.Schema:
+def _build_password_schema(*, customer_optional: bool = False) -> vol.Schema:
+    password_field = (
+        vol.Optional(CONF_API_PASSWORD, default="")
+        if customer_optional
+        else vol.Required(CONF_API_PASSWORD)
+    )
     return vol.Schema(
         {
-            vol.Required(CONF_API_PASSWORD): TextSelector(
+            password_field: TextSelector(
                 TextSelectorConfig(
                     type=TextSelectorType.PASSWORD,
                     autocomplete="current-password",
@@ -233,6 +245,8 @@ def _set_form_error(errors: dict[str, str], err: Exception) -> None:
         errors["base"] = "unsupported_hardware"
     elif isinstance(err, _AddressesNotUnique):
         errors["base"] = "modbus_address_conflict"
+    elif isinstance(err, _AlreadyConfigured):
+        errors["base"] = "already_configured"
     else:
         _LOGGER.exception("Unexpected exception")
         errors["base"] = "unknown"
@@ -377,6 +391,22 @@ async def _validate_input(
     return {"title": _entry_title(data)}
 
 
+def _claim_host(
+    hass: HomeAssistant, entry: config_entries.ConfigEntry, settings: dict[str, Any]
+) -> str:
+    """The unique id for ``settings``' host, unless another entry already holds it.
+
+    The unique id is the host; a reconfigure or options change that moves the
+    host has to move the id with it, or duplicate detection keeps guarding the
+    old host and lets a second entry for the new one through (audit F12).
+    """
+    unique_id = _entry_unique_id(settings)
+    holder = hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, unique_id)
+    if holder is not None and holder.entry_id != entry.entry_id:
+        raise _AlreadyConfigured
+    return unique_id
+
+
 async def async_update_entry_from_input(
     hass: HomeAssistant,
     entry: config_entries.ConfigEntry,
@@ -384,6 +414,7 @@ async def async_update_entry_from_input(
     *,
     previous_host: str | None = None,
 ) -> None:
+    unique_id = _claim_host(hass, entry, validated_input)
     updated_payload = _entry_payload(validated_input, reconfigure_required=False)
     new_data = {**entry.data, **updated_payload}
     new_options = {**entry.options, **updated_payload}
@@ -398,6 +429,7 @@ async def async_update_entry_from_input(
         data=new_data,
         options=new_options,
         title=_entry_title(validated_input),
+        unique_id=unique_id,
     )
     if previous_host and previous_host != validated_input[CONF_HOST]:
         await _async_delete_token(hass, previous_host)
@@ -422,7 +454,9 @@ class TokenFlowMixin:
             }
         return self.async_show_form(
             step_id=step_id,
-            data_schema=_build_password_schema(),
+            data_schema=_build_password_schema(
+                customer_optional=state is not None and state.existing_token is not None
+            ),
             errors=errors or {},
             description_placeholders=placeholders,
         )
@@ -437,6 +471,7 @@ class TokenFlowMixin:
         previous_host: str | None,
         previous_settings: dict[str, Any] | None,
         force_apply_modbus_config: bool = False,
+        always_ask_password: bool = False,
         on_success: _FlowFinishCallback,
     ):
         errors: dict[str, str] = {}
@@ -453,11 +488,12 @@ class TokenFlowMixin:
                     )
                 )
                 token = await _async_load_token(self.hass, settings[CONF_HOST])
-                if token is None:
+                if token is None or always_ask_password:
                     self._pending_flow_state = _PendingFlowState(
                         settings,
                         previous_host,
                         apply_modbus_config,
+                        existing_token=token,
                     )
                     return await self._async_show_password_step(
                         step_id=password_step_id
@@ -504,12 +540,14 @@ class TokenFlowMixin:
 
         if user_input is not None:
             try:
-                token = await _async_mint_token(
-                    self.hass,
-                    state.settings[CONF_HOST],
-                    user_input.get(CONF_API_PASSWORD, ""),
-                )
-                await _async_save_token(self.hass, state.settings[CONF_HOST], token)
+                password = str(user_input.get(CONF_API_PASSWORD, "")).strip()
+                if password == "" and state.existing_token is not None:
+                    token = state.existing_token
+                else:
+                    token = await _async_mint_token(
+                        self.hass, state.settings[CONF_HOST], password
+                    )
+                    await _async_save_token(self.hass, state.settings[CONF_HOST], token)
                 tech_password = str(user_input.get("technician_password", "")).strip()
                 if tech_password:
                     try:
@@ -628,6 +666,10 @@ class FroniusModbusOptionsFlow(TokenFlowMixin, config_entries.OptionsFlow):
 
     async def _async_finish_options(self, settings, info, previous_host):
         del info
+        unique_id = _claim_host(self.hass, self.config_entry, settings)
+        self.hass.config_entries.async_update_entry(
+            self.config_entry, unique_id=unique_id, title=_entry_title(settings)
+        )
         if previous_host != settings[CONF_HOST]:
             await _async_delete_token(self.hass, previous_host)
         return self.async_create_entry(
@@ -644,6 +686,9 @@ class FroniusModbusOptionsFlow(TokenFlowMixin, config_entries.OptionsFlow):
             defaults=defaults,
             previous_host=defaults[CONF_HOST],
             previous_settings=defaults,
+            # Configure is the one place to add or replace the passwords, so
+            # the password step is always offered here (audit F11).
+            always_ask_password=True,
             on_success=self._async_finish_options,
         )
 

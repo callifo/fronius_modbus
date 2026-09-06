@@ -58,7 +58,8 @@
       "modbus_address_conflict": "Modbus IDs are not unique",
       "missing_api_password": "Customer password is required.",
       "invalid_api_credentials": "Customer login failed.",
-      "cannot_resolve_local_ip": "Could not determine the Home Assistant IP."
+      "cannot_resolve_local_ip": "Could not determine the Home Assistant IP.",
+      "already_configured": "Another entry already uses this host."
     }
   },
   "entity": {
@@ -517,7 +518,8 @@
           "modbus_address_conflict": "Modbus IDs are not unique",
           "missing_api_password": "Customer password is required.",
           "invalid_api_credentials": "Customer login failed.",
-          "cannot_resolve_local_ip": "Could not determine the Home Assistant IP."
+          "cannot_resolve_local_ip": "Could not determine the Home Assistant IP.",
+          "already_configured": "Another entry already uses this host."
         },
         "abort": {
           "entry_not_found": "The Fronius entry no longer exists."
@@ -553,7 +555,8 @@
         "error": {
           "cannot_connect": "Failed to connect to the inverter.",
           "invalid_api_credentials": "Customer login failed.",
-          "unknown": "Unknown error"
+          "unknown": "Unknown error",
+          "already_configured": "Another entry already uses this host."
         },
         "abort": {
           "entry_not_found": "The Fronius entry no longer exists.",
@@ -579,7 +582,7 @@
       },
       "password": {
         "title": "Customer Password",
-        "description": "Enter the customer password for {entry_title} ({host}) to create or refresh the stored token. The password is not stored in the config entry.",
+        "description": "Enter the customer password for {entry_title} ({host}) to create or refresh the stored token, or leave it empty to keep the stored one. The technician password enables the export limit control. Passwords are not stored in the config entry.",
         "data": {
           "api_password": "Customer password",
           "technician_password": "Technician password (optional)"
@@ -599,7 +602,8 @@
       "modbus_address_conflict": "Modbus IDs are not unique",
       "missing_api_password": "Customer password is required.",
       "invalid_api_credentials": "Customer login failed.",
-      "cannot_resolve_local_ip": "Could not determine the Home Assistant IP."
+      "cannot_resolve_local_ip": "Could not determine the Home Assistant IP.",
+      "already_configured": "Another entry already uses this host."
     }
   }
 }

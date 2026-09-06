@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- Storage charge/discharge limits are converted to percent of WChaMax (model 124), the reference Fronius documents for InWRte/OutWRte; the nameplate ratings are only used when a device reports no WChaMax. Identical on devices where both agree.
+
 ## 1.0.0b2
 
 Fixes from an independent audit of 1.0.0b1 plus two upstream issues; no entity, unique id or option changes.

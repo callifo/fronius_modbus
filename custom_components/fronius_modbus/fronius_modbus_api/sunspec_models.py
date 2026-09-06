@@ -20,7 +20,6 @@ from modbus_connection.model.sunspec import (
     int16,
     string,
     uint16,
-    uint32,
 )
 
 INVERTER_MODEL_IDS = (103, 101)
@@ -74,7 +73,6 @@ class Inverter(SunSpecComponent):
 class Nameplate(SunSpecComponent):
     """SunSpec model 120: ratings."""
 
-    der_typ = enum16(2)
     wh_rtg = uint16(19, scale_register=20, unit="Wh")
     max_cha_rte = uint16(23, scale_register=24, unit="W")
     max_dis_cha_rte = uint16(25, scale_register=26, unit="W")
@@ -113,8 +111,6 @@ class Storage(SunSpecComponent):
     """SunSpec model 124: storage."""
 
     w_cha_max = uint16(2, scale_register=18, unit="W")
-    w_cha_gra = uint16(3, scale_register=19, unit="% WChaMax/sec")
-    w_dis_cha_gra = uint16(4, scale_register=19, unit="% WChaMax/sec")
     stor_ctl_mod = bitfield16(5, writable=True)
     min_rsv_pct = uint16(7, scale_register=21, writable=True, unit="% WChaMax")
     cha_state = uint16(8, scale_register=22, unit="% AhrRtg")
@@ -133,7 +129,6 @@ class MpptModule(Component):
     dcv = uint16(20, scale_register=3, unit="V")
     dcw = uint16(21, scale_register=4, unit="W")
     dcwh = acc32(22, scale_register=5, unit="Wh")
-    tms = uint32(24, unit="Secs")
 
 
 class Mppt(SunSpecComponent):

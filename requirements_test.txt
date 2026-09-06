@@ -20,9 +20,9 @@ pytest-homeassistant-custom-component
 pytest-timeout
 # The gates check.sh runs, at the versions CI pins - a formatter that
 # reflows differently from CI's is a red build nobody changed.
-ruff==0.16.1
+ruff==0.16.5
 mypy==2.3.1
-pip-audit==2.10.0
+pip-audit==2.10.1
 # resolve_phcc.py parses versions with it.
 packaging
 -r requirements.txt

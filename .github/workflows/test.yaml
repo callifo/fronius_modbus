@@ -35,7 +35,7 @@ jobs:
       # a build nobody changed. Raise it deliberately, together with the local
       # run.
       - name: Install Ruff
-        run: pip install "ruff==0.16.1"
+        run: pip install "ruff==0.16.5"
       - name: Lint
         run: ruff check .
       # The formatting only stays put if something checks it.
@@ -57,7 +57,7 @@ jobs:
         with:
           python-version: "3.14"
       - name: Install pip-audit
-        run: pip install "pip-audit==2.10.0"
+        run: pip install "pip-audit==2.10.1"
       - name: Audit the runtime requirements
         run: pip-audit -r requirements.txt --strict
 

@@ -108,3 +108,47 @@ class LoadEstimator:
             self._consecutive_bad_polls = 0
             return None
         return self._good(max(candidate, 0.0), inverter_power_w)
+
+
+class TotalGuard:
+    """Accepts readings of a monotonically increasing counter, one verdict per poll.
+
+    A single lower or far-too-high sample is a bad reading and is ignored. The
+    same kind of sample on ``confirmations`` consecutive polls is the device
+    telling the truth - a counter reset after a hardware swap, or a large but
+    genuine gap while Home Assistant was offline (audit F05/F06) - and is
+    accepted. Property reads never advance this state: only observe() does.
+    """
+
+    def __init__(self, *, max_step: float, confirmations: int) -> None:
+        """Bound single-poll jumps by max_step; adopt a new range after confirmations polls."""
+        self.value: float | None = None
+        self._max_step = max_step
+        self._confirmations = confirmations
+        self._suspect_polls = 0
+
+    def seed(self, value: float | None) -> None:
+        """Start from a restored value without counting it as a poll."""
+        self.value = value
+        self._suspect_polls = 0
+
+    def observe(self, reading: float | None) -> str | None:
+        """Record one poll; returns why a reading was rejected or accepted late, else None."""
+        if reading is None:
+            self._suspect_polls = 0
+            return None
+        if self.value is None or 0 <= reading - self.value <= self._max_step:
+            self.value = reading
+            self._suspect_polls = 0
+            return None
+        self._suspect_polls += 1
+        kind = "lower than" if reading < self.value else "far above"
+        if self._suspect_polls < self._confirmations:
+            return f"ignoring {reading}: {kind} the last value {self.value}"
+        message = (
+            f"accepting {reading}: {kind} the last value {self.value} for "
+            f"{self._confirmations} polls, so the counter really moved"
+        )
+        self.value = reading
+        self._suspect_polls = 0
+        return message

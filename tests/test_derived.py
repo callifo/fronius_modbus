@@ -1,6 +1,10 @@
 """Tests for household load and grid status derivation."""
 
-from custom_components.fronius_modbus.derived import LoadEstimator, grid_status
+from custom_components.fronius_modbus.derived import (
+    LoadEstimator,
+    TotalGuard,
+    grid_status,
+)
 
 
 def test_grid_status_from_both_frequencies():
@@ -59,3 +63,42 @@ def test_strong_charging_makes_a_negative_load_unavailable():
         )
         is None
     )
+
+
+def _guard(value=1000.0):
+    guard = TotalGuard(max_step=100.0, confirmations=3)
+    guard.seed(value)
+    return guard
+
+
+def test_a_plausible_increase_is_accepted_at_once():
+    guard = _guard()
+    assert guard.observe(1050.0) is None
+    assert guard.value == 1050.0
+
+
+def test_one_bad_sample_is_ignored_and_none_resets_the_streak():
+    guard = _guard()
+    assert guard.observe(10.0) is not None
+    assert guard.observe(None) is None
+    assert guard.observe(10.0) is not None
+    assert guard.value == 1000.0
+
+
+def test_three_lower_polls_are_a_counter_reset():
+    guard = _guard()
+    assert [guard.observe(10.0) is None for _ in range(3)] == [False, False, False]
+    assert guard.value == 10.0
+
+
+def test_three_far_higher_polls_are_a_genuine_gap():
+    guard = _guard()
+    for reading in (5000.0, 5001.0, 5002.0):
+        guard.observe(reading)
+    assert guard.value == 5002.0
+
+
+def test_the_first_reading_seeds_an_unseeded_guard():
+    guard = TotalGuard(max_step=100.0, confirmations=3)
+    assert guard.observe(42.0) is None
+    assert guard.value == 42.0

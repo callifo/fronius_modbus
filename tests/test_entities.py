@@ -65,10 +65,24 @@ def _description(descriptions, key):
 
 
 def _report(sensor, value) -> None:
-    """Make the sensor's next poll report `value`, leaving the shared table alone."""
+    """Deliver one poll reporting `value`, leaving the shared table alone.
+
+    The description is swapped on the sensor rather than mutated: the table's
+    instances are shared across every test in the session. The poll is what
+    the coordinator would deliver; reading the property alone judges nothing.
+    """
     sensor.entity_description = replace(
         sensor.entity_description, value_fn=lambda r: value
     )
+    sensor._observe_poll()
+
+
+def _total_sensor(runtime, entry, hass):
+    description = _description(entities.sensor_descriptions(runtime), "acenergy")
+    sensor = entities.FroniusTotalSensor(runtime, entry, description)
+    sensor.hass = hass
+    sensor._observe_poll()
+    return sensor
 
 
 async def test_sensor_descriptions_carry_the_polled_values(runtime):
@@ -99,9 +113,7 @@ async def test_a_meter_entity_is_unavailable_after_its_meter_fails(
 async def test_a_total_sensor_keeps_its_value_when_a_poll_reports_none(
     hass, entry, runtime
 ):
-    description = _description(entities.sensor_descriptions(runtime), "acenergy")
-    sensor = entities.FroniusTotalSensor(runtime, entry, description)
-    sensor.hass = hass
+    sensor = _total_sensor(runtime, entry, hass)
 
     assert sensor.native_value == 33187794.59
 
@@ -113,9 +125,7 @@ async def test_a_total_sensor_keeps_its_value_when_a_poll_reports_none(
 
 
 async def test_a_total_sensor_ignores_a_lower_value(hass, entry, runtime):
-    description = _description(entities.sensor_descriptions(runtime), "acenergy")
-    sensor = entities.FroniusTotalSensor(runtime, entry, description)
-    sensor.hass = hass
+    sensor = _total_sensor(runtime, entry, hass)
 
     assert sensor.native_value == 33187794.59
 
@@ -124,9 +134,7 @@ async def test_a_total_sensor_ignores_a_lower_value(hass, entry, runtime):
 
 
 async def test_a_total_sensor_ignores_an_implausible_jump(hass, entry, runtime):
-    description = _description(entities.sensor_descriptions(runtime), "acenergy")
-    sensor = entities.FroniusTotalSensor(runtime, entry, description)
-    sensor.hass = hass
+    sensor = _total_sensor(runtime, entry, hass)
 
     assert sensor.native_value == 33187794.59
 
@@ -138,9 +146,7 @@ async def test_a_total_sensor_ignores_an_implausible_jump(hass, entry, runtime):
 
 
 async def test_a_total_sensor_accepts_a_plausible_higher_value(hass, entry, runtime):
-    description = _description(entities.sensor_descriptions(runtime), "acenergy")
-    sensor = entities.FroniusTotalSensor(runtime, entry, description)
-    sensor.hass = hass
+    sensor = _total_sensor(runtime, entry, hass)
 
     assert sensor.native_value == 33187794.59
 
@@ -186,22 +192,19 @@ async def test_an_invalid_soc_minimum_writes_nothing(hass, entry, connection):
 
 async def test_a_total_sensor_follows_a_genuine_counter_reset(hass, entry, runtime):
     """A replaced meter really does restart at zero; refusing that forever freezes the sensor."""
-    description = _description(entities.sensor_descriptions(runtime), "acenergy")
-    sensor = entities.FroniusTotalSensor(runtime, entry, description)
-    sensor.hass = hass
+    sensor = _total_sensor(runtime, entry, hass)
     assert sensor.native_value == 33187794.59
 
-    _report(sensor, 120.0)
     for _ in range(entities.TOTAL_INCREASING_RESET_POLLS - 1):
+        _report(sensor, 120.0)
         assert sensor.native_value == 33187794.59
+    _report(sensor, 120.0)
     assert sensor.native_value == 120.0
 
 
 async def test_a_total_sensor_reset_needs_consecutive_lower_polls(hass, entry, runtime):
     """A missing poll between lower readings must not count toward a counter reset."""
-    description = _description(entities.sensor_descriptions(runtime), "acenergy")
-    sensor = entities.FroniusTotalSensor(runtime, entry, description)
-    sensor.hass = hass
+    sensor = _total_sensor(runtime, entry, hass)
     assert sensor.native_value == 33187794.59
 
     _report(sensor, 120.0)
@@ -214,12 +217,12 @@ async def test_a_total_sensor_reset_needs_consecutive_lower_polls(hass, entry, r
     assert sensor.native_value == 33187794.59
 
     # Three CONSECUTIVE lower polls, with no gap, still adopt the reset.
-    other_sensor = entities.FroniusTotalSensor(runtime, entry, description)
-    other_sensor.hass = hass
+    other_sensor = _total_sensor(runtime, entry, hass)
     assert other_sensor.native_value == 33187794.59
-    _report(other_sensor, 120.0)
     for _ in range(entities.TOTAL_INCREASING_RESET_POLLS - 1):
+        _report(other_sensor, 120.0)
         assert other_sensor.native_value == 33187794.59
+    _report(other_sensor, 120.0)
     assert other_sensor.native_value == 120.0
 
 
@@ -268,3 +271,21 @@ async def test_storage_rate_numbers_follow_the_storage_report(
     entity = entities.FroniusEntity(runtime, entry, description)
     assert "storage" in runtime.modbus.data.report.failed
     assert entity.available is False
+
+
+async def test_a_total_sensor_follows_a_large_but_sustained_gap(hass, entry, runtime):
+    """Audit F05: after a gap above the step limit every later reading was rejected forever."""
+    sensor = _total_sensor(runtime, entry, hass)
+    original = sensor.native_value
+    for increment in range(1, entities.TOTAL_INCREASING_RESET_POLLS + 1):
+        _report(sensor, original + entities.TOTAL_INCREASING_MAX_STEP_WH + increment)
+    assert sensor.native_value > original
+
+
+async def test_reading_a_total_sensor_does_not_count_as_a_poll(hass, entry, runtime):
+    """Audit F06: three property reads of one bad sample were taken for three polls."""
+    sensor = _total_sensor(runtime, entry, hass)
+    original = sensor.native_value
+    _report(sensor, 120.0)
+    reads = [sensor.native_value for _ in range(entities.TOTAL_INCREASING_RESET_POLLS)]
+    assert reads == [original] * entities.TOTAL_INCREASING_RESET_POLLS

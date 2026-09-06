@@ -27,6 +27,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.components.switch import SwitchEntityDescription
+from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityCategory
@@ -61,6 +62,7 @@ from .coordinator import (
     FroniusWebCoordinator,
     assume_present,
 )
+from .derived import TotalGuard
 from .fronius_modbus_api.device import (
     REPORT_CONTROLS,
     REPORT_INVERTER,
@@ -1750,17 +1752,34 @@ class FroniusTotalSensor(FroniusEntity, RestoreSensor):
         entry: FroniusConfigEntry,
         description: FroniusDescription,
     ) -> None:
-        """Track the last accepted value alongside the base entity's state."""
+        """Hand the acceptance policy to a TotalGuard fed once per poll."""
         super().__init__(runtime, entry, description)
-        self._last_value: float | None = None
-        self._lower_values_seen = 0
+        self._guard = TotalGuard(
+            max_step=TOTAL_INCREASING_MAX_STEP_WH,
+            confirmations=TOTAL_INCREASING_RESET_POLLS,
+        )
+        # The coordinator has polled before any entity exists: judge that poll
+        # now so the first state is never empty.
+        self._observe_poll()
 
     async def async_added_to_hass(self) -> None:
-        """Seed the last accepted value from the entity registry."""
+        """Seed the guard from the restored state, then judge the current poll."""
         await super().async_added_to_hass()
         last_data = await self.async_get_last_sensor_data()
         if last_data is not None:
-            self._last_value = cast(float | None, last_data.native_value)
+            self._guard.seed(cast(float | None, last_data.native_value))
+        self._observe_poll()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._observe_poll()
+        super()._handle_coordinator_update()
+
+    def _observe_poll(self) -> None:
+        description = cast(FroniusDescription, self.entity_description)
+        verdict = self._guard.observe(description.value_fn(self._runtime))
+        if verdict is not None:
+            _LOGGER.warning("%s: %s", self.entity_id, verdict)
 
     @property
     def available(self) -> bool:
@@ -1769,44 +1788,5 @@ class FroniusTotalSensor(FroniusEntity, RestoreSensor):
 
     @property
     def native_value(self) -> float | None:
-        """The description's value, unless it is missing, lower, or an implausible jump."""
-        description = cast(FroniusDescription, self.entity_description)
-        new_value: float | None = description.value_fn(self._runtime)
-        if new_value is None:
-            self._lower_values_seen = 0
-            return self._last_value
-        if self._last_value is not None:
-            if new_value < self._last_value:
-                self._lower_values_seen += 1
-                if self._lower_values_seen < TOTAL_INCREASING_RESET_POLLS:
-                    _LOGGER.warning(
-                        "Ignoring %s: %s is lower than the last value %s",
-                        self.entity_id,
-                        new_value,
-                        self._last_value,
-                    )
-                    return self._last_value
-                _LOGGER.warning(
-                    "Accepting %s: %s stayed below the last value %s for %s polls, "
-                    "which is a counter reset, not a bad reading",
-                    self.entity_id,
-                    new_value,
-                    self._last_value,
-                    TOTAL_INCREASING_RESET_POLLS,
-                )
-                self._lower_values_seen = 0
-                self._last_value = new_value
-                return new_value
-            if new_value - self._last_value > TOTAL_INCREASING_MAX_STEP_WH:
-                _LOGGER.warning(
-                    "Ignoring %s: %s jumped more than %s above the last value %s",
-                    self.entity_id,
-                    new_value,
-                    TOTAL_INCREASING_MAX_STEP_WH,
-                    self._last_value,
-                )
-                self._lower_values_seen = 0
-                return self._last_value
-        self._lower_values_seen = 0
-        self._last_value = new_value
-        return new_value
+        """The last value the guard accepted; reading it changes nothing."""
+        return self._guard.value

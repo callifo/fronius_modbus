@@ -14,12 +14,14 @@ from homeassistant.helpers import issue_registry as ir
 
 from .const import (
     API_USERNAME,
+    CONF_API_USERNAME,
     CONF_METER_UNIT_ID,
     CONF_METER_UNIT_IDS,
     CONF_RECONFIGURE_REQUIRED,
     DOMAIN,
     ENTITY_PREFIX,
     MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX,
+    TECHNICIAN_USERNAME,
     entity_prefix,
     instance_key,
 )
@@ -31,10 +33,12 @@ _TRANSLATIONS_DIR = Path(__file__).resolve().parent / "translations"
 _TRANSLATION_CACHE: dict[str, dict] = {}
 
 _TARGET_VERSION = 1
-_TARGET_MINOR_VERSION = 10
+_TARGET_MINOR_VERSION = 11
 # Entries below this minor version predate the web API integration and still
 # carry the dropped meter-unit config, so only they need the data migration.
 _WEB_API_MINOR_VERSION = 9
+# Entries below this minor version predate the single web API role.
+_SINGLE_ROLE_MINOR_VERSION = 11
 
 _LEGACY_METER_DEVICE_RE = re.compile(r".*_meter_?\d+")
 _V019_MPPT_UNIQUE_ID_MAPPINGS = (
@@ -205,33 +209,50 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         return False
 
     if entry.version == _TARGET_VERSION and entry.minor_version < _TARGET_MINOR_VERSION:
-        if entry.minor_version < _WEB_API_MINOR_VERSION:
-            new_data = dict(entry.data)
-            new_options = dict(entry.options)
+        new_data = dict(entry.data)
+        new_options = dict(entry.options)
+        title = entry.title
 
+        if entry.minor_version < _WEB_API_MINOR_VERSION:
             new_data.pop(CONF_METER_UNIT_ID, None)
             new_data.pop(CONF_METER_UNIT_IDS, None)
             new_options.pop(CONF_METER_UNIT_ID, None)
             new_options.pop(CONF_METER_UNIT_IDS, None)
             new_data[CONF_RECONFIGURE_REQUIRED] = True
             new_options[CONF_RECONFIGURE_REQUIRED] = True
+            title = _updated_entry_title(entry)
 
-            hass.config_entries.async_update_entry(
-                entry,
-                data=new_data,
-                options=new_options,
-                version=_TARGET_VERSION,
-                minor_version=_TARGET_MINOR_VERSION,
-                title=_updated_entry_title(entry),
-            )
-        else:
-            hass.config_entries.async_update_entry(
-                entry,
-                version=_TARGET_VERSION,
-                minor_version=_TARGET_MINOR_VERSION,
-            )
+        if entry.minor_version < _SINGLE_ROLE_MINOR_VERSION:
+            api_username = await _async_stored_role(hass, entry)
+            new_data[CONF_API_USERNAME] = api_username
+            new_options[CONF_API_USERNAME] = api_username
+
+        hass.config_entries.async_update_entry(
+            entry,
+            data=new_data,
+            options=new_options,
+            version=_TARGET_VERSION,
+            minor_version=_TARGET_MINOR_VERSION,
+            title=title,
+        )
 
     return True
+
+
+async def _async_stored_role(hass: HomeAssistant, entry: ConfigEntry) -> str:
+    """The role an entry used before roles were a setting.
+
+    Up to minor 10 an entry could hold a customer and a technician token at
+    once; the technician one enabled the export limit. With one role per entry
+    that entry keeps technician access, everything else stays on customer.
+    """
+    host = str(_entry_value(entry, CONF_HOST, "")).strip()
+    if not host:
+        return API_USERNAME
+    token = await async_get_token_store(hass).async_load_token(
+        host, TECHNICIAN_USERNAME
+    )
+    return TECHNICIAN_USERNAME if token else API_USERNAME
 
 
 async def async_prepare_entry_token(
@@ -239,7 +260,8 @@ async def async_prepare_entry_token(
     entry: ConfigEntry,
     host: str,
 ) -> dict[str, str] | None:
-    token = await async_get_token_store(hass).async_load_token(host, API_USERNAME)
+    api_username = str(_entry_value(entry, CONF_API_USERNAME, API_USERNAME))
+    token = await async_get_token_store(hass).async_load_token(host, api_username)
     await _async_set_reconfigure_required(hass, entry, not bool(token))
     return token
 

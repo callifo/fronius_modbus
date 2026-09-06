@@ -94,7 +94,7 @@ def make_control(hass, **kwargs) -> FroniusWebControl:
     events: list[str] = []
     defaults = {
         "client": FakeWebClient(),
-        "technician_client": None,
+        "api_username": "customer",
         "storage_present": True,
         "inverter_firmware": lambda: "1.38.6-1",
     }
@@ -189,7 +189,9 @@ async def test_the_export_soft_limit_is_shown_right_after_the_write(hass):
             return True
 
     pushed = []
-    control = make_control(hass, technician_client=FakeTechnicianClient())
+    control = make_control(
+        hass, client=FakeTechnicianClient(), api_username="technician"
+    )
     control.attach_coordinator(
         type("Coordinator", (), {"async_set_updated_data": pushed.append})()
     )
@@ -209,16 +211,18 @@ async def test_a_rejected_technician_write_does_not_fake_the_limit(hass):
         def set_export_soft_limit(self, watts):
             raise FroniusWebAuthError("token rejected")
 
-    control = make_control(hass, technician_client=FakeRejectingTechnicianClient())
+    control = make_control(
+        hass, client=FakeRejectingTechnicianClient(), api_username="technician"
+    )
     try:
         await control.async_refresh()
-        with pytest.raises(RuntimeError, match="technician"):
+        with pytest.raises(RuntimeError, match="authentication failed"):
             await control.set_export_soft_limit_w(4200)
     finally:
         control.shutdown()
 
-    # The auth failure disables the technician client and clears the limit as
-    # unknown; the point under test is that it never becomes the rejected 4200.
+    # The auth failure disables the web client and clears the limit as unknown;
+    # the point under test is that it never becomes the rejected 4200.
     assert control.data.export_soft_limit_w != 4200
 
 
@@ -304,3 +308,27 @@ async def test_a_write_without_a_customer_login_is_an_error_not_a_silent_no_op(h
             await control.set_solar_api_enabled(False)
     finally:
         control.shutdown()
+
+
+async def test_the_technician_role_is_the_single_client_with_that_username(hass):
+    """Upstream #130: no second client; the role of the one login decides what is exposed."""
+
+    class FakeTechnicianClient(FakeWebClient):
+        def set_export_soft_limit(self, watts):
+            self.calls.append(("export", watts))
+            return True
+
+    control = make_control(
+        hass, client=FakeTechnicianClient(), api_username="technician"
+    )
+    try:
+        assert control.technician_configured
+        await control.set_export_soft_limit_w(4200)
+    finally:
+        control.shutdown()
+    assert control._client.calls[-1] == ("export", 4200)
+
+
+async def test_a_customer_client_is_not_technician_configured(control):
+    assert control.configured
+    assert not control.technician_configured

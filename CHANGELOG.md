@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Changed
+- The Web API now uses one role per entry: pick `customer` or `technician` during setup and enter only that password. An entry that had a technician token keeps technician access; every other entry stays on `customer`. Switching roles is a reconfigure.
 - Storage charge/discharge limits are converted to percent of WChaMax (model 124), the reference Fronius documents for InWRte/OutWRte; the nameplate ratings are only used when a device reports no WChaMax. Identical on devices where both agree.
 
 ## 1.0.0b2

@@ -1,5 +1,7 @@
 """The config flow, with the web client stubbed and Modbus served by the mock connection."""
 
+from unittest.mock import AsyncMock
+
 from modbus_connection import ModbusConnectionError
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -7,12 +9,26 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components import fronius_modbus
 from custom_components.fronius_modbus import config_flow
 from custom_components.fronius_modbus.const import DOMAIN
+from custom_components.fronius_modbus.token_store import async_get_token_store
 from homeassistant.data_entry_flow import FlowResultType
 
 from .conftest import INVERTER_UNIT_ID
 
 HOST = "192.0.2.10"
 USER_INPUT = {"host": HOST, "scan_interval": 10, "restrict_modbus_to_this_ip": False}
+
+
+def make_entry(hass) -> MockConfigEntry:
+    """A configured entry on the customer role, added to hass."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={**USER_INPUT, "web_scan_interval": 60, "api_username": "customer"},
+        unique_id=HOST,
+        version=1,
+        minor_version=11,
+    )
+    entry.add_to_hass(hass)
+    return entry
 
 
 @pytest.fixture(autouse=True)
@@ -51,7 +67,7 @@ async def run_flow(hass) -> dict:
     )
     assert result["step_id"] == "user_password"
     return await hass.config_entries.flow.async_configure(
-        result["flow_id"], {"api_password": "secret", "technician_password": ""}
+        result["flow_id"], {"api_password": "secret"}
     )
 
 
@@ -61,7 +77,7 @@ async def test_the_config_flow_creates_an_entry(hass, mock_modbus):
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["title"] == "Fronius 192.0.2.10"
     assert result["data"]["host"] == HOST
-    assert result["minor_version"] == 10
+    assert result["minor_version"] == 11
 
 
 async def test_a_second_flow_for_the_same_host_aborts(hass, mock_modbus):
@@ -82,3 +98,63 @@ async def test_an_unreachable_inverter_shows_cannot_connect(hass, mock_modbus):
 
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {"base": "cannot_connect"}
+
+
+async def test_the_technician_role_mints_and_stores_a_technician_token(
+    hass, mock_modbus, monkeypatch
+):
+    """Upstream #130: one role per entry; the password belongs to the selected role."""
+    minted = []
+    monkeypatch.setattr(
+        config_flow,
+        "mint_token",
+        lambda host, user, password: (
+            minted.append(user) or {"realm": "r", "token": "t"}
+        ),
+    )
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT | {"api_username": "technician"}
+    )
+    assert result["step_id"] == "user_password"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"]["api_username"] == "technician"
+    assert minted == ["technician"]
+    store = async_get_token_store(hass)
+    assert await store.async_load_token(HOST, "technician") == {
+        "realm": "r",
+        "token": "t",
+    }
+    assert await store.async_load_token(HOST, "customer") is None
+
+
+async def test_switching_the_role_asks_for_that_roles_password(hass, monkeypatch):
+    """A stored customer token must not stand in for the technician role."""
+    entry = make_entry(hass)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="stored")
+    monkeypatch.setattr(
+        config_flow, "_validate_input", AsyncMock(return_value={"title": "Fronius"})
+    )
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "host": HOST,
+            "scan_interval": 10,
+            "web_scan_interval": 60,
+            "restrict_modbus_to_this_ip": False,
+            "api_username": "technician",
+        },
+    )
+    assert result["step_id"] == "password"
+    # No technician token yet: an empty password is not accepted.
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"api_password": ""}
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"]["base"] == "missing_api_password"

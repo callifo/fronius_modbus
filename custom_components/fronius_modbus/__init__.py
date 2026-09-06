@@ -16,6 +16,7 @@ from homeassistant.core import HomeAssistant
 from . import migrations
 from .const import (
     API_USERNAME,
+    CONF_API_USERNAME,
     CONF_INVERTER_UNIT_ID,
     CONF_WEB_SCAN_INTERVAL,
     DEFAULT_INVERTER_UNIT_ID,
@@ -23,7 +24,6 @@ from .const import (
     DEFAULT_PORT,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_WEB_SCAN_INTERVAL,
-    TECHNICIAN_USERNAME,
 )
 from .coordinator import (
     FroniusConfigEntry,
@@ -120,23 +120,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
         _entry_value(entry, CONF_WEB_SCAN_INTERVAL, DEFAULT_WEB_SCAN_INTERVAL)
     )
 
+    api_username = str(_entry_value(entry, CONF_API_USERNAME, API_USERNAME))
     api_token = await migrations.async_prepare_entry_token(hass, entry, host)
     await migrations.async_sync_reconfigure_issue(
         hass, entry, has_token=api_token is not None
     )
-    technician_token = await async_get_token_store(hass).async_load_token(
-        host, TECHNICIAN_USERNAME
-    )
     client = (
-        FroniusWebClient(host=host, username=API_USERNAME, password="", token=api_token)
+        FroniusWebClient(host=host, username=api_username, password="", token=api_token)
         if api_token
-        else None
-    )
-    technician_client = (
-        FroniusWebClient(
-            host=host, username=TECHNICIAN_USERNAME, token=technician_token
-        )
-        if technician_token
         else None
     )
 
@@ -163,13 +154,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
 
     web_control = None
     web = None
-    if client is not None or technician_client is not None:
+    if client is not None:
         web_control = FroniusWebControl(
             hass,
             entry,
             host=host,
             client=client,
-            technician_client=technician_client,
+            api_username=api_username,
             storage_present=device.storage is not None,
             inverter_firmware=lambda: (
                 device.identity.version if device.identity else None

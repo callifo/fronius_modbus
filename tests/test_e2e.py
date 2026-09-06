@@ -218,7 +218,7 @@ async def test_the_select_changes_the_storage_mode(hass, mock_modbus):
     assert unit.holding[40355] == 0
 
 
-async def test_minor_version_9_entries_migrate_to_10(hass, mock_modbus):
+async def test_minor_version_9_entries_migrate_to_the_current_shape(hass, mock_modbus):
     entry = make_entry(hass, minor_version=9)
     title_before = entry.title
 
@@ -227,9 +227,9 @@ async def test_minor_version_9_entries_migrate_to_10(hass, mock_modbus):
     # for an entry with no stored token, masking what the migration itself did.
     assert await migrations.async_migrate_entry(hass, entry)
 
-    assert entry.minor_version == 10
+    assert entry.minor_version == 11
     # Minor 9 entries are already on the web-API shape: only the version bump
-    # is expected, not the pre-web-API data migration.
+    # and the new role are expected, not the pre-web-API data migration.
     assert CONF_RECONFIGURE_REQUIRED not in entry.data
     assert entry.title == title_before
 
@@ -423,3 +423,26 @@ async def test_mppt_entities_appear_once_the_first_read_succeeds(hass, mock_modb
     )
     assert entity_id is not None
     assert hass.states.get(entity_id) is not None
+
+
+async def test_minor_version_10_entries_take_the_role_of_their_stored_token(
+    hass, mock_modbus
+):
+    """Upstream #130: an entry that had a technician token keeps technician access after the migration."""
+    entry = make_entry(hass, minor_version=10)
+    await async_get_token_store(hass).async_save_token(
+        HOST, realm="r", token="t", user="technician"
+    )
+    assert await migrations.async_migrate_entry(hass, entry)
+    assert entry.minor_version == 11
+    assert entry.data["api_username"] == "technician"
+    assert entry.options["api_username"] == "technician"
+
+
+async def test_minor_version_10_entries_without_a_technician_token_stay_customer(
+    hass, mock_modbus
+):
+    entry = make_entry(hass, minor_version=10)
+    assert await migrations.async_migrate_entry(hass, entry)
+    assert entry.minor_version == 11
+    assert entry.data["api_username"] == "customer"

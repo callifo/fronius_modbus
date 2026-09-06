@@ -17,17 +17,19 @@ from homeassistant.helpers import issue_registry as ir
 from .const import (
     API_BATTERY_MODE,
     API_SOC_MODE,
-    API_USERNAME,
     DOMAIN,
     MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX,
     SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX,
+    TECHNICIAN_USERNAME,
 )
 from .froniuswebclient import FroniusWebAuthError, FroniusWebClient
 from .token_store import async_get_token_store
 
 _LOGGER = logging.getLogger(__name__)
 WEB_API_NOT_CONFIGURED = "Fronius Web API is not configured"
-TECHNICIAN_NOT_CONFIGURED = "Technician credentials not configured - enter the technician password via Configure"
+TECHNICIAN_NOT_CONFIGURED = (
+    "Technician access is not selected - choose the technician role via Configure"
+)
 
 
 def _serialised(method):
@@ -170,7 +172,7 @@ class FroniusWebControl:
         *,
         host: str,
         client: FroniusWebClient | None,
-        technician_client: FroniusWebClient | None,
+        api_username: str,
         storage_present: bool,
         inverter_firmware: Callable[[], str | None],
         on_battery_write: Callable[[], None],
@@ -181,7 +183,7 @@ class FroniusWebControl:
         self._entry = entry
         self._host = host
         self._client = client
-        self._technician_client = technician_client
+        self._api_username = api_username
         self._storage_present = storage_present
         self._inverter_firmware = inverter_firmware
         self._on_battery_write = on_battery_write
@@ -204,8 +206,8 @@ class FroniusWebControl:
 
     @property
     def technician_configured(self) -> bool:
-        """Whether the technician web API client is available."""
-        return self._technician_client is not None
+        """Whether the one configured login is the technician role."""
+        return self.configured and self._api_username == TECHNICIAN_USERNAME
 
     @property
     def battery_mode_is_manual(self) -> bool:
@@ -296,30 +298,6 @@ class FroniusWebControl:
             return None
         return await self._async_web_job(getattr(client, method_name), *args)
 
-    async def _async_tech_web_job(
-        self, func, *args, raise_on_auth_failure: bool = False
-    ):
-        """Run a technician-client job; on auth failure clear only the technician client."""
-        if not self._technician_client:
-            if raise_on_auth_failure:
-                raise RuntimeError(TECHNICIAN_NOT_CONFIGURED)
-            return None
-        try:
-            return await self._hass.async_add_executor_job(func, *args)
-        except FroniusWebAuthError as err:
-            _LOGGER.warning(
-                "Disabling Fronius technician web API for %s after auth failure: %s",
-                self._host,
-                err,
-            )
-            self._technician_client = None
-            self.data.export_soft_limit_w = None
-            if raise_on_auth_failure:
-                raise RuntimeError(
-                    "Fronius technician authentication failed. Reconfigure the integration."
-                ) from err
-            return None
-
     async def _async_handle_web_api_auth_failure(self, err: Exception) -> None:
         if not self._client:
             return
@@ -330,7 +308,7 @@ class FroniusWebControl:
         self._client = None
         self.data = WebData()
         await async_get_token_store(self._hass).async_delete_token(
-            self._host, API_USERNAME
+            self._host, self._api_username
         )
         self._async_sync_solar_api_warning()
 
@@ -441,16 +419,7 @@ class FroniusWebControl:
             if isinstance(battery_config, dict):
                 self._apply_web_battery_config(battery_config)
 
-        if self._technician_client:
-            export_limit_config = await self._async_tech_web_job(
-                self._technician_client.get_export_limit_config
-            )
-        elif self._client:
-            export_limit_config = await self._async_web_job(
-                self._client.get_export_limit_config
-            )
-        else:
-            export_limit_config = None
+        export_limit_config = await self._async_client_job("get_export_limit_config")
         _LOGGER.debug(
             "Export limit config from web API: %s",
             _export_limit_summary(export_limit_config),
@@ -705,12 +674,13 @@ class FroniusWebControl:
 
     @_serialised
     async def set_export_soft_limit_w(self, value: float) -> None:
-        """Set the export soft limit; requires technician credentials."""
-        if not self._technician_client:
+        """Set the export soft limit; only the technician role may write it."""
+        client = self._client
+        if client is None or not self.technician_configured:
             raise RuntimeError(TECHNICIAN_NOT_CONFIGURED)
         limit_w = int(round(value))
-        result = await self._async_tech_web_job(
-            self._technician_client.set_export_soft_limit,
+        result = await self._async_web_job(
+            client.set_export_soft_limit,
             limit_w,
             raise_on_auth_failure=True,
         )

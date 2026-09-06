@@ -33,7 +33,7 @@ SETTINGS_INPUT = {
     "scan_interval": 10,
     "restrict_modbus_to_this_ip": False,
 }
-PASSWORD_INPUT = {"api_password": "secret", "technician_password": ""}
+PASSWORD_INPUT = {"api_password": "secret"}
 
 
 class SetupWebClient(FakeWebClient):

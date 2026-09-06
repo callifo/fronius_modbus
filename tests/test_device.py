@@ -184,3 +184,38 @@ async def test_a_foreign_labelled_module_is_not_a_pv_channel(connection, symo_ge
     await device.async_update()
 
     assert device.mppt_channels.pv == (1,)
+
+
+async def test_a_meter_that_does_not_answer_at_setup_is_retried_on_the_next_poll(
+    connection,
+):
+    """Audit F03: a discovery timeout was filed as "no meter" for the life of the entry."""
+    meter_unit = connection.for_unit(METER_UNIT_ID)
+    meter_unit.fail_requests(ModbusTimeoutError())
+    device = FroniusInverter(
+        connection.for_unit(INVERTER_UNIT_ID),
+        INVERTER_UNIT_ID,
+        {METER_UNIT_ID: meter_unit},
+    )
+    report = await device.async_update()
+    assert METER_UNIT_ID not in device.meters
+    assert isinstance(
+        report.failed[meter_report_name(METER_UNIT_ID)], ModbusTimeoutError
+    )
+    meter_unit.fail_requests(None)
+    report = await device.async_update()
+    assert METER_UNIT_ID in device.meters
+    assert meter_report_name(METER_UNIT_ID) in report.updated
+
+
+async def test_a_unit_that_refuses_the_marker_is_absent_for_good(connection):
+    absent = connection.for_unit(201)
+    absent.fail_requests(GatewayTargetError())
+    device = FroniusInverter(
+        connection.for_unit(INVERTER_UNIT_ID), INVERTER_UNIT_ID, {201: absent}
+    )
+    report = await device.async_update()
+    absent.fail_requests(None)
+    report = await device.async_update()
+    assert 201 not in device.meters
+    assert meter_report_name(201) not in report.failed

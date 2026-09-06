@@ -159,6 +159,9 @@ class FroniusInverter:
         self.mppt: Mppt | None = None
         self.storage: Storage | None = None
         self.meters: dict[int, MeterInfo] = {}
+        # Meter units whose probe did not answer: neither present nor absent
+        # yet, probed again on every poll (audit F03).
+        self._undecided_meters: dict[int, ModbusUnit] = {}
         self._polled: tuple[str, ...] = ()
 
     @property
@@ -195,10 +198,9 @@ class FroniusInverter:
         self.mppt = self._optional(Mppt, chain, MPPT_MODEL_ID)
         self.storage = self._optional(Storage, chain, STORAGE_MODEL_ID)
         self.meters = {}
+        self._undecided_meters = {}
         for unit_id, meter_unit in self._meter_units.items():
-            meter = await self._async_probe_meter(unit_id, meter_unit)
-            if meter is not None:
-                self.meters[unit_id] = meter
+            await self._async_place_meter(unit_id, meter_unit)
         self._polled = tuple(
             name
             for name, component in (
@@ -219,17 +221,32 @@ class FroniusInverter:
         model = chain.first(model_id)
         return None if model is None else component_class(self._unit, model)
 
+    async def _async_place_meter(self, unit_id: int, meter_unit: ModbusUnit) -> None:
+        """Probe one meter unit and file it as present, absent or undecided."""
+        try:
+            meter = await self._async_probe_meter(unit_id, meter_unit)
+        except ModbusTimeoutError as err:
+            # No answer is not "no meter": the inverter may still be booting
+            # (audit F03). Try again on every poll, and say so in the report.
+            _LOGGER.debug("Meter on unit %s did not answer yet: %s", unit_id, err)
+            self._undecided_meters[unit_id] = meter_unit
+            return
+        self._undecided_meters.pop(unit_id, None)
+        if meter is not None:
+            self.meters[unit_id] = meter
+
     async def _async_probe_meter(
         self, unit_id: int, meter_unit: ModbusUnit
     ) -> MeterInfo | None:
         """A meter on ``unit_id``, or None when nothing SunSpec answers there.
 
-        A unit without a device answers exception 0x0B (gateway target) or
-        times out; both mean "no meter here", not a failed setup.
+        A unit without a device answers exception 0x0B (gateway target): that
+        is a confirmed absence. A timeout propagates; the caller keeps the
+        unit undecided.
         """
         try:
             chain = await _scan(meter_unit)
-        except ModbusConnectionError:
+        except ModbusConnectionError, ModbusTimeoutError:
             raise
         except ModbusError:
             _LOGGER.debug("No meter on unit %s", unit_id)
@@ -273,7 +290,22 @@ class FroniusInverter:
                 report.failed[name] = err
             else:
                 report.updated.append(name)
+        await self._async_retry_undecided_meters(report)
         return report
+
+    async def _async_retry_undecided_meters(self, report: UpdateReport) -> None:
+        for unit_id, meter_unit in list(self._undecided_meters.items()):
+            name = meter_report_name(unit_id)
+            await self._async_place_meter(unit_id, meter_unit)
+            if unit_id in self._undecided_meters:
+                report.failed[name] = ModbusTimeoutError(
+                    f"meter {unit_id} did not answer"
+                )
+                continue
+            if unit_id in self.meters:
+                self._polled = (*self._polled, name)
+                await self._component(name).async_update()
+                report.updated.append(name)
 
     async def async_read_raw(self) -> dict[int, dict[str, dict[int, int | bool]]]:
         """Every register read, undecoded, per unit id, minus the serial number words."""

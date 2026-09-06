@@ -117,6 +117,10 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
         self._meter_locations = meter_locations
         self._load = LoadEstimator()
         self._failed: frozenset[str] = frozenset()
+        # Sub-systems the platforms were built for: the ones that had answered
+        # by the first refresh. One that answers only later has no entities
+        # yet, so the entry reloads once to build them (audit F03).
+        self._built_for: frozenset[str] | None = None
         self._timeouts = 0
         self._tolerate_until = 0.0
         self._tolerated_failures = 0
@@ -149,6 +153,7 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
         for name in sorted(report.failed.keys() - self._failed):
             _LOGGER.warning("Failed to read %s: %s", name, report.failed[name])
         self._failed = frozenset(report.failed)
+        self._reload_for_new_sub_systems(report)
         self._build_controls()
         return ModbusPoll(
             report=report,
@@ -171,6 +176,21 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
             self._tolerate_until = 0.0
             await self.device.unit.disconnect()
         raise UpdateFailed(f"Modbus communication failure: {err}") from err
+
+    def _reload_for_new_sub_systems(self, report: UpdateReport) -> None:
+        answered = frozenset(report.updated)
+        if self._built_for is None:
+            self._built_for = answered
+            return
+        new = answered - self._built_for
+        if not new:
+            return
+        _LOGGER.info(
+            "%s answered for the first time; reloading the entry to add its entities",
+            ", ".join(sorted(new)),
+        )
+        self._built_for = self._built_for | new
+        self.hass.config_entries.async_schedule_reload(self.config_entry.entry_id)
 
     def _build_controls(self) -> None:
         device = self.device

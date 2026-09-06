@@ -175,3 +175,24 @@ async def test_the_nameplate_rates_replace_the_fallback_once_read(
     await coordinator.async_refresh()
     assert coordinator.storage_control.max_charge_rate_w == 10240
     assert coordinator.storage_control.max_discharge_rate_w == 10240
+
+
+# A register inside the model-160 block of the captured fixture: the block read fails,
+# the header scan does not.
+MPPT_HEADER_ADDRESS = 40260
+
+
+async def test_a_sub_system_answering_for_the_first_time_reloads_the_entry(
+    coordinator, inverter_unit, hass, entry, monkeypatch
+):
+    """Audit F03: MPPT entities built from a failed first read never appeared."""
+    inverter_unit.fail_read(MPPT_HEADER_ADDRESS, ServerDeviceFailureError())
+    await coordinator.async_refresh()
+    assert "mppt" in coordinator.data.report.failed
+    reload = MagicMock()
+    monkeypatch.setattr(hass.config_entries, "async_schedule_reload", reload)
+    inverter_unit.fail_read(MPPT_HEADER_ADDRESS, None)
+    await coordinator.async_refresh()
+    reload.assert_called_once_with(entry.entry_id)
+    await coordinator.async_refresh()
+    reload.assert_called_once()

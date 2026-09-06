@@ -390,3 +390,36 @@ async def test_a_failed_mppt_read_at_startup_keeps_the_mppt_entities(hass, mock_
         )
         is not None
     )
+
+
+async def test_a_meter_that_times_out_at_setup_keeps_its_entities(hass, mock_modbus):
+    """Audit F03: the cleanup after a timed-out meter probe removed the meter's registry entries."""
+    entry = make_entry(hass)
+    registry = er.async_get(hass)
+    original = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{entity_prefix(entry.entry_id)}_meter_200_power",
+        config_entry=entry,
+        suggested_object_id="existing_meter_power",
+    )
+    mock_modbus.fail_requests(METER_UNIT_ID, ModbusTimeoutError())
+    await setup_entry(hass, entry)
+    assert registry.async_get(original.entity_id) is not None
+
+
+async def test_mppt_entities_appear_once_the_first_read_succeeds(hass, mock_modbus):
+    """Audit F03: a failed model-160 read at setup left the MPPT entities missing until a manual reload."""
+    entry = make_entry(hass)
+    mock_modbus.fail_read(
+        INVERTER_UNIT_ID, MPPT_REGISTER_ADDRESS, ServerDeviceFailureError()
+    )
+    await setup_entry(hass, entry)
+    mock_modbus.fail_read(INVERTER_UNIT_ID, MPPT_REGISTER_ADDRESS, None)
+    await entry.runtime_data.modbus.async_refresh()
+    await hass.async_block_till_done()
+    entity_id = er.async_get(hass).async_get_entity_id(
+        "sensor", DOMAIN, f"{entity_prefix(entry.entry_id)}_mppt_module_0_dc_power"
+    )
+    assert entity_id is not None
+    assert hass.states.get(entity_id) is not None

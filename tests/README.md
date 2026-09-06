@@ -39,31 +39,6 @@ pytest tests/ -q -m e2e     # only the slow ones
 pytest tests/ -q -m ""      # all - what CI and check.sh run
 ```
 
-## The push gate
-
-`git config core.hooksPath .githooks` arms `.githooks/pre-push`, which refuses
-a push unless two gates pass. Set it once per clone; without it nothing runs.
-
-1. `check.sh`, through WSL, because
-   `pytest-homeassistant-custom-component` only runs on Linux. The hook
-   derives the WSL path from the checkout, so it holds no machine-specific
-   path and stays trackable. It expects the virtualenv at `~/ha-dev/venv`
-   inside WSL.
-2. A blocklist over the commit messages and added lines of the push range,
-   plus any e-mail address outside the allowed domains. The list itself lives
-   in the project folder's `.local/`, outside the repository, because several
-   of its entries are the words it keeps out. A missing or empty list refuses
-   the push.
-
-Secret shapes are not a third gate: `check.sh` already scans every commit
-this fork added, and reaching further back would only re-report upstream's
-own findings.
-
-A push costs about a minute and a half. hassfest, the HACS validation and the
-run against the minimum Home Assistant exist only in CI, so a change to the
-manifest, the translations or the config flow is worth pushing on a branch
-first.
-
 ## Why a mutation run
 
 A passing test proves nothing on its own. `.github/mutations/plan.json`

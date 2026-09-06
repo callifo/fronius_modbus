@@ -171,7 +171,7 @@ jobs:
       # -m "" cancels the `-m "not e2e"` default from pyproject.toml, so the
       # slow end-to-end tests against a real Home Assistant run here.
       - name: Run test suite
-        run: pytest tests/ -q -m "" --cov=custom_components/fronius_modbus --cov-report=term:skip-covered --cov-fail-under=89
+        run: pytest tests/ -q -m "" --cov=custom_components/fronius_modbus --cov-report=term:skip-covered --cov-fail-under=90
       # A green suite says the tests pass, not that they would catch anything.
       # Only on one job: the answer does not depend on the Home Assistant
       # version, and the mutations edit files in the workspace.

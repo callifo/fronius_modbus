@@ -395,7 +395,15 @@ class FroniusWebControl:
         self.data.soc_mode = API_SOC_MODE.get(raw_soc_mode, raw_soc_mode)
 
     async def async_refresh(self) -> WebData:
-        """Poll the web API and return a snapshot of the resulting state."""
+        """Poll the web API and return a snapshot of the resulting state.
+
+        Under the write lock: a poll started before a write finished would
+        otherwise overwrite the confirmed new state with the older reading.
+        """
+        async with self._write_lock:
+            return await self._async_refresh_locked()
+
+    async def _async_refresh_locked(self) -> WebData:
         if not self._client:
             return replace(self.data)
 

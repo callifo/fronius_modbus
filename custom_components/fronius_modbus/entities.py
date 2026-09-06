@@ -1238,24 +1238,6 @@ def _storage_percent_number(
     )
 
 
-async def _set_soc_minimum(runtime: FroniusRuntimeData, value: float) -> None:
-    """Write the SoC minimum to Modbus, then mirror it to the web API in Manual mode."""
-    percent = int(round(value))
-    web_control = runtime.web_control
-    mirror_to_web = (
-        web_control is not None
-        and web_control.configured
-        and web_control.battery_mode_is_manual
-    )
-    # A minimum the web API refuses must not reach Modbus either: the two would
-    # otherwise disagree, with the reserve only half applied.
-    if mirror_to_web:
-        assume_present(web_control).validate_soc_minimum(percent)
-    await assume_present(runtime.storage_control).set_minimum_reserve(percent)
-    if mirror_to_web:
-        await assume_present(web_control).set_soc_minimum_manual(percent)
-
-
 _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
     _storage_percent_number(
         "grid_discharge_power",
@@ -1314,7 +1296,7 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
         report_name=REPORT_STORAGE,
         exists_fn=_storage_present,
         value_fn=lambda r: assume_present(r.storage_control).soc_minimum,
-        set_fn=_set_soc_minimum,
+        set_fn=lambda r, v: r.async_set_soc_minimum(v),
         native_min_value=5,
         native_max_value=100,
         native_step=1,
@@ -1419,25 +1401,6 @@ def number_descriptions(runtime: FroniusRuntimeData) -> list[FroniusNumberDescri
 # -- select table -----------------------------------------------------------------
 
 
-async def _set_ext_control_mode(runtime: FroniusRuntimeData, code: int) -> None:
-    mode = ExtendedMode(code)
-    await assume_present(runtime.storage_control).set_mode(mode)
-    web_control = runtime.web_control
-    if (
-        mode is ExtendedMode.CHARGE_FROM_GRID
-        and web_control is not None
-        and web_control.configured
-    ):
-        try:
-            await web_control.set_charge_sources(
-                charge_from_grid=True, charge_from_ac=True
-            )
-        except (ModbusError, RuntimeError, ValueError) as err:
-            _LOGGER.warning(
-                "Failed to enable charge from grid via the web API: %s", err
-            )
-
-
 _CONTROL_STATUS_OPTIONS = {0: CONTROL_STATUS[0], 1: CONTROL_STATUS[1]}
 
 
@@ -1479,7 +1442,7 @@ _SELECT_DESCRIPTIONS: tuple[FroniusSelectDescription, ...] = (
             STORAGE_EXT_CONTROL_MODE,
             assume_present(r.storage_control).extended_mode.value,
         ),
-        set_fn=_set_ext_control_mode,
+        set_fn=lambda r, code: r.async_set_extended_mode(code),
         exists_fn=_storage_present,
     ),
     _select(

@@ -185,7 +185,7 @@ async def test_an_invalid_soc_minimum_writes_nothing(hass, entry, connection):
     connection.for_unit(INVERTER_UNIT_ID).on_write(writes.append)
     try:
         with pytest.raises(ValueError):
-            await entities._set_soc_minimum(runtime, 50)
+            await runtime.async_set_soc_minimum(50)
     finally:
         web_control.shutdown()
 

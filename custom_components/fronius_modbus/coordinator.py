@@ -24,7 +24,7 @@ from .fronius_modbus_api.device import (
     UpdateReport,
     meter_report_name,
 )
-from .fronius_modbus_api.storage import StorageControl
+from .fronius_modbus_api.storage import ExtendedMode, StorageControl
 from .fronius_modbus_api.sunspec_models import AcMeter
 
 if TYPE_CHECKING:
@@ -84,6 +84,42 @@ class FroniusRuntimeData:
     def web_data(self) -> WebData | None:
         """The web coordinator's last data, or None when the web API is not set up."""
         return None if self.web is None else self.web.data
+
+    async def async_set_soc_minimum(self, value: float) -> None:
+        """Write the SoC minimum to Modbus, then mirror it to the web API in Manual mode."""
+        percent = int(round(value))
+        web_control = self.web_control
+        mirror_to_web = (
+            web_control is not None
+            and web_control.configured
+            and web_control.battery_mode_is_manual
+        )
+        # A minimum the web API refuses must not reach Modbus either: the two
+        # would otherwise disagree, with the reserve only half applied.
+        if mirror_to_web:
+            assume_present(web_control).validate_soc_minimum(percent)
+        await assume_present(self.storage_control).set_minimum_reserve(percent)
+        if mirror_to_web:
+            await assume_present(web_control).set_soc_minimum_manual(percent)
+
+    async def async_set_extended_mode(self, code: int) -> None:
+        """Switch the storage mode; Charge from Grid also opens the web charge sources."""
+        mode = ExtendedMode(code)
+        await assume_present(self.storage_control).set_mode(mode)
+        web_control = self.web_control
+        if (
+            mode is ExtendedMode.CHARGE_FROM_GRID
+            and web_control is not None
+            and web_control.configured
+        ):
+            try:
+                await web_control.set_charge_sources(
+                    charge_from_grid=True, charge_from_ac=True
+                )
+            except (ModbusError, RuntimeError, ValueError) as err:
+                _LOGGER.warning(
+                    "Failed to enable charge from grid via the web API: %s", err
+                )
 
 
 type FroniusConfigEntry = ConfigEntry[FroniusRuntimeData]

@@ -484,7 +484,7 @@ class FroniusWebClient:
         except FroniusWebAuthError:
             raise
         except Exception as err:
-            _LOGGER.warning(
+            _LOGGER.debug(
                 "Failed reading storage identity via web API from %s: %s",
                 self._host,
                 err,
@@ -499,7 +499,7 @@ class FroniusWebClient:
         except FroniusWebAuthError:
             raise
         except Exception as err:
-            _LOGGER.warning(
+            _LOGGER.debug(
                 "Failed reading inverter readable data via web API from %s: %s",
                 self._host,
                 err,
@@ -530,7 +530,7 @@ class FroniusWebClient:
             )
             return meter_info
         except Exception as err:
-            _LOGGER.warning(
+            _LOGGER.debug(
                 "Failed reading power meter config via web API from %s: %s",
                 self._host,
                 err,

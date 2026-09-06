@@ -1,9 +1,9 @@
 #!/bin/sh
-# The push proves; the commit stays fast. Install once: git config core.hooksPath .githooks
+# The push proves; the commit stays fast. Arm it once: git config core.hooksPath .githooks
 #
 # Two fail-closed gates. The kit's third gate (gitleaks over the history) is
 # folded into gate 1: check.sh already scans every commit this fork added, and
-# scanning further back would only re-report upstream's own findings, which are
+# reaching further back would only re-report upstream's own findings, which are
 # not ours to fix and would leave the gate permanently red.
 #
 # Probe each gate once after changing it and watch it refuse: a gate that was
@@ -15,27 +15,48 @@ cd "$(git rev-parse --show-toplevel)" || exit 1
 fail() { echo "pre-push: $1 - push refused." >&2; exit 1; }
 
 # 1. Definition of done. The suite needs Linux (pytest-homeassistant-custom-component
-#    is Linux-only), so it runs in WSL; the path is derived, never written down,
-#    so this file carries no user name and can be tracked.
+#    is Linux-only), so it runs in WSL; the path is derived from the checkout,
+#    never written down, so this file carries no user name and can be tracked.
 command -v wsl.exe >/dev/null 2>&1 || fail "wsl.exe not found (the test suite only runs on Linux)"
 repo_wsl=$(wsl.exe -e wslpath -a "$(pwd -W)" | tr -d '\r')
 [ -n "$repo_wsl" ] || fail "could not translate the repository path into WSL"
 wsl.exe -e bash -lc "cd \"$repo_wsl\" && PYTHON=\$HOME/ha-dev/venv/bin/python .github/scripts/check.sh" \
     || fail "check.sh failed"
 
-# 2. Blocklist over exactly what leaves the machine: commit messages and added
-#    lines of the push range. The list lives outside the repository because
-#    several of its entries are the very words it keeps out.
+# 2. Blocklist over exactly what leaves the machine: the commit messages and
+#    added lines of the commits this push sends. Git passes those refs on stdin
+#    as "<local ref> <local sha> <remote ref> <remote sha>". The tracking branch
+#    is no substitute: here it follows the upstream project this repository was
+#    forked from, which put sixty foreign commits into the range and refused an
+#    honest push over a trailer in one of them. The list lives outside the
+#    repository because several of its entries are the words it keeps out.
 blocklist="../.local/push-blocklist.txt"
 [ -s "$blocklist" ] || fail "blocklist $blocklist missing or empty"
-upstream=$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || echo origin/main)
-range="$upstream..HEAD"
+remote_name="${1:-origin}"
+zero=$(git hash-object --stdin </dev/null | tr '0-9a-f' '0')
+revisions=""
+while read -r _local_ref local_sha _remote_ref remote_sha; do
+    [ "$local_sha" = "$zero" ] && continue          # a deletion sends no content
+    if [ "$remote_sha" = "$zero" ]; then
+        revisions="$revisions $local_sha --not --remotes=$remote_name"
+    else
+        revisions="$revisions $local_sha --not $remote_sha"
+    fi
+done
+# Manual probing sends no refs; fall back to what a push of HEAD would send.
+[ -n "$revisions" ] || revisions="HEAD --not --remotes=$remote_name"
+
 patterns=$(mktemp)
 grep -vE '^[[:space:]]*(#|$)' "$blocklist" | sed 's/\r$//' > "$patterns"   # a CRLF list would match nothing
 # The diff marker is stripped before scanning. Kept, it becomes part of the
 # text: an added decorator line reads as an e-mail address whose local part is
 # the marker itself, and an honest push is refused.
-scan=$( { git log --format='%B' "$range"; git diff "$range" | grep -E '^\+' | grep -v '^+++' | sed 's/^+//'; } )
+# shellcheck disable=SC2086
+messages=$(git log --format='%B' $revisions)
+# shellcheck disable=SC2086
+additions=$(git log -p --format='' $revisions | grep '^+' | grep -v '^+++' | sed 's/^+//')
+scan="$messages
+$additions"
 hits=$(printf '%s\n' "$scan" | grep -n -i -E -f "$patterns")
 status=$?
 rm -f "$patterns"
@@ -46,7 +67,7 @@ addresses=$(printf '%s\n' "$scan" \
 [ -n "$addresses" ] && hits="$hits
 private address: $addresses"
 if [ -n "$hits" ]; then
-    echo "pre-push: the range $range adds text the blocklist forbids:" >&2
+    echo "pre-push: this push adds text the blocklist forbids:" >&2
     printf '%s\n' "$hits" | head -20 >&2
     exit 1
 fi

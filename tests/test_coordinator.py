@@ -5,14 +5,22 @@ from datetime import timedelta
 import time
 from unittest.mock import MagicMock
 
-from modbus_connection import ModbusConnectionError, ModbusTimeoutError
+from modbus_connection import (
+    ModbusConnectionError,
+    ModbusTimeoutError,
+    ServerDeviceFailureError,
+)
 from modbus_connection.model.sunspec import SunSpecMapShiftError
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.fronius_modbus.const import DOMAIN
-from custom_components.fronius_modbus.coordinator import FroniusModbusCoordinator
+from custom_components.fronius_modbus.coordinator import (
+    DEFAULT_MAX_RATE_W,
+    FroniusModbusCoordinator,
+)
 from custom_components.fronius_modbus.fronius_modbus_api.device import FroniusInverter
+from custom_components.fronius_modbus.fronius_modbus_api.sunspec_models import Nameplate
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID
@@ -134,3 +142,36 @@ async def test_the_link_is_recycled_when_the_window_expires_failing(
         await coordinator._async_update_data()
 
     assert connection.connected is False
+
+
+async def test_derived_values_need_a_fresh_inverter_reading(coordinator, inverter_unit):
+    """Audit F14: a failed inverter block still produced load and grid status from stale power."""
+    await coordinator.async_refresh()
+    address = coordinator.device.inverter.resolved_fields["model_id"].address
+    inverter_unit.fail_read(address, ServerDeviceFailureError())
+    await coordinator.async_refresh()
+    assert "inverter" in coordinator.data.report.failed
+    assert coordinator.data.load_w is None
+    assert coordinator.data.grid_status is None
+
+
+async def test_the_nameplate_rates_replace_the_fallback_once_read(
+    coordinator, inverter_unit, monkeypatch
+):
+    """Audit F09: a first poll without model 120 fixed the storage control on 11000 W."""
+    original_update = Nameplate.async_update
+    calls = {"failed": False}
+
+    async def fail_first(component):
+        if not calls["failed"]:
+            calls["failed"] = True
+            raise ServerDeviceFailureError
+        await original_update(component)
+
+    monkeypatch.setattr(Nameplate, "async_update", fail_first)
+    await coordinator.async_refresh()
+    assert "nameplate" in coordinator.data.report.failed
+    assert coordinator.storage_control.max_charge_rate_w == DEFAULT_MAX_RATE_W
+    await coordinator.async_refresh()
+    assert coordinator.storage_control.max_charge_rate_w == 10240
+    assert coordinator.storage_control.max_discharge_rate_w == 10240

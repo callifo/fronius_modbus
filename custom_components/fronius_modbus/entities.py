@@ -1209,6 +1209,7 @@ def _storage_percent_number(
         key=key,
         translation_key=key,
         device="storage",
+        report_name=REPORT_STORAGE,
         value_fn=value_fn,
         set_fn=set_fn,
         available_fn=available_fn,

@@ -253,3 +253,18 @@ async def test_every_enum_sensor_value_is_one_of_its_options(runtime):
         and description.value_fn(runtime) not in description.options
     ]
     assert offenders == []
+
+
+async def test_storage_rate_numbers_follow_the_storage_report(
+    runtime, entry, inverter_unit
+):
+    """Audit F15: the rate numbers stayed available while every storage register read failed."""
+    address = runtime.device.storage.resolved_fields["model_id"].address
+    inverter_unit.fail_read(address, ModbusTimeoutError())
+    await runtime.modbus.async_refresh()
+    description = next(
+        d for d in entities.number_descriptions(runtime) if d.key == "charge_limit"
+    )
+    entity = entities.FroniusEntity(runtime, entry, description)
+    assert "storage" in runtime.modbus.data.report.failed
+    assert entity.available is False

@@ -17,7 +17,13 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .derived import LoadEstimator, grid_status
 from .fronius_modbus_api.controls import InverterControls
-from .fronius_modbus_api.device import FroniusInverter, UpdateReport, meter_report_name
+from .fronius_modbus_api.device import (
+    REPORT_INVERTER,
+    REPORT_MPPT,
+    FroniusInverter,
+    UpdateReport,
+    meter_report_name,
+)
 from .fronius_modbus_api.storage import StorageControl
 from .fronius_modbus_api.sunspec_models import AcMeter
 
@@ -178,6 +184,14 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
                 or DEFAULT_MAX_RATE_W,
             )
         if self.storage_control is not None:
+            # A first poll without model 120 built the control on the
+            # fallback maximum; every later nameplate read refreshes it
+            # (audit F09), the same way max_power_w follows the settings.
+            nameplate = device.nameplate
+            if nameplate is not None and nameplate.max_cha_rte:
+                self.storage_control.max_charge_rate_w = nameplate.max_cha_rte
+            if nameplate is not None and nameplate.max_dis_cha_rte:
+                self.storage_control.max_discharge_rate_w = nameplate.max_dis_cha_rte
             self.storage_control.sync_from_device()
         if self.inverter_controls is None and device.controls is not None:
             self.inverter_controls = InverterControls(device.controls, max_power_w=None)
@@ -188,30 +202,40 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
         info = self.device.meters.get(self._primary_meter_unit_id)
         return None if info is None else info.meter
 
-    def _load_w(self, report: UpdateReport) -> float | None:
+    def _primary_meter_fresh(self, report: UpdateReport) -> AcMeter | None:
+        """The primary meter, only when both it and the inverter answered this poll.
+
+        Every derived value mixes the two; a stale half would pass as current
+        (audit F14).
+        """
         meter = self._primary_meter()
         if (
             meter is None
             or meter_report_name(self._primary_meter_unit_id) not in report.updated
+            or REPORT_INVERTER not in report.updated
         ):
             return None
-        charge = self.device.mppt_channels.charge
+        return meter
+
+    def _load_w(self, report: UpdateReport) -> float | None:
+        meter = self._primary_meter_fresh(report)
+        if meter is None:
+            return None
+        mppt_fresh = REPORT_MPPT in report.updated
+        charge = self.device.mppt_channels.charge if mppt_fresh else None
         charge_module = None if charge is None else self.device.mppt_module(charge)
         return self._load.update(
             meter_power_w=meter.w,
             inverter_power_w=assume_present(self.device.inverter).w,
             meter_location=self._meter_locations.get(self._primary_meter_unit_id),
-            pv_power_w=self.device.pv_power_w,
+            pv_power_w=self.device.pv_power_w if mppt_fresh else None,
             storage_charge_power_w=None if charge_module is None else charge_module.dcw,
             storage_present=self.device.storage is not None,
         )
 
     def _grid_status(self, report: UpdateReport) -> str | None:
-        meter = self._primary_meter()
-        if (
-            meter is None
-            or meter_report_name(self._primary_meter_unit_id) not in report.updated
-        ):
+        meter = self._primary_meter_fresh(report)
+        if meter is None:
             return None
         return grid_status(assume_present(self.device.inverter).hz, meter.hz)
 

@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.0.0b2
+
+Fixes from an independent audit of 1.0.0b1 plus two upstream issues; no entity, unique id or option changes.
+
+### Fixed
+- The idle inverter-control state read `Normal` while its option list said `normal`, so Home Assistant refused the sensor (regression in 1.0.0b1).
+- A failed AC-limit or power-factor value write left a previously active limit switched off; the enable flag is now restored and a failure to restore it is reported.
+- A rate change queued behind a storage mode switch was validated against the old mode and could undo a fresh charging block; mode checks now happen under the write lock.
+- The storage mode select followed what was written, not what the inverter did: the extended mode is now re-derived from the registers on every poll, a silently refused mode write is given up after three polls, and forced discharge is recognised after a restart (upstream #127).
+- A storage mode change writes the rate that rises first, so Charge from Grid → Block Charging no longer trips the firmware's exception 3 (upstream #126).
+- A meter that did not answer during discovery was treated as absent for the life of the entry; it is now probed again on every poll, and a sub-system that answers for the first time later (meter, MPPT) reloads the entry so its entities appear.
+- Cumulative energy sensors: a sustained gap above 100 kWh (Home Assistant offline) is now accepted after three consecutive polls instead of freezing the sensor forever, and reading the sensor no longer counts as a poll.
+- A first poll without the nameplate model fixed the storage rate maxima on 11 000 W; they now follow every later nameplate read.
+- Load and grid status are only derived when both the meter and the inverter answered in the same poll.
+- The storage rate numbers now go unavailable when the storage registers could not be read.
+- Concurrent web API writes (SoC minimum/maximum, charge sources) are serialised; one no longer overwrites the other.
+- After a rejected web login the web entities go unavailable and a write reports an error instead of doing nothing.
+- The assisted Modbus setup now also switches a float register map to the integer map the integration reads.
+- Configure always offers the password step, so the technician password can be added or replaced later; an empty customer password keeps the stored token.
+- Changing the host in Configure/Reconfigure moves the entry's unique id with it and refuses a host another entry already serves.
+
 ## 1.0.0b1
 
 First beta of the rewrite; the 1.0.0 release follows once the beta has run on more installations.

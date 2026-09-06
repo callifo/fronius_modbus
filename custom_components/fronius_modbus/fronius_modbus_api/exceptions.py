@@ -9,3 +9,7 @@ class NotAFroniusInverter(ModbusError):
     A ModbusError so a coordinator treats it as a failed refresh: a device
     that answers the marker but serves no inverter is the wrong device.
     """
+
+
+class ControlLeftDisabledError(ModbusError):
+    """A control was switched off for a write, the write failed, and switching it back on failed too."""

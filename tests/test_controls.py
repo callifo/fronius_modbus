@@ -8,6 +8,9 @@ from custom_components.fronius_modbus.fronius_modbus_api.controls import (
     APPLY_MASK_SECONDS,
     InverterControls,
 )
+from custom_components.fronius_modbus.fronius_modbus_api.exceptions import (
+    ControlLeftDisabledError,
+)
 from custom_components.fronius_modbus.fronius_modbus_api.sunspec_models import (
     CONTROLS_MODEL_ID,
     Controls,
@@ -114,3 +117,51 @@ async def test_the_pulse_succeeds_when_the_read_right_after_it_is_refused(
     await controls.set_ac_limit_w(2500)
 
     assert [w for _, w in _at(writes, W_MAX_LIM_PCT)] == [2500]
+
+
+async def test_a_failed_limit_write_leaves_the_limit_enabled(clock):
+    """Audit F01: the pulse switched the limit off and never back on when the value write failed."""
+
+    class FakeControls:
+        w_max_lim_ena = 1
+        w_max_lim_pct = 25.0
+        writes = []
+
+        async def async_update(self):
+            pass
+
+        async def write(self, field, value):
+            self.writes.append((field, value))
+            if field == "w_max_lim_pct":
+                raise ServerDeviceFailureError
+            setattr(self, field, value)
+
+    component = FakeControls()
+    controls = InverterControls(
+        component, max_power_w=10000, monotonic=clock.monotonic, sleep=clock.sleep
+    )
+    with pytest.raises(ServerDeviceFailureError):
+        await controls.set_ac_limit_w(5000)
+    assert component.w_max_lim_ena == 1
+    assert component.writes[-1] == ("w_max_lim_ena", 1)
+
+
+async def test_a_limit_that_cannot_be_re_enabled_is_reported_as_left_disabled(clock):
+    class FakeControls:
+        w_max_lim_ena = 1
+
+        async def async_update(self):
+            pass
+
+        async def write(self, field, value):
+            if field == "w_max_lim_ena" and value == 0:
+                setattr(self, field, value)
+                return
+            raise ServerDeviceFailureError
+
+    component = FakeControls()
+    controls = InverterControls(
+        component, max_power_w=10000, monotonic=clock.monotonic, sleep=clock.sleep
+    )
+    with pytest.raises(ControlLeftDisabledError):
+        await controls.set_ac_limit_w(5000)

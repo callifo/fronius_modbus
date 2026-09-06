@@ -23,8 +23,8 @@
   {
     "label": "controls: the enable pulse waits before switching back on",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/controls.py",
-    "old": "                await self._sleep(APPLY_TOGGLE_DELAY_SECONDS)\n",
-    "new": "",
+    "old": "            await self._sleep(APPLY_TOGGLE_DELAY_SECONDS)\n            await self._controls.write(enable_field, ENABLED)\n            return True\n",
+    "new": "            await self._controls.write(enable_field, ENABLED)\n            return True\n",
     "tests": "pulsed_off_and_on_around_the_write"
   },
   {
@@ -121,8 +121,8 @@
   {
     "label": "storage: a rate write reads back inside the write lock",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "            await self._storage.write(field_name, percent)\n",
-    "new": "            await self._storage.write(field_name, percent)\n            await self._storage.async_update()\n",
+    "old": "            await self._storage.write(field_name, percent())\n",
+    "new": "            await self._storage.write(field_name, percent())\n            await self._storage.async_update()\n",
     "tests": "a_rate_write_succeeds_when_the_read_right_after_it_is_refused"
   }
 ]

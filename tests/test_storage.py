@@ -1,10 +1,14 @@
 """The storage mode automaton and its write sequences, watched through the mock's write events."""
 
+import asyncio
+from types import SimpleNamespace
+
 from modbus_connection import ServerDeviceFailureError
 from modbus_connection.model.sunspec import scan
 import pytest
 
 from custom_components.fronius_modbus.fronius_modbus_api.storage import (
+    MODE_WRITE_GRACE_POLLS,
     ExtendedMode,
     StorageControl,
 )
@@ -230,3 +234,105 @@ async def test_a_rate_write_succeeds_when_the_read_right_after_it_is_refused(
     await control.set_charge_limit_w(5120)
 
     assert _words(writes, IN_W_RTE)[-1] == 5000
+
+
+async def test_a_rate_queued_behind_a_mode_switch_is_judged_by_the_new_mode():
+    """Audit F02: validated before the lock, a charge limit undid a fresh charging block."""
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    class FakeStorage:
+        stor_ctl_mod = 1
+        in_w_rte = 100.0
+        out_w_rte = 100.0
+
+        async def write(self, field, value):
+            setattr(self, field, value)
+            if field == "stor_ctl_mod":
+                entered.set()
+                await release.wait()
+
+    storage = FakeStorage()
+    control = StorageControl(
+        storage, max_charge_rate_w=10000, max_discharge_rate_w=10000
+    )
+    control.sync_from_device()
+    mode_task = asyncio.create_task(control.set_mode(ExtendedMode.BLOCK_CHARGING))
+    await entered.wait()
+    rate_task = asyncio.create_task(control.set_charge_limit_w(5000))
+    await asyncio.sleep(0)
+    release.set()
+    results = await asyncio.gather(mode_task, rate_task, return_exceptions=True)
+    assert isinstance(results[1], ValueError)
+    assert storage.in_w_rte == 0
+
+
+def test_forced_discharge_is_recognised_at_startup():
+    """Audit F08: mode 1 with a negative InWRte read as a PV charge limit."""
+    storage = SimpleNamespace(stor_ctl_mod=1, in_w_rte=-50.0, out_w_rte=100.0)
+    control = StorageControl(
+        storage, max_charge_rate_w=10000, max_discharge_rate_w=10000
+    )
+    control.sync_from_device()
+    assert control.extended_mode is ExtendedMode.DISCHARGE_TO_GRID
+
+
+@pytest.mark.parametrize("mode", list(ExtendedMode))
+async def test_every_written_mode_is_read_back_as_itself(inverter_unit, mode):
+    chain = await scan(inverter_unit, 40000)
+    storage = Storage(inverter_unit, chain.first(STORAGE_MODEL_ID))
+    await storage.async_update()
+    control = StorageControl(
+        storage, max_charge_rate_w=10000, max_discharge_rate_w=10000
+    )
+    control.sync_from_device()
+    await control.set_mode(mode)
+    if mode is ExtendedMode.CHARGE_FROM_GRID:
+        await control.set_grid_charge_power_w(2500)
+    if mode is ExtendedMode.DISCHARGE_TO_GRID:
+        await control.set_grid_discharge_power_w(2500)
+    await storage.async_update()
+    fresh = StorageControl(storage, max_charge_rate_w=10000, max_discharge_rate_w=10000)
+    fresh.sync_from_device()
+    assert fresh.extended_mode is mode
+
+
+async def test_a_mode_changed_outside_home_assistant_is_adopted(control):
+    """Audit F07 / upstream #127: the select kept showing the mode it had written."""
+    await control.set_mode(ExtendedMode.BLOCK_CHARGING)
+    await control._storage.async_update()
+    control.sync_from_device()
+    assert control.extended_mode is ExtendedMode.BLOCK_CHARGING
+    control._storage.modbus_unit.holding[STOR_CTL_MOD] = 0
+    await control._storage.async_update()
+    control.sync_from_device()
+    assert control.extended_mode is ExtendedMode.AUTO
+
+
+async def test_a_mode_the_inverter_refuses_is_given_up_after_the_grace_polls(control):
+    """Audit F07: a silently refused mode write was reported as done forever."""
+    storage = control._storage
+    written = []
+    storage.modbus_unit.on_write(written.append)
+    await control.set_mode(ExtendedMode.BLOCK_DISCHARGING)
+    # The inverter keeps its registers as if the write never happened.
+    for event in written:
+        storage.modbus_unit.holding[event.address] = (
+            0 if event.address == STOR_CTL_MOD else 10000
+        )
+    for _ in range(MODE_WRITE_GRACE_POLLS - 1):
+        await storage.async_update()
+        control.sync_from_device()
+        assert control.extended_mode is ExtendedMode.BLOCK_DISCHARGING
+    await storage.async_update()
+    control.sync_from_device()
+    assert control.extended_mode is ExtendedMode.AUTO
+
+
+async def test_charge_from_grid_at_zero_watts_keeps_its_mode_across_polls(control):
+    """The registers of Charge from Grid at 0 W equal Block Discharging; the choice must survive."""
+    await control.set_mode(ExtendedMode.CHARGE_FROM_GRID)
+    for _ in range(MODE_WRITE_GRACE_POLLS + 1):
+        await control._storage.async_update()
+        control.sync_from_device()
+    assert control.extended_mode is ExtendedMode.CHARGE_FROM_GRID

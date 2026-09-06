@@ -11,6 +11,9 @@ import asyncio
 from collections.abc import Awaitable, Callable
 import time
 
+from modbus_connection import ModbusError
+
+from .exceptions import ControlLeftDisabledError
 from .sunspec_models import Controls
 
 APPLY_TOGGLE_DELAY_SECONDS = 1.0
@@ -95,13 +98,29 @@ class InverterControls:
         async with self._write_lock:
             await self._controls.async_update()
             was_enabled: bool = getattr(self._controls, enable_field) == ENABLED
-            if was_enabled:
-                await self._controls.write(enable_field, DISABLED)
-            await self._controls.write(value_field, value)
-            if was_enabled:
-                await self._sleep(APPLY_TOGGLE_DELAY_SECONDS)
-                await self._controls.write(enable_field, ENABLED)
-            return was_enabled
+            if not was_enabled:
+                await self._controls.write(value_field, value)
+                return False
+            await self._controls.write(enable_field, DISABLED)
+            try:
+                await self._controls.write(value_field, value)
+            except ModbusError as err:
+                # The limit was live before this call; a failed value write
+                # must not leave it switched off (audit F01).
+                await self._restore_enable(enable_field, err)
+                raise
+            await self._sleep(APPLY_TOGGLE_DELAY_SECONDS)
+            await self._controls.write(enable_field, ENABLED)
+            return True
+
+    async def _restore_enable(self, enable_field: str, cause: ModbusError) -> None:
+        try:
+            await self._controls.write(enable_field, ENABLED)
+        except ModbusError as restore_error:
+            raise ControlLeftDisabledError(
+                f"{enable_field} could not be re-enabled after a failed write: "
+                f"{restore_error}"
+            ) from cause
 
     async def set_ac_limit_w(self, watts: float) -> None:
         """Set the AC power limit in watts, converted to percent of max power."""

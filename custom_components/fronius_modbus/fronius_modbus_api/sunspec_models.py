@@ -35,8 +35,6 @@ STATUS_MODEL_ID = 122
 CONTROLS_MODEL_ID = 123
 COMMON_MODEL_ID = 1
 SUNSPEC_BASE_ADDRESS = 40000
-# Header-relative offset of the serial number in model 1: stripped from diagnostics.
-COMMON_SERIAL_OFFSET = 50
 COMMON_SERIAL_WORDS = 16
 
 

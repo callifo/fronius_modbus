@@ -4,7 +4,6 @@ from collections.abc import Mapping
 import re
 
 DOMAIN = "fronius_modbus"
-CONNECTION_MODBUS = "modbus"
 DEFAULT_NAME = "Fronius"
 ENTITY_PREFIX = "fm"
 DEFAULT_SCAN_INTERVAL = 10

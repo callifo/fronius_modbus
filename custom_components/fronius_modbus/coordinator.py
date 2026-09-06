@@ -190,33 +190,45 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
             ", ".join(sorted(new)),
         )
         self._built_for = self._built_for | new
-        self.hass.config_entries.async_schedule_reload(self.config_entry.entry_id)
+        self.hass.config_entries.async_schedule_reload(
+            assume_present(self.config_entry).entry_id
+        )
 
     def _build_controls(self) -> None:
         device = self.device
-        if self.storage_control is None and device.storage is not None:
-            nameplate = device.nameplate
-            self.storage_control = StorageControl(
-                device.storage,
-                max_charge_rate_w=(nameplate.max_cha_rte if nameplate else None)
-                or DEFAULT_MAX_RATE_W,
-                max_discharge_rate_w=(nameplate.max_dis_cha_rte if nameplate else None)
-                or DEFAULT_MAX_RATE_W,
-            )
-        if self.storage_control is not None:
-            # A first poll without model 120 built the control on the
-            # fallback maximum; every later nameplate read refreshes it
-            # (audit F09), the same way max_power_w follows the settings.
-            nameplate = device.nameplate
-            if nameplate is not None and nameplate.max_cha_rte:
-                self.storage_control.max_charge_rate_w = nameplate.max_cha_rte
-            if nameplate is not None and nameplate.max_dis_cha_rte:
-                self.storage_control.max_discharge_rate_w = nameplate.max_dis_cha_rte
-            self.storage_control.sync_from_device()
+        self._refresh_storage_control()
         if self.inverter_controls is None and device.controls is not None:
             self.inverter_controls = InverterControls(device.controls, max_power_w=None)
         if self.inverter_controls is not None and device.settings is not None:
             self.inverter_controls.max_power_w = device.settings.w_max
+
+    def _refresh_storage_control(self) -> None:
+        """Build the storage control once, then keep its rate maxima current.
+
+        A first poll without model 120 built it on the fallback maximum; every
+        later nameplate read refreshes it (audit F09), the same way
+        max_power_w follows the settings.
+        """
+        device = self.device
+        if device.storage is None:
+            return
+        nameplate = device.nameplate
+        max_charge = (
+            nameplate.max_cha_rte if nameplate else None
+        ) or DEFAULT_MAX_RATE_W
+        max_discharge = (
+            nameplate.max_dis_cha_rte if nameplate else None
+        ) or DEFAULT_MAX_RATE_W
+        if self.storage_control is None:
+            self.storage_control = StorageControl(
+                device.storage,
+                max_charge_rate_w=max_charge,
+                max_discharge_rate_w=max_discharge,
+            )
+        else:
+            self.storage_control.max_charge_rate_w = max_charge
+            self.storage_control.max_discharge_rate_w = max_discharge
+        self.storage_control.sync_from_device()
 
     def _primary_meter(self) -> AcMeter | None:
         info = self.device.meters.get(self._primary_meter_unit_id)

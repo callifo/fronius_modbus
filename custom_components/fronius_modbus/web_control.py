@@ -129,12 +129,7 @@ def _as_int(value: Any) -> int | None:
 
 
 def _enabled_state(value: Any) -> str:
-    if isinstance(value, str):
-        normalized = value.strip().lower()
-        is_enabled = normalized in ("1", "true", "on", "yes", "enabled")
-    else:
-        is_enabled = bool(value)
-    return "enabled" if is_enabled else "disabled"
+    return "enabled" if _enabled_bool(value) else "disabled"
 
 
 def _enabled_bool(value: Any) -> bool:
@@ -662,12 +657,14 @@ class FroniusWebControl:
             raise RuntimeError(WEB_API_NOT_CONFIGURED)
         await self._set_api_soc_manual(soc_min=soc_min, control_name="SoC Minimum")
 
-    async def _set_api_charge_sources(
+    @_serialised
+    async def set_charge_sources(
         self,
         *,
         charge_from_grid: bool | None = None,
         charge_from_ac: bool | None = None,
     ) -> None:
+        """Allow charging the battery from the grid and/or from AC."""
         if not self._client:
             raise RuntimeError(WEB_API_NOT_CONFIGURED)
 
@@ -697,18 +694,6 @@ class FroniusWebControl:
         self.data.charge_from_grid = next_charge_from_grid
         self.data.charge_from_ac = next_charge_from_ac
         self._start_battery_write_transition("battery charge source")
-
-    @_serialised
-    async def set_charge_sources(
-        self,
-        *,
-        charge_from_grid: bool | None = None,
-        charge_from_ac: bool | None = None,
-    ) -> None:
-        """Allow charging the battery from the grid and/or from AC."""
-        await self._set_api_charge_sources(
-            charge_from_grid=charge_from_grid, charge_from_ac=charge_from_ac
-        )
 
     @_serialised
     async def set_export_soft_limit_w(self, value: float) -> None:

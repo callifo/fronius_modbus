@@ -16,7 +16,7 @@ It can use the authenticated Fronius web API for setup assistance and battery co
 > You are using this module (and it's prerequisites/dependencies) at your own risk. Not me neither any of contributors to this or any prerequired/dependency project are responsible for damage in any kind caused by this project or any of its prerequsites/dependencies.
 
 > [!IMPORTANT]
-> Its recommended to keep the inverter up to date, this integration will only be tested on recent firmwares. It is suggested to update your GEN24 inverter firmware to 1.40.0 or higher as issues have been reported in earlier firmwares of the Solar API caused multiple outages on GEN24 inverters. As of Mar 26, this firmware update has limited availability, so other areas might take longer.
+> Its recommended to keep the inverter up to date, this integration will only be tested on recent firmwares. Firmware below 1.40.7-1 has a Solar API issue that caused outages on GEN24 inverters; the integration raises a repair issue on such firmware and offers to disable the Solar API until the inverter is updated.
 
 ## What changed in 1.0
 

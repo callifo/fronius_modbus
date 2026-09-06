@@ -12,8 +12,10 @@ from custom_components.fronius_modbus.const import DOMAIN
 from custom_components.fronius_modbus.coordinator import (
     FroniusModbusCoordinator,
     FroniusRuntimeData,
+    FroniusWebCoordinator,
 )
 from custom_components.fronius_modbus.fronius_modbus_api.device import FroniusInverter
+from custom_components.fronius_modbus.froniuswebclient import FroniusWebAuthError
 from custom_components.fronius_modbus.sensor import FroniusSensor
 
 from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID
@@ -289,3 +291,31 @@ async def test_reading_a_total_sensor_does_not_count_as_a_poll(hass, entry, runt
     _report(sensor, 120.0)
     reads = [sensor.native_value for _ in range(entities.TOTAL_INCREASING_RESET_POLLS)]
     assert reads == [original] * entities.TOTAL_INCREASING_RESET_POLLS
+
+
+async def test_web_controls_go_unavailable_when_the_customer_login_is_rejected(
+    hass, entry, runtime
+):
+    """Audit F16: after a rejected login the switches stayed available and did nothing."""
+    control = make_control(hass)
+    runtime.web_control = control
+    runtime.web = FroniusWebCoordinator(
+        hass, entry, control, interval=timedelta(seconds=60)
+    )
+    try:
+        await runtime.web.async_refresh()
+        description = next(
+            d
+            for d in entities.switch_descriptions(runtime)
+            if d.key == "api_solar_api_enabled"
+        )
+        entity = entities.FroniusEntity(runtime, entry, description)
+        assert entity.available
+        control._client.get_inverter_info = lambda: (_ for _ in ()).throw(
+            FroniusWebAuthError("rejected")
+        )
+        await runtime.web.async_refresh()
+        assert not control.configured
+        assert not entity.available
+    finally:
+        control.shutdown()

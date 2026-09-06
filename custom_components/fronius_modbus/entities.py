@@ -83,6 +83,7 @@ from .fronius_modbus_api.sunspec_models import MpptModule
 _LOGGER = logging.getLogger(__name__)
 
 type Source = Literal["modbus", "web"]
+type WebClientKind = Literal["customer", "technician"]
 type DeviceKind = Literal["inverter", "storage", "meter"]
 
 # A new poll below the last value, or a jump above it, is a bad reading, not a reset.
@@ -101,6 +102,8 @@ class FroniusDescriptionMixin:
     key: str
     device: DeviceKind
     source: Source = "modbus"
+    # Which web login a web-sourced entity needs; it goes unavailable without it.
+    web_client: WebClientKind = "customer"
     report_name: str | None = None
     meter_unit_id: int | None = None
     value_fn: Callable[[FroniusRuntimeData], Any]
@@ -194,6 +197,13 @@ def _web_field(runtime: FroniusRuntimeData, field_name: str) -> Any:
     return None if web_data is None else getattr(web_data, field_name)
 
 
+def _web_client_present(runtime: FroniusRuntimeData, kind: WebClientKind) -> bool:
+    control = runtime.web_control
+    if control is None:
+        return False
+    return control.technician_configured if kind == "technician" else control.configured
+
+
 def _web_configured(runtime: FroniusRuntimeData) -> bool:
     return runtime.web_control is not None and runtime.web_control.configured
 
@@ -217,6 +227,7 @@ def _sensor(
     *,
     device: DeviceKind = "inverter",
     source: Source = "modbus",
+    web_client: WebClientKind = "customer",
     report_name: str | None = None,
     meter_unit_id: int | None = None,
     value_fn: Callable[[FroniusRuntimeData], Any],
@@ -234,6 +245,7 @@ def _sensor(
         translation_key=translation_key,
         device=device,
         source=source,
+        web_client=web_client,
         report_name=report_name,
         meter_unit_id=meter_unit_id,
         value_fn=value_fn,
@@ -584,6 +596,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "export_soft_limit",
         "export_soft_limit",
         source="web",
+        web_client="technician",
         value_fn=lambda r: _web_field(r, "export_soft_limit_w"),
         exists_fn=_web_configured,
         device_class=SensorDeviceClass.POWER,
@@ -1379,6 +1392,7 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
     FroniusNumberDescription(
         key="export_soft_limit",
         translation_key="export_soft_limit",
+        web_client="technician",
         device="inverter",
         source="web",
         value_fn=lambda r: _web_field(r, "export_soft_limit_w"),
@@ -1729,6 +1743,11 @@ class FroniusEntity(
                 return False
             return description.available_fn(self._runtime)
         web_coordinator = self._runtime.web
+        # A rejected login clears the client but the coordinator keeps
+        # succeeding on what is left (audit F16): the entities of that login
+        # must not stay operable.
+        if not _web_client_present(self._runtime, description.web_client):
+            return False
         if web_coordinator is None or not web_coordinator.last_update_success:
             return False
         return description.available_fn(self._runtime)

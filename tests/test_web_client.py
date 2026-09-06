@@ -439,6 +439,7 @@ def modbus_config(**slave) -> dict:
     return {
         "slave": {
             "mode": "tcp",
+            "sunspecMode": "int",
             "port": 502,
             "meterAddress": 200,
             "rtu_inverter_slave_id": 1,
@@ -644,3 +645,22 @@ def test_the_login_request_names_the_user_it_authenticates(inverter, monkeypatch
     login(HOST, "technician", password="secret")
 
     assert {"user": ["technician"]} in seen
+
+
+def test_assisted_setup_converts_an_existing_float_register_map():
+    """Audit F13: a TCP map that only differed in sunspecMode counted as ready, then failed the probe."""
+    client = FroniusWebClient("192.0.2.10")
+    client.get_modbus_config = lambda: {
+        "slave": {
+            "mode": "tcp",
+            "port": 502,
+            "meterAddress": 200,
+            "rtu_inverter_slave_id": 1,
+            "sunspecMode": "float",
+            "ctr": {"on": True, "restriction": {"on": False}},
+        }
+    }
+    sent = {}
+    client._request = lambda method, path, payload=None: sent.update(payload=payload)
+    assert client.ensure_modbus_enabled(502, 200, 1) is True
+    assert sent["payload"]["slave"]["sunspecMode"] == "int"

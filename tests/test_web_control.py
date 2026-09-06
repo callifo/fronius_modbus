@@ -1,5 +1,7 @@
 """Web control: battery mode rules and the write side effects, with the HTTP client stubbed."""
 
+import asyncio
+
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -210,7 +212,8 @@ async def test_a_rejected_technician_write_does_not_fake_the_limit(hass):
     control = make_control(hass, technician_client=FakeRejectingTechnicianClient())
     try:
         await control.async_refresh()
-        await control.set_export_soft_limit_w(4200)
+        with pytest.raises(RuntimeError, match="technician"):
+            await control.set_export_soft_limit_w(4200)
     finally:
         control.shutdown()
 
@@ -275,3 +278,29 @@ async def test_a_firmware_update_clears_the_solar_api_warning_on_the_next_refres
         control.shutdown()
 
     assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_concurrent_soc_writes_are_applied_one_after_the_other(hass):
+    """Audit F10: two read-modify-write SoC updates composed from the same old tuple lost one change."""
+    control = make_control(hass)
+    try:
+        await control.async_refresh()
+        control._set_effective_battery_mode(1, "manual")
+        await asyncio.gather(
+            control.set_soc_minimum_manual(10), control.set_soc_maximum(90)
+        )
+        soc_calls = [call for call in control._client.calls if call[0] == "soc"]
+        assert soc_calls == [("soc", 10, 100, 5), ("soc", 10, 90, 5)]
+        assert (control.data.soc_min, control.data.soc_max) == (10, 90)
+    finally:
+        control.shutdown()
+
+
+async def test_a_write_without_a_customer_login_is_an_error_not_a_silent_no_op(hass):
+    """Audit F16: setters returned quietly after the login had been rejected."""
+    control = make_control(hass, client=None)
+    try:
+        with pytest.raises(RuntimeError, match="not configured"):
+            await control.set_solar_api_enabled(False)
+    finally:
+        control.shutdown()

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+import functools
 import logging
 import re
 from typing import Any
@@ -25,6 +26,21 @@ from .froniuswebclient import FroniusWebAuthError, FroniusWebClient
 from .token_store import async_get_token_store
 
 _LOGGER = logging.getLogger(__name__)
+WEB_API_NOT_CONFIGURED = "Fronius Web API is not configured"
+TECHNICIAN_NOT_CONFIGURED = "Technician credentials not configured - enter the technician password via Configure"
+
+
+def _serialised(method):
+    """Run one web write at a time: every setter reads state, composes a payload and writes it back."""
+
+    @functools.wraps(method)
+    async def wrapper(self, *args, **kwargs):
+        async with self._write_lock:
+            return await method(self, *args, **kwargs)
+
+    return wrapper
+
+
 # The inverter drops Modbus for a while after a battery configuration write over the web API.
 BATTERY_WRITE_MODBUS_RECOVERY_SECONDS = 30.0
 BATTERY_WRITE_WEB_REFRESH_DELAY_SECONDS = 10.0
@@ -175,6 +191,9 @@ class FroniusWebControl:
         self._inverter_firmware = inverter_firmware
         self._on_battery_write = on_battery_write
         self._modbus_soc_minimum = modbus_soc_minimum
+        # One write at a time (audit F10): concurrent read-modify-write of the
+        # SoC tuple or the charge-source pair lost one of the two changes.
+        self._write_lock = asyncio.Lock()
         self.data = WebData()
         self._coordinator: Any = None
         self._delayed_refresh_task: asyncio.Task | None = None
@@ -262,7 +281,7 @@ class FroniusWebControl:
     async def _async_web_job(self, func, *args, raise_on_auth_failure: bool = False):
         if not self._client:
             if raise_on_auth_failure:
-                raise RuntimeError("Fronius Web API is not configured")
+                raise RuntimeError(WEB_API_NOT_CONFIGURED)
             return None
 
         try:
@@ -282,9 +301,13 @@ class FroniusWebControl:
             return None
         return await self._async_web_job(getattr(client, method_name), *args)
 
-    async def _async_tech_web_job(self, func, *args):
+    async def _async_tech_web_job(
+        self, func, *args, raise_on_auth_failure: bool = False
+    ):
         """Run a technician-client job; on auth failure clear only the technician client."""
         if not self._technician_client:
+            if raise_on_auth_failure:
+                raise RuntimeError(TECHNICIAN_NOT_CONFIGURED)
             return None
         try:
             return await self._hass.async_add_executor_job(func, *args)
@@ -296,6 +319,10 @@ class FroniusWebControl:
             )
             self._technician_client = None
             self.data.export_soft_limit_w = None
+            if raise_on_auth_failure:
+                raise RuntimeError(
+                    "Fronius technician authentication failed. Reconfigure the integration."
+                ) from err
             return None
 
     async def _async_handle_web_api_auth_failure(self, err: Exception) -> None:
@@ -467,10 +494,11 @@ class FroniusWebControl:
 
     # -- setters -----------------------------------------------------------------
 
+    @_serialised
     async def set_solar_api_enabled(self, enabled: bool) -> None:
         """Enable or disable the Solar API."""
         if not self._client:
-            return
+            raise RuntimeError(WEB_API_NOT_CONFIGURED)
 
         await self._async_web_job(
             self._client.set_solar_api_enabled, enabled, raise_on_auth_failure=True
@@ -478,10 +506,11 @@ class FroniusWebControl:
         self.data.solar_api_enabled = bool(enabled)
         self._async_sync_solar_api_warning()
 
+    @_serialised
     async def reset_modbus_control(self) -> None:
         """Reset the inverter's Modbus configuration to its defaults."""
         if not self._client:
-            return
+            raise RuntimeError(WEB_API_NOT_CONFIGURED)
 
         await self._async_web_job(
             self._client.reset_modbus_control, raise_on_auth_failure=True
@@ -537,7 +566,7 @@ class FroniusWebControl:
         control_name: str = "SoC Maximum",
     ) -> tuple[int, int, int] | None:
         if not self._client:
-            return None
+            raise RuntimeError(WEB_API_NOT_CONFIGURED)
         self._require_battery_mode_manual(control_name)
 
         next_soc_min, next_soc_max, next_backup_reserved = self._get_api_soc_values(
@@ -557,10 +586,11 @@ class FroniusWebControl:
         self._start_battery_write_transition(control_name)
         return next_soc_min, next_soc_max, next_backup_reserved
 
+    @_serialised
     async def set_battery_mode(self, mode: int) -> None:
         """Switch the battery between Auto (0) and Manual (1) control."""
         if not self._client:
-            return
+            raise RuntimeError(WEB_API_NOT_CONFIGURED)
 
         current_effective_mode = self.data.battery_mode_effective
         display_power = self.data.battery_power_w
@@ -600,10 +630,11 @@ class FroniusWebControl:
             self.data.soc_max = SOC_HIGHEST
         self._start_battery_write_transition("Battery API mode")
 
+    @_serialised
     async def set_battery_power_w(self, value: float) -> None:
         """Set the target feed-in power in Manual battery mode."""
         if not self._client:
-            return
+            raise RuntimeError(WEB_API_NOT_CONFIGURED)
         self._require_battery_mode_manual("Target feed in")
 
         power = -int(round(value))
@@ -617,16 +648,18 @@ class FroniusWebControl:
         self._set_effective_battery_mode(BATTERY_MODE_MANUAL, SOC_MODE_MANUAL)
         self._start_battery_write_transition("Target feed in")
 
+    @_serialised
     async def set_soc_maximum(self, soc_max: int) -> None:
         """Set the maximum state of charge in Manual battery mode."""
         if not self._client:
-            return
+            raise RuntimeError(WEB_API_NOT_CONFIGURED)
         await self._set_api_soc_manual(soc_max=soc_max, control_name="SoC Maximum")
 
+    @_serialised
     async def set_soc_minimum_manual(self, soc_min: int) -> None:
         """Set the minimum state of charge in Manual battery mode."""
         if not self._client:
-            return
+            raise RuntimeError(WEB_API_NOT_CONFIGURED)
         await self._set_api_soc_manual(soc_min=soc_min, control_name="SoC Minimum")
 
     async def _set_api_charge_sources(
@@ -636,7 +669,7 @@ class FroniusWebControl:
         charge_from_ac: bool | None = None,
     ) -> None:
         if not self._client:
-            return
+            raise RuntimeError(WEB_API_NOT_CONFIGURED)
 
         if charge_from_ac is False:
             next_charge_from_grid = False
@@ -665,6 +698,7 @@ class FroniusWebControl:
         self.data.charge_from_ac = next_charge_from_ac
         self._start_battery_write_transition("battery charge source")
 
+    @_serialised
     async def set_charge_sources(
         self,
         *,
@@ -676,18 +710,19 @@ class FroniusWebControl:
             charge_from_grid=charge_from_grid, charge_from_ac=charge_from_ac
         )
 
+    @_serialised
     async def set_export_soft_limit_w(self, value: float) -> None:
         """Set the export soft limit; requires technician credentials."""
         if not self._technician_client:
-            raise RuntimeError(
-                "Technician credentials not configured — enter the technician password via Configure"
-            )
+            raise RuntimeError(TECHNICIAN_NOT_CONFIGURED)
         limit_w = int(round(value))
         result = await self._async_tech_web_job(
-            self._technician_client.set_export_soft_limit, limit_w
+            self._technician_client.set_export_soft_limit,
+            limit_w,
+            raise_on_auth_failure=True,
         )
         if not result:
-            return
+            raise RuntimeError("The inverter did not accept the export soft limit")
         self.data.export_soft_limit_w = limit_w
         if self._coordinator is not None:
             self._coordinator.async_set_updated_data(replace(self.data))

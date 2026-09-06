@@ -553,6 +553,9 @@ class FroniusWebClient:
 
         if (
             slave.get("mode") == "tcp"
+            # The integration reads the integer+SF models only; a float map
+            # would pass every other check and then fail the probe (audit F13).
+            and slave.get("sunspecMode") == "int"
             and _is_enabled(ctr.get("on"))
             and _as_int(slave.get("port"), port) == int(port)
             and _as_int(slave.get("meterAddress"), meter_address) == int(meter_address)

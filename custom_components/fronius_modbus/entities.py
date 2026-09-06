@@ -357,7 +357,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "control_mode",
         report_name=REPORT_STATUS,
         value_fn=lambda r: bitmask_to_string(
-            assume_present(r.device.status).st_act_ctl, INVERTER_CONTROLS, "Normal"
+            assume_present(r.device.status).st_act_ctl, INVERTER_CONTROLS, "normal"
         ),
         entity_category=EntityCategory.DIAGNOSTIC,
     ),

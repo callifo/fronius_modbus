@@ -241,3 +241,15 @@ async def test_an_absent_first_meter_does_not_renumber_the_second(
     info = entities.device_info(runtime, entry, "meter", METER_UNIT_ID)
 
     assert info["name"].endswith("Meter 2")
+
+
+async def test_every_enum_sensor_value_is_one_of_its_options(runtime):
+    """Audit F04: the zero-flag control state read "Normal" while the options said "normal"."""
+    offenders = [
+        (description.key, description.value_fn(runtime))
+        for description in entities.sensor_descriptions(runtime)
+        if description.options is not None
+        and description.value_fn(runtime) is not None
+        and description.value_fn(runtime) not in description.options
+    ]
+    assert offenders == []

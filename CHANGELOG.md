@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Fixed
+- A device that refuses a read past the end of its register map instead of answering the SunSpec end marker no longer fails the whole setup with "cannot connect": discovery keeps the models the device did serve and logs where the chain stopped.
+
 ### Changed
 - The Web API now uses one role per entry: pick `customer` or `technician` during setup and enter only that password. An entry that had a technician token keeps technician access; every other entry stays on `customer`. Switching roles is a reconfigure.
 - Storage charge/discharge limits are converted to percent of WChaMax (model 124), the reference Fronius documents for InWRte/OutWRte; the nameplate ratings are only used when a device reports no WChaMax. Identical on devices where both agree.

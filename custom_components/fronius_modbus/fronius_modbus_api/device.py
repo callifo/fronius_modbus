@@ -8,6 +8,7 @@ import logging
 from typing import Any, NamedTuple, cast
 
 from modbus_connection import (
+    IllegalDataAddressError,
     ModbusConnectionError,
     ModbusError,
     ModbusTimeoutError,
@@ -125,13 +126,51 @@ async def _read_identity(unit: ModbusUnit, chain: SunSpecModels) -> DeviceIdenti
     )
 
 
+# SunSpec header words before the first model, and the id that closes the chain.
+MARKER_WORDS = 2
+END_MODEL_ID = 0xFFFF
+# A map longer than this is a misread chain, not a device; bounds the walk.
+MAXIMUM_MODELS = 64
+
+
 async def _scan(unit: ModbusUnit) -> SunSpecModels:
     try:
         chain = await scan(unit, SUNSPEC_BASE_ADDRESS)
+    except IllegalDataAddressError:
+        # Some devices refuse a read past their map instead of answering the
+        # end marker, which took the whole chain down and left setup reporting
+        # "cannot connect" although Modbus was fine (upstream #105). Keep what
+        # the device did serve; if that is not even a Fronius, report the
+        # refusal itself, which is what an absent unit answers.
+        chain = await _scan_until_refused(unit)
+        if chain.first(COMMON_MODEL_ID) is None:
+            raise
+        _LOGGER.warning(
+            "The SunSpec chain ends in a refused read; continuing with the models "
+            "found before it: %s",
+            ", ".join(str(model_id) for model_id in sorted(chain)),
+        )
     except SunSpecError as err:
         raise NotAFroniusInverter(str(err)) from err
     if chain.first(COMMON_MODEL_ID) is None:
         raise NotAFroniusInverter("no SunSpec common model")
+    return chain
+
+
+async def _scan_until_refused(unit: ModbusUnit) -> SunSpecModels:
+    """Walk the model chain by hand, keeping what was read before a refusal."""
+    chain = SunSpecModels()
+    address = SUNSPEC_BASE_ADDRESS + MARKER_WORDS
+    for _ in range(MAXIMUM_MODELS):
+        try:
+            model_id, length = await unit.read_holding_registers(address, MARKER_WORDS)
+        except IllegalDataAddressError:
+            return chain
+        if model_id == END_MODEL_ID:
+            return chain
+        model = SunSpecModel(model_id=model_id, address=address, length=length)
+        chain.setdefault(model_id, []).append(model)
+        address += model.span
     return chain
 
 

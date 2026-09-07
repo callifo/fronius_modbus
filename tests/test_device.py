@@ -2,6 +2,7 @@
 
 from modbus_connection import (
     GatewayTargetError,
+    IllegalDataAddressError,
     ModbusConnectionError,
     ModbusTimeoutError,
 )
@@ -216,6 +217,38 @@ async def test_a_unit_that_refuses_the_marker_is_absent_for_good(connection):
     )
     report = await device.async_update()
     absent.fail_requests(None)
+    report = await device.async_update()
+    assert 201 not in device.meters
+    assert meter_report_name(201) not in report.failed
+
+
+# The storage model header in the captured fixture; the chain ends right after it.
+STORAGE_HEADER_ADDRESS = 40343
+
+
+async def test_a_refused_model_header_keeps_the_models_found_before_it(connection):
+    """Upstream #105: one refused header failed the whole chain, and setup then
+
+    reported "cannot connect" although Modbus was answering fine.
+    """
+    unit = connection.for_unit(INVERTER_UNIT_ID)
+    unit.fail_read(STORAGE_HEADER_ADDRESS, IllegalDataAddressError())
+    identity = await FroniusInverter.async_probe(unit)
+    assert identity.manufacturer == "Fronius"
+    device = FroniusInverter(unit, INVERTER_UNIT_ID, {})
+    report = await device.async_update()
+    assert device.storage is None
+    assert device.mppt is not None
+    assert REPORT_INVERTER in report.updated
+
+
+async def test_a_unit_that_refuses_every_read_is_still_no_meter(connection):
+    """The tolerant walk must not turn an absent meter into a failed setup."""
+    meter_unit = connection.for_unit(201)
+    meter_unit.fail_requests(IllegalDataAddressError())
+    device = FroniusInverter(
+        connection.for_unit(INVERTER_UNIT_ID), INVERTER_UNIT_ID, {201: meter_unit}
+    )
     report = await device.async_update()
     assert 201 not in device.meters
     assert meter_report_name(201) not in report.failed

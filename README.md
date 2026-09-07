@@ -77,6 +77,13 @@ If an entry has no valid stored Web API token for the configured host and role, 
 
 Turn off scheduled (dis)charging in the web UI to avoid unexpected behavior.
 
+Grid charging stops at around 500 W while the inverter's own battery configuration
+does not allow charging from the grid, whatever charge power is written over Modbus.
+PV charging reaches full power in the same state, which makes this look like a Modbus
+fault. Selecting `Charge from Grid` enables the `Charge from grid` and `Charge from AC`
+toggles over the Web API, so a configured Web API clears this on its own; without one,
+enable both in the inverter web UI.
+
 # Usage
 
 ### Battery Storage

@@ -8,6 +8,8 @@ import logging
 from typing import Any, NamedTuple, cast
 
 from modbus_connection import (
+    GatewayPathUnavailableError,
+    GatewayTargetError,
     IllegalDataAddressError,
     ModbusConnectionError,
     ModbusError,
@@ -50,6 +52,13 @@ from .sunspec_models import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# What a unit answers when nothing lives there: no device behind the gateway,
+# or no registers at the marker address. Anything else leaves the answer open.
+ABSENCE_ERRORS = (
+    GatewayTargetError,
+    GatewayPathUnavailableError,
+    IllegalDataAddressError,
+)
 REPORT_DISCOVERY = "discovery"
 REPORT_INVERTER = "inverter"
 REPORT_NAMEPLATE = "nameplate"
@@ -208,10 +217,10 @@ class FroniusInverter:
         # False while the chain ended in a refused header: the models behind it
         # are undecided, not absent, so discovery is retried (audit A03).
         self.discovery_complete = False
-        # Where each optional model sat when its component was built: an
-        # unchanged block keeps its component, so the controls and the storage
-        # wrapper keep reading what the poll refreshes (audit B02).
-        self._model_addresses: dict[int, int] = {}
+        # Each optional model's last component and the address it was built
+        # for; an unchanged block keeps its component, so the controls and the
+        # storage wrapper keep reading what the poll refreshes (audit B02).
+        self._components_by_model: dict[int, tuple[int, Any]] = {}
         self.meters: dict[int, MeterInfo] = {}
         # Meter units whose probe did not answer: neither present nor absent
         # yet, probed again on every poll (audit F03).
@@ -237,94 +246,102 @@ class FroniusInverter:
         return self.inverter is not None
 
     async def _async_setup(self) -> None:
-        """Read what never changes and place the components. Optional models may be absent."""
+        """Read what never changes and place the components, as one step.
+
+        Everything is built beside the live state and published only when it is
+        whole. A failure halfway through leaves the entities on the objects they
+        already read, and leaves discovery with its obligation to try again
+        (audit B03/C02).
+        """
         chain, complete = await _scan(self._unit)
         inverter_model = chain.first(*INVERTER_MODEL_IDS)
         if inverter_model is None:
             raise NotAFroniusInverter("no SunSpec inverter model in the chain")
-        self.identity = await _read_identity(self._unit, chain)
-        self.three_phase = inverter_model.model_id == THREE_PHASE_INVERTER_MODEL_ID
-        self.inverter = Inverter(self._unit, inverter_model)
-        self.nameplate = self._optional(
-            Nameplate, chain, NAMEPLATE_MODEL_ID, self.nameplate
-        )
-        self.settings = self._optional(
-            Settings, chain, SETTINGS_MODEL_ID, self.settings
-        )
-        self.status = self._optional(Status, chain, STATUS_MODEL_ID, self.status)
-        self.controls = self._optional(
-            Controls, chain, CONTROLS_MODEL_ID, self.controls
-        )
-        self.mppt = self._optional(Mppt, chain, MPPT_MODEL_ID, self.mppt)
-        self.storage = self._optional(Storage, chain, STORAGE_MODEL_ID, self.storage)
-        self.meters = {}
-        self._undecided_meters = {}
+        identity = await _read_identity(self._unit, chain)
+        components = {
+            REPORT_INVERTER: Inverter(self._unit, inverter_model),
+            REPORT_NAMEPLATE: self._optional(Nameplate, chain, NAMEPLATE_MODEL_ID),
+            REPORT_SETTINGS: self._optional(Settings, chain, SETTINGS_MODEL_ID),
+            REPORT_STATUS: self._optional(Status, chain, STATUS_MODEL_ID),
+            REPORT_CONTROLS: self._optional(Controls, chain, CONTROLS_MODEL_ID),
+            REPORT_MPPT: self._optional(Mppt, chain, MPPT_MODEL_ID),
+            REPORT_STORAGE: self._optional(Storage, chain, STORAGE_MODEL_ID),
+        }
+        meters: dict[int, MeterInfo] = {}
+        undecided: dict[int, ModbusUnit] = {}
         for unit_id, meter_unit in self._meter_units.items():
-            await self._async_place_meter(unit_id, meter_unit)
+            await self._async_place_meter(unit_id, meter_unit, meters, undecided)
+
+        self.identity = identity
+        self.three_phase = inverter_model.model_id == THREE_PHASE_INVERTER_MODEL_ID
+        self.inverter = components[REPORT_INVERTER]
+        self.nameplate = components[REPORT_NAMEPLATE]
+        self.settings = components[REPORT_SETTINGS]
+        self.status = components[REPORT_STATUS]
+        self.controls = components[REPORT_CONTROLS]
+        self.mppt = components[REPORT_MPPT]
+        self.storage = components[REPORT_STORAGE]
+        self.meters = meters
+        self._undecided_meters = undecided
         self._polled = tuple(
-            name
-            for name, component in (
-                (REPORT_INVERTER, self.inverter),
-                (REPORT_NAMEPLATE, self.nameplate),
-                (REPORT_SETTINGS, self.settings),
-                (REPORT_STATUS, self.status),
-                (REPORT_CONTROLS, self.controls),
-                (REPORT_MPPT, self.mppt),
-                (REPORT_STORAGE, self.storage),
-            )
-            if component is not None
-        ) + tuple(meter_report_name(unit_id) for unit_id in self.meters)
-        # Last: a discovery that raised on the way here keeps the old state and
-        # its obligation to try again (audit B03).
+            name for name, component in components.items() if component is not None
+        ) + tuple(meter_report_name(unit_id) for unit_id in meters)
         self.discovery_complete = complete
 
     def _optional(
-        self,
-        component_class: Any,
-        chain: SunSpecModels,
-        model_id: int,
-        existing: Any = None,
+        self, component_class: Any, chain: SunSpecModels, model_id: int
     ) -> Any:
-        """The component for `model_id`, reusing `existing` while its block has not moved."""
+        """The component for `model_id`, kept while its block has not moved.
+
+        Remembered per model rather than read off the live attribute: a model
+        missing from one incomplete scan must come back as the same object, or
+        the control built on it reads a component nothing polls (audit B02/C01).
+        """
         model = chain.first(model_id)
         if model is None:
             return None
-        if (
-            existing is not None
-            and self._model_addresses.get(model_id) == model.address
-        ):
-            return existing
-        self._model_addresses[model_id] = model.address
-        return component_class(self._unit, model)
+        address, component = self._components_by_model.get(model_id, (None, None))
+        if component is not None and address == model.address:
+            return component
+        component = component_class(self._unit, model)
+        self._components_by_model[model_id] = (model.address, component)
+        return component
 
-    async def _async_place_meter(self, unit_id: int, meter_unit: ModbusUnit) -> None:
+    async def _async_place_meter(
+        self,
+        unit_id: int,
+        meter_unit: ModbusUnit,
+        meters: dict[int, MeterInfo],
+        undecided: dict[int, ModbusUnit],
+    ) -> None:
         """Probe one meter unit and file it as present, absent or undecided."""
         try:
             meter = await self._async_probe_meter(unit_id, meter_unit)
-        except (ModbusTimeoutError, IncompleteChainError) as err:
-            # No answer is not "no meter": the inverter may still be booting
-            # (audit F03). Try again on every poll, and say so in the report.
+        except ModbusConnectionError:
+            raise
+        except ModbusError as err:
+            # Only "no such device" is an absence. A timeout, a busy meter or a
+            # device failure leave the question open (audit F03/C03): try again
+            # on every poll, and say so in the report.
             _LOGGER.debug("Meter on unit %s did not answer yet: %s", unit_id, err)
-            self._undecided_meters[unit_id] = meter_unit
+            undecided[unit_id] = meter_unit
             return
-        self._undecided_meters.pop(unit_id, None)
+        undecided.pop(unit_id, None)
         if meter is not None:
-            self.meters[unit_id] = meter
+            meters[unit_id] = meter
 
     async def _async_probe_meter(
         self, unit_id: int, meter_unit: ModbusUnit
     ) -> MeterInfo | None:
         """A meter on ``unit_id``, or None when nothing SunSpec answers there.
 
-        A unit without a device answers exception 0x0B (gateway target): that
-        is a confirmed absence. A timeout propagates; the caller keeps the
-        unit undecided.
+        A unit with nothing behind it answers exception 0x0B (gateway target)
+        or refuses the marker address; that is a confirmed absence. Every other
+        error propagates and the caller keeps the unit undecided.
         """
         try:
             chain, complete = await _scan(meter_unit)
-        except ModbusConnectionError, ModbusTimeoutError:
-            raise
-        except ModbusError:
+        except ABSENCE_ERRORS:
             _LOGGER.debug("No meter on unit %s", unit_id)
             return None
         if not complete:
@@ -395,7 +412,9 @@ class FroniusInverter:
     async def _async_retry_undecided_meters(self, report: UpdateReport) -> None:
         for unit_id, meter_unit in list(self._undecided_meters.items()):
             name = meter_report_name(unit_id)
-            await self._async_place_meter(unit_id, meter_unit)
+            await self._async_place_meter(
+                unit_id, meter_unit, self.meters, self._undecided_meters
+            )
             if unit_id in self._undecided_meters:
                 report.failed[name] = ModbusTimeoutError(
                     f"meter {unit_id} did not answer"

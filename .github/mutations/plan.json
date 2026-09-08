@@ -198,15 +198,15 @@
   {
     "label": "device: an unchanged model keeps its component",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
-    "old": "        if (\n            existing is not None\n            and self._model_addresses.get(model_id) == model.address\n        ):\n            return existing\n",
+    "old": "        address, component = self._components_by_model.get(model_id, (None, None))\n        if component is not None and address == model.address:\n            return component\n",
     "new": "",
     "tests": "rediscovery_keeps_the_controls_reading_the_polled_component"
   },
   {
     "label": "device: completion is published after the setup succeeded",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
-    "old": "        chain, complete = await _scan(self._unit)",
-    "new": "        chain, complete = await _scan(self._unit)\n        self.discovery_complete = complete",
+    "old": "        self.discovery_complete = complete",
+    "new": "        self.discovery_complete = True",
     "tests": "failed_identity_read_does_not_finish_incomplete_discovery"
   },
   {
@@ -222,5 +222,19 @@
     "old": "            return replace(self.data, retained=True)",
     "new": "            return self.data",
     "tests": "retained_poll_does_not_confirm_a_bad_energy_sample"
+  },
+  {
+    "label": "device: a busy meter stays undecided instead of absent",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        except ABSENCE_ERRORS:\n            _LOGGER.debug(\"No meter on unit %s\", unit_id)\n            return None",
+    "new": "        except ModbusError:\n            _LOGGER.debug(\"No meter on unit %s\", unit_id)\n            return None",
+    "tests": "busy_meter_is_undecided_rather_than_absent"
+  },
+  {
+    "label": "device: the meters are published together with their polled names",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        meters: dict[int, MeterInfo] = {}\n        undecided: dict[int, ModbusUnit] = {}\n",
+    "new": "        meters = self.meters = {}\n        undecided = self._undecided_meters = {}\n",
+    "tests": "aborted_rediscovery_keeps_the_previous_meters"
   }
 ]

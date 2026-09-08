@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Fixed
+- A meter that answers busy or reports a device failure is treated as undecided and probed again, instead of counting as absent and losing its entities.
+- Discovery publishes its result in one step: a probe that fails halfway no longer leaves the poll with a meter name and no meter behind it.
+- A model missing from one incomplete scan comes back as the same component, so the controls and the storage control keep reading what the poll refreshes.
 - The AC-limit and power-factor write is guarded from the first register on: a cancellation right after the inverter disabled the control no longer leaves it off.
 - A repeated discovery keeps the components whose model has not moved, so the controls and the storage control keep reading what the poll refreshes.
 - Discovery only counts as complete once its components are installed; an identity read that fails during a retry no longer ends the retries.

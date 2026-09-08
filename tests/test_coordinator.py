@@ -242,6 +242,7 @@ STORAGE_HEADER_ADDRESS = 40343
 STORAGE_CONTROL_MODE_ADDRESS = 40348
 AC_LIMIT_PERCENT_ADDRESS = 40232
 CHAIN_END_ADDRESS = 40369
+CONTROLS_HEADER_ADDRESS = 40227
 
 
 async def test_rediscovery_keeps_the_controls_reading_the_polled_component(
@@ -271,3 +272,22 @@ async def test_rediscovery_keeps_the_storage_control_reading_the_polled_componen
     await coordinator.async_refresh()
 
     assert coordinator.storage_control.extended_mode is not ExtendedMode.AUTO
+
+
+async def test_a_model_that_returns_after_one_scan_keeps_its_control(
+    coordinator, inverter_unit
+):
+    """Audit C01: a model missing from one scan came back as a new component."""
+    inverter_unit.fail_read(CHAIN_END_ADDRESS, IllegalDataAddressError())
+    await coordinator.async_refresh()
+
+    inverter_unit.fail_read(CONTROLS_HEADER_ADDRESS, IllegalDataAddressError())
+    await coordinator.async_refresh()
+
+    inverter_unit.fail_read(CONTROLS_HEADER_ADDRESS, None)
+    inverter_unit.fail_read(CHAIN_END_ADDRESS, None)
+    inverter_unit.holding[AC_LIMIT_PERCENT_ADDRESS] = 2500
+    await coordinator.async_refresh()
+
+    assert coordinator.device.discovery_complete
+    assert coordinator.inverter_controls.ac_limit_pct == 25.0

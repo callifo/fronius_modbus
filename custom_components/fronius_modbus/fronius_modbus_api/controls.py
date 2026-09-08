@@ -104,19 +104,27 @@ class InverterControls:
             await self._controls.write(enable_field, DISABLED)
             try:
                 await self._controls.write(value_field, value)
-            except ModbusError as err:
-                # The limit was live before this call; a failed value write
-                # must not leave it switched off (audit F01).
+                await self._sleep(APPLY_TOGGLE_DELAY_SECONDS)
+                await self._controls.write(enable_field, ENABLED)
+            except (ModbusError, asyncio.CancelledError) as err:
+                # The limit was live before this call. Neither a failed write
+                # nor a cancelled service call may leave it switched off
+                # (audit F01/A01), so restore it before propagating either.
                 await self._restore_enable(enable_field, err)
                 raise
-            await self._sleep(APPLY_TOGGLE_DELAY_SECONDS)
-            await self._controls.write(enable_field, ENABLED)
             return True
 
-    async def _restore_enable(self, enable_field: str, cause: ModbusError) -> None:
+    async def _restore_enable(self, enable_field: str, cause: BaseException) -> None:
+        """Switch the control back on; the write outlives a cancellation of this call."""
+        restore = asyncio.create_task(self._controls.write(enable_field, ENABLED))
         try:
-            await self._controls.write(enable_field, ENABLED)
-        except ModbusError as restore_error:
+            await asyncio.shield(restore)
+        except ModbusError, asyncio.CancelledError:
+            # A cancelled caller must not abandon the shielded write, and a
+            # failed one is reported from the task below.
+            await asyncio.wait({restore})
+        restore_error = restore.exception()
+        if restore_error is not None:
             raise ControlLeftDisabledError(
                 f"{enable_field} could not be re-enabled after a failed write: "
                 f"{restore_error}"

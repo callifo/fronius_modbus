@@ -33,7 +33,6 @@ from .const import (
     DEFAULT_AUTO_ENABLE_MODBUS,
     DEFAULT_INVERTER_UNIT_ID,
     DEFAULT_METER_UNIT_ID,
-    DEFAULT_METER_UNIT_IDS,
     DEFAULT_NAME,
     DEFAULT_PORT,
     DEFAULT_RESTRICT_MODBUS_TO_THIS_IP,
@@ -273,7 +272,7 @@ def _validate_static_input(data: dict[str, Any]) -> None:
     if data[CONF_SCAN_INTERVAL] < MINIMUM_SCAN_INTERVAL:
         raise _ScanIntervalTooShort
 
-    all_addresses = [DEFAULT_METER_UNIT_IDS[0], data[CONF_INVERTER_UNIT_ID]]
+    all_addresses = [DEFAULT_METER_UNIT_ID, data[CONF_INVERTER_UNIT_ID]]
     if len(all_addresses) > len(set(all_addresses)):
         _LOGGER.error("Modbus addresses are not unique %s", all_addresses)
         raise _AddressesNotUnique

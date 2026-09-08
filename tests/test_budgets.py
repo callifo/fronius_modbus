@@ -49,7 +49,7 @@ COMPLEXITY_LIMIT = 15
 # improvement is written down.
 COMPLEXITY_BUDGETS = {
     "derived.py::LoadEstimator.update": 19,
-    "froniuswebclient.py::_parse_power_meter_info": 30,
+    "froniuswebclient.py::_parse_power_meter_info": 26,
     "migrations.py::async_migrate_v019_mppt_statistics": 19,
     "web_control.py::FroniusWebControl._async_refresh_locked": 18,
 }

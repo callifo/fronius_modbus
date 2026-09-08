@@ -12,7 +12,6 @@ MINIMUM_SCAN_INTERVAL = 5
 DEFAULT_PORT = 502
 DEFAULT_INVERTER_UNIT_ID = 1
 DEFAULT_METER_UNIT_ID = 200
-DEFAULT_METER_UNIT_IDS = [DEFAULT_METER_UNIT_ID]
 DEFAULT_AUTO_ENABLE_MODBUS = True
 DEFAULT_RESTRICT_MODBUS_TO_THIS_IP = False
 API_USERNAME = "customer"
@@ -30,7 +29,6 @@ CONF_API_PASSWORD = "api_password"
 CONF_AUTO_ENABLE_MODBUS = "auto_enable_modbus"
 CONF_RESTRICT_MODBUS_TO_THIS_IP = "restrict_modbus_to_this_ip"
 CONF_WEB_SCAN_INTERVAL = "web_scan_interval"
-ATTR_MANUFACTURER = "Fronius"
 SUPPORTED_MANUFACTURERS = ["Fronius"]
 SUPPORTED_MODELS = ["Primo GEN24", "Symo GEN24", "Verto"]
 # Every enum state is a translation key (hassfest: [a-z0-9-_]+); an unmapped

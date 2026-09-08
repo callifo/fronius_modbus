@@ -241,9 +241,6 @@ def test_login_fails_when_the_inverter_keeps_refusing(inverter):
 
 def test_the_client_reports_the_token_its_login_minted(client):
     assert client.login() is True
-    # The client's own auth object never saw the login exchange; login() runs a
-    # separate one, so the client has nothing to hand back yet.
-    assert client.issued_token() is None
 
 
 # -- payload parsing ---------------------------------------------------------------
@@ -267,7 +264,6 @@ def test_the_power_meter_payload_is_read_from_the_plain_body_shape():
 
     assert info["unit_ids"] == [200, 201]
     assert info["primary_unit_id"] == 200
-    assert info["phase_counts_by_unit_id"] == {200: 3, 201: 1}
     assert info["locations_by_unit_id"] == {201: 1}
     assert info["payload_shape"] == "Body.Data"
 

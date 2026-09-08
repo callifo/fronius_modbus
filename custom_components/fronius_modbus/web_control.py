@@ -23,7 +23,7 @@ from .const import (
     SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX,
     TECHNICIAN_USERNAME,
 )
-from .froniuswebclient import FroniusWebAuthError, FroniusWebClient
+from .froniuswebclient import FroniusWebAuthError, FroniusWebClient, is_enabled
 from .token_store import async_get_token_store
 
 _LOGGER = logging.getLogger(__name__)
@@ -132,13 +132,7 @@ def _as_int(value: Any) -> int | None:
 
 
 def _enabled_state(value: Any) -> str:
-    return "enabled" if _enabled_bool(value) else "disabled"
-
-
-def _enabled_bool(value: Any) -> bool:
-    if isinstance(value, str):
-        return value.strip().lower() in ("1", "true", "on", "yes", "enabled")
-    return bool(value)
+    return "enabled" if is_enabled(value) else "disabled"
 
 
 def _parse_firmware_version(version_text: Any) -> tuple[int, int, int, int] | None:
@@ -381,10 +375,8 @@ class FroniusWebControl:
         self.data.soc_min = _as_int(battery_config.get("BAT_M0_SOC_MIN"))
         self.data.soc_max = _as_int(battery_config.get("BAT_M0_SOC_MAX"))
         self.data.backup_reserved = _as_int(battery_config.get("HYB_BACKUP_RESERVED"))
-        self.data.charge_from_ac = _enabled_bool(
-            battery_config.get("HYB_BM_CHARGEFROMAC")
-        )
-        self.data.charge_from_grid = _enabled_bool(
+        self.data.charge_from_ac = is_enabled(battery_config.get("HYB_BM_CHARGEFROMAC"))
+        self.data.charge_from_grid = is_enabled(
             battery_config.get("HYB_EVU_CHARGEFROMGRID")
         )
 
@@ -440,7 +432,7 @@ class FroniusWebControl:
         if isinstance(solar_api_config, dict):
             enabled = solar_api_config.get("SolarAPIv1Enabled")
             self.data.solar_api_enabled = (
-                _enabled_bool(enabled) if enabled is not None else None
+                is_enabled(enabled) if enabled is not None else None
             )
         else:
             self.data.solar_api_enabled = None
@@ -703,12 +695,12 @@ class FroniusWebControl:
             next_charge_from_ac = False
         else:
             next_charge_from_grid = (
-                _enabled_bool(self.data.charge_from_grid)
+                is_enabled(self.data.charge_from_grid)
                 if charge_from_grid is None
                 else bool(charge_from_grid)
             )
             next_charge_from_ac = (
-                _enabled_bool(self.data.charge_from_ac)
+                is_enabled(self.data.charge_from_ac)
                 if charge_from_ac is None
                 else bool(charge_from_ac)
             )

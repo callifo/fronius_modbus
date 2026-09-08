@@ -35,7 +35,8 @@ def _as_int(value: Any, fallback: int) -> int:
         return fallback
 
 
-def _is_enabled(value: Any) -> bool:
+def is_enabled(value: Any) -> bool:
+    """Whether a Solar-API flag reads as on; the API sends both booleans and words."""
     if isinstance(value, str):
         return value.strip().lower() in {"1", "true", "on", "yes", "enabled"}
     return bool(value)
@@ -166,7 +167,6 @@ def _parse_power_meter_info(
     result: dict[str, Any] = {
         "unit_ids": [],
         "primary_unit_id": None,
-        "phase_counts_by_unit_id": {},
         "locations_by_unit_id": {},
         "payload_shape": payload_shape,
     }
@@ -192,14 +192,12 @@ def _parse_power_meter_info(
 
         label = (_clean_text(attributes.get("label")) or "").lower()
         location = _clean_text(attributes.get("meter-location"))
-        phase_count = _as_int(attributes.get("phaseCnt"), 0)
         meters.append(
             {
                 "unit_id": int(meter_address_offset) + rtu_addr - 1,
                 "rtu_addr": rtu_addr,
                 "is_primary": label == "<primary>" or location == "0",
                 "location": _as_int(location, -1),
-                "phase_count": phase_count if phase_count > 0 else None,
             }
         )
 
@@ -217,8 +215,6 @@ def _parse_power_meter_info(
             continue
         seen.add(unit_id)
         unit_ids.append(unit_id)
-        if meter["phase_count"] is not None:
-            result["phase_counts_by_unit_id"][unit_id] = meter["phase_count"]
         if meter["location"] >= 0:
             result["locations_by_unit_id"][unit_id] = meter["location"]
         if result["primary_unit_id"] is None and meter["is_primary"]:
@@ -458,9 +454,6 @@ class FroniusWebClient:
     def _post_ok(self, path: str, payload: dict[str, Any] | None = None) -> bool:
         return self._request("post", path, payload=payload).ok
 
-    def issued_token(self) -> dict[str, str] | None:
-        return self._auth.saved_token
-
     def _resolve_client_ip(self) -> str:
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
@@ -572,12 +565,12 @@ class FroniusWebClient:
             # The integration reads the integer+SF models only; a float map
             # would pass every other check and then fail the probe (audit F13).
             and slave.get("sunspecMode") == "int"
-            and _is_enabled(ctr.get("on"))
+            and is_enabled(ctr.get("on"))
             and _as_int(slave.get("port"), port) == int(port)
             and _as_int(slave.get("meterAddress"), meter_address) == int(meter_address)
             and _as_int(slave.get("rtu_inverter_slave_id"), inverter_unit_id)
             == int(inverter_unit_id)
-            and _is_enabled(current_restriction.get("on")) == restriction_on
+            and is_enabled(current_restriction.get("on")) == restriction_on
             and (not restriction_on or current_restriction.get("ip") == restriction_ip)
         ):
             return False

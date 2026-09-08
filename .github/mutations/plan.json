@@ -135,7 +135,7 @@
   {
     "label": "entities: a stale reading is not an observation",
     "path": "custom_components/fronius_modbus/entities.py",
-    "old": "        reading = (\n            description.value_fn(self._runtime) if self._source_refreshed else None\n        )",
+    "old": "        reading = description.value_fn(self._runtime) if self._source_sampled else None",
     "new": "        reading = description.value_fn(self._runtime)",
     "tests": "failed_polls_do_not_confirm_a_bad_energy_sample"
   },
@@ -187,5 +187,40 @@
     "old": "    @_serialised\n    async def apply_soc_minimum(",
     "new": "    async def apply_soc_minimum(",
     "tests": "concurrent_maximum_cannot_slip_between_check_and_write"
+  },
+  {
+    "label": "controls: the disable write is inside the restore guard",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/controls.py",
+    "old": "            try:\n                # Inside the guard from here: the device may have applied the\n                # disable before this call is cancelled (audit A01/B01).\n                await self._controls.write(enable_field, DISABLED)\n",
+    "new": "            await self._controls.write(enable_field, DISABLED)\n            try:\n",
+    "tests": "cancelled_disable_write_leaves_the_control_enabled"
+  },
+  {
+    "label": "device: an unchanged model keeps its component",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        if (\n            existing is not None\n            and self._model_addresses.get(model_id) == model.address\n        ):\n            return existing\n",
+    "new": "",
+    "tests": "rediscovery_keeps_the_controls_reading_the_polled_component"
+  },
+  {
+    "label": "device: completion is published after the setup succeeded",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        chain, complete = await _scan(self._unit)",
+    "new": "        chain, complete = await _scan(self._unit)\n        self.discovery_complete = complete",
+    "tests": "failed_identity_read_does_not_finish_incomplete_discovery"
+  },
+  {
+    "label": "coordinator: a confirmed topology is applied, not just a wider one",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "        self._recheck_topology = False\n        _LOGGER.info(\n            \"The web API confirmed meters %s; reloading the entry to apply it\",",
+    "new": "        self._recheck_topology = False\n        if not set(topology.unit_ids) - set(runtime.device.meter_unit_ids):\n            return\n        _LOGGER.info(\n            \"The web API confirmed meters %s; reloading the entry to apply it\",",
+    "tests": "confirmed_single_meter_topology_is_applied"
+  },
+  {
+    "label": "coordinator: a tolerated outage serves the poll as retained",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "            return replace(self.data, retained=True)",
+    "new": "            return self.data",
+    "tests": "retained_poll_does_not_confirm_a_bad_energy_sample"
   }
 ]

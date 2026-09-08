@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import timedelta
 import logging
 import time
@@ -57,6 +57,9 @@ class ModbusPoll:
     report: UpdateReport
     load_w: float | None
     grid_status: str | None
+    # True when this is the previous poll served again during a tolerated
+    # outage: usable for display, but not a new reading (audit B05).
+    retained: bool = False
 
 
 @dataclass
@@ -205,7 +208,7 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
             log = _LOGGER.warning if self._tolerated_failures == 0 else _LOGGER.debug
             log("Modbus outage tolerated after a web write: %s", err)
             self._tolerated_failures += 1
-            return self.data
+            return replace(self.data, retained=True)
         if self._tolerated_failures:
             # 0.3 closed the client when the window opened. The connection is
             # shared with the rest of Home Assistant now, so it may not be
@@ -363,10 +366,12 @@ class FroniusWebCoordinator(DataUpdateCoordinator["WebData"]):
         topology = await self.web_control.async_meter_topology()
         if not topology.confirmed:
             return
+        # The answer carries the locations and the primary meter too, so it is
+        # applied even when it names the meter the entry already polls (audit
+        # B04). Setup then confirms it and arms no further recheck.
         self._recheck_topology = False
-        if set(topology.unit_ids) - set(runtime.device.meter_unit_ids):
-            _LOGGER.info(
-                "The web API now reports meters %s; reloading the entry to add them",
-                ", ".join(str(unit_id) for unit_id in sorted(topology.unit_ids)),
-            )
-            self.hass.config_entries.async_schedule_reload(entry.entry_id)
+        _LOGGER.info(
+            "The web API confirmed meters %s; reloading the entry to apply it",
+            ", ".join(str(unit_id) for unit_id in sorted(topology.unit_ids)),
+        )
+        self.hass.config_entries.async_schedule_reload(entry.entry_id)

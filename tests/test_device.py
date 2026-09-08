@@ -270,3 +270,39 @@ async def test_an_incomplete_chain_is_rescanned_until_it_is_complete(connection)
     assert device.discovery_complete
     assert device.storage is not None
     assert REPORT_STORAGE in report.updated
+
+
+# The common model in the captured fixture: a block read of it carries the identity.
+COMMON_MODEL_ADDRESS = 40002
+COMMON_HEADER_WORDS = 2
+
+
+async def test_a_failed_identity_read_does_not_finish_incomplete_discovery(
+    connection, monkeypatch
+):
+    """Audit B03: completion was published from the scan, before the models were installed."""
+    unit = connection.for_unit(INVERTER_UNIT_ID)
+    unit.fail_read(STORAGE_HEADER_ADDRESS, IllegalDataAddressError())
+    device = FroniusInverter(unit, INVERTER_UNIT_ID, {})
+    await device.async_update()
+    assert not device.discovery_complete
+
+    unit.fail_read(STORAGE_HEADER_ADDRESS, None)
+    read = unit.read_holding_registers
+    refused = []
+
+    async def refuse_the_identity_once(address, count, **kwargs):
+        reads_identity = address == COMMON_MODEL_ADDRESS and count > COMMON_HEADER_WORDS
+        if reads_identity and not refused:
+            refused.append(address)
+            raise ModbusTimeoutError("identity temporarily unavailable")
+        return await read(address, count, **kwargs)
+
+    monkeypatch.setattr(unit, "read_holding_registers", refuse_the_identity_once)
+    await device.async_update()
+    assert refused
+    assert not device.discovery_complete
+
+    await device.async_update()
+    assert device.discovery_complete
+    assert device.storage is not None

@@ -101,8 +101,10 @@ class InverterControls:
             if not was_enabled:
                 await self._controls.write(value_field, value)
                 return False
-            await self._controls.write(enable_field, DISABLED)
             try:
+                # Inside the guard from here: the device may have applied the
+                # disable before this call is cancelled (audit A01/B01).
+                await self._controls.write(enable_field, DISABLED)
                 await self._controls.write(value_field, value)
                 await self._sleep(APPLY_TOGGLE_DELAY_SECONDS)
                 await self._controls.write(enable_field, ENABLED)

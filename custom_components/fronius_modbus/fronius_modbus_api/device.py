@@ -208,6 +208,10 @@ class FroniusInverter:
         # False while the chain ended in a refused header: the models behind it
         # are undecided, not absent, so discovery is retried (audit A03).
         self.discovery_complete = False
+        # Where each optional model sat when its component was built: an
+        # unchanged block keeps its component, so the controls and the storage
+        # wrapper keep reading what the poll refreshes (audit B02).
+        self._model_addresses: dict[int, int] = {}
         self.meters: dict[int, MeterInfo] = {}
         # Meter units whose probe did not answer: neither present nor absent
         # yet, probed again on every poll (audit F03).
@@ -234,19 +238,25 @@ class FroniusInverter:
 
     async def _async_setup(self) -> None:
         """Read what never changes and place the components. Optional models may be absent."""
-        chain, self.discovery_complete = await _scan(self._unit)
+        chain, complete = await _scan(self._unit)
         inverter_model = chain.first(*INVERTER_MODEL_IDS)
         if inverter_model is None:
             raise NotAFroniusInverter("no SunSpec inverter model in the chain")
         self.identity = await _read_identity(self._unit, chain)
         self.three_phase = inverter_model.model_id == THREE_PHASE_INVERTER_MODEL_ID
         self.inverter = Inverter(self._unit, inverter_model)
-        self.nameplate = self._optional(Nameplate, chain, NAMEPLATE_MODEL_ID)
-        self.settings = self._optional(Settings, chain, SETTINGS_MODEL_ID)
-        self.status = self._optional(Status, chain, STATUS_MODEL_ID)
-        self.controls = self._optional(Controls, chain, CONTROLS_MODEL_ID)
-        self.mppt = self._optional(Mppt, chain, MPPT_MODEL_ID)
-        self.storage = self._optional(Storage, chain, STORAGE_MODEL_ID)
+        self.nameplate = self._optional(
+            Nameplate, chain, NAMEPLATE_MODEL_ID, self.nameplate
+        )
+        self.settings = self._optional(
+            Settings, chain, SETTINGS_MODEL_ID, self.settings
+        )
+        self.status = self._optional(Status, chain, STATUS_MODEL_ID, self.status)
+        self.controls = self._optional(
+            Controls, chain, CONTROLS_MODEL_ID, self.controls
+        )
+        self.mppt = self._optional(Mppt, chain, MPPT_MODEL_ID, self.mppt)
+        self.storage = self._optional(Storage, chain, STORAGE_MODEL_ID, self.storage)
         self.meters = {}
         self._undecided_meters = {}
         for unit_id, meter_unit in self._meter_units.items():
@@ -264,12 +274,28 @@ class FroniusInverter:
             )
             if component is not None
         ) + tuple(meter_report_name(unit_id) for unit_id in self.meters)
+        # Last: a discovery that raised on the way here keeps the old state and
+        # its obligation to try again (audit B03).
+        self.discovery_complete = complete
 
     def _optional(
-        self, component_class: Any, chain: SunSpecModels, model_id: int
+        self,
+        component_class: Any,
+        chain: SunSpecModels,
+        model_id: int,
+        existing: Any = None,
     ) -> Any:
+        """The component for `model_id`, reusing `existing` while its block has not moved."""
         model = chain.first(model_id)
-        return None if model is None else component_class(self._unit, model)
+        if model is None:
+            return None
+        if (
+            existing is not None
+            and self._model_addresses.get(model_id) == model.address
+        ):
+            return existing
+        self._model_addresses[model_id] = model.address
+        return component_class(self._unit, model)
 
     async def _async_place_meter(self, unit_id: int, meter_unit: ModbusUnit) -> None:
         """Probe one meter unit and file it as present, absent or undecided."""

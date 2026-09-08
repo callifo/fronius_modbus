@@ -1729,6 +1729,21 @@ class FroniusEntity(
         return web_coordinator is not None and web_coordinator.last_update_success
 
     @property
+    def _source_sampled(self) -> bool:
+        """Whether this poll read the source, rather than re-serving the last one.
+
+        Availability is happy with retained data - that is what the tolerance
+        window around a web write is for - but a value the device did not send
+        again is no evidence about the device (audit B05).
+        """
+        if not self._source_refreshed:
+            return False
+        description = cast(FroniusDescription, self.entity_description)
+        if description.source != "modbus":
+            return True
+        return not self._runtime.modbus.data.retained
+
+    @property
     def available(self) -> bool:
         """Whether the report backing this entity was refreshed, and available_fn agrees."""
         if not self._source_refreshed:
@@ -1783,9 +1798,7 @@ class FroniusTotalSensor(FroniusEntity, RestoreSensor):
         # A failed read leaves the component holding what it decoded last, so
         # feeding it again would let one bad reading confirm itself over two
         # failed polls (audit A02). Only a refreshed source is an observation.
-        reading = (
-            description.value_fn(self._runtime) if self._source_refreshed else None
-        )
+        reading = description.value_fn(self._runtime) if self._source_sampled else None
         verdict = self._guard.observe(reading)
         if verdict is not None:
             _LOGGER.warning("%s: %s", self.entity_id, verdict)

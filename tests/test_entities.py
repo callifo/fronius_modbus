@@ -1,9 +1,10 @@
 """Entity descriptions read against a real runtime, and the total-sensor behaviour."""
 
+import asyncio
 from dataclasses import replace
 from datetime import timedelta
 
-from modbus_connection import ModbusTimeoutError
+from modbus_connection import ModbusTimeoutError, ServerDeviceFailureError
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -20,6 +21,9 @@ from custom_components.fronius_modbus.sensor import FroniusSensor
 
 from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID
 from .test_web_control import make_control
+
+# MinRsvPct in the captured fixture; the model-124 scale factor is -2.
+SOC_MINIMUM_ADDRESS = 40350
 
 
 @pytest.fixture
@@ -192,6 +196,44 @@ async def test_an_invalid_soc_minimum_writes_nothing(hass, entry, connection):
     assert writes == []
 
 
+async def test_a_concurrent_maximum_cannot_slip_between_check_and_write(
+    hass, entry, connection
+):
+    """Audit A05: the check ran outside the web lock, so Modbus took a refused minimum."""
+    runtime = await make_runtime(hass, entry, connection)
+    web_control = make_control(hass)
+    web_control._client.battery.update(HYB_EM_MODE=1, BAT_M0_SOC_MODE="manual")
+    await web_control.async_refresh()
+    runtime = replace(runtime, web_control=web_control)
+    storage = runtime.storage_control
+    entered = asyncio.Event()
+    resume = asyncio.Event()
+    write_minimum = storage.set_minimum_reserve
+
+    async def paused_write(percent):
+        entered.set()
+        await resume.wait()
+        await write_minimum(percent)
+
+    storage.set_minimum_reserve = paused_write
+    try:
+        minimum = asyncio.create_task(runtime.async_set_soc_minimum(50))
+        await entered.wait()
+        maximum = asyncio.create_task(web_control.set_soc_maximum(20))
+        await asyncio.sleep(0)
+        resume.set()
+        await minimum
+        with pytest.raises(ValueError):
+            await maximum
+    finally:
+        web_control.shutdown()
+
+    # Read the register itself, not the cached decode: the point is what the
+    # device ended up with.
+    assert connection.for_unit(INVERTER_UNIT_ID).holding[SOC_MINIMUM_ADDRESS] == 5000
+    assert web_control.data.soc_min == 50
+
+
 async def test_a_total_sensor_follows_a_genuine_counter_reset(hass, entry, runtime):
     """A replaced meter really does restart at zero; refusing that forever freezes the sensor."""
     sensor = _total_sensor(runtime, entry, hass)
@@ -319,3 +361,24 @@ async def test_web_controls_go_unavailable_when_the_customer_login_is_rejected(
         assert not entity.available
     finally:
         control.shutdown()
+
+
+# The model-103 header in the captured fixture: failing it fails the inverter report.
+INVERTER_HEADER_ADDRESS = 40069
+
+
+async def test_failed_polls_do_not_confirm_a_bad_energy_sample(
+    hass, entry, runtime, inverter_unit
+):
+    """Audit A02: a failed read keeps the last decoded value, which confirmed itself."""
+    sensor = _total_sensor(runtime, entry, hass)
+    original = sensor.native_value
+
+    _report(sensor, 120.0)
+    inverter_unit.fail_read(INVERTER_HEADER_ADDRESS, ServerDeviceFailureError())
+    for _ in range(entities.TOTAL_INCREASING_RESET_POLLS):
+        await runtime.modbus.async_refresh()
+        assert "inverter" in runtime.modbus.data.report.failed
+        _report(sensor, 120.0)
+
+    assert sensor.native_value == original

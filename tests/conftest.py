@@ -136,6 +136,10 @@ class SharedMockModbus:
         self.connections.append(connection)
         return connection
 
+    def add_unit(self, unit_id: int, like: int) -> None:
+        """Serve another unit id from an existing unit's captured registers."""
+        self._fixture[unit_id] = self._fixture[like]
+
     def unit(self, unit_id: int):
         """The unit on the connection the integration is currently holding."""
         return self.connections[-1].for_unit(unit_id)

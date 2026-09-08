@@ -69,6 +69,9 @@ class FroniusRuntimeData:
     web_control: FroniusWebControl | None
     meter_locations: dict[int, int] = field(default_factory=dict)
     primary_meter_unit_id: int = 200
+    # False while the meter topology could not be read: the meters beyond the
+    # default one are then undecided, not gone (audit A04).
+    topology_confirmed: bool = True
 
     @property
     def storage_control(self) -> StorageControl | None:
@@ -86,21 +89,21 @@ class FroniusRuntimeData:
         return None if self.web is None else self.web.data
 
     async def async_set_soc_minimum(self, value: float) -> None:
-        """Write the SoC minimum to Modbus, then mirror it to the web API in Manual mode."""
+        """Write the SoC minimum to Modbus, and to the web API in Manual mode.
+
+        The web control owns the sequence: it serialises both writes against
+        competing web changes, and a minimum the web API refuses reaches
+        neither protocol (audit A05).
+        """
         percent = int(round(value))
+        storage = assume_present(self.storage_control)
         web_control = self.web_control
-        mirror_to_web = (
-            web_control is not None
-            and web_control.configured
-            and web_control.battery_mode_is_manual
+        if web_control is None:
+            await storage.set_minimum_reserve(percent)
+            return
+        await web_control.apply_soc_minimum(
+            percent, lambda: storage.set_minimum_reserve(percent)
         )
-        # A minimum the web API refuses must not reach Modbus either: the two
-        # would otherwise disagree, with the reserve only half applied.
-        if mirror_to_web:
-            assume_present(web_control).validate_soc_minimum(percent)
-        await assume_present(self.storage_control).set_minimum_reserve(percent)
-        if mirror_to_web:
-            await assume_present(web_control).set_soc_minimum_manual(percent)
 
     async def async_set_extended_mode(self, code: int) -> None:
         """Switch the storage mode; Charge from Grid also opens the web charge sources."""
@@ -325,6 +328,7 @@ class FroniusWebCoordinator(DataUpdateCoordinator["WebData"]):
         web_control: FroniusWebControl,
         *,
         interval: timedelta,
+        recheck_topology: bool = False,
     ) -> None:
         """Bind to the web control the poll delegates to."""
         super().__init__(
@@ -335,9 +339,34 @@ class FroniusWebCoordinator(DataUpdateCoordinator["WebData"]):
             update_interval=interval,
         )
         self.web_control = web_control
+        self._recheck_topology = recheck_topology
 
     async def _async_update_data(self) -> WebData:
         try:
-            return await self.web_control.async_refresh()
+            data = await self.web_control.async_refresh()
         except Exception as err:  # the client raises plain RuntimeError/requests errors
             raise UpdateFailed(f"Fronius web API refresh failed: {err}") from err
+        if self._recheck_topology:
+            await self._async_recheck_topology()
+        return data
+
+    async def _async_recheck_topology(self) -> None:
+        """Look once more for meters a failed topology read hid (audit A04).
+
+        Only a confirmed answer that names a unit the entry does not serve
+        reloads it, so a permanently broken endpoint cannot loop.
+        """
+        entry = assume_present(self.config_entry)
+        runtime = getattr(entry, "runtime_data", None)
+        if runtime is None:
+            return
+        topology = await self.web_control.async_meter_topology()
+        if not topology.confirmed:
+            return
+        self._recheck_topology = False
+        if set(topology.unit_ids) - set(runtime.device.meter_unit_ids):
+            _LOGGER.info(
+                "The web API now reports meters %s; reloading the entry to add them",
+                ", ".join(str(unit_id) for unit_id in sorted(topology.unit_ids)),
+            )
+            self.hass.config_entries.async_schedule_reload(entry.entry_id)

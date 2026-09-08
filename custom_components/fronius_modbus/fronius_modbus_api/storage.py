@@ -3,8 +3,9 @@
 SunSpec 124 knows four control modes and two signed percent rates. The
 integration exposes eight "extended" modes on top (charge from grid, block
 discharging, ...), each a fixed combination of mode and rates. The device
-cannot report the extended mode; it is derived once from the registers and
-then owned by the writes.
+cannot name the extended mode, so it is re-derived from the registers on
+every poll; a written mode is only held over the few polls the device needs
+to apply it.
 """
 
 from __future__ import annotations

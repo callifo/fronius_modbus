@@ -1,5 +1,7 @@
 """AC limit and power factor writes with the enable pulse the inverter needs to apply a new value."""
 
+import asyncio
+
 from modbus_connection import ServerDeviceFailureError
 from modbus_connection.model.sunspec import scan
 import pytest
@@ -165,3 +167,31 @@ async def test_a_limit_that_cannot_be_re_enabled_is_reported_as_left_disabled(cl
     )
     with pytest.raises(ControlLeftDisabledError):
         await controls.set_ac_limit_w(5000)
+
+
+@pytest.mark.parametrize(
+    ("enable_address", "setter", "value"),
+    [
+        (W_MAX_LIM_ENA, "set_ac_limit_w", 5000.0),
+        (OUT_PF_SET_ENA, "set_power_factor", 0.9),
+    ],
+)
+async def test_a_cancelled_write_leaves_the_control_enabled(
+    controls, inverter_unit, enable_address, setter, value
+):
+    """Audit A01: cancelling during the pulse left a live limit switched off for good."""
+    inverter_unit.holding[enable_address] = 1
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def blocking_sleep(_seconds):
+        entered.set()
+        await release.wait()
+
+    controls._sleep = blocking_sleep
+    write = asyncio.create_task(getattr(controls, setter)(value))
+    await entered.wait()
+    write.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await write
+    assert inverter_unit.holding[enable_address] == 1

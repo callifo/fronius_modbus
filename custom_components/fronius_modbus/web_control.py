@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 import functools
 import logging
@@ -17,6 +17,7 @@ from homeassistant.helpers import issue_registry as ir
 from .const import (
     API_BATTERY_MODE,
     API_SOC_MODE,
+    DEFAULT_METER_UNIT_ID,
     DOMAIN,
     MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX,
     SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX,
@@ -162,6 +163,39 @@ def _derive_api_battery_mode(raw_mode: int | None) -> int | None:
     return None
 
 
+@dataclass(slots=True)
+class MeterTopology:
+    """Which meters the web API reports, and whether it actually answered.
+
+    `confirmed` is the difference between "this device has one meter" and "the
+    question could not be asked": only the former may retire entities (audit A04).
+    """
+
+    unit_ids: list[int]
+    primary_unit_id: int
+    locations: dict[int, int]
+    confirmed: bool
+
+
+def parse_meter_topology(info: dict | None) -> MeterTopology:
+    """The topology an answer describes, or the unconfirmed single-meter default."""
+    default = MeterTopology([DEFAULT_METER_UNIT_ID], DEFAULT_METER_UNIT_ID, {}, False)
+    if not info or not info.get("unit_ids"):
+        return default
+    unit_ids = [int(unit) for unit in info["unit_ids"] if int(unit) > 0]
+    if not unit_ids:
+        return default
+    return MeterTopology(
+        unit_ids=unit_ids,
+        primary_unit_id=int(info.get("primary_unit_id") or unit_ids[0]),
+        locations={
+            int(unit_id): int(location)
+            for unit_id, location in (info.get("locations_by_unit_id") or {}).items()
+        },
+        confirmed=True,
+    )
+
+
 class FroniusWebControl:
     """Solar-API state and battery/export controls, alongside the Modbus poll."""
 
@@ -198,6 +232,12 @@ class FroniusWebControl:
     def attach_coordinator(self, coordinator: Any) -> None:
         """Bind the web coordinator so the delayed post-write refresh can push new data."""
         self._coordinator = coordinator
+
+    async def async_meter_topology(self) -> MeterTopology:
+        """Ask the web API which meters exist; unconfirmed when it could not be read."""
+        return parse_meter_topology(
+            await self._async_client_job("get_power_meter_info", DEFAULT_METER_UNIT_ID)
+        )
 
     @property
     def configured(self) -> bool:
@@ -521,9 +561,22 @@ class FroniusWebControl:
 
         return next_soc_min, next_soc_max, next_backup_reserved
 
-    def validate_soc_minimum(self, soc_min: int) -> None:
-        """Raise if the web API would reject this minimum, before anything is written."""
-        self._get_api_soc_values(soc_min=soc_min)
+    @_serialised
+    async def apply_soc_minimum(
+        self, soc_min: int, write_modbus: Callable[[], Awaitable[None]]
+    ) -> None:
+        """Write the shared minimum to Modbus and, in Manual mode, to the web API.
+
+        Both writes and the check that guards them happen under this lock. A
+        check outside it went stale when a concurrent maximum change landed in
+        between, and Modbus then took a reserve the web API refuses (audit A05).
+        """
+        mirror = self.configured and self.battery_mode_is_manual
+        if mirror:
+            self._get_api_soc_values(soc_min=soc_min)
+        await write_modbus()
+        if mirror:
+            await self._set_api_soc_manual(soc_min=soc_min, control_name="SoC Minimum")
 
     def _require_battery_mode_manual(self, control_name: str) -> None:
         if not self.battery_mode_is_manual:

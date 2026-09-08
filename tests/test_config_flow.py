@@ -158,3 +158,25 @@ async def test_switching_the_role_asks_for_that_roles_password(hass, monkeypatch
     )
     assert result["type"] is FlowResultType.FORM
     assert result["errors"]["base"] == "missing_api_password"
+
+
+async def test_changing_only_the_host_spelling_keeps_the_stored_token(
+    hass, monkeypatch
+):
+    """Audit A06: the host comparison was case-sensitive, the token key never is."""
+    named_host = "inverter.example"
+    entry = make_entry(hass)
+    await async_get_token_store(hass).async_save_token(
+        named_host, realm="r", token="stored"
+    )
+    monkeypatch.setattr(
+        hass.config_entries, "async_reload", AsyncMock(return_value=True)
+    )
+    settings = config_flow.entry_defaults(entry) | {"host": named_host.upper()}
+
+    await config_flow.async_update_entry_from_input(
+        hass, entry, settings, previous_host=named_host
+    )
+
+    stored = await async_get_token_store(hass).async_load_token(named_host)
+    assert stored == {"realm": "r", "token": "stored"}

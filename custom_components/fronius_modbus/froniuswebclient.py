@@ -6,7 +6,6 @@ import logging
 import os
 import re
 import socket
-from functools import lru_cache
 from typing import Any
 from urllib.parse import urlparse
 
@@ -231,8 +230,23 @@ def _parse_power_meter_info(
     return result
 
 
-@lru_cache(maxsize=None)
+_HASH_MODES: dict[tuple[str, str], str] = {}
+
+
+def _forget_hash_modes() -> None:
+    """Drop what was learned about the devices; for tests and reconfiguration."""
+    _HASH_MODES.clear()
+
+
 def _hash_mode(base_url: str, user: str, timeout: float) -> str:
+    """The digest hash this device declares for `user`, remembered once answered.
+
+    A transport failure returns the fallback without remembering it: caching
+    that answer left md5 devices unable to log in until a restart (audit A07).
+    """
+    remembered = _HASH_MODES.get((base_url, user))
+    if remembered is not None:
+        return remembered
     try:
         response = requests.get(f"{base_url}/api/status/common", timeout=timeout)
         response.raise_for_status()
@@ -243,8 +257,10 @@ def _hash_mode(base_url: str, user: str, timeout: float) -> str:
             .get(f"{user}HashingVersion")
         )
     except requests.RequestException, ValueError:
-        version = None
-    return "md5" if version == 1 else "sha256"
+        return "sha256"
+    mode = "md5" if version == 1 else "sha256"
+    _HASH_MODES[(base_url, user)] = mode
+    return mode
 
 
 class XHeaderDigestAuth(AuthBase):

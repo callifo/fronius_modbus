@@ -3,6 +3,13 @@
 ## Unreleased
 
 ### Fixed
+- A cancelled service call during an AC-limit or power-factor write no longer leaves the control switched off: the enable flag is restored even while the call is being cancelled.
+- Cumulative energy sensors no longer accept a bad reading that a failed poll repeated: only a poll that actually refreshed the register counts as confirmation.
+- Discovery that ended in a refused register read is retried on every poll and reported as a failure, instead of passing as a device without those models. While discovery or the meter topology is uncertain, no entity or device is retired.
+- A meter device is no longer retired and rebuilt on every reload: the legacy pattern that removes pre-web-API devices also matched the identifiers this version builds.
+- The shared SoC minimum is written to both protocols under one lock, so a concurrent maximum change can no longer slip between the check and the Modbus write.
+- Changing only the spelling of the host no longer deletes the stored login token.
+- A timed-out lookup of the inverter's digest hash version is no longer remembered, so password login recovers instead of failing until a restart.
 - A device that refuses a read past the end of its register map instead of answering the SunSpec end marker no longer fails the whole setup with "cannot connect": discovery keeps the models the device did serve and logs where the chain stopped.
 
 ### Changed

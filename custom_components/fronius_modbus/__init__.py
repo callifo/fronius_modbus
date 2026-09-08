@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import timedelta
 import logging
 import time
@@ -34,7 +35,12 @@ from .coordinator import (
 from .fronius_modbus_api.device import FroniusInverter
 from .froniuswebclient import FroniusWebAuthError, FroniusWebClient
 from .token_store import async_get_token_store
-from .web_control import BATTERY_WRITE_MODBUS_RECOVERY_SECONDS, FroniusWebControl
+from .web_control import (
+    BATTERY_WRITE_MODBUS_RECOVERY_SECONDS,
+    FroniusWebControl,
+    MeterTopology,
+    parse_meter_topology,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -64,17 +70,17 @@ async def _async_meter_topology(
     hass: HomeAssistant,
     entry: FroniusConfigEntry,
     client: FroniusWebClient | None,
-) -> tuple[FroniusWebClient | None, list[int], int, dict[int, int]]:
+) -> tuple[FroniusWebClient | None, MeterTopology]:
     """Ask the web API which meters exist; fall back to the single default meter.
 
     An authentication failure drops the client for good: the stored token is
     deleted, so the entry runs Modbus-only until the user reconfigures it.
     """
-    meter_unit_ids = [DEFAULT_METER_UNIT_ID]
-    primary = DEFAULT_METER_UNIT_ID
-    locations: dict[int, int] = {}
+    unconfirmed = parse_meter_topology(None)
     if client is None:
-        return None, meter_unit_ids, primary, locations
+        # Without the web API the entry only ever serves the default meter, so
+        # that is the configuration, not an unread answer.
+        return None, replace(unconfirmed, confirmed=True)
 
     try:
         info = await hass.async_add_executor_job(
@@ -89,23 +95,16 @@ async def _async_meter_topology(
         await async_get_token_store(hass).async_delete_token(
             str(_entry_value(entry, CONF_HOST)), API_USERNAME
         )
-        return None, meter_unit_ids, primary, locations
+        return None, unconfirmed
     except Exception as err:
         _LOGGER.warning(
             "Could not read the meter topology from the web API: %s",
             err,
             exc_info=True,
         )
-        return client, meter_unit_ids, primary, locations
+        return client, unconfirmed
 
-    if info and info.get("unit_ids"):
-        meter_unit_ids = [int(u) for u in info["unit_ids"] if int(u) > 0]
-        primary = int(info.get("primary_unit_id") or meter_unit_ids[0])
-        locations = {
-            int(unit_id): int(location)
-            for unit_id, location in (info.get("locations_by_unit_id") or {}).items()
-        }
-    return client, meter_unit_ids, primary, locations
+    return client, parse_meter_topology(info)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> bool:
@@ -131,9 +130,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
         else None
     )
 
-    client, meter_unit_ids, primary, locations = await _async_meter_topology(
-        hass, entry, client
-    )
+    client, topology = await _async_meter_topology(hass, entry, client)
+    meter_unit_ids, primary = topology.unit_ids, topology.primary_unit_id
+    locations = topology.locations
 
     params = ModbusTcpParams(host=host, port=port)
     unit = async_get_unit(hass, entry, params, inverter_unit_id)
@@ -175,7 +174,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
             ),
         )
         web = FroniusWebCoordinator(
-            hass, entry, web_control, interval=timedelta(seconds=web_scan_interval)
+            hass,
+            entry,
+            web_control,
+            interval=timedelta(seconds=web_scan_interval),
+            recheck_topology=not topology.confirmed,
         )
         web_control.attach_coordinator(web)
         entry.async_on_unload(web_control.shutdown)
@@ -190,6 +193,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
         web_control=web_control,
         meter_locations=locations,
         primary_meter_unit_id=primary,
+        topology_confirmed=topology.confirmed,
     )
 
     await migrations.async_migrate_v019_mppt_statistics(hass, entry)

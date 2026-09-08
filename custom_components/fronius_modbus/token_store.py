@@ -13,10 +13,19 @@ _TOKEN_STORE_VERSION = 1
 _TOKEN_STORE_DATA_KEY = "web_api_token_store"
 
 
-def _token_key(host: str, user: str = API_USERNAME) -> str:
+def canonical_host(host: str) -> str:
+    """The host as an identity: what the stored credential is keyed by.
+
+    Two spellings of one host are one host. Comparing the raw strings deleted
+    the live token when only the case changed (audit A06).
+    """
     if "://" not in host:
         host = f"http://{host}"
-    return f"{urlparse(host).netloc.lower()}:{user}"
+    return urlparse(host).netloc.lower()
+
+
+def _token_key(host: str, user: str = API_USERNAME) -> str:
+    return f"{canonical_host(host)}:{user}"
 
 
 class FroniusTokenStore:

@@ -21,7 +21,7 @@ from modbus_connection.model.sunspec import (
     scan,
 )
 
-from .exceptions import NotAFroniusInverter
+from .exceptions import IncompleteChainError, NotAFroniusInverter
 from .sunspec_models import (
     COMMON_MODEL_ID,
     COMMON_SERIAL_WORDS,
@@ -50,6 +50,7 @@ from .sunspec_models import (
 
 _LOGGER = logging.getLogger(__name__)
 
+REPORT_DISCOVERY = "discovery"
 REPORT_INVERTER = "inverter"
 REPORT_NAMEPLATE = "nameplate"
 REPORT_SETTINGS = "settings"
@@ -133,7 +134,13 @@ END_MODEL_ID = 0xFFFF
 MAXIMUM_MODELS = 64
 
 
-async def _scan(unit: ModbusUnit) -> SunSpecModels:
+async def _scan(unit: ModbusUnit) -> tuple[SunSpecModels, bool]:
+    """The SunSpec chain and whether it ended in the end marker rather than a refusal.
+
+    An incomplete chain is not a device without those models: the caller has to
+    keep it as undecided and look again (audit A03).
+    """
+    complete = True
     try:
         chain = await scan(unit, SUNSPEC_BASE_ADDRESS)
     except IllegalDataAddressError:
@@ -145,6 +152,7 @@ async def _scan(unit: ModbusUnit) -> SunSpecModels:
         chain = await _scan_until_refused(unit)
         if chain.first(COMMON_MODEL_ID) is None:
             raise
+        complete = False
         _LOGGER.warning(
             "The SunSpec chain ends in a refused read; continuing with the models "
             "found before it: %s",
@@ -154,7 +162,7 @@ async def _scan(unit: ModbusUnit) -> SunSpecModels:
         raise NotAFroniusInverter(str(err)) from err
     if chain.first(COMMON_MODEL_ID) is None:
         raise NotAFroniusInverter("no SunSpec common model")
-    return chain
+    return chain, complete
 
 
 async def _scan_until_refused(unit: ModbusUnit) -> SunSpecModels:
@@ -197,6 +205,9 @@ class FroniusInverter:
         self.controls: Controls | None = None
         self.mppt: Mppt | None = None
         self.storage: Storage | None = None
+        # False while the chain ended in a refused header: the models behind it
+        # are undecided, not absent, so discovery is retried (audit A03).
+        self.discovery_complete = False
         self.meters: dict[int, MeterInfo] = {}
         # Meter units whose probe did not answer: neither present nor absent
         # yet, probed again on every poll (audit F03).
@@ -211,7 +222,7 @@ class FroniusInverter:
     @staticmethod
     async def async_probe(unit: ModbusUnit) -> DeviceIdentity:
         """The identity of the inverter on ``unit``; raises NotAFroniusInverter otherwise."""
-        chain = await _scan(unit)
+        chain, _complete = await _scan(unit)
         if chain.first(*INVERTER_MODEL_IDS) is None:
             raise NotAFroniusInverter("no SunSpec inverter model in the chain")
         return await _read_identity(unit, chain)
@@ -223,7 +234,7 @@ class FroniusInverter:
 
     async def _async_setup(self) -> None:
         """Read what never changes and place the components. Optional models may be absent."""
-        chain = await _scan(self._unit)
+        chain, self.discovery_complete = await _scan(self._unit)
         inverter_model = chain.first(*INVERTER_MODEL_IDS)
         if inverter_model is None:
             raise NotAFroniusInverter("no SunSpec inverter model in the chain")
@@ -264,7 +275,7 @@ class FroniusInverter:
         """Probe one meter unit and file it as present, absent or undecided."""
         try:
             meter = await self._async_probe_meter(unit_id, meter_unit)
-        except ModbusTimeoutError as err:
+        except (ModbusTimeoutError, IncompleteChainError) as err:
             # No answer is not "no meter": the inverter may still be booting
             # (audit F03). Try again on every poll, and say so in the report.
             _LOGGER.debug("Meter on unit %s did not answer yet: %s", unit_id, err)
@@ -284,12 +295,14 @@ class FroniusInverter:
         unit undecided.
         """
         try:
-            chain = await _scan(meter_unit)
+            chain, complete = await _scan(meter_unit)
         except ModbusConnectionError, ModbusTimeoutError:
             raise
         except ModbusError:
             _LOGGER.debug("No meter on unit %s", unit_id)
             return None
+        if not complete:
+            raise IncompleteChainError(f"meter {unit_id} answered an incomplete chain")
         model = chain.first(*METER_MODEL_IDS)
         if model is None:
             return None
@@ -315,7 +328,7 @@ class FroniusInverter:
             except ModbusError:
                 self.inverter = None
                 raise
-        report = UpdateReport()
+        report = await self._async_open_report()
         for name in self._polled:
             try:
                 await self._component(name).async_update()
@@ -331,6 +344,27 @@ class FroniusInverter:
                 report.updated.append(name)
         await self._async_retry_undecided_meters(report)
         return report
+
+    async def _async_open_report(self) -> UpdateReport:
+        """A report for this poll; an incomplete chain is retried and named in it."""
+        if self.discovery_complete:
+            return UpdateReport()
+        await self._async_retry_discovery()
+        report = UpdateReport()
+        if not self.discovery_complete:
+            report.failed[REPORT_DISCOVERY] = IncompleteChainError(
+                "the SunSpec chain ends in a refused read"
+            )
+        return report
+
+    async def _async_retry_discovery(self) -> None:
+        """Scan again; a chain that completes now brings its models with it."""
+        try:
+            await self._async_setup()
+        except ModbusConnectionError:
+            raise
+        except (ModbusError, NotAFroniusInverter) as err:
+            _LOGGER.debug("Discovery is still incomplete: %s", err)
 
     async def _async_retry_undecided_meters(self, report: UpdateReport) -> None:
         for unit_id, meter_unit in list(self._undecided_meters.items()):
@@ -355,7 +389,7 @@ class FroniusInverter:
         async def collect(
             unit_id: int, unit: ModbusUnit, components: Sequence[Any]
         ) -> None:
-            chain = await _scan(unit)
+            chain, _complete = await _scan(unit)
             common = Common(unit, cast(SunSpecModel, chain.first(COMMON_MODEL_ID)))
             raw = per_unit.setdefault(unit_id, {})
             for component in (common, *components):

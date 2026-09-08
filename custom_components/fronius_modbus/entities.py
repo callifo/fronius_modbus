@@ -1659,6 +1659,18 @@ def device_info(
     )
 
 
+def expected_device_identifiers(
+    runtime: FroniusRuntimeData, entry: FroniusConfigEntry
+) -> set[str]:
+    """The device identifiers the current runtime registers, in the shape device_info builds."""
+    key = instance_key(entry.entry_id)
+    identifiers = {f"{key}_inverter"}
+    if runtime.device.storage is not None:
+        identifiers.add(f"{key}_battery_storage")
+    identifiers.update(f"{key}_meter_{unit_id}" for unit_id in runtime.device.meters)
+    return identifiers
+
+
 class FroniusEntity(
     CoordinatorEntity[FroniusModbusCoordinator | FroniusWebCoordinator]
 ):
@@ -1690,8 +1702,13 @@ class FroniusEntity(
         )
 
     @property
-    def available(self) -> bool:
-        """Whether the report backing this entity was refreshed, and available_fn agrees."""
+    def _source_refreshed(self) -> bool:
+        """Whether the last poll actually refreshed the report this entity reads.
+
+        The one owner of that question: `available` hides a stale entity, and a
+        total sensor must not take a stale cached value for a fresh sample
+        (audit A02).
+        """
         # Home Assistant types the attribute as a plain EntityDescription, and
         # a narrower annotation here collides with the platform base classes.
         description = cast(FroniusDescription, self.entity_description)
@@ -1699,20 +1716,24 @@ class FroniusEntity(
             coordinator = self._runtime.modbus
             if not coordinator.last_update_success:
                 return False
-            if (
-                description.report_name is not None
-                and description.report_name not in coordinator.data.report.updated
-            ):
-                return False
-            return description.available_fn(self._runtime)
-        web_coordinator = self._runtime.web
+            return (
+                description.report_name is None
+                or description.report_name in coordinator.data.report.updated
+            )
         # A rejected login clears the client but the coordinator keeps
         # succeeding on what is left (audit F16): the entities of that login
         # must not stay operable.
         if not _web_client_present(self._runtime, description.web_client):
             return False
-        if web_coordinator is None or not web_coordinator.last_update_success:
+        web_coordinator = self._runtime.web
+        return web_coordinator is not None and web_coordinator.last_update_success
+
+    @property
+    def available(self) -> bool:
+        """Whether the report backing this entity was refreshed, and available_fn agrees."""
+        if not self._source_refreshed:
             return False
+        description = cast(FroniusDescription, self.entity_description)
         return description.available_fn(self._runtime)
 
     async def async_run_write(self, action: Callable[[], Awaitable[None]]) -> None:
@@ -1759,7 +1780,13 @@ class FroniusTotalSensor(FroniusEntity, RestoreSensor):
 
     def _observe_poll(self) -> None:
         description = cast(FroniusDescription, self.entity_description)
-        verdict = self._guard.observe(description.value_fn(self._runtime))
+        # A failed read leaves the component holding what it decoded last, so
+        # feeding it again would let one bad reading confirm itself over two
+        # failed polls (audit A02). Only a refreshed source is an observation.
+        reading = (
+            description.value_fn(self._runtime) if self._source_refreshed else None
+        )
+        verdict = self._guard.observe(reading)
         if verdict is not None:
             _LOGGER.warning("%s: %s", self.entity_id, verdict)
 

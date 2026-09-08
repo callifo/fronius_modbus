@@ -13,3 +13,7 @@ class NotAFroniusInverter(ModbusError):
 
 class ControlLeftDisabledError(ModbusError):
     """A control was switched off for a write, the write failed, and switching it back on failed too."""
+
+
+class IncompleteChainError(ModbusError):
+    """The SunSpec chain ended in a refused read, so later models are undecided."""

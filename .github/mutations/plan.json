@@ -23,8 +23,8 @@
   {
     "label": "controls: the enable pulse waits before switching back on",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/controls.py",
-    "old": "            await self._sleep(APPLY_TOGGLE_DELAY_SECONDS)\n            await self._controls.write(enable_field, ENABLED)\n            return True\n",
-    "new": "            await self._controls.write(enable_field, ENABLED)\n            return True\n",
+    "old": "                await self._sleep(APPLY_TOGGLE_DELAY_SECONDS)\n                await self._controls.write(enable_field, ENABLED)\n",
+    "new": "                await self._controls.write(enable_field, ENABLED)\n",
     "tests": "pulsed_off_and_on_around_the_write"
   },
   {
@@ -100,9 +100,9 @@
   {
     "label": "migrations: stale entities are only kept after a failed poll",
     "path": "custom_components/fronius_modbus/migrations.py",
-    "old": "    if runtime.modbus.data.report.failed or web_refresh_failed:",
-    "new": "    if True:",
-    "tests": "stale_entity_is_removed_after_a_clean_first_poll"
+    "old": "    if runtime.modbus.data.report.failed:\n        reason = \"a poll did not succeed everywhere\"",
+    "new": "    if False:\n        reason = \"a poll did not succeed everywhere\"",
+    "tests": "meter_that_times_out_at_setup_keeps_its_entities"
   },
   {
     "label": "storage: minimum reserve reads back inside the write lock",
@@ -124,5 +124,68 @@
     "old": "            await self._storage.write(field_name, percent())\n",
     "new": "            await self._storage.write(field_name, percent())\n            await self._storage.async_update()\n",
     "tests": "a_rate_write_succeeds_when_the_read_right_after_it_is_refused"
+  },
+  {
+    "label": "controls: a cancelled pulse still restores the enable flag",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/controls.py",
+    "old": "            except (ModbusError, asyncio.CancelledError) as err:",
+    "new": "            except ModbusError as err:",
+    "tests": "cancelled_write_leaves_the_control_enabled"
+  },
+  {
+    "label": "entities: a stale reading is not an observation",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "        reading = (\n            description.value_fn(self._runtime) if self._source_refreshed else None\n        )",
+    "new": "        reading = description.value_fn(self._runtime)",
+    "tests": "failed_polls_do_not_confirm_a_bad_energy_sample"
+  },
+  {
+    "label": "device: an incomplete chain is reported as a failed sub-system",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        if self.discovery_complete:\n            return UpdateReport()\n",
+    "new": "        if True:\n            return UpdateReport()\n",
+    "tests": "an_incomplete_chain_is_rescanned_until_it_is_complete"
+  },
+  {
+    "label": "migrations: an unread topology blocks the cleanup",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "    elif not runtime.topology_confirmed:",
+    "new": "    elif False:",
+    "tests": "a_topology_outage_keeps_the_second_meters_entities"
+  },
+  {
+    "label": "migrations: live devices are never retired as legacy ones",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "        and identifier not in current\n",
+    "new": "",
+    "tests": "a_reload_retires_no_live_meter_device"
+  },
+  {
+    "label": "web control: the SoC minimum is checked before Modbus is written",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        mirror = self.configured and self.battery_mode_is_manual\n        if mirror:\n            self._get_api_soc_values(soc_min=soc_min)\n        await write_modbus()",
+    "new": "        mirror = self.configured and self.battery_mode_is_manual\n        await write_modbus()",
+    "tests": "invalid_soc_minimum_writes_nothing"
+  },
+  {
+    "label": "config flow: only a real host move deletes the token",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "    return canonical_host(previous_host) != canonical_host(host)",
+    "new": "    return previous_host != host",
+    "tests": "changing_only_the_host_spelling_keeps_the_stored_token"
+  },
+  {
+    "label": "web client: a failed hash lookup is not remembered",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "    except requests.RequestException, ValueError:\n        return \"sha256\"",
+    "new": "    except requests.RequestException, ValueError:\n        _HASH_MODES[(base_url, user)] = \"sha256\"\n        return \"sha256\"",
+    "tests": "timed_out_status_page_is_not_remembered_as_the_hash_mode"
+  },
+  {
+    "label": "web control: the two-protocol SoC write holds the web lock",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "    @_serialised\n    async def apply_soc_minimum(",
+    "new": "    async def apply_soc_minimum(",
+    "tests": "concurrent_maximum_cannot_slip_between_check_and_write"
   }
 ]

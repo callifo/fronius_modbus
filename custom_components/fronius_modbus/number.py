@@ -95,7 +95,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities) -> None:
         )
         entities.append(number)
 
-    if hub.web_api_configured:
+    if hub.tech_configured:
         for number_info in INVERTER_WEB_NUMBER_TYPES:
             max_val = number_info[2]['max']
             max_key = number_info[2].get('max_key')

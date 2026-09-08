@@ -4,42 +4,36 @@
     "step": {
       "user": {
         "title": "Set up Fronius System",
-        "description": "Enter the host, update interval, and Modbus IP restriction. Minimum interval: 5 seconds. If no stored token exists for this host, the next step asks for the customer password.",
+        "description": "Enter the host, choose the local Web API access role, and configure the update interval and Modbus IP restriction. Technician access also enables the export soft-limit control. Minimum interval: 5 seconds.",
         "data": {
           "host": "Host",
+          "api_username": "Web API access role",
           "scan_interval": "Update interval (seconds)",
           "restrict_modbus_to_this_ip": "Restrict Modbus to this IP"
         }
       },
       "user_password": {
-        "title": "Customer Password",
-        "description": "Enter the customer password for {entry_title} ({host}) to create or refresh the stored token. The password is not stored in the config entry.",
+        "title": "Web API Password",
+        "description": "Enter the password for the selected Web API role on {entry_title} ({host}) to create or refresh its stored token. The password is not stored in the config entry.",
         "data": {
-          "api_password": "Customer password",
-          "technician_password": "Technician password (optional)"
-        },
-        "data_description": {
-          "technician_password": "Required to enable the Export Limit Control (Soft Limit) setter. Leave empty to skip."
+          "api_password": "Password"
         }
       },
       "reconfigure": {
         "title": "Review Fronius System",
-        "description": "Review the host, update interval, and Modbus IP restriction. Minimum interval: 5 seconds. If the stored token is missing or invalid, the next step asks for the customer password.",
+        "description": "Review the host, local Web API access role, update interval, and Modbus IP restriction. Technician access also enables the export soft-limit control. Minimum interval: 5 seconds.",
         "data": {
           "host": "Host",
+          "api_username": "Web API access role",
           "scan_interval": "Update interval (seconds)",
           "restrict_modbus_to_this_ip": "Restrict Modbus to this IP"
         }
       },
       "reconfigure_password": {
-        "title": "Customer Password",
-        "description": "Enter the customer password for {entry_title} ({host}) to create or refresh the stored token. The password is not stored in the config entry.",
+        "title": "Web API Password",
+        "description": "Enter the password for the selected Web API role on {entry_title} ({host}) to create or refresh its stored token. The password is not stored in the config entry.",
         "data": {
-          "api_password": "Customer password",
-          "technician_password": "Technician password (optional)"
-        },
-        "data_description": {
-          "technician_password": "Required to enable the Export Limit Control (Soft Limit) setter. Leave empty to skip."
+          "api_password": "Password"
         }
       }
     },
@@ -54,9 +48,17 @@
       "unknown": "Unknown error",
       "scan_interval_too_short": "Minimum update interval is 5 seconds.",
       "modbus_address_conflict": "Modbus IDs are not unique",
-      "missing_api_password": "Customer password is required.",
-      "invalid_api_credentials": "Customer login failed.",
+      "missing_api_password": "A password is required for the selected Web API role.",
+      "invalid_api_credentials": "Login failed for the selected Web API role.",
       "cannot_resolve_local_ip": "Could not determine the Home Assistant IP."
+    }
+  },
+  "selector": {
+    "api_username": {
+      "options": {
+        "customer": "Customer",
+        "technician": "Technician"
+      }
     }
   },
   "entity": {
@@ -489,18 +491,19 @@
         "step": {
           "init": {
             "title": "Review Fronius System",
-            "description": "The entry \"{entry_title}\" needs a valid customer token. Review the host, update interval, and Modbus IP restriction. The next step asks for the customer password only if needed.",
+            "description": "The entry \"{entry_title}\" needs a valid token for its selected Web API role. Review the host, access role, update interval, and Modbus IP restriction. The next step asks for the corresponding password only if needed.",
             "data": {
               "host": "Host",
+              "api_username": "Web API access role",
               "scan_interval": "Update interval (seconds)",
               "restrict_modbus_to_this_ip": "Restrict Modbus to this IP"
             }
           },
           "password": {
-            "title": "Customer Password",
-            "description": "Enter the customer password for {entry_title} ({host}) to create or refresh the stored token. The password is not stored in the config entry.",
+            "title": "Web API Password",
+            "description": "Enter the password for the selected Web API role on {entry_title} ({host}) to create or refresh its stored token. The password is not stored in the config entry.",
             "data": {
-              "api_password": "Customer password"
+              "api_password": "Password"
             }
           }
         },
@@ -512,8 +515,8 @@
           "unknown": "Unknown error",
           "scan_interval_too_short": "Minimum update interval is 5 seconds.",
           "modbus_address_conflict": "Modbus IDs are not unique",
-          "missing_api_password": "Customer password is required.",
-          "invalid_api_credentials": "Customer login failed.",
+          "missing_api_password": "A password is required for the selected Web API role.",
+          "invalid_api_credentials": "Login failed for the selected Web API role.",
           "cannot_resolve_local_ip": "Could not determine the Home Assistant IP."
         },
         "abort": {
@@ -549,7 +552,7 @@
         },
         "error": {
           "cannot_connect": "Failed to connect to the inverter.",
-          "invalid_api_credentials": "Customer login failed.",
+          "invalid_api_credentials": "Login failed for the selected Web API role.",
           "unknown": "Unknown error"
         },
         "abort": {
@@ -566,22 +569,19 @@
     "step": {
       "init": {
         "title": "Set up Fronius System",
-        "description": "Set the host, update interval, and Modbus IP restriction. Minimum interval: 5 seconds. If the stored token is missing or invalid, the next step asks for the customer password.",
+        "description": "Set the host, local Web API access role, update interval, and Modbus IP restriction. Technician access also enables the export soft-limit control. Minimum interval: 5 seconds.",
         "data": {
           "host": "Host",
+          "api_username": "Web API access role",
           "scan_interval": "Update interval (seconds)",
           "restrict_modbus_to_this_ip": "Restrict Modbus to this IP"
         }
       },
       "password": {
-        "title": "Customer Password",
-        "description": "Enter the customer password for {entry_title} ({host}) to create or refresh the stored token. The password is not stored in the config entry.",
+        "title": "Web API Password",
+        "description": "Enter the password for the selected Web API role on {entry_title} ({host}) to create or refresh its stored token. The password is not stored in the config entry.",
         "data": {
-          "api_password": "Customer password",
-          "technician_password": "Technician password (optional)"
-        },
-        "data_description": {
-          "technician_password": "Required to enable the Export Limit Control (Soft Limit) setter. Leave empty to skip."
+          "api_password": "Password"
         }
       }
     },
@@ -593,8 +593,8 @@
       "unknown": "Unknown error",
       "scan_interval_too_short": "Minimum update interval is 5 seconds.",
       "modbus_address_conflict": "Modbus IDs are not unique",
-      "missing_api_password": "Customer password is required.",
-      "invalid_api_credentials": "Customer login failed.",
+      "missing_api_password": "A password is required for the selected Web API role.",
+      "invalid_api_credentials": "Login failed for the selected Web API role.",
       "cannot_resolve_local_ip": "Could not determine the Home Assistant IP."
     }
   }

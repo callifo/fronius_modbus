@@ -49,7 +49,7 @@ from .const import (
 )
 from .fronius_modbus_api.device import FroniusInverter
 from .froniuswebclient import ClientIpResolutionError, FroniusWebClient, mint_token
-from .token_store import async_get_token_store
+from .token_store import async_get_token_store, canonical_host
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -316,6 +316,13 @@ async def _async_save_token(
     )
 
 
+def _moved_host(previous_host: str | None, host: str) -> bool:
+    """Whether the entry really moved to another host, not just to another spelling."""
+    if not previous_host:
+        return False
+    return canonical_host(previous_host) != canonical_host(host)
+
+
 async def _async_delete_token(hass: HomeAssistant, host: str | None) -> None:
     if host:
         token_store = async_get_token_store(hass)
@@ -446,7 +453,7 @@ async def async_update_entry_from_input(
         title=_entry_title(validated_input),
         unique_id=unique_id,
     )
-    if previous_host and previous_host != validated_input[CONF_HOST]:
+    if previous_host and _moved_host(previous_host, validated_input[CONF_HOST]):
         await _async_delete_token(hass, previous_host)
     await hass.config_entries.async_reload(entry.entry_id)
 
@@ -671,7 +678,7 @@ class FroniusModbusOptionsFlow(TokenFlowMixin, config_entries.OptionsFlow):
         self.hass.config_entries.async_update_entry(
             self.config_entry, unique_id=unique_id, title=_entry_title(settings)
         )
-        if previous_host != settings[CONF_HOST]:
+        if _moved_host(previous_host, settings[CONF_HOST]):
             await _async_delete_token(self.hass, previous_host)
         return self.async_create_entry(
             title="",

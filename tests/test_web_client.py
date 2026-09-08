@@ -79,9 +79,9 @@ class FakeInverter:
 @pytest.fixture(autouse=True)
 def _no_cached_hash_mode():
     """The hash mode is memoized per host; a fresh inverter must not inherit it."""
-    froniuswebclient._hash_mode.cache_clear()
+    froniuswebclient._forget_hash_modes()
     yield
-    froniuswebclient._hash_mode.cache_clear()
+    froniuswebclient._forget_hash_modes()
 
 
 @pytest.fixture
@@ -160,7 +160,7 @@ def test_the_hash_mode_follows_the_version_the_inverter_reports(inverter):
     inverter.hashing_version = 1
     assert froniuswebclient._hash_mode(f"http://{HOST}", "customer", 4.0) == "md5"
 
-    froniuswebclient._hash_mode.cache_clear()
+    froniuswebclient._forget_hash_modes()
     inverter.hashing_version = 2
     assert froniuswebclient._hash_mode(f"http://{HOST}", "customer", 4.0) == "sha256"
 
@@ -172,6 +172,26 @@ def test_an_unreadable_status_page_falls_back_to_sha256(monkeypatch):
     monkeypatch.setattr(requests, "get", refuse)
 
     assert froniuswebclient._hash_mode(f"http://{HOST}", "customer", 4.0) == "sha256"
+
+
+def test_a_timed_out_status_page_is_not_remembered_as_the_hash_mode(
+    inverter, monkeypatch
+):
+    """Audit A07: the sha256 fallback was cached, so md5 devices never logged in again."""
+    inverter.hashing_version = 1
+    answered = requests.get
+    attempts = []
+
+    def refuse_once(*args, **kwargs):
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise requests.ConnectionError
+        return answered(*args, **kwargs)
+
+    monkeypatch.setattr(requests, "get", refuse_once)
+
+    assert froniuswebclient._hash_mode(f"http://{HOST}", "customer", 4.0) == "sha256"
+    assert froniuswebclient._hash_mode(f"http://{HOST}", "customer", 4.0) == "md5"
 
 
 def test_the_nonce_count_rises_while_the_nonce_stays_the_same():

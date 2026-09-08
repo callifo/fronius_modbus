@@ -25,7 +25,7 @@ from .const import (
     entity_prefix,
     instance_key,
 )
-from .entities import expected_unique_ids
+from .entities import expected_device_identifiers, expected_unique_ids
 from .token_store import async_get_token_store
 
 _LOGGER = logging.getLogger(__name__)
@@ -93,10 +93,11 @@ def _legacy_device_identifiers(entry: ConfigEntry) -> set[str]:
     }
 
 
-def _legacy_device_needs_removal(entry: ConfigEntry, device) -> bool:
+def _legacy_device_needs_removal(entry: ConfigEntry, device, current: set[str]) -> bool:
     identifiers = getattr(device, "identifiers", set())
     return any(
         identifier_domain == DOMAIN
+        and identifier not in current
         and (
             identifier in _legacy_device_identifiers(entry)
             or _LEGACY_METER_DEVICE_RE.fullmatch(identifier)
@@ -417,16 +418,44 @@ async def async_migrate_name_based_unique_ids(
         )
 
 
+def _retirement_blocked(entry: ConfigEntry, what: str) -> bool:
+    """Whether the current picture of the device is too uncertain to retire anything.
+
+    The one gate in front of every destructive cleanup: a failed poll, a failed
+    web refresh or an unread meter topology all mean "not seen", never "gone"
+    (audit A03/A04). Without it a single outage takes entities and their
+    history with it.
+    """
+    runtime = entry.runtime_data
+    reason = None
+    if runtime.modbus.data.report.failed:
+        reason = "a poll did not succeed everywhere"
+    elif runtime.web is not None and not runtime.web.last_update_success:
+        reason = "the web API refresh failed"
+    elif not runtime.topology_confirmed:
+        reason = "the meter topology could not be read"
+    if reason is None:
+        return False
+    _LOGGER.info("Skipping the %s cleanup: %s", what, reason)
+    return True
+
+
 async def async_remove_legacy_devices(
     hass: HomeAssistant,
     entry: ConfigEntry,
 ) -> None:
     """Remove device ids that only existed on older layouts."""
+    if _retirement_blocked(entry, "legacy-device"):
+        return
     device_registry = dr.async_get(hass)
+    # The legacy meter pattern also matches the identifiers this version builds,
+    # so a reload retired live meter devices - and their entities with them
+    # (sibling of audit A03/A04). Never retire what the runtime just registered.
+    current = expected_device_identifiers(entry.runtime_data, entry)
 
     removed_devices = 0
     for device in dr.async_entries_for_config_entry(device_registry, entry.entry_id):
-        if _legacy_device_needs_removal(entry, device):
+        if _legacy_device_needs_removal(entry, device, current):
             device_registry.async_remove_device(device.id)
             removed_devices += 1
 
@@ -446,12 +475,7 @@ async def async_remove_unexpected_entities(
     answered, so a sub-system that was silent this once would otherwise take
     its entities - and their history - with it.
     """
-    runtime = entry.runtime_data
-    web_refresh_failed = runtime.web is not None and not runtime.web.last_update_success
-    if runtime.modbus.data.report.failed or web_refresh_failed:
-        _LOGGER.info(
-            "Skipping the stale-entity cleanup until a poll succeeds everywhere"
-        )
+    if _retirement_blocked(entry, "stale-entity"):
         return
 
     registry = er.async_get(hass)

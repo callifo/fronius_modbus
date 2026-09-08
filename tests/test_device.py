@@ -10,6 +10,7 @@ from modbus_connection.mock import MockModbusConnection
 import pytest
 
 from custom_components.fronius_modbus.fronius_modbus_api.device import (
+    REPORT_DISCOVERY,
     REPORT_INVERTER,
     REPORT_MPPT,
     REPORT_STORAGE,
@@ -252,3 +253,20 @@ async def test_a_unit_that_refuses_every_read_is_still_no_meter(connection):
     report = await device.async_update()
     assert 201 not in device.meters
     assert meter_report_name(201) not in report.failed
+
+
+async def test_an_incomplete_chain_is_rescanned_until_it_is_complete(connection):
+    """Audit A03: models behind a refused header stayed hidden for the life of the entry."""
+    unit = connection.for_unit(INVERTER_UNIT_ID)
+    unit.fail_read(STORAGE_HEADER_ADDRESS, IllegalDataAddressError())
+    device = FroniusInverter(unit, INVERTER_UNIT_ID, {})
+    report = await device.async_update()
+    assert device.storage is None
+    assert not device.discovery_complete
+    assert REPORT_DISCOVERY in report.failed
+
+    unit.fail_read(STORAGE_HEADER_ADDRESS, None)
+    report = await device.async_update()
+    assert device.discovery_complete
+    assert device.storage is not None
+    assert REPORT_STORAGE in report.updated

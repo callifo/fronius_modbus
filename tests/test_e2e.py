@@ -4,6 +4,7 @@ from dataclasses import replace
 from types import SimpleNamespace
 
 from modbus_connection import (
+    IllegalDataAddressError,
     ModbusConnectionError,
     ModbusTimeoutError,
     ServerDeviceFailureError,
@@ -446,3 +447,85 @@ async def test_minor_version_10_entries_without_a_technician_token_stay_customer
     assert await migrations.async_migrate_entry(hass, entry)
     assert entry.minor_version == 11
     assert entry.data["api_username"] == "customer"
+
+
+# The storage model header in the captured fixture.
+STORAGE_HEADER_ADDRESS = 40343
+
+
+async def test_a_refused_chain_keeps_the_storage_entities(hass, mock_modbus):
+    """Audit A03: an incomplete scan looked like an absent battery, so cleanup removed it."""
+    entry = make_entry(hass)
+    await setup_entry(hass, entry)
+    entity_id = entity_id_for(hass, entry, "sensor", "soc")
+
+    mock_modbus.fail_read(
+        INVERTER_UNIT_ID, STORAGE_HEADER_ADDRESS, IllegalDataAddressError()
+    )
+    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert er.async_get(hass).async_get(entity_id) is not None
+
+
+class _FakeWebClientWithTopology:
+    """A web client that serves two meters until `topology` is set to None."""
+
+    topology: dict | None = {
+        "unit_ids": [200, 201],
+        "primary_unit_id": 200,
+        "locations_by_unit_id": {200: 0, 201: 1},
+    }
+
+    def __init__(self, *_args, **_kwargs) -> None:
+        pass
+
+    def get_power_meter_info(self, *_args, **_kwargs):
+        return self.topology
+
+    def __getattr__(self, name: str):
+        def _quiet(*_args, **_kwargs):
+            return None
+
+        return _quiet
+
+
+async def test_a_topology_outage_keeps_the_second_meters_entities(
+    hass, mock_modbus, monkeypatch
+):
+    """Audit A04: one failed topology read fell back to a single meter and deleted the rest."""
+    mock_modbus.add_unit(201, like=METER_UNIT_ID)
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _FakeWebClientWithTopology)
+    monkeypatch.setattr(
+        _FakeWebClientWithTopology,
+        "topology",
+        dict(_FakeWebClientWithTopology.topology),
+    )
+    entry = make_entry(hass)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+    await setup_entry(hass, entry)
+    entity_id = entity_id_for(hass, entry, "sensor", "meter_201_power")
+
+    monkeypatch.setattr(_FakeWebClientWithTopology, "topology", None)
+    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert er.async_get(hass).async_get(entity_id) is not None
+
+
+async def test_a_reload_retires_no_live_meter_device(hass, mock_modbus, monkeypatch):
+    """The legacy meter pattern matches the identifiers this version builds, too.
+
+    Home Assistant restores a device that comes straight back, so the damage is
+    only visible as the removal itself: assert none happens.
+    """
+    entry = make_entry(hass)
+    await setup_entry(hass, entry)
+    removed: list[str] = []
+    registry = dr.async_get(hass)
+    monkeypatch.setattr(registry, "async_remove_device", removed.append)
+
+    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert removed == []

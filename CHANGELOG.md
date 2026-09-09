@@ -1,32 +1,27 @@
 # Changelog
 
-## Unreleased
+## 1.0.0b3
+
+Four independent audit rounds worked off, plus the single-role Web API login. Entries migrate on
+their own; an entry that had a technician token keeps technician access.
 
 ### Changed
+- The Web API uses one role per entry: pick `customer` or `technician` during setup and enter only that password. Switching roles is a reconfigure.
+- Storage charge and discharge limits are converted to percent of `WChaMax` (model 124), the reference Fronius documents for `InWRte`/`OutWRte`. The nameplate ratings are only used when a device reports no `WChaMax`.
 - A device that does not answer is logged as an expected outage instead of an error, the way the quality scale asks for. A device that answers and refuses is still an error.
-- Log lines no longer name the host: diagnostics carry it redacted, and Home Assistant logs travel with bug reports.
+- Log lines no longer name the host. Diagnostics carry it redacted, and Home Assistant logs travel with bug reports.
 
 ### Fixed
-- A meter that answers busy or reports a device failure is treated as undecided and probed again, instead of counting as absent and losing its entities.
-- Discovery publishes its result in one step: a probe that fails halfway no longer leaves the poll with a meter name and no meter behind it.
-- A model missing from one incomplete scan comes back as the same component, so the controls and the storage control keep reading what the poll refreshes.
-- The AC-limit and power-factor write is guarded from the first register on: a cancellation right after the inverter disabled the control no longer leaves it off.
-- A repeated discovery keeps the components whose model has not moved, so the controls and the storage control keep reading what the poll refreshes.
-- Discovery only counts as complete once its components are installed; an identity read that fails during a retry no longer ends the retries.
-- A meter topology that is confirmed after a failed one is applied even when it names the meter the entry already polls, so the household load and the meter location arrive without waiting for an unrelated reload.
-- During the tolerated outage after a web write the previous poll is served for display but no longer counts as a new sample for the cumulative energy sensors.
-- A cancelled service call during an AC-limit or power-factor write no longer leaves the control switched off: the enable flag is restored even while the call is being cancelled.
-- Cumulative energy sensors no longer accept a bad reading that a failed poll repeated: only a poll that actually refreshed the register counts as confirmation.
-- Discovery that ended in a refused register read is retried on every poll and reported as a failure, instead of passing as a device without those models. While discovery or the meter topology is uncertain, no entity or device is retired.
-- A meter device is no longer retired and rebuilt on every reload: the legacy pattern that removes pre-web-API devices also matched the identifiers this version builds.
-- The shared SoC minimum is written to both protocols under one lock, so a concurrent maximum change can no longer slip between the check and the Modbus write.
+- A cancelled service call during an AC-limit or power-factor write no longer leaves the control switched off. The enable flag is restored from the first register on, even while the call is being cancelled.
+- Discovery publishes its result in one step and retries what it could not finish. A device that refuses a read past the end of its register map no longer fails setup with "cannot connect", a probe that fails halfway no longer leaves the poll with a meter name and no meter behind it, and completion is only reported once the components are installed.
+- Nothing is retired while the picture is uncertain. An unread meter topology, an incomplete chain or a failed poll all block the entity and device cleanup, and the legacy pass no longer removes the meter devices this version builds.
+- A meter that answers busy, reports a device failure or does not answer at all is probed again instead of counting as absent and losing its entities. Only a unit that answers without a SunSpec map is treated as empty.
+- Components whose model has not moved keep their readings across a rediscovery, so the controls and the storage control never read a component that nothing polls. A model that has moved reloads the entry instead of being published behind the controls' back.
+- Cumulative energy sensors only count a poll that actually refreshed the register. Neither a failed read nor the retained poll during the recovery window after a web write can confirm a bad reading any more.
+- A meter topology confirmed after a failed one is applied even when it names the meter the entry already polls, so the household load and the meter location arrive without waiting for an unrelated reload.
+- The shared SoC minimum is written to both protocols under one lock, so a concurrent maximum change cannot slip between the check and the Modbus write.
 - Changing only the spelling of the host no longer deletes the stored login token.
 - A timed-out lookup of the inverter's digest hash version is no longer remembered, so password login recovers instead of failing until a restart.
-- A device that refuses a read past the end of its register map instead of answering the SunSpec end marker no longer fails the whole setup with "cannot connect": discovery keeps the models the device did serve and logs where the chain stopped.
-
-### Changed
-- The Web API now uses one role per entry: pick `customer` or `technician` during setup and enter only that password. An entry that had a technician token keeps technician access; every other entry stays on `customer`. Switching roles is a reconfigure.
-- Storage charge/discharge limits are converted to percent of WChaMax (model 124), the reference Fronius documents for InWRte/OutWRte; the nameplate ratings are only used when a device reports no WChaMax. Identical on devices where both agree.
 
 ## 1.0.0b2
 

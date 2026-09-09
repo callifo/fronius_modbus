@@ -73,8 +73,9 @@ async def test_the_first_update_discovers_every_sub_system(device):
 
 
 async def test_a_missing_meter_is_absent_not_an_error(connection):
+    """A unit that answers without a SunSpec map has no meter; a gateway error is an outage."""
     absent = connection.for_unit(201)
-    absent.fail_requests(GatewayTargetError())
+    absent.fail_requests(IllegalDataAddressError())
     device = FroniusInverter(
         connection.for_unit(INVERTER_UNIT_ID),
         INVERTER_UNIT_ID,
@@ -212,9 +213,10 @@ async def test_a_meter_that_does_not_answer_at_setup_is_retried_on_the_next_poll
     assert meter_report_name(METER_UNIT_ID) in report.updated
 
 
-async def test_a_unit_that_refuses_the_marker_is_absent_for_good(connection):
+async def test_a_unit_without_a_sunspec_map_is_absent_for_good(connection):
+    """Only "answered, but nothing here" settles it; a gateway error does not (audit D01)."""
     absent = connection.for_unit(201)
-    absent.fail_requests(GatewayTargetError())
+    absent.fail_requests(IllegalDataAddressError())
     device = FroniusInverter(
         connection.for_unit(INVERTER_UNIT_ID), INVERTER_UNIT_ID, {201: absent}
     )
@@ -279,6 +281,8 @@ COMMON_MODEL_ADDRESS = 40002
 COMMON_HEADER_WORDS = 2
 # The chain's end marker in the captured fixture, right behind the storage model.
 CHAIN_END_ADDRESS = 40369
+# The model-103 header; a failed read of it fails the inverter report.
+INVERTER_HEADER_ADDRESS = 40069
 
 
 async def test_a_failed_identity_read_does_not_finish_incomplete_discovery(
@@ -376,3 +380,39 @@ async def test_an_aborted_rediscovery_keeps_the_previous_meters(connection):
     # Entities still read the meter through this mapping while the coordinator
     # serves the retained poll.
     assert METER_UNIT_ID in device.meters
+
+
+async def test_a_gateway_outage_on_a_meter_is_retried(connection):
+    """Audit D01: a switched-off meter answers 0x0B, which was taken for "no meter"."""
+    meter_unit = connection.for_unit(METER_UNIT_ID)
+    meter_unit.fail_requests(GatewayTargetError())
+    device = FroniusInverter(
+        connection.for_unit(INVERTER_UNIT_ID),
+        INVERTER_UNIT_ID,
+        {METER_UNIT_ID: meter_unit},
+    )
+    report = await device.async_update()
+    assert METER_UNIT_ID not in device.meters
+    assert meter_report_name(METER_UNIT_ID) in report.failed
+
+    meter_unit.fail_requests(None)
+    report = await device.async_update()
+    assert METER_UNIT_ID in device.meters
+    assert meter_report_name(METER_UNIT_ID) in report.updated
+
+
+async def test_a_component_that_did_not_move_keeps_its_readings(connection):
+    """Audit D02: a rediscovery installed empty components over the last readings."""
+    inverter_unit = connection.for_unit(INVERTER_UNIT_ID)
+    # The chain stays incomplete, so every poll rediscovers.
+    inverter_unit.fail_read(CHAIN_END_ADDRESS, IllegalDataAddressError())
+    device = FroniusInverter(inverter_unit, INVERTER_UNIT_ID, {})
+    await device.async_update()
+    power = device.inverter.w
+    assert power is not None
+
+    inverter_unit.fail_read(INVERTER_HEADER_ADDRESS, ServerDeviceFailureError)
+    report = await device.async_update()
+
+    assert REPORT_INVERTER in report.failed
+    assert device.inverter.w == power

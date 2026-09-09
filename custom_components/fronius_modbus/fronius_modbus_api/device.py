@@ -8,8 +8,6 @@ import logging
 from typing import Any, NamedTuple, cast
 
 from modbus_connection import (
-    GatewayPathUnavailableError,
-    GatewayTargetError,
     IllegalDataAddressError,
     ModbusConnectionError,
     ModbusError,
@@ -18,6 +16,7 @@ from modbus_connection import (
 )
 from modbus_connection.model.sunspec import (
     SunSpecError,
+    SunSpecMapShiftError,
     SunSpecModel,
     SunSpecModels,
     scan,
@@ -52,13 +51,11 @@ from .sunspec_models import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# What a unit answers when nothing lives there: no device behind the gateway,
-# or no registers at the marker address. Anything else leaves the answer open.
-ABSENCE_ERRORS = (
-    GatewayTargetError,
-    GatewayPathUnavailableError,
-    IllegalDataAddressError,
-)
+# The one answer that establishes an absence: the unit responds, but serves no
+# registers at the marker address. A gateway error means the meter did not
+# answer at all - which is also what a switched-off meter does (audit D01) - and
+# every other error is a failure, so both leave the question open.
+ABSENCE_ERRORS = (IllegalDataAddressError,)
 REPORT_DISCOVERY = "discovery"
 REPORT_INVERTER = "inverter"
 REPORT_NAMEPLATE = "nameplate"
@@ -221,6 +218,8 @@ class FroniusInverter:
         # for; an unchanged block keeps its component, so the controls and the
         # storage wrapper keep reading what the poll refreshes (audit B02).
         self._components_by_model: dict[int, tuple[int, Any]] = {}
+        # Where each meter's model sat when its component was built.
+        self._meter_addresses: dict[int, int] = {}
         self.meters: dict[int, MeterInfo] = {}
         # Meter units whose probe did not answer: neither present nor absent
         # yet, probed again on every poll (audit F03).
@@ -259,7 +258,7 @@ class FroniusInverter:
             raise NotAFroniusInverter("no SunSpec inverter model in the chain")
         identity = await _read_identity(self._unit, chain)
         components = {
-            REPORT_INVERTER: Inverter(self._unit, inverter_model),
+            REPORT_INVERTER: self._optional(Inverter, chain, inverter_model.model_id),
             REPORT_NAMEPLATE: self._optional(Nameplate, chain, NAMEPLATE_MODEL_ID),
             REPORT_SETTINGS: self._optional(Settings, chain, SETTINGS_MODEL_ID),
             REPORT_STATUS: self._optional(Status, chain, STATUS_MODEL_ID),
@@ -301,8 +300,16 @@ class FroniusInverter:
         if model is None:
             return None
         address, component = self._components_by_model.get(model_id, (None, None))
-        if component is not None and address == model.address:
-            return component
+        if component is not None:
+            if address == model.address:
+                return component
+            # Building a replacement here would leave every control that holds
+            # the old component writing to the old registers (audit D03). The
+            # coordinator answers a moved map by reloading the entry.
+            raise SunSpecMapShiftError(
+                f"SunSpec model {model_id} moved from register {address} to "
+                f"{model.address}"
+            )
         component = component_class(self._unit, model)
         self._components_by_model[model_id] = (model.address, component)
         return component
@@ -335,9 +342,9 @@ class FroniusInverter:
     ) -> MeterInfo | None:
         """A meter on ``unit_id``, or None when nothing SunSpec answers there.
 
-        A unit with nothing behind it answers exception 0x0B (gateway target)
-        or refuses the marker address; that is a confirmed absence. Every other
-        error propagates and the caller keeps the unit undecided.
+        A unit that answers but serves no registers at the marker address has
+        no SunSpec map: that is an absence. Every other error propagates and
+        the caller keeps the unit undecided.
         """
         try:
             chain, complete = await _scan(meter_unit)
@@ -351,11 +358,17 @@ class FroniusInverter:
             return None
         identity = await _read_identity(meter_unit, chain)
         phases = 1 if model.model_id == SINGLE_PHASE_METER_MODEL_ID else 3
+        # An unchanged meter keeps its component, so a poll that fails right
+        # after a rediscovery still shows the last readings (audit D02).
+        known = self.meters.get(unit_id)
+        moved = self._meter_addresses.get(unit_id) != model.address
+        self._meter_addresses[unit_id] = model.address
+        meter = AcMeter(meter_unit, model) if known is None or moved else known.meter
         return MeterInfo(
             unit_id=unit_id,
             identity=identity,
             phases=phases,
-            meter=AcMeter(meter_unit, model),
+            meter=meter,
         )
 
     def _component(self, name: str) -> Any:

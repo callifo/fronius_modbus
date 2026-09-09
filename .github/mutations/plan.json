@@ -196,13 +196,6 @@
     "tests": "cancelled_disable_write_leaves_the_control_enabled"
   },
   {
-    "label": "device: an unchanged model keeps its component",
-    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
-    "old": "        address, component = self._components_by_model.get(model_id, (None, None))\n        if component is not None and address == model.address:\n            return component\n",
-    "new": "",
-    "tests": "rediscovery_keeps_the_controls_reading_the_polled_component"
-  },
-  {
     "label": "device: completion is published after the setup succeeded",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
     "old": "        self.discovery_complete = complete",
@@ -224,7 +217,7 @@
     "tests": "retained_poll_does_not_confirm_a_bad_energy_sample"
   },
   {
-    "label": "device: a busy meter stays undecided instead of absent",
+    "label": "device: only a missing SunSpec map is an absent meter",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
     "old": "        except ABSENCE_ERRORS:\n            _LOGGER.debug(\"No meter on unit %s\", unit_id)\n            return None",
     "new": "        except ModbusError:\n            _LOGGER.debug(\"No meter on unit %s\", unit_id)\n            return None",
@@ -236,5 +229,19 @@
     "old": "        meters: dict[int, MeterInfo] = {}\n        undecided: dict[int, ModbusUnit] = {}\n",
     "new": "        meters = self.meters = {}\n        undecided = self._undecided_meters = {}\n",
     "tests": "aborted_rediscovery_keeps_the_previous_meters"
+  },
+  {
+    "label": "device: an unmoved model keeps the readings it already has",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "            if address == model.address:\n                return component",
+    "new": "            if False:\n                return component",
+    "tests": "component_that_did_not_move_keeps_its_readings"
+  },
+  {
+    "label": "device: a moved model reloads instead of being published",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "            raise SunSpecMapShiftError(",
+    "new": "            component = component_class(self._unit, model)\n            self._components_by_model[model_id] = (model.address, component)\n            return component\n            raise SunSpecMapShiftError(",
+    "tests": "model_that_moves_during_a_retry_is_not_published"
   }
 ]

@@ -291,3 +291,39 @@ async def test_a_model_that_returns_after_one_scan_keeps_its_control(
 
     assert coordinator.device.discovery_complete
     assert coordinator.inverter_controls.ac_limit_pct == 25.0
+
+
+def _insert_a_model_before_the_controls(unit) -> None:
+    """Move the tail of the map by inserting one well-formed unknown model."""
+    filler_id, filler_length = 129, 2
+    block = filler_length + 2
+    tail = {
+        address: value
+        for address, value in unit.holding.items()
+        if address >= CONTROLS_HEADER_ADDRESS
+    }
+    for address in sorted(tail, reverse=True):
+        unit.holding[address + block] = tail[address]
+    unit.holding[CONTROLS_HEADER_ADDRESS] = filler_id
+    unit.holding[CONTROLS_HEADER_ADDRESS + 1] = filler_length
+    unit.holding[CONTROLS_HEADER_ADDRESS + 2] = 0
+    unit.holding[CONTROLS_HEADER_ADDRESS + 3] = 0
+
+
+async def test_a_model_that_moves_during_a_retry_is_not_published(
+    coordinator, inverter_unit, hass, entry, monkeypatch
+):
+    """Audit D03: a new component at a new address left the controls on the old registers."""
+    inverter_unit.fail_read(CHAIN_END_ADDRESS, IllegalDataAddressError())
+    await coordinator.async_refresh()
+    controls_component = coordinator.device.controls
+
+    reload_entry = MagicMock()
+    monkeypatch.setattr(hass.config_entries, "async_schedule_reload", reload_entry)
+    _insert_a_model_before_the_controls(inverter_unit)
+    inverter_unit.fail_read(CHAIN_END_ADDRESS, None)
+    await coordinator.async_refresh()
+
+    # Nothing is published at the new addresses; the entry reloads instead.
+    assert coordinator.device.controls is controls_component
+    reload_entry.assert_called_once_with(entry.entry_id)

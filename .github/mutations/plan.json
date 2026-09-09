@@ -243,5 +243,12 @@
     "old": "            raise SunSpecMapShiftError(",
     "new": "            component = component_class(self._unit, model)\n            self._components_by_model[model_id] = (model.address, component)\n            return component\n            raise SunSpecMapShiftError(",
     "tests": "model_that_moves_during_a_retry_is_not_published"
+  },
+  {
+    "label": "coordinator: an unreachable device is not an error",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "        failure = DeviceUnreachable if silent else UpdateFailed",
+    "new": "        failure = UpdateFailed",
+    "tests": "an_unreachable_device_is_not_logged_as_an_error"
   }
 ]

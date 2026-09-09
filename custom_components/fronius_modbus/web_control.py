@@ -336,9 +336,7 @@ class FroniusWebControl:
         if not self._client:
             return
 
-        _LOGGER.warning(
-            "Disabling Fronius web API for %s after auth failure: %s", self._host, err
-        )
+        _LOGGER.warning("Disabling the Fronius web API after an auth failure: %s", err)
         self._client = None
         self.data = WebData()
         await async_get_token_store(self._hass).async_delete_token(
@@ -492,9 +490,7 @@ class FroniusWebControl:
     def _start_battery_write_transition(self, source: str) -> None:
         self._on_battery_write()
         self._schedule_delayed_web_refresh()
-        _LOGGER.debug(
-            "Started Modbus recovery window after %s write for %s", source, self._host
-        )
+        _LOGGER.debug("Started the Modbus recovery window after a %s write", source)
 
     # -- setters -----------------------------------------------------------------
 

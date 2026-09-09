@@ -494,8 +494,7 @@ class FroniusWebClient:
             raise
         except Exception as err:
             _LOGGER.debug(
-                "Failed reading storage identity via web API from %s: %s",
-                self._host,
+                "Failed reading the storage identity via the web API: %s",
                 err,
             )
         return _parse_storage_readable(None)
@@ -509,8 +508,7 @@ class FroniusWebClient:
             raise
         except Exception as err:
             _LOGGER.debug(
-                "Failed reading inverter readable data via web API from %s: %s",
-                self._host,
+                "Failed reading the inverter data via the web API: %s",
                 err,
             )
         return _parse_inverter_readable(None)
@@ -524,15 +522,13 @@ class FroniusWebClient:
             if meter_info is None:
                 top_level_keys = list(data.keys()) if isinstance(data, dict) else []
                 _LOGGER.debug(
-                    "Unrecognized PowerMeter payload shape from %s: top-level keys=%s",
-                    self._host,
+                    "Unrecognized PowerMeter payload shape: top-level keys=%s",
                     top_level_keys,
                 )
                 return None
 
             _LOGGER.debug(
-                "Parsed PowerMeter payload from %s via %s: unit_ids=%s primary_unit_id=%s",
-                self._host,
+                "Parsed the PowerMeter payload via %s: unit_ids=%s primary_unit_id=%s",
                 meter_info.get("payload_shape"),
                 meter_info.get("unit_ids"),
                 meter_info.get("primary_unit_id"),
@@ -540,8 +536,7 @@ class FroniusWebClient:
             return meter_info
         except Exception as err:
             _LOGGER.debug(
-                "Failed reading power meter config via web API from %s: %s",
-                self._host,
+                "Failed reading the power meter config via the web API: %s",
                 err,
             )
         return None
@@ -595,13 +590,11 @@ class FroniusWebClient:
         }
         self._request("post", "/api/config/modbus", payload=payload)
         _LOGGER.info(
-            "Enabled Modbus TCP via web API on %s (port=%s inverter_id=%s meter_id=%s restriction=%s ip=%s)",
-            self._host,
+            "Enabled Modbus TCP via the web API (port=%s inverter_id=%s meter_id=%s restriction=%s)",
             port,
             inverter_unit_id,
             meter_address,
             restriction_on,
-            restriction_ip,
         )
         return True
 

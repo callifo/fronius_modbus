@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+- A device that does not answer is logged as an expected outage instead of an error, the way the quality scale asks for. A device that answers and refuses is still an error.
+- Log lines no longer name the host: diagnostics carry it redacted, and Home Assistant logs travel with bug reports.
+
 ### Fixed
 - A meter that answers busy or reports a device failure is treated as undecided and probed again, instead of counting as absent and losing its entities.
 - Discovery publishes its result in one step: a probe that fails halfway no longer leaves the poll with a meter name and no meter behind it.

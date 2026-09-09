@@ -76,6 +76,20 @@ because the thing it prevents happened, here or in a sibling project.
 | `test_requirements.py` | `manifest.json` and `requirements.txt` name the same dependencies |
 | `test_secret_scan.py` | The gitleaks allowlist for translation keys does not hide a token on the same line (needs the gitleaks binary; skips without it) |
 
+### test_log_hygiene.py
+
+Two things at once. An AST scan over the package refuses any logger call that
+passes a host, serial, token or URL: Home Assistant logs travel to GitHub with
+bug reports, and diagnostics already carry those values redacted. Drop the
+value from the message rather than adding an exception here.
+
+The other two tests hold the level a device outage is logged at. The quality
+scale asks for `info` when a device goes away, but `DataUpdateCoordinator`
+logs the outage at `error` and only the recovery at `info`, with no setting to
+change it. `DeviceUnreachable` plus a filter on the coordinator's own logger
+downgrades exactly that case; the counter-check keeps a device that answers
+and refuses at `error`, so the filter cannot quietly swallow real failures.
+
 ## When a budget turns red
 
 `tests/test_budgets.py` freezes size and complexity so nothing grows back.

@@ -91,12 +91,21 @@ def _device_registry_name(hass: HomeAssistant, device_info) -> str | None:
     connections = device_info.get("connections")
     if not isinstance(identifiers, set) and not isinstance(connections, set):
         return None
-    device_entry = dr.async_get(hass).async_get_device(
+        
+    device_registry = dr.async_get(hass)
+    
+    # Use the new global query which returns a list of matches without requiring config_entry_id
+    devices = device_registry.async_get_devices(
         identifiers=identifiers if isinstance(identifiers, set) else None,
         connections=connections if isinstance(connections, set) else None,
     )
-    if device_entry is None:
+    
+    if not devices:
         return None
+        
+    # Get the first matching device from the list
+    device_entry = devices[0]
+        
     for candidate in (device_entry.name_by_user, device_entry.name):
         if isinstance(candidate, str) and candidate:
             return candidate

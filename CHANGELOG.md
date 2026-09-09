@@ -3,6 +3,14 @@
 ## Unreleased
 
 ### Fixed
+- A meter that answers busy or reports a device failure is treated as undecided and probed again, instead of counting as absent and losing its entities.
+- Discovery publishes its result in one step: a probe that fails halfway no longer leaves the poll with a meter name and no meter behind it.
+- A model missing from one incomplete scan comes back as the same component, so the controls and the storage control keep reading what the poll refreshes.
+- The AC-limit and power-factor write is guarded from the first register on: a cancellation right after the inverter disabled the control no longer leaves it off.
+- A repeated discovery keeps the components whose model has not moved, so the controls and the storage control keep reading what the poll refreshes.
+- Discovery only counts as complete once its components are installed; an identity read that fails during a retry no longer ends the retries.
+- A meter topology that is confirmed after a failed one is applied even when it names the meter the entry already polls, so the household load and the meter location arrive without waiting for an unrelated reload.
+- During the tolerated outage after a web write the previous poll is served for display but no longer counts as a new sample for the cumulative energy sensors.
 - A cancelled service call during an AC-limit or power-factor write no longer leaves the control switched off: the enable flag is restored even while the call is being cancelled.
 - Cumulative energy sensors no longer accept a bad reading that a failed poll repeated: only a poll that actually refreshed the register counts as confirmation.
 - Discovery that ended in a refused register read is retried on every poll and reported as a failure, instead of passing as a device without those models. While discovery or the meter topology is uncertain, no entity or device is retired.

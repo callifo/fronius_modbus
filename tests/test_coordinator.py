@@ -6,6 +6,7 @@ import time
 from unittest.mock import MagicMock
 
 from modbus_connection import (
+    IllegalDataAddressError,
     ModbusConnectionError,
     ModbusTimeoutError,
     ServerDeviceFailureError,
@@ -20,6 +21,7 @@ from custom_components.fronius_modbus.coordinator import (
     FroniusModbusCoordinator,
 )
 from custom_components.fronius_modbus.fronius_modbus_api.device import FroniusInverter
+from custom_components.fronius_modbus.fronius_modbus_api.storage import ExtendedMode
 from custom_components.fronius_modbus.fronius_modbus_api.sunspec_models import Nameplate
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
@@ -74,7 +76,11 @@ async def test_failures_are_tolerated_inside_the_write_window(
     coordinator.data = first
     coordinator.tolerate_failures_until(10**9)
     inverter_unit.fail_requests(ModbusConnectionError())
-    assert await coordinator._async_update_data() is first
+
+    tolerated = await coordinator._async_update_data()
+    # The same reading is served on for display, marked as not newly read.
+    assert (tolerated.report, tolerated.load_w) == (first.report, first.load_w)
+    assert tolerated.retained
 
 
 async def test_three_timeouts_recycle_the_link(coordinator, inverter_unit, connection):
@@ -135,7 +141,7 @@ async def test_the_link_is_recycled_when_the_window_expires_failing(
     coordinator.data = await coordinator._async_update_data()
     coordinator.tolerate_failures_until(time.monotonic() + 0.05)
     inverter_unit.fail_requests(ModbusConnectionError())
-    assert await coordinator._async_update_data() is coordinator.data
+    assert (await coordinator._async_update_data()).retained
 
     await asyncio.sleep(0.1)
     with pytest.raises(UpdateFailed):
@@ -229,3 +235,95 @@ async def test_a_sub_system_answering_for_the_first_time_reloads_the_entry(
     reload.assert_called_once_with(entry.entry_id)
     await coordinator.async_refresh()
     reload.assert_called_once()
+
+
+# Model 124 header, its StorCtl_Mod register, and the AC limit in the fixture.
+STORAGE_HEADER_ADDRESS = 40343
+STORAGE_CONTROL_MODE_ADDRESS = 40348
+AC_LIMIT_PERCENT_ADDRESS = 40232
+CHAIN_END_ADDRESS = 40369
+CONTROLS_HEADER_ADDRESS = 40227
+
+
+async def test_rediscovery_keeps_the_controls_reading_the_polled_component(
+    coordinator, inverter_unit
+):
+    """Audit B02: every retry built new components while the wrappers kept the old ones."""
+    inverter_unit.fail_read(STORAGE_HEADER_ADDRESS, IllegalDataAddressError())
+    await coordinator.async_refresh()
+
+    inverter_unit.holding[AC_LIMIT_PERCENT_ADDRESS] = 2500
+    await coordinator.async_refresh()
+
+    assert coordinator.inverter_controls.ac_limit_pct == 25.0
+
+
+async def test_rediscovery_keeps_the_storage_control_reading_the_polled_component(
+    coordinator, inverter_unit
+):
+    """Audit B02: the storage wrapper kept a component nothing polls any more."""
+    # The chain's end marker, right behind the storage model: storage itself
+    # answers, only the walk cannot finish.
+    inverter_unit.fail_read(CHAIN_END_ADDRESS, IllegalDataAddressError())
+    await coordinator.async_refresh()
+    assert coordinator.device.storage is not None
+
+    inverter_unit.holding[STORAGE_CONTROL_MODE_ADDRESS] = 3
+    await coordinator.async_refresh()
+
+    assert coordinator.storage_control.extended_mode is not ExtendedMode.AUTO
+
+
+async def test_a_model_that_returns_after_one_scan_keeps_its_control(
+    coordinator, inverter_unit
+):
+    """Audit C01: a model missing from one scan came back as a new component."""
+    inverter_unit.fail_read(CHAIN_END_ADDRESS, IllegalDataAddressError())
+    await coordinator.async_refresh()
+
+    inverter_unit.fail_read(CONTROLS_HEADER_ADDRESS, IllegalDataAddressError())
+    await coordinator.async_refresh()
+
+    inverter_unit.fail_read(CONTROLS_HEADER_ADDRESS, None)
+    inverter_unit.fail_read(CHAIN_END_ADDRESS, None)
+    inverter_unit.holding[AC_LIMIT_PERCENT_ADDRESS] = 2500
+    await coordinator.async_refresh()
+
+    assert coordinator.device.discovery_complete
+    assert coordinator.inverter_controls.ac_limit_pct == 25.0
+
+
+def _insert_a_model_before_the_controls(unit) -> None:
+    """Move the tail of the map by inserting one well-formed unknown model."""
+    filler_id, filler_length = 129, 2
+    block = filler_length + 2
+    tail = {
+        address: value
+        for address, value in unit.holding.items()
+        if address >= CONTROLS_HEADER_ADDRESS
+    }
+    for address in sorted(tail, reverse=True):
+        unit.holding[address + block] = tail[address]
+    unit.holding[CONTROLS_HEADER_ADDRESS] = filler_id
+    unit.holding[CONTROLS_HEADER_ADDRESS + 1] = filler_length
+    unit.holding[CONTROLS_HEADER_ADDRESS + 2] = 0
+    unit.holding[CONTROLS_HEADER_ADDRESS + 3] = 0
+
+
+async def test_a_model_that_moves_during_a_retry_is_not_published(
+    coordinator, inverter_unit, hass, entry, monkeypatch
+):
+    """Audit D03: a new component at a new address left the controls on the old registers."""
+    inverter_unit.fail_read(CHAIN_END_ADDRESS, IllegalDataAddressError())
+    await coordinator.async_refresh()
+    controls_component = coordinator.device.controls
+
+    reload_entry = MagicMock()
+    monkeypatch.setattr(hass.config_entries, "async_schedule_reload", reload_entry)
+    _insert_a_model_before_the_controls(inverter_unit)
+    inverter_unit.fail_read(CHAIN_END_ADDRESS, None)
+    await coordinator.async_refresh()
+
+    # Nothing is published at the new addresses; the entry reloads instead.
+    assert coordinator.device.controls is controls_component
+    reload_entry.assert_called_once_with(entry.entry_id)

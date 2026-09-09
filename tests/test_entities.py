@@ -3,8 +3,13 @@
 import asyncio
 from dataclasses import replace
 from datetime import timedelta
+import time
 
-from modbus_connection import ModbusTimeoutError, ServerDeviceFailureError
+from modbus_connection import (
+    ModbusConnectionError,
+    ModbusTimeoutError,
+    ServerDeviceFailureError,
+)
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -379,6 +384,28 @@ async def test_failed_polls_do_not_confirm_a_bad_energy_sample(
     for _ in range(entities.TOTAL_INCREASING_RESET_POLLS):
         await runtime.modbus.async_refresh()
         assert "inverter" in runtime.modbus.data.report.failed
+        _report(sensor, 120.0)
+
+    assert sensor.native_value == original
+
+
+# The window the integration opens around a web battery write.
+TOLERATED_OUTAGE_SECONDS = 30
+
+
+async def test_a_retained_poll_does_not_confirm_a_bad_energy_sample(
+    hass, entry, runtime, inverter_unit
+):
+    """Audit B05: inside the tolerance window the old poll was served again as a fresh one."""
+    sensor = _total_sensor(runtime, entry, hass)
+    original = sensor.native_value
+
+    _report(sensor, 120.0)
+    runtime.modbus.tolerate_failures_until(time.monotonic() + TOLERATED_OUTAGE_SECONDS)
+    inverter_unit.fail_requests(ModbusConnectionError())
+    for _ in range(entities.TOTAL_INCREASING_RESET_POLLS):
+        await runtime.modbus.async_refresh()
+        assert runtime.modbus.last_update_success
         _report(sensor, 120.0)
 
     assert sensor.native_value == original

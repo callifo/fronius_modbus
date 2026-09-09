@@ -135,7 +135,7 @@
   {
     "label": "entities: a stale reading is not an observation",
     "path": "custom_components/fronius_modbus/entities.py",
-    "old": "        reading = (\n            description.value_fn(self._runtime) if self._source_refreshed else None\n        )",
+    "old": "        reading = description.value_fn(self._runtime) if self._source_sampled else None",
     "new": "        reading = description.value_fn(self._runtime)",
     "tests": "failed_polls_do_not_confirm_a_bad_energy_sample"
   },
@@ -187,5 +187,61 @@
     "old": "    @_serialised\n    async def apply_soc_minimum(",
     "new": "    async def apply_soc_minimum(",
     "tests": "concurrent_maximum_cannot_slip_between_check_and_write"
+  },
+  {
+    "label": "controls: the disable write is inside the restore guard",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/controls.py",
+    "old": "            try:\n                # Inside the guard from here: the device may have applied the\n                # disable before this call is cancelled (audit A01/B01).\n                await self._controls.write(enable_field, DISABLED)\n",
+    "new": "            await self._controls.write(enable_field, DISABLED)\n            try:\n",
+    "tests": "cancelled_disable_write_leaves_the_control_enabled"
+  },
+  {
+    "label": "device: completion is published after the setup succeeded",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        self.discovery_complete = complete",
+    "new": "        self.discovery_complete = True",
+    "tests": "failed_identity_read_does_not_finish_incomplete_discovery"
+  },
+  {
+    "label": "coordinator: a confirmed topology is applied, not just a wider one",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "        self._recheck_topology = False\n        _LOGGER.info(\n            \"The web API confirmed meters %s; reloading the entry to apply it\",",
+    "new": "        self._recheck_topology = False\n        if not set(topology.unit_ids) - set(runtime.device.meter_unit_ids):\n            return\n        _LOGGER.info(\n            \"The web API confirmed meters %s; reloading the entry to apply it\",",
+    "tests": "confirmed_single_meter_topology_is_applied"
+  },
+  {
+    "label": "coordinator: a tolerated outage serves the poll as retained",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "            return replace(self.data, retained=True)",
+    "new": "            return self.data",
+    "tests": "retained_poll_does_not_confirm_a_bad_energy_sample"
+  },
+  {
+    "label": "device: only a missing SunSpec map is an absent meter",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        except ABSENCE_ERRORS:\n            _LOGGER.debug(\"No meter on unit %s\", unit_id)\n            return None",
+    "new": "        except ModbusError:\n            _LOGGER.debug(\"No meter on unit %s\", unit_id)\n            return None",
+    "tests": "busy_meter_is_undecided_rather_than_absent"
+  },
+  {
+    "label": "device: the meters are published together with their polled names",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        meters: dict[int, MeterInfo] = {}\n        undecided: dict[int, ModbusUnit] = {}\n",
+    "new": "        meters = self.meters = {}\n        undecided = self._undecided_meters = {}\n",
+    "tests": "aborted_rediscovery_keeps_the_previous_meters"
+  },
+  {
+    "label": "device: an unmoved model keeps the readings it already has",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "            if address == model.address:\n                return component",
+    "new": "            if False:\n                return component",
+    "tests": "component_that_did_not_move_keeps_its_readings"
+  },
+  {
+    "label": "device: a moved model reloads instead of being published",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "            raise SunSpecMapShiftError(",
+    "new": "            component = component_class(self._unit, model)\n            self._components_by_model[model_id] = (model.address, component)\n            return component\n            raise SunSpecMapShiftError(",
+    "tests": "model_that_moves_during_a_retry_is_not_published"
   }
 ]

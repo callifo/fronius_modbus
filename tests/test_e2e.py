@@ -529,3 +529,31 @@ async def test_a_reload_retires_no_live_meter_device(hass, mock_modbus, monkeypa
     await hass.async_block_till_done()
 
     assert removed == []
+
+
+async def test_a_confirmed_single_meter_topology_is_applied(
+    hass, mock_modbus, monkeypatch
+):
+    """Audit B04: a confirmed answer about the meter we already poll never reached the runtime."""
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _FakeWebClientWithTopology)
+    monkeypatch.setattr(_FakeWebClientWithTopology, "topology", None)
+    entry = make_entry(hass)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+    await setup_entry(hass, entry)
+    assert entry.runtime_data.topology_confirmed is False
+
+    monkeypatch.setattr(
+        _FakeWebClientWithTopology,
+        "topology",
+        {
+            "unit_ids": [METER_UNIT_ID],
+            "primary_unit_id": METER_UNIT_ID,
+            "locations_by_unit_id": {METER_UNIT_ID: 0},
+        },
+    )
+    await entry.runtime_data.web.async_refresh()
+    await hass.async_block_till_done()
+
+    runtime = hass.config_entries.async_get_entry(entry.entry_id).runtime_data
+    assert runtime.topology_confirmed
+    assert runtime.meter_locations == {METER_UNIT_ID: 0}

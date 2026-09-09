@@ -195,3 +195,35 @@ async def test_a_cancelled_write_leaves_the_control_enabled(
     with pytest.raises(asyncio.CancelledError):
         await write
     assert inverter_unit.holding[enable_address] == 1
+
+
+@pytest.mark.parametrize(
+    ("enable_address", "setter", "value"),
+    [
+        (W_MAX_LIM_ENA, "set_ac_limit_w", 5000.0),
+        (OUT_PF_SET_ENA, "set_power_factor", 0.9),
+    ],
+)
+async def test_a_cancelled_disable_write_leaves_the_control_enabled(
+    controls, inverter_unit, enable_address, setter, value
+):
+    """Audit B01: the device may already have applied the disable when the call is cancelled."""
+    inverter_unit.holding[enable_address] = 1
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    write = controls._controls.write
+
+    async def hold_after_disabling(field, written):
+        await write(field, written)
+        if field.endswith("_ena") and written == 0:
+            entered.set()
+            await release.wait()
+
+    controls._controls.write = hold_after_disabling
+    setting = asyncio.create_task(getattr(controls, setter)(value))
+    await entered.wait()
+    setting.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await setting
+
+    assert inverter_unit.holding[enable_address] == 1

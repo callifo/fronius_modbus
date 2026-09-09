@@ -88,8 +88,7 @@ async def _async_meter_topology(
         )
     except FroniusWebAuthError as err:
         _LOGGER.warning(
-            "Disabling the Fronius web API for %s after an auth failure: %s",
-            _entry_value(entry, CONF_HOST),
+            "Disabling the Fronius web API after an auth failure: %s",
             err,
         )
         await async_get_token_store(hass).async_delete_token(

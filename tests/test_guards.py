@@ -35,6 +35,7 @@ GUARD_FILES = {
     "test_imports.py": "every module imports outside the author's own tree",
     "test_entity_table.py": "every legacy key is still registered and translated",
     "test_api_is_ha_free.py": "the device library imports no Home Assistant",
+    "test_log_hygiene.py": "no log line names the device, and an outage is not an error",
     "test_mutation_harness.py": "the mutation run fails loudly instead of reporting success",
     "test_mypy_scope.py": "every module is type-checked or says why it is not yet",
     "test_platform_entities.py": "every platform builds its entities through the shared helper",

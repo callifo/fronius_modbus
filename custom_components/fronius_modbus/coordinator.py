@@ -8,7 +8,7 @@ import logging
 import time
 from typing import TYPE_CHECKING, cast
 
-from modbus_connection import ModbusError, ModbusTimeoutError
+from modbus_connection import ModbusConnectionError, ModbusError, ModbusTimeoutError
 from modbus_connection.model.sunspec import SunSpecMapShiftError
 
 from homeassistant.config_entries import ConfigEntry
@@ -31,6 +31,35 @@ if TYPE_CHECKING:
     from .web_control import FroniusWebControl, WebData
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class DeviceUnreachable(UpdateFailed):
+    """The device did not answer at all - normal while it is switched off."""
+
+
+class _OfflineIsNotAnError(logging.Filter):
+    """Log an expected outage at info, the way the quality scale asks for.
+
+    DataUpdateCoordinator logs the outage at error and the recovery at info
+    (checked in 2026.9.0) with no level to configure, so a device the owner
+    switches off writes a red line every day. Home Assistant formats lazily,
+    so the exception is still an object in `record.args`: that, not the text,
+    identifies the case.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        expected_outage = record.levelno == logging.ERROR and any(
+            isinstance(argument, DeviceUnreachable) for argument in record.args or ()
+        )
+        if expected_outage:
+            record.levelno = logging.INFO
+            record.levelname = logging.getLevelName(logging.INFO)
+        return True
+
+
+# On this logger, not a parent: a filter never sees a child logger's records,
+# and this is the one both coordinators are built with.
+_LOGGER.addFilter(_OfflineIsNotAnError())
 
 
 def assume_present[Subsystem](subsystem: Subsystem | None) -> Subsystem:
@@ -217,7 +246,11 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
             self._tolerated_failures = 0
             self._tolerate_until = 0.0
             await self.device.unit.disconnect()
-        raise UpdateFailed(f"Modbus communication failure: {err}") from err
+        # No answer at all is the expected shape of a device that is off; a
+        # device that answers and refuses is not.
+        silent = isinstance(err, ModbusConnectionError | ModbusTimeoutError)
+        failure = DeviceUnreachable if silent else UpdateFailed
+        raise failure(f"Modbus communication failure: {err}") from err
 
     def _reload_for_new_sub_systems(self, report: UpdateReport) -> None:
         answered = frozenset(report.updated)
@@ -347,7 +380,11 @@ class FroniusWebCoordinator(DataUpdateCoordinator["WebData"]):
     async def _async_update_data(self) -> WebData:
         try:
             data = await self.web_control.async_refresh()
-        except Exception as err:  # the client raises plain RuntimeError/requests errors
+        except OSError as err:
+            # requests' transport errors derive from OSError: the web API not
+            # answering is the same switched-off device as on the Modbus side.
+            raise DeviceUnreachable(f"Fronius web API unreachable: {err}") from err
+        except Exception as err:  # the client raises plain RuntimeError as well
             raise UpdateFailed(f"Fronius web API refresh failed: {err}") from err
         if self._recheck_topology:
             await self._async_recheck_topology()

@@ -29,6 +29,8 @@ from .test_web_control import make_control
 
 # MinRsvPct in the captured fixture; the model-124 scale factor is -2.
 SOC_MINIMUM_ADDRESS = 40350
+# The model-123 header; failing it fails the controls report.
+CONTROLS_HEADER_ADDRESS = 40227
 
 
 @pytest.fixture
@@ -409,3 +411,17 @@ async def test_a_retained_poll_does_not_confirm_a_bad_energy_sample(
         _report(sensor, 120.0)
 
     assert sensor.native_value == original
+
+
+async def test_the_throttle_reason_needs_both_of_its_reports(
+    hass, entry, connection, inverter_unit
+):
+    """It reads the status and the controls model, so a stale one must not answer."""
+    runtime = await make_runtime(hass, entry, connection)
+    description = _description(entities.sensor_descriptions(runtime), "throttle_reason")
+    assert description.value_fn(runtime) == "none"
+
+    inverter_unit.fail_read(CONTROLS_HEADER_ADDRESS, ServerDeviceFailureError())
+    await runtime.modbus.async_refresh()
+
+    assert description.value_fn(runtime) is None

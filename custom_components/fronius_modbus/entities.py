@@ -1193,10 +1193,28 @@ def _load_and_grid_status_descriptions(
     ]
 
 
+def _throttle_descriptions(
+    runtime: FroniusRuntimeData,
+) -> list[FroniusSensorDescription]:
+    """The throttling reason, once the models it reads are present."""
+    if runtime.device.status is None or runtime.device.controls is None:
+        return []
+    return [
+        _sensor(
+            "throttle_reason",
+            "throttle_reason",
+            value_fn=lambda r: r.modbus.data.throttle_reason,
+            icon="mdi:speedometer-slow",
+            entity_category=EntityCategory.DIAGNOSTIC,
+        )
+    ]
+
+
 def sensor_descriptions(runtime: FroniusRuntimeData) -> list[FroniusSensorDescription]:
     """Every sensor description the current runtime produces."""
     descriptions = [d for d in _STATIC_SENSOR_DESCRIPTIONS if d.exists_fn(runtime)]
     descriptions += _load_and_grid_status_descriptions(runtime)
+    descriptions += _throttle_descriptions(runtime)
     for unit_id, info in runtime.device.meters.items():
         descriptions += _meter_sensor_descriptions(unit_id, info.phases)
     for index in runtime.device.mppt_channels.pv:

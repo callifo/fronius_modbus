@@ -250,5 +250,19 @@
     "old": "        failure = DeviceUnreachable if silent else UpdateFailed",
     "new": "        failure = UpdateFailed",
     "tests": "an_unreachable_device_is_not_logged_as_an_error"
+  },
+  {
+    "label": "derived: a limit at full power is no throttling",
+    "path": "custom_components/fronius_modbus/derived.py",
+    "old": "    limited = bool(limit_enabled) and (limit_percent or 0.0) < FULL_POWER_PERCENT",
+    "new": "    limited = bool(limit_enabled)",
+    "tests": "a_limit_at_full_power_is_no_reason"
+  },
+  {
+    "label": "derived: an unread source is not a no",
+    "path": "custom_components/fronius_modbus/derived.py",
+    "old": "    return None if unknown else NO_REASON",
+    "new": "    return NO_REASON",
+    "tests": "a_source_that_did_not_answer_prevents_a_no"
   }
 ]

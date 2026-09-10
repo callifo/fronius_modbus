@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .const import GRID_STATUS
+from .const import GRID_STATUS, THROTTLE_REASONS
 
 GRID_FREQUENCY_HZ = 50.0
 METER_GRID_BAND_HZ = 0.2
@@ -18,6 +18,52 @@ LOAD_GLITCH_MIN_PV_W = 1000.0
 # During strong battery charging on Verto the meter export can exceed the inverter
 # AC power and the grid-meter formula produces a bogus negative load.
 LOAD_STORAGE_CHARGE_MIN_W = 1000.0
+
+
+# Model 103 St: the operating state the inverter names itself.
+THROTTLED_OPERATING_STATE = 5
+# Model 122 StActCtl bit 0: an active power setpoint is in effect.
+ACTIVE_POWER_CONTROL_BIT = 0b1
+FULL_POWER_PERCENT = 100.0
+NO_REASON, SEVERAL_REASONS = THROTTLE_REASONS[0], THROTTLE_REASONS[-1]
+
+
+def throttle_reason(
+    *,
+    operating_state: int | None,
+    active_controls: int | None,
+    limit_enabled: bool | None,
+    limit_percent: float | None,
+) -> str | None:
+    """Why the inverter is limiting its output, or None while nothing is known.
+
+    Three independent signals say it, and a device rarely sets all of them: the
+    operating state, an active power setpoint, and a limit that is switched on
+    *and* below full power. The last condition is the one that matters in
+    practice - an installation may leave the export limit switched on at 100
+    percent for years, and that is not a throttled inverter.
+    """
+    limited = bool(limit_enabled) and (limit_percent or 0.0) < FULL_POWER_PERCENT
+    reasons = [
+        reason
+        for reason, applies in (
+            (THROTTLE_REASONS[1], operating_state == THROTTLED_OPERATING_STATE),
+            (
+                THROTTLE_REASONS[2],
+                bool((active_controls or 0) & ACTIVE_POWER_CONTROL_BIT),
+            ),
+            (THROTTLE_REASONS[3], limited),
+        )
+        if applies
+    ]
+    if reasons:
+        return reasons[0] if len(reasons) == 1 else SEVERAL_REASONS
+    # No reason found is only an answer once every source answered: a limit we
+    # could not read may be the one that is throttling.
+    unknown = (
+        operating_state is None or active_controls is None or limit_enabled is None
+    )
+    return None if unknown else NO_REASON
 
 
 def _within(value: float, centre: float, band: float) -> bool:

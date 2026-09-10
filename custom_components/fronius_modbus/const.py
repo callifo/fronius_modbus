@@ -105,6 +105,15 @@ CHARGE_GRID_STATUS = {
     1: "enabled",
 }
 
+# Why the inverter is limiting its output, in the order the rule reports them.
+THROTTLE_REASONS = (
+    "none",
+    "inverter_state",
+    "active_power_control",
+    "export_limit",
+    "several",
+)
+
 GRID_STATUS = {
     0: "off_grid",
     1: "off_grid_operating",
@@ -174,6 +183,7 @@ SENSOR_STATE_OPTIONS = {
     "status": _state_values(INVERTER_STATUS),
     "statusvendor": _state_values(FRONIUS_INVERTER_STATUS),
     "grid_status": _state_values(GRID_STATUS),
+    "throttle_reason": [*THROTTLE_REASONS, UNKNOWN_STATE],
     "connection_control": _state_values(CONTROL_STATUS),
     "power_limit_control": _state_values(CONTROL_STATUS),
     "power_factor_control": _state_values(CONTROL_STATUS),

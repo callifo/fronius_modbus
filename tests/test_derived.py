@@ -4,6 +4,7 @@ from custom_components.fronius_modbus.derived import (
     LoadEstimator,
     TotalGuard,
     grid_status,
+    throttle_reason,
 )
 
 
@@ -102,3 +103,54 @@ def test_the_first_reading_seeds_an_unseeded_guard():
     guard = TotalGuard(max_step=100.0, confirmations=3)
     assert guard.observe(42.0) is None
     assert guard.value == 42.0
+
+
+def _reason(
+    operating_state=4, active_controls=0, limit_enabled=False, limit_percent=100.0
+):
+    return throttle_reason(
+        operating_state=operating_state,
+        active_controls=active_controls,
+        limit_enabled=limit_enabled,
+        limit_percent=limit_percent,
+    )
+
+
+def test_a_normal_inverter_is_not_throttled():
+    assert _reason() == "none"
+
+
+def test_the_inverter_reporting_the_state_itself_is_a_reason():
+    assert _reason(operating_state=5) == "inverter_state"
+
+
+def test_an_active_power_control_is_a_reason():
+    assert _reason(active_controls=0b1) == "active_power_control"
+
+
+def test_a_limit_below_full_power_is_a_reason():
+    assert _reason(limit_enabled=True, limit_percent=70.0) == "export_limit"
+
+
+def test_a_limit_at_full_power_is_no_reason():
+    """The trap: many installations leave the limit switched on at 100 percent."""
+    assert _reason(limit_enabled=True, limit_percent=100.0) == "none"
+
+
+def test_two_reasons_at_once_are_reported_as_several():
+    assert _reason(operating_state=5, active_controls=0b1) == "several"
+
+
+def test_nothing_known_is_no_answer():
+    assert (
+        _reason(operating_state=None, active_controls=None, limit_enabled=None) is None
+    )
+
+
+def test_a_source_that_did_not_answer_prevents_a_no():
+    """A limit that could not be read may be the one that is throttling."""
+    assert _reason(limit_enabled=None) is None
+
+
+def test_a_found_reason_stands_even_while_another_source_is_silent():
+    assert _reason(operating_state=5, limit_enabled=None) == "inverter_state"

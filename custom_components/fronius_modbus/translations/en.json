@@ -459,6 +459,17 @@
       },
       "mppt_module_lifetime_energy": {
         "name": "MPPT module {module} Lifetime energy"
+      },
+      "throttle_reason": {
+        "name": "Throttle reason",
+        "state": {
+          "none": "Not throttled",
+          "inverter_state": "Inverter reports throttling",
+          "active_power_control": "Active power control",
+          "export_limit": "Export limit",
+          "several": "Several reasons",
+          "unknown": "Unknown"
+        }
       }
     },
     "switch": {

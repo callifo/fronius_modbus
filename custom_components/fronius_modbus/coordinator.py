@@ -15,11 +15,13 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .derived import LoadEstimator, grid_status
+from .derived import LoadEstimator, grid_status, throttle_reason
 from .fronius_modbus_api.controls import InverterControls
 from .fronius_modbus_api.device import (
+    REPORT_CONTROLS,
     REPORT_INVERTER,
     REPORT_MPPT,
+    REPORT_STATUS,
     FroniusInverter,
     UpdateReport,
     meter_report_name,
@@ -86,6 +88,7 @@ class ModbusPoll:
     report: UpdateReport
     load_w: float | None
     grid_status: str | None
+    throttle_reason: str | None
     # True when this is the previous poll served again during a tolerated
     # outage: usable for display, but not a new reading (audit B05).
     retained: bool = False
@@ -230,6 +233,7 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
             report=report,
             load_w=self._load_w(report),
             grid_status=self._grid_status(report),
+            throttle_reason=self._throttle_reason(report),
         )
 
     async def _failed_poll(self, err: ModbusError) -> ModbusPoll:
@@ -345,6 +349,21 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
             pv_power_w=self.device.pv_power_w if mppt_fresh else None,
             storage_charge_power_w=None if charge_module is None else charge_module.dcw,
             storage_present=self.device.storage is not None,
+        )
+
+    def _throttle_reason(self, report: UpdateReport) -> str | None:
+        """The throttling reason, from the two models that answered this poll."""
+        status = self.device.status if REPORT_STATUS in report.updated else None
+        controls = self.device.controls if REPORT_CONTROLS in report.updated else None
+        return throttle_reason(
+            operating_state=(
+                assume_present(self.device.inverter).st
+                if REPORT_INVERTER in report.updated
+                else None
+            ),
+            active_controls=None if status is None else status.st_act_ctl,
+            limit_enabled=None if controls is None else controls.w_max_lim_ena == 1,
+            limit_percent=None if controls is None else controls.w_max_lim_pct,
         )
 
     def _grid_status(self, report: UpdateReport) -> str | None:

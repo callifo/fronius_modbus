@@ -459,6 +459,17 @@
       },
       "mppt_module_lifetime_energy": {
         "name": "MPPT-Modul {module} Energie gesamt"
+      },
+      "throttle_reason": {
+        "name": "Drosselungsgrund",
+        "state": {
+          "none": "Keine Drosselung",
+          "inverter_state": "Wechselrichter meldet Drosselung",
+          "active_power_control": "Wirkleistungsvorgabe",
+          "export_limit": "Einspeisebegrenzung",
+          "several": "Mehrere Gründe",
+          "unknown": "Unbekannt"
+        }
       }
     },
     "switch": {

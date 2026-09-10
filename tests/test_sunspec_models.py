@@ -4,6 +4,12 @@ from modbus_connection.model.sunspec import scan
 
 from custom_components.fronius_modbus.fronius_modbus_api import sunspec_models as models
 
+# Model 121 in the captured fixture, and the two sentinels SunSpec defines.
+SETTINGS_W_MAX_ADDRESS = 40151
+SETTINGS_V_REF_OFS_ADDRESS = 40153
+UINT16_NOT_IMPLEMENTED = 0xFFFF
+INT16_NOT_IMPLEMENTED = 0x8000
+
 
 async def test_the_inverter_model_decodes_scaled_points(inverter_unit):
     chain = await scan(inverter_unit, 40000)
@@ -17,11 +23,22 @@ async def test_the_inverter_model_decodes_scaled_points(inverter_unit):
 
 
 async def test_unimplemented_points_read_as_none(inverter_unit):
+    """The device says "not implemented" with a per-type sentinel, not with a value.
+
+    An MPPT string in the dark sends 0xFFFF and a meter phase that does not
+    exist sends 0x8000; decoding either as a number is what made the old
+    integration report 65535 W and refuse the poll.
+    """
     chain = await scan(inverter_unit, 40000)
-    settings = models.Settings(inverter_unit, chain.first(121))
+    settings = models.Settings(inverter_unit, chain.first(models.SETTINGS_MODEL_ID))
     await settings.async_update()
-    assert settings.w_max == 10000
-    assert settings.v_ref_ofs == 0
+    assert (settings.w_max, settings.v_ref_ofs) == (10000, 0)
+
+    inverter_unit.holding[SETTINGS_W_MAX_ADDRESS] = UINT16_NOT_IMPLEMENTED
+    inverter_unit.holding[SETTINGS_V_REF_OFS_ADDRESS] = INT16_NOT_IMPLEMENTED
+    await settings.async_update()
+
+    assert (settings.w_max, settings.v_ref_ofs) == (None, None)
 
 
 async def test_the_mppt_modules_use_the_parent_scale_factors(inverter_unit):

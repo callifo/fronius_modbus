@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 1.0.0
+
+First stable release of the rewrite. It contains everything from the three 1.0.0 pre-releases
+below; upgrading from 0.3.x follows the migration notes under 1.0.0b1.
 
 ### Added
 - A `Throttle reason` sensor says whether the inverter is limiting its output and why: the operating state it reports itself, an active power setpoint, or an export limit that is switched on below full power. It stays unknown while one of those sources could not be read, rather than claiming there is no throttling.

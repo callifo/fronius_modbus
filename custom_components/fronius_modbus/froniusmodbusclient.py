@@ -28,6 +28,7 @@ from .froniusmodbusclient_const import (
     CHARGE_STATUS,
     CHARGE_GRID_STATUS,
     STORAGE_EXT_CONTROL_MODE,
+    EXT_MODE_BASE_MODES,
     FRONIUS_INVERTER_STATUS,
     INVERTER_STATUS,
     CONNECTION_STATUS_CONDENSED,
@@ -94,6 +95,13 @@ class FroniusModbusClient(ExtModbusClient):
         self.mppt_configured = False
         self.storage_configured = False
         self.storage_extended_control_mode = 0
+        # Mode-write bookkeeping for the extended-mode re-derivation in
+        # read_inverter_storage_data: a storage read can overlap a mode write
+        # (the coordinator poll does not take the hub's write lock), and a
+        # register value read before the write must not be taken as a mode
+        # change made outside HA.
+        self._mode_writes_in_progress = 0
+        self._mode_write_seq = 0
         self.max_charge_rate_w = 11000
         self.max_discharge_rate_w = 11000
         self._storage_address = STORAGE_ADDRESS
@@ -1027,6 +1035,7 @@ class FroniusModbusClient(ExtModbusClient):
     @_safe_read("storage")
     async def read_inverter_storage_data(self):
         """start reading storage data"""
+        mode_write_seq = self._mode_write_seq
         regs = await self.get_registers(unit_id=self._inverter_unit_id, address=self._storage_address, count=24)
         if regs is None:
             return False
@@ -1095,8 +1104,31 @@ class FroniusModbusClient(ExtModbusClient):
 
             self.data['control_mode'] = normalized_control_mode
 
-        # set extended storage control mode at startup
+        # Extended storage control mode: derived from the registers at startup,
+        # then maintained by change_settings() on HA-side writes. Re-derive it
+        # when the base control mode register no longer matches the stored
+        # extended mode (a change from Solar.web, the inverter itself, or any
+        # path that bypassed change_settings) - otherwise the stale extended
+        # mode sticks until a config-entry reload, and with it the select
+        # state and the availability of the mode-gated number entities.
+        # Power-level transitions within a matching base mode (e.g. a charge
+        # limit reaching 0 in mode 1) deliberately do NOT re-derive, so an
+        # extended mode chosen in HA is never overridden while its base mode
+        # still matches. Skipped while a mode write is running or finished
+        # during this read, because the registers may predate that write.
         ext_control_mode = self.data.get('ext_control_mode')
+        if (
+            ext_control_mode is not None
+            and self._mode_writes_in_progress == 0
+            and self._mode_write_seq == mode_write_seq
+            and raw['storage_control_mode'] not in EXT_MODE_BASE_MODES.get(self.storage_extended_control_mode, ())
+        ):
+            _LOGGER.info(
+                "Storage control mode register (%s) no longer matches extended mode %s, re-deriving extended mode",
+                raw['storage_control_mode'],
+                self.storage_extended_control_mode,
+            )
+            ext_control_mode = None
         if ext_control_mode is None:
             if raw['storage_control_mode'] == 0:
                 ext_control_mode = 0
@@ -1346,14 +1378,19 @@ class FroniusModbusClient(ExtModbusClient):
         extended_mode: Optional[int] = None,
     ):
         effective_mode = self.storage_extended_control_mode if extended_mode is None else extended_mode
-        await self.set_storage_control_mode(mode)
-        await self.set_charge_rate(charge_limit)
-        await self.set_discharge_rate(discharge_limit)
-        self.data['charge_limit'] = 0 if effective_mode == 5 else charge_limit
-        self.data['discharge_limit'] = 0 if effective_mode == 4 else discharge_limit
-        self.data['grid_charge_power'] = grid_charge_power
-        self.data['grid_discharge_power'] = grid_discharge_power
-        self.storage_extended_control_mode = effective_mode
+        self._mode_writes_in_progress += 1
+        try:
+            await self.set_storage_control_mode(mode)
+            await self.set_charge_rate(charge_limit)
+            await self.set_discharge_rate(discharge_limit)
+            self.data['charge_limit'] = 0 if effective_mode == 5 else charge_limit
+            self.data['discharge_limit'] = 0 if effective_mode == 4 else discharge_limit
+            self.data['grid_charge_power'] = grid_charge_power
+            self.data['grid_discharge_power'] = grid_discharge_power
+            self.storage_extended_control_mode = effective_mode
+        finally:
+            self._mode_writes_in_progress -= 1
+            self._mode_write_seq += 1
         if not minimum_reserve is None:
             await self.set_minimum_reserve(minimum_reserve)
         

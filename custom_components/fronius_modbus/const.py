@@ -43,6 +43,12 @@ API_SOC_MODE = {
     "auto": "automatic",
     "manual": "manual",
 }
+# The select speaks in codes like every other one; 1 is manual, as for HYB_EM_MODE.
+SOC_MODE_MANUAL_CODE = 1
+API_SOC_MODE_OPTIONS = {
+    0: API_SOC_MODE["auto"],
+    SOC_MODE_MANUAL_CODE: API_SOC_MODE["manual"],
+}
 
 STORAGE_CONTROL_MODE = {
     0: "auto",
@@ -193,7 +199,6 @@ SENSOR_STATE_OPTIONS = {
     "charge_status": _state_values(CHARGE_STATUS),
     "grid_charging": _state_values(CHARGE_GRID_STATUS),
     "api_modbus_control": _state_values(CONTROL_STATUS),
-    "api_soc_mode": [*API_SOC_MODE.values(), UNKNOWN_STATE],
     "api_modbus_restriction": _state_values(CONTROL_STATUS),
 }
 

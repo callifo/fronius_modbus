@@ -76,7 +76,7 @@
         "name": "PV-Ladebegrenzung"
       },
       "soc_minimum": {
-        "name": "Minimaler SoC"
+        "name": "Modbus-Speicherreserve"
       },
       "api_battery_power": {
         "name": "Ziel-Einspeisung"
@@ -95,6 +95,9 @@
       },
       "backup_reserve": {
         "name": "Notstromreserve"
+      },
+      "api_soc_minimum": {
+        "name": "SoC-Minimum (Web-API)"
       }
     },
     "select": {
@@ -112,7 +115,7 @@
         }
       },
       "api_battery_mode": {
-        "name": "Batterie-API-Modus",
+        "name": "Eigenverbrauchs-Optimierung",
         "state": {
           "auto": "Automatisch",
           "manual": "Manuell"
@@ -137,6 +140,13 @@
         "state": {
           "disabled": "Deaktiviert",
           "enabled": "Aktiviert"
+        }
+      },
+      "api_soc_mode": {
+        "name": "Web-API-SoC-Modus",
+        "state": {
+          "automatic": "Automatisch",
+          "manual": "Manuell"
         }
       }
     },
@@ -443,7 +453,7 @@
         "name": "Ladezustand"
       },
       "soc_minimum": {
-        "name": "Minimaler SoC"
+        "name": "Modbus-Speicherreserve"
       },
       "charging_power": {
         "name": "Ladeleistung"
@@ -471,14 +481,6 @@
           "active_power_control": "Wirkleistungsvorgabe",
           "export_limit": "Einspeisebegrenzung",
           "several": "Mehrere Gründe",
-          "unknown": "Unbekannt"
-        }
-      },
-      "api_soc_mode": {
-        "name": "Web-API-SoC-Modus",
-        "state": {
-          "automatic": "Automatisch",
-          "manual": "Manuell",
           "unknown": "Unbekannt"
         }
       }

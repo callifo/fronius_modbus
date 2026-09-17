@@ -567,26 +567,20 @@ def posted(inverter: FakeInverter, path: str) -> dict | None:
     )
 
 
-def test_manual_battery_mode_writes_the_manual_soc_mode_and_minimum(client, inverter):
-    assert client.set_battery_config(1, power=-2000, soc_min=12) is True
+def test_manual_battery_mode_writes_the_mode_and_the_power_only(client, inverter):
+    """HYB_EM_MODE is self-consumption optimisation; the SoC window is a separate switch."""
+    assert client.set_battery_config(1, power=-2000) is True
 
     assert posted(inverter, "/api/config/batteries") == {
         "HYB_EM_MODE": 1,
-        "BAT_M0_SOC_MODE": "manual",
-        "BAT_M0_SOC_MIN": 12,
         "HYB_EM_POWER": -2000,
     }
 
 
-def test_leaving_manual_battery_mode_restores_the_full_soc_window(client, inverter):
+def test_leaving_manual_battery_mode_leaves_the_soc_window_alone(client, inverter):
     assert client.set_battery_config(0) is True
 
-    assert posted(inverter, "/api/config/batteries") == {
-        "HYB_EM_MODE": 0,
-        "BAT_M0_SOC_MODE": "auto",
-        "BAT_M0_SOC_MIN": 5,
-        "BAT_M0_SOC_MAX": 100,
-    }
+    assert posted(inverter, "/api/config/batteries") == {"HYB_EM_MODE": 0}
 
 
 def test_the_soc_window_write_carries_the_backup_reserve(client, inverter):
@@ -680,6 +674,13 @@ def test_assisted_setup_converts_an_existing_float_register_map():
     client._request = lambda method, path, payload=None: sent.update(payload=payload)
     assert client.ensure_modbus_enabled(502, 200, 1) is True
     assert sent["payload"]["slave"]["sunspecMode"] == "int"
+
+
+def test_the_soc_mode_is_written_alone(client, inverter):
+    """Switching the window to manual must not rewrite the limits the inverter holds."""
+    assert client.set_soc_mode("manual") is True
+
+    assert posted(inverter, "/api/config/batteries") == {"BAT_M0_SOC_MODE": "manual"}
 
 
 def test_the_backup_reserve_is_written_alone(client, inverter):

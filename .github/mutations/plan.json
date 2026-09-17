@@ -84,13 +84,6 @@
     "tests": "total_sensor_ignores_an_implausible_jump"
   },
   {
-    "label": "web control: manual mode restores the Modbus reserve, not the web one",
-    "path": "custom_components/fronius_modbus/web_control.py",
-    "old": "            soc_min = self.data.soc_min if modbus_reserve is None else modbus_reserve",
-    "new": "            soc_min = self.data.soc_min",
-    "tests": "switching_back_to_manual_keeps_the_modbus_reserve"
-  },
-  {
     "label": "web control: the battery mode still vetoes on the SoC mode",
     "path": "custom_components/fronius_modbus/web_control.py",
     "old": "    if raw_mode == BATTERY_MODE_MANUAL:\n        return BATTERY_MODE_MANUAL\n    if raw_mode == BATTERY_MODE_AUTO:\n        return BATTERY_MODE_AUTO\n    return None",
@@ -163,8 +156,8 @@
   {
     "label": "web control: the SoC minimum is checked before Modbus is written",
     "path": "custom_components/fronius_modbus/web_control.py",
-    "old": "        mirror = self.configured and self.battery_mode_is_manual\n        if mirror:\n            self._get_api_soc_values(soc_min=soc_min)\n        await write_modbus()",
-    "new": "        mirror = self.configured and self.battery_mode_is_manual\n        await write_modbus()",
+    "old": "        mirror = self.configured and self.soc_mode_is_manual\n        if mirror:\n            self._get_api_soc_values(soc_min=soc_min)\n        await write_modbus()",
+    "new": "        mirror = self.configured and self.soc_mode_is_manual\n        await write_modbus()",
     "tests": "invalid_soc_minimum_writes_nothing"
   },
   {
@@ -278,5 +271,26 @@
     "old": "{\"HYB_BACKUP_RESERVED\": int(percent)}",
     "new": "{\"HYB_BACKUP_RESERVED\": int(percent), \"BAT_M0_SOC_MODE\": \"manual\"}",
     "tests": "the_backup_reserve_is_written_alone"
+  },
+  {
+    "label": "web_control: the SoC window follows the SoC mode, not the energy management",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        return self.data.soc_mode_raw == SOC_MODE_MANUAL",
+    "new": "        return self.data.battery_mode_effective == BATTERY_MODE_MANUAL",
+    "tests": "the_soc_window_follows_the_soc_mode_not_the_energy_management"
+  },
+  {
+    "label": "web_control: switching the energy management leaves the SoC window alone",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        self._set_effective_battery_mode(mode, self.data.soc_mode_raw)\n        if mode == BATTERY_MODE_MANUAL:\n            self.data.battery_power_w = display_power",
+    "new": "        self._set_effective_battery_mode(mode, self.data.soc_mode_raw)\n        if mode == BATTERY_MODE_MANUAL:\n            self.data.battery_power_w = display_power\n        else:\n            self.data.soc_min = SOC_LOWEST",
+    "tests": "switching_the_energy_management_leaves_the_soc_window_alone"
+  },
+  {
+    "label": "web_client: the SoC mode write leaves the limits alone",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "{\"BAT_M0_SOC_MODE\": mode}",
+    "new": "{\"BAT_M0_SOC_MODE\": mode, \"BAT_M0_SOC_MIN\": 5}",
+    "tests": "the_soc_mode_is_written_alone"
   }
 ]

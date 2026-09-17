@@ -63,11 +63,9 @@ class FakeWebClient:
             }
         }
 
-    def set_battery_config(self, mode, power, soc_min=None):
-        self.calls.append(("battery", mode, power, soc_min))
-        self.battery.update(
-            HYB_EM_MODE=mode, BAT_M0_SOC_MODE="manual" if mode else "auto"
-        )
+    def set_battery_config(self, mode, power):
+        self.calls.append(("battery", mode, power))
+        self.battery.update(HYB_EM_MODE=mode)
         return True
 
     def set_battery_soc_config(self, soc_min, soc_max, backup):
@@ -76,6 +74,11 @@ class FakeWebClient:
 
     def set_battery_charge_sources(self, grid, ac):
         self.calls.append(("sources", grid, ac))
+        return True
+
+    def set_soc_mode(self, mode):
+        self.calls.append(("soc_mode", mode))
+        self.battery["BAT_M0_SOC_MODE"] = mode
         return True
 
     def set_backup_reserve(self, percent):
@@ -146,10 +149,10 @@ async def test_auto_mode_with_a_manual_soc_mode_still_reads_as_auto(hass):
     control.shutdown()
 
 
-async def test_switching_to_manual_sends_power_and_soc_minimum(control):
+async def test_switching_to_manual_sends_the_power(control):
     await control.async_refresh()
     await control.set_battery_mode(1)
-    assert control._client.calls[-1] == ("battery", 1, 0, 5)
+    assert control._client.calls[-1] == ("battery", 1, 0)
     assert control.battery_mode_is_manual
     assert control.events == ["write"]
 
@@ -165,24 +168,6 @@ async def test_charge_from_grid_implies_charge_from_ac(control):
     await control.set_charge_sources(charge_from_grid=True)
     assert control._client.calls[-1] == ("sources", True, True)
     assert (control.data.charge_from_grid, control.data.charge_from_ac) == (True, True)
-
-
-async def test_switching_back_to_manual_keeps_the_modbus_reserve(hass):
-    """Manual mode must restore the Modbus reserve, not the 5 % Auto mode leaves behind.
-
-    Leaving Manual resets the web API's own minimum to 5 %, so reading it back on
-    the way in would silently discharge the battery below the user's reserve.
-    """
-    control = make_control(hass, modbus_soc_minimum=lambda: 7)
-    try:
-        await control.async_refresh()
-        await control.set_battery_mode(1)
-        await control.set_battery_mode(0)
-        await control.set_battery_mode(1)
-    finally:
-        control.shutdown()
-
-    assert control._client.calls[-1] == ("battery", 1, 0, 7)
 
 
 async def test_the_export_soft_limit_is_shown_right_after_the_write(hass):
@@ -354,3 +339,69 @@ async def test_a_backup_reserve_outside_the_range_is_refused(control):
         await control.set_backup_reserve(4)
     assert control._client.calls == []
     assert control.data.backup_reserved == 5
+
+
+async def test_the_soc_window_follows_the_soc_mode_not_the_energy_management(hass):
+    """The inverter's own UI: SoC limits have their own automatic/manual switch.
+
+    A user who sets the limits to manual and leaves self-consumption optimisation
+    on automatic must still be able to write the minimum and the maximum.
+    """
+    client = FakeWebClient()
+    client.battery.update(HYB_EM_MODE=0, BAT_M0_SOC_MODE="manual")
+    control = make_control(hass, client=client)
+    try:
+        await control.async_refresh()
+        assert control.soc_mode_is_manual
+        await control.set_soc_maximum(90)
+        await control.set_soc_minimum_manual(12)
+    finally:
+        control.shutdown()
+    assert [c for c in client.calls if c[0] == "soc"] == [
+        ("soc", 5, 90, 5),
+        ("soc", 12, 90, 5),
+    ]
+
+
+async def test_switching_the_energy_management_leaves_the_soc_window_alone(control):
+    """Auto/Manual self-consumption optimisation is not the SoC limits switch."""
+    control._client.battery.update(BAT_M0_SOC_MODE="manual", BAT_M0_SOC_MIN=20)
+    await control.async_refresh()
+    await control.set_battery_mode(1)
+    await control.set_battery_mode(0)
+    assert (control.data.soc_min, control.data.soc_mode_raw) == (20, "manual")
+    assert [c for c in control._client.calls if c[0] == "battery"] == [
+        ("battery", 1, 0),
+        ("battery", 0, None),
+    ]
+
+
+async def test_the_modbus_reserve_mirrors_to_the_web_api_in_manual_soc_mode(hass):
+    client = FakeWebClient()
+    client.battery.update(HYB_EM_MODE=0, BAT_M0_SOC_MODE="manual")
+    control = make_control(hass, client=client)
+    written = []
+    try:
+        await control.async_refresh()
+
+        async def write_modbus():
+            written.append(9)
+
+        await control.apply_soc_minimum(9, write_modbus)
+    finally:
+        control.shutdown()
+    assert written == [9]
+    assert client.calls[-1] == ("soc", 9, 100, 5)
+
+
+async def test_the_soc_mode_select_opens_the_window_for_writing(control):
+    await control.async_refresh()
+    assert not control.soc_mode_is_manual
+    await control.set_soc_mode(manual=True)
+    assert control._client.calls[-1] == ("soc_mode", "manual")
+    assert control.soc_mode_is_manual
+    assert control.data.soc_mode == "manual"
+    assert control.events == ["write"]
+    await control.set_soc_mode(manual=False)
+    assert control._client.calls[-1] == ("soc_mode", "auto")
+    assert not control.soc_mode_is_manual

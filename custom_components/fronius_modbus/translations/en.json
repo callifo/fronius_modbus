@@ -76,7 +76,7 @@
         "name": "PV charge limit"
       },
       "soc_minimum": {
-        "name": "SoC Minimum"
+        "name": "Modbus storage reserve"
       },
       "api_battery_power": {
         "name": "Target feed in"
@@ -95,6 +95,9 @@
       },
       "backup_reserve": {
         "name": "Backup reserve"
+      },
+      "api_soc_minimum": {
+        "name": "SoC Minimum (Web API)"
       }
     },
     "select": {
@@ -112,9 +115,9 @@
         }
       },
       "api_battery_mode": {
-        "name": "Battery API mode",
+        "name": "Self-consumption optimisation",
         "state": {
-          "auto": "Auto",
+          "auto": "Automatic",
           "manual": "Manual"
         }
       },
@@ -443,7 +446,7 @@
         "name": "State of charge"
       },
       "soc_minimum": {
-        "name": "SoC Minimum"
+        "name": "Modbus storage reserve"
       },
       "charging_power": {
         "name": "Charging power"

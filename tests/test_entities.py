@@ -450,3 +450,29 @@ async def test_the_battery_web_fields_show_once_storage_and_web_are_there(
         assert soc_mode.value_fn(runtime) == "automatic"
     finally:
         web_control.shutdown()
+
+
+async def test_the_web_soc_limits_are_writable_in_manual_soc_mode_alone(
+    hass, entry, connection
+):
+    """SoC Maximum used to hang on the energy-management mode, the wrong switch."""
+    runtime = await make_runtime(hass, entry, connection)
+    web_control = make_control(hass)
+    web_control._client.battery.update(
+        HYB_EM_MODE=0, BAT_M0_SOC_MODE="manual", BAT_M0_SOC_MIN=15
+    )
+    await web_control.async_refresh()
+    runtime = replace(
+        runtime, web_control=web_control, web=SimpleNamespace(data=web_control.data)
+    )
+    try:
+        numbers = entities.number_descriptions(runtime)
+        maximum = _description(numbers, "soc_maximum")
+        minimum = _description(numbers, "api_soc_minimum")
+        assert maximum.available_fn(runtime)
+        assert minimum.available_fn(runtime)
+        assert minimum.value_fn(runtime) == 15
+        await minimum.set_fn(runtime, 25)
+    finally:
+        web_control.shutdown()
+    assert web_control._client.calls[-1] == ("soc", 25, 100, 5)

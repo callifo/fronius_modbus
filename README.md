@@ -89,36 +89,38 @@ enable both in the inverter web UI.
 ### Battery Storage
 
 If Web API credentials are configured, the integration exposes both Modbus battery controls and authenticated battery API controls together.
-The only built-in cross-protocol synchronization is the SoC minimum:
+The inverter keeps two independent switches, and the entities follow them:
 
-- while `Battery API Mode` is `Manual`, writing `SoC Minimum` also writes the API SoC minimum and forces API SOC mode to `manual`
-- `Battery API Mode` follows `HYB_EM_MODE`; the inverter's `BAT_M0_SOC_MODE` is shown by the diagnostic sensor `Web API SoC mode` and does not affect the mode
+- `Self-consumption optimisation` is `HYB_EM_MODE`, the inverter's automatic/manual energy management. `Target Feed In` belongs to it.
+- `Web API SoC mode` is `BAT_M0_SOC_MODE`, the automatic/manual switch of the SoC window. `SoC Minimum (Web API)` and `SoC Maximum` belong to it and are only writable while it is `manual`; switching self-consumption optimisation does not touch the window.
+- `Modbus storage reserve` is model 124 `MinRsvPct`. The inverter only applies it while a Modbus storage control mode is active; it is not the SoC minimum shown in the inverter's own UI. While the SoC mode is `manual`, writing it also writes `SoC Minimum (Web API)`.
 - entering Modbus `Charge from Grid` also enables the Web API `Charge from grid` and `Charge from AC` toggles when Web API is configured
 - turning on the Web API `Charge from grid` switch also enables `Charge from AC`
 - `Target Feed In` is ignored by the inverter when battery charging is unavailable
-- `Target Feed In` and `SoC Maximum` are only available while `Battery API Mode` is `Manual`
-- `Backup reserve` is independent of the battery mode and can be written in either
+- `Target Feed In` is only available while `Self-consumption optimisation` is `Manual`
+- `Backup reserve` is independent of both switches
 
 ### Controls
 
-| Entity               | Description                                                                                                                                                             |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Discharge Limit      | This is maxium discharging power in watts of which the battery can be discharged by.                                                                                    |
-| Grid Charge Power    | The charging power in watts when the storage is being charged from the grid. Note that grid charging is seems to be limited to an effictive 50% by the hardware.        |
-| Grid Discharge Power | The discharging power in watts when the storage is being discharged to the grid.                                                                                        |
-| SoC Minimum          | Shared minimum SoC control. On the Web API side this corresponds to `BAT_M0_SOC_MIN`. Whole numbers only. In manual API mode it must not be greater than `SoC Maximum`. |
-| PV Charge Limit      | This is maximum PV charging power in watts of which the battery can be charged by.                                                                                      |
+| Entity               | Description                                                                                                                                                                                                                                              |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Discharge Limit      | This is maxium discharging power in watts of which the battery can be discharged by.                                                                                                                                                                     |
+| Grid Charge Power    | The charging power in watts when the storage is being charged from the grid. Note that grid charging is seems to be limited to an effictive 50% by the hardware.                                                                                         |
+| Grid Discharge Power | The discharging power in watts when the storage is being discharged to the grid.                                                                                                                                                                         |
+| SoC Minimum          | Model 124 `MinRsvPct`, the reserve the inverter applies under Modbus storage control. Shown as `Modbus storage reserve`. Whole numbers only. While the SoC mode is `manual` it is mirrored to `SoC Minimum (Web API)` and must not exceed `SoC Maximum`. |
+| PV Charge Limit      | This is maximum PV charging power in watts of which the battery can be charged by.                                                                                                                                                                       |
 
 ### Battery API Controls
 
-| Entity           | Description                                                                                                                                                                                                                                                                                                                                                            |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Battery API Mode | Fronius Web API battery mode: `Auto` or `Manual`.                                                                                                                                                                                                                                                                                                                      |
-| Charge from AC   | Web API toggle for `HYB_BM_CHARGEFROMAC`. This is also auto-enabled when Modbus `Charge from Grid` is selected from the integration. Turning it off disables both charge-source flags.                                                                                                                                                                                 |
-| Charge from grid | Web API toggle for `HYB_EVU_CHARGEFROMGRID`. Turning it on also enables `Charge from AC`. Turning it off only disables the grid flag. This is also auto-enabled when Modbus `Charge from Grid` is selected from the integration.                                                                                                                                       |
-| Target Feed In   | Manual Fronius target feed-in in watts. Positive values target feed-in watts. Negative values target grid consumption watts, and the inverter will target that grid consumption even when PV power is available. This setting is ignored by the inverter when battery charging is unavailable. It is disabled unless `Battery API Mode` is `Manual` (`HYB_EM_MODE=1`). |
-| SoC Maximum      | `BAT_M0_SOC_MAX` from the Web API. Only available while `Battery API Mode` is `Manual` (`HYB_EM_MODE=1`), and it must not be set below `SoC Minimum`.                                                                                                                                                                                                                   |
-| Backup reserve   | `HYB_BACKUP_RESERVED` from the Web API: the share of the battery kept for backup power, 5 to 100 percent. Available in either `Battery API Mode`.                                                                                                                                                                                                                       |
+| Entity                | Description                                                                                                                                                                                                                                                                                                                                                                         |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Battery API Mode      | `HYB_EM_MODE`, shown as `Self-consumption optimisation`: `Automatic` or `Manual`. Does not change the SoC window.                                                                                                                                                                                                                                                                   |
+| Charge from AC        | Web API toggle for `HYB_BM_CHARGEFROMAC`. This is also auto-enabled when Modbus `Charge from Grid` is selected from the integration. Turning it off disables both charge-source flags.                                                                                                                                                                                              |
+| Charge from grid      | Web API toggle for `HYB_EVU_CHARGEFROMGRID`. Turning it on also enables `Charge from AC`. Turning it off only disables the grid flag. This is also auto-enabled when Modbus `Charge from Grid` is selected from the integration.                                                                                                                                                    |
+| Target Feed In        | Manual Fronius target feed-in in watts. Positive values target feed-in watts. Negative values target grid consumption watts, and the inverter will target that grid consumption even when PV power is available. This setting is ignored by the inverter when battery charging is unavailable. It is disabled unless `Self-consumption optimisation` is `Manual` (`HYB_EM_MODE=1`). |
+| SoC Maximum           | `BAT_M0_SOC_MAX` from the Web API. Only available while `Web API SoC mode` is `manual`, and it must not be set below `SoC Minimum (Web API)`.                                                                                                                                                                                                                                       |
+| SoC Minimum (Web API) | `BAT_M0_SOC_MIN` from the Web API, the minimum shown in the inverter's own UI. Only available while `Web API SoC mode` is `manual`.                                                                                                                                                                                                                                                 |
+| Backup reserve        | `HYB_BACKUP_RESERVED` from the Web API: the share of the battery kept for backup power, 5 to 100 percent. Independent of both switches.                                                                                                                                                                                                                                             |
 
 ### Storage Control Modes
 
@@ -159,11 +161,11 @@ Note to change the mode first then set controls active in that mode. The mode na
 
 ### Battery Storage Sensors
 
-| Entity          | Description                                                                                                              |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Charge Status   | `holding` / `charging` / `discharging` (plus `off`, `empty`, `full`, `testing`)                                                                                         |
-| SoC Minimum     | Shared minimum SoC value. When Web API is configured and API mode is manual, this follows the Web API SoC minimum value. |
-| State of Charge | The current battery level                                                                                                |
+| Entity          | Description                                                                                             |
+| --------------- | ------------------------------------------------------------------------------------------------------- |
+| Charge Status   | `holding` / `charging` / `discharging` (plus `off`, `empty`, `full`, `testing`)                         |
+| SoC Minimum     | Model 124 `MinRsvPct`, shown as `Modbus storage reserve`. Not the SoC minimum of the inverter's own UI. |
+| State of Charge | The current battery level                                                                               |
 
 ### Inverter Sensors
 
@@ -183,13 +185,13 @@ Note to change the mode first then set controls active in that mode. The mode na
 
 ### Inverter Diagnostics
 
-| Entity                                       | Description                                                                                                                                                                                                        |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Entity                                       | Description                                                                                                                                                                                                                                                                |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Grid status                                  | `on_grid_operating`, `on_grid`, `off_grid_operating` or `off_grid`, based on meter and inverter frequency. If inverter frequency is 53hz it is running in off grid mode and normally in 50hz. When the inverter is sleeping the meter frequency is checked for connection. |
-| Status / Vendor status                       | Standard SunSpec inverter state plus the Fronius vendor-specific state code.                                                                                                                                       |
-| Reference voltage / Reference voltage offset | SunSpec model 121 PCC voltage reference values exposed by the inverter.                                                                                                                                            |
-| Web API Modbus mode / control / SunSpec mode | Authenticated Modbus service diagnostics from `/api/config/modbus`.                                                                                                                                                |
-| Web API Modbus restriction / restriction IP  | Shows whether the inverter is restricting Modbus access by IP.                                                                                                                                                     |
+| Status / Vendor status                       | Standard SunSpec inverter state plus the Fronius vendor-specific state code.                                                                                                                                                                                               |
+| Reference voltage / Reference voltage offset | SunSpec model 121 PCC voltage reference values exposed by the inverter.                                                                                                                                                                                                    |
+| Web API Modbus mode / control / SunSpec mode | Authenticated Modbus service diagnostics from `/api/config/modbus`.                                                                                                                                                                                                        |
+| Web API Modbus restriction / restriction IP  | Shows whether the inverter is restricting Modbus access by IP.                                                                                                                                                                                                             |
 
 ### Inverter Controls
 

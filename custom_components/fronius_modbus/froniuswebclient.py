@@ -611,22 +611,9 @@ class FroniusWebClient:
     def reset_modbus_control(self) -> bool:
         return self._post_ok("/api/commands/ModbusReset")
 
-    def set_battery_config(
-        self,
-        mode: int,
-        power: int | None = None,
-        soc_min: int | None = None,
-    ) -> bool:
-        soc_mode = "manual" if int(mode) == 1 else "auto"
-        payload: dict[str, Any] = {
-            "HYB_EM_MODE": mode,
-            "BAT_M0_SOC_MODE": soc_mode,
-        }
-        if int(mode) == 1 and soc_min is not None:
-            payload["BAT_M0_SOC_MIN"] = int(soc_min)
-        if int(mode) != 1:
-            payload["BAT_M0_SOC_MIN"] = 5
-            payload["BAT_M0_SOC_MAX"] = 100
+    def set_battery_config(self, mode: int, power: int | None = None) -> bool:
+        """Self-consumption optimisation only; the SoC window has its own switch."""
+        payload: dict[str, Any] = {"HYB_EM_MODE": mode}
         if power is not None:
             payload["HYB_EM_POWER"] = power
         return self._post_ok("/api/config/batteries", payload)

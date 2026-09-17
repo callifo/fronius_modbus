@@ -208,6 +208,13 @@ def _web_configured(runtime: FroniusRuntimeData) -> bool:
     return runtime.web_control is not None and runtime.web_control.configured
 
 
+def _web_soc_mode_is_manual(runtime: FroniusRuntimeData) -> bool:
+    return (
+        _web_configured(runtime)
+        and assume_present(runtime.web_control).soc_mode_is_manual
+    )
+
+
 def _controls_present(runtime: FroniusRuntimeData) -> bool:
     return runtime.inverter_controls is not None
 
@@ -1389,10 +1396,25 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
             int(round(v))
         ),
         exists_fn=lambda r: _storage_present(r) and _web_configured(r),
-        available_fn=lambda r: (
-            _web_configured(r) and assume_present(r.web_control).battery_mode_is_manual
-        ),
+        available_fn=_web_soc_mode_is_manual,
         native_min_value=0,
+        native_max_value=100,
+        native_step=1,
+        mode=NumberMode.BOX,
+        native_unit_of_measurement="%",
+    ),
+    FroniusNumberDescription(
+        key="api_soc_minimum",
+        translation_key="api_soc_minimum",
+        device="storage",
+        source="web",
+        value_fn=lambda r: _web_field(r, "soc_min"),
+        set_fn=lambda r, v: assume_present(r.web_control).set_soc_minimum_manual(
+            int(round(v))
+        ),
+        exists_fn=lambda r: _storage_present(r) and _web_configured(r),
+        available_fn=_web_soc_mode_is_manual,
+        native_min_value=5,
         native_max_value=100,
         native_step=1,
         mode=NumberMode.BOX,

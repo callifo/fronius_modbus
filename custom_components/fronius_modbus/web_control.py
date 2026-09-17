@@ -52,7 +52,7 @@ SOLAR_API_MINIMUM_VERSION_TEXT = "1.40.7-1"
 SOLAR_API_WARNING_TRANSLATION_KEY = "solar_api_low_firmware"
 _FIRMWARE_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)(?:-(\d+))?$")
 BATTERY_MODE_AUTO, BATTERY_MODE_MANUAL = 0, 1
-SOC_MODE_AUTO, SOC_MODE_MANUAL = "auto", "manual"
+SOC_MODE_MANUAL = "manual"
 SOC_LOWEST, SOC_HIGHEST, SOC_MAX_DEFAULT = 5, 100, 99
 
 
@@ -204,7 +204,6 @@ class FroniusWebControl:
         storage_present: bool,
         inverter_firmware: Callable[[], str | None],
         on_battery_write: Callable[[], None],
-        modbus_soc_minimum: Callable[[], int | None] = lambda: None,
     ) -> None:
         """Bind to the web clients; on_battery_write opens the Modbus recovery window."""
         self._hass = hass
@@ -215,7 +214,6 @@ class FroniusWebControl:
         self._storage_present = storage_present
         self._inverter_firmware = inverter_firmware
         self._on_battery_write = on_battery_write
-        self._modbus_soc_minimum = modbus_soc_minimum
         # One write at a time (audit F10): concurrent read-modify-write of the
         # SoC tuple or the charge-source pair lost one of the two changes.
         self._write_lock = asyncio.Lock()
@@ -245,8 +243,17 @@ class FroniusWebControl:
 
     @property
     def battery_mode_is_manual(self) -> bool:
-        """Whether the battery is confirmed to be in Manual mode."""
+        """Whether self-consumption optimisation (HYB_EM_MODE) is confirmed Manual."""
         return self.data.battery_mode_effective == BATTERY_MODE_MANUAL
+
+    @property
+    def soc_mode_is_manual(self) -> bool:
+        """Whether the SoC window (BAT_M0_SOC_MODE) is under manual control.
+
+        The inverter keeps this switch apart from self-consumption optimisation,
+        so the SoC limits must follow it and not HYB_EM_MODE.
+        """
+        return self.data.soc_mode_raw == SOC_MODE_MANUAL
 
     def shutdown(self) -> None:
         """Cancel the delayed post-write refresh; called from entry.async_on_unload."""
@@ -553,13 +560,13 @@ class FroniusWebControl:
     async def apply_soc_minimum(
         self, soc_min: int, write_modbus: Callable[[], Awaitable[None]]
     ) -> None:
-        """Write the shared minimum to Modbus and, in Manual mode, to the web API.
+        """Write the shared minimum to Modbus and, in manual SoC mode, to the web API.
 
         Both writes and the check that guards them happen under this lock. A
         check outside it went stale when a concurrent maximum change landed in
         between, and Modbus then took a reserve the web API refuses (audit A05).
         """
-        mirror = self.configured and self.battery_mode_is_manual
+        mirror = self.configured and self.soc_mode_is_manual
         if mirror:
             self._get_api_soc_values(soc_min=soc_min)
         await write_modbus()
@@ -569,7 +576,14 @@ class FroniusWebControl:
     def _require_battery_mode_manual(self, control_name: str) -> None:
         if not self.battery_mode_is_manual:
             raise ValueError(
-                f"{control_name} can only be changed when Battery API mode is Manual"
+                f"{control_name} can only be changed when self-consumption "
+                "optimisation is Manual"
+            )
+
+    def _require_soc_mode_manual(self, control_name: str) -> None:
+        if not self.soc_mode_is_manual:
+            raise ValueError(
+                f"{control_name} can only be changed when the SoC mode is Manual"
             )
 
     async def _set_api_soc_manual(
@@ -580,7 +594,7 @@ class FroniusWebControl:
     ) -> tuple[int, int, int] | None:
         if not self._client:
             raise RuntimeError(WEB_API_NOT_CONFIGURED)
-        self._require_battery_mode_manual(control_name)
+        self._require_soc_mode_manual(control_name)
 
         next_soc_min, next_soc_max, next_backup_reserved = self._get_api_soc_values(
             soc_min=soc_min, soc_max=soc_max
@@ -592,7 +606,7 @@ class FroniusWebControl:
             next_backup_reserved,
             raise_on_auth_failure=True,
         )
-        self._set_effective_battery_mode(BATTERY_MODE_MANUAL, SOC_MODE_MANUAL)
+        self._set_effective_battery_mode(self.data.battery_mode_raw, SOC_MODE_MANUAL)
         self.data.soc_min = next_soc_min
         self.data.soc_max = next_soc_max
         self.data.backup_reserved = next_backup_reserved
@@ -601,11 +615,13 @@ class FroniusWebControl:
 
     @_serialised
     async def set_battery_mode(self, mode: int) -> None:
-        """Switch the battery between Auto (0) and Manual (1) control."""
+        """Switch self-consumption optimisation between Auto (0) and Manual (1).
+
+        The SoC window is not touched: the inverter keeps its own switch for it.
+        """
         if not self._client:
             raise RuntimeError(WEB_API_NOT_CONFIGURED)
 
-        current_effective_mode = self.data.battery_mode_effective
         display_power = self.data.battery_power_w
         if mode == BATTERY_MODE_MANUAL and display_power is None:
             display_power = 0
@@ -614,38 +630,17 @@ class FroniusWebControl:
             if mode == BATTERY_MODE_MANUAL and display_power is not None
             else None
         )
-        soc_min = None
-        if (
-            mode == BATTERY_MODE_MANUAL
-            and current_effective_mode != BATTERY_MODE_MANUAL
-        ):
-            # Leaving Manual resets the web API's own minimum to SOC_LOWEST, so the
-            # Modbus reserve is the only record of what the user actually wants.
-            modbus_reserve = self._modbus_soc_minimum()
-            soc_min = self.data.soc_min if modbus_reserve is None else modbus_reserve
-
         await self._async_web_job(
-            self._client.set_battery_config,
-            mode,
-            power,
-            soc_min,
-            raise_on_auth_failure=True,
+            self._client.set_battery_config, mode, power, raise_on_auth_failure=True
         )
-        self._set_effective_battery_mode(
-            mode, SOC_MODE_MANUAL if mode == BATTERY_MODE_MANUAL else SOC_MODE_AUTO
-        )
+        self._set_effective_battery_mode(mode, self.data.soc_mode_raw)
         if mode == BATTERY_MODE_MANUAL:
             self.data.battery_power_w = display_power
-            if soc_min is not None:
-                self.data.soc_min = soc_min
-        else:
-            self.data.soc_min = SOC_LOWEST
-            self.data.soc_max = SOC_HIGHEST
-        self._start_battery_write_transition("Battery API mode")
+        self._start_battery_write_transition("self-consumption optimisation")
 
     @_serialised
     async def set_battery_power_w(self, value: float) -> None:
-        """Set the target feed-in power in Manual battery mode."""
+        """Set the target feed-in power in manual self-consumption optimisation."""
         if not self._client:
             raise RuntimeError(WEB_API_NOT_CONFIGURED)
         self._require_battery_mode_manual("Target feed in")
@@ -658,19 +653,19 @@ class FroniusWebControl:
             raise_on_auth_failure=True,
         )
         self.data.battery_power_w = int(round(value))
-        self._set_effective_battery_mode(BATTERY_MODE_MANUAL, SOC_MODE_MANUAL)
+        self._set_effective_battery_mode(BATTERY_MODE_MANUAL, self.data.soc_mode_raw)
         self._start_battery_write_transition("Target feed in")
 
     @_serialised
     async def set_soc_maximum(self, soc_max: int) -> None:
-        """Set the maximum state of charge in Manual battery mode."""
+        """Set the maximum state of charge in manual SoC mode."""
         if not self._client:
             raise RuntimeError(WEB_API_NOT_CONFIGURED)
         await self._set_api_soc_manual(soc_max=soc_max, control_name="SoC Maximum")
 
     @_serialised
     async def set_soc_minimum_manual(self, soc_min: int) -> None:
-        """Set the minimum state of charge in Manual battery mode."""
+        """Set the web API's minimum state of charge in manual SoC mode."""
         if not self._client:
             raise RuntimeError(WEB_API_NOT_CONFIGURED)
         await self._set_api_soc_manual(soc_min=soc_min, control_name="SoC Minimum")

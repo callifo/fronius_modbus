@@ -92,6 +92,9 @@
       },
       "export_soft_limit": {
         "name": "Export soft limit"
+      },
+      "backup_reserve": {
+        "name": "Backup reserve"
       }
     },
     "select": {
@@ -468,6 +471,14 @@
           "active_power_control": "Active power control",
           "export_limit": "Export limit",
           "several": "Several reasons",
+          "unknown": "Unknown"
+        }
+      },
+      "api_soc_mode": {
+        "name": "Web API SoC mode",
+        "state": {
+          "automatic": "Automatic",
+          "manual": "Manual",
           "unknown": "Unknown"
         }
       }

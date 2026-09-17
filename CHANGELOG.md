@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- A `Backup reserve` number sets the battery share kept for backup power (`HYB_BACKUP_RESERVED`), in either battery mode.
+- A diagnostic `Web API SoC mode` sensor shows the inverter's `BAT_M0_SOC_MODE`, the value that decides whether `SoC Maximum` is writable. The README had claimed it was shown already.
+
 ## 1.0.0
 
 First stable release of the rewrite. It contains everything from the three 1.0.0 pre-releases

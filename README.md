@@ -92,11 +92,12 @@ If Web API credentials are configured, the integration exposes both Modbus batte
 The only built-in cross-protocol synchronization is the SoC minimum:
 
 - while `Battery API Mode` is `Manual`, writing `SoC Minimum` also writes the API SoC minimum and forces API SOC mode to `manual`
-- `Battery API Mode` follows `HYB_EM_MODE`; the inverter's `BAT_M0_SOC_MODE` is shown separately and does not affect the mode
+- `Battery API Mode` follows `HYB_EM_MODE`; the inverter's `BAT_M0_SOC_MODE` is shown by the diagnostic sensor `Web API SoC mode` and does not affect the mode
 - entering Modbus `Charge from Grid` also enables the Web API `Charge from grid` and `Charge from AC` toggles when Web API is configured
 - turning on the Web API `Charge from grid` switch also enables `Charge from AC`
 - `Target Feed In` is ignored by the inverter when battery charging is unavailable
 - `Target Feed In` and `SoC Maximum` are only available while `Battery API Mode` is `Manual`
+- `Backup reserve` is independent of the battery mode and can be written in either
 
 ### Controls
 
@@ -117,6 +118,7 @@ The only built-in cross-protocol synchronization is the SoC minimum:
 | Charge from grid | Web API toggle for `HYB_EVU_CHARGEFROMGRID`. Turning it on also enables `Charge from AC`. Turning it off only disables the grid flag. This is also auto-enabled when Modbus `Charge from Grid` is selected from the integration.                                                                                                                                       |
 | Target Feed In   | Manual Fronius target feed-in in watts. Positive values target feed-in watts. Negative values target grid consumption watts, and the inverter will target that grid consumption even when PV power is available. This setting is ignored by the inverter when battery charging is unavailable. It is disabled unless `Battery API Mode` is `Manual` (`HYB_EM_MODE=1`). |
 | SoC Maximum      | `BAT_M0_SOC_MAX` from the Web API. Only available while `Battery API Mode` is `Manual` (`HYB_EM_MODE=1`), and it must not be set below `SoC Minimum`.                                                                                                                                                                                                                   |
+| Backup reserve   | `HYB_BACKUP_RESERVED` from the Web API: the share of the battery kept for backup power, 5 to 100 percent. Available in either `Battery API Mode`.                                                                                                                                                                                                                       |
 
 ### Storage Control Modes
 

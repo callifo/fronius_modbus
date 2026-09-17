@@ -764,6 +764,15 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         icon="mdi:thermometer",
     ),
     _sensor(
+        "api_soc_mode",
+        "api_soc_mode",
+        device="storage",
+        source="web",
+        value_fn=lambda r: _web_field(r, "soc_mode"),
+        exists_fn=lambda r: _storage_present(r) and _web_configured(r),
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    _sensor(
         "control_mode",
         "control_mode",
         device="storage",
@@ -1388,6 +1397,23 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
         native_step=1,
         mode=NumberMode.BOX,
         native_unit_of_measurement="%",
+    ),
+    FroniusNumberDescription(
+        key="backup_reserve",
+        translation_key="backup_reserve",
+        device="storage",
+        source="web",
+        value_fn=lambda r: _web_field(r, "backup_reserved"),
+        set_fn=lambda r, v: assume_present(r.web_control).set_backup_reserve(
+            int(round(v))
+        ),
+        exists_fn=lambda r: _storage_present(r) and _web_configured(r),
+        native_min_value=5,
+        native_max_value=100,
+        native_step=1,
+        mode=NumberMode.BOX,
+        native_unit_of_measurement="%",
+        icon="mdi:home-battery",
     ),
     FroniusNumberDescription(
         key="export_soft_limit",

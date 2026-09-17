@@ -37,7 +37,8 @@ LINE_BUDGETS = {
     # the value_fn factories that replaced the loop-bound lambda defaults.
     # +29: the translation-key map that keeps hassfest happy (upstream data keys
     # are not valid translation keys), table file, ~85 % declarative
-    "entities.py": 1832,  # + the throttling sensor (callifo #112)
+    # 1832 + the throttling sensor (callifo #112)
+    "entities.py": 1858,  # + the backup reserve and the SoC mode (callifo #136)
 }
 
 # SonarSource's own default. Above it, a function is one somebody has to

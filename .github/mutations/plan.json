@@ -264,5 +264,19 @@
     "old": "    return None if unknown else NO_REASON",
     "new": "    return NO_REASON",
     "tests": "a_source_that_did_not_answer_prevents_a_no"
+  },
+  {
+    "label": "web_control: a reserve outside the range is refused",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        if percent < SOC_LOWEST or percent > SOC_HIGHEST:\n            raise ValueError(\"Battery backup reserve must be between 5 and 100\")\n        await self._async_web_job(\n            self._client.set_backup_reserve",
+    "new": "        await self._async_web_job(\n            self._client.set_backup_reserve",
+    "tests": "a_backup_reserve_outside_the_range_is_refused"
+  },
+  {
+    "label": "web_client: the reserve write leaves the SoC mode alone",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "{\"HYB_BACKUP_RESERVED\": int(percent)}",
+    "new": "{\"HYB_BACKUP_RESERVED\": int(percent), \"BAT_M0_SOC_MODE\": \"manual\"}",
+    "tests": "the_backup_reserve_is_written_alone"
   }
 ]

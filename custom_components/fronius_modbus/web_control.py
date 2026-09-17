@@ -676,6 +676,19 @@ class FroniusWebControl:
         await self._set_api_soc_manual(soc_min=soc_min, control_name="SoC Minimum")
 
     @_serialised
+    async def set_backup_reserve(self, percent: int) -> None:
+        """Set the backup power reserve; the inverter offers it in either battery mode."""
+        if not self._client:
+            raise RuntimeError(WEB_API_NOT_CONFIGURED)
+        if percent < SOC_LOWEST or percent > SOC_HIGHEST:
+            raise ValueError("Battery backup reserve must be between 5 and 100")
+        await self._async_web_job(
+            self._client.set_backup_reserve, percent, raise_on_auth_failure=True
+        )
+        self.data.backup_reserved = percent
+        self._start_battery_write_transition("Backup reserve")
+
+    @_serialised
     async def set_charge_sources(
         self,
         *,

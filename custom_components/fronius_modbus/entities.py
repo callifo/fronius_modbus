@@ -1393,7 +1393,7 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
         native_min_value=0,
         native_max_value=100,
         native_step=1,
-        mode=NumberMode.BOX,
+        mode=NumberMode.SLIDER,
         native_unit_of_measurement="%",
     ),
     FroniusNumberDescription(
@@ -1410,7 +1410,7 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
         native_min_value=5,
         native_max_value=100,
         native_step=1,
-        mode=NumberMode.BOX,
+        mode=NumberMode.SLIDER,
         native_unit_of_measurement="%",
     ),
     FroniusNumberDescription(
@@ -1426,7 +1426,7 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
         native_min_value=5,
         native_max_value=100,
         native_step=1,
-        mode=NumberMode.BOX,
+        mode=NumberMode.SLIDER,
         native_unit_of_measurement="%",
         icon="mdi:home-battery",
     ),

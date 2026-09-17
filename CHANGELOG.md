@@ -4,6 +4,7 @@
 
 ### Changed
 - The web SoC window follows the inverter's own switch. `SoC Maximum` and the new `SoC Minimum (Web API)` are writable while `BAT_M0_SOC_MODE` is manual, whatever the energy management mode; switching `HYB_EM_MODE` no longer rewrites the SoC window or forces its mode. Before, both hung on the wrong switch, and a minimum set in the inverter's UI never reached Home Assistant.
+- The web SoC limits and the backup reserve are sliders. Each step of the input box was a web write, and a burst of them stalls the inverter's Modbus side long enough for other integrations on the same connection to time out.
 - Renamed for what they do: `Battery API mode` is now `Self-consumption optimisation`, and the Modbus `SoC Minimum` (model 124 `MinRsvPct`, only applied under Modbus storage control) is now `Modbus storage reserve`. Unique ids are unchanged.
 
 ### Added

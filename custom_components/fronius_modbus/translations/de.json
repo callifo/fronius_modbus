@@ -92,6 +92,9 @@
       },
       "export_soft_limit": {
         "name": "Weiche Einspeisebegrenzung"
+      },
+      "backup_reserve": {
+        "name": "Notstromreserve"
       }
     },
     "select": {
@@ -468,6 +471,14 @@
           "active_power_control": "Wirkleistungsvorgabe",
           "export_limit": "Einspeisebegrenzung",
           "several": "Mehrere Gründe",
+          "unknown": "Unbekannt"
+        }
+      },
+      "api_soc_mode": {
+        "name": "Web-API-SoC-Modus",
+        "state": {
+          "automatic": "Automatisch",
+          "manual": "Manuell",
           "unknown": "Unbekannt"
         }
       }

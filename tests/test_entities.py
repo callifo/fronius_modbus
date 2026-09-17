@@ -4,6 +4,7 @@ import asyncio
 from dataclasses import replace
 from datetime import timedelta
 import time
+from types import SimpleNamespace
 
 from modbus_connection import (
     ModbusConnectionError,
@@ -425,3 +426,27 @@ async def test_the_throttle_reason_needs_both_of_its_reports(
     await runtime.modbus.async_refresh()
 
     assert description.value_fn(runtime) is None
+
+
+async def test_the_battery_web_fields_show_once_storage_and_web_are_there(
+    hass, entry, connection
+):
+    """The backup reserve and the SoC mode come from the web API's battery config."""
+    runtime = await make_runtime(hass, entry, connection)
+    assert not any(
+        d.key == "backup_reserve" for d in entities.number_descriptions(runtime)
+    )
+
+    web_control = make_control(hass)
+    web_control._client.battery.update(HYB_BACKUP_RESERVED=35)
+    await web_control.async_refresh()
+    runtime = replace(
+        runtime, web_control=web_control, web=SimpleNamespace(data=web_control.data)
+    )
+    try:
+        reserve = _description(entities.number_descriptions(runtime), "backup_reserve")
+        soc_mode = _description(entities.sensor_descriptions(runtime), "api_soc_mode")
+        assert reserve.value_fn(runtime) == 35
+        assert soc_mode.value_fn(runtime) == "automatic"
+    finally:
+        web_control.shutdown()

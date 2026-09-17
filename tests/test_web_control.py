@@ -78,6 +78,11 @@ class FakeWebClient:
         self.calls.append(("sources", grid, ac))
         return True
 
+    def set_backup_reserve(self, percent):
+        self.calls.append(("reserve", percent))
+        self.battery["HYB_BACKUP_RESERVED"] = percent
+        return True
+
     def set_solar_api_enabled(self, enabled):
         self.calls.append(("solar", enabled))
         return True
@@ -332,3 +337,20 @@ async def test_the_technician_role_is_the_single_client_with_that_username(hass)
 async def test_a_customer_client_is_not_technician_configured(control):
     assert control.configured
     assert not control.technician_configured
+
+
+async def test_the_backup_reserve_is_written_in_auto_mode_too(control):
+    """The inverter's own UI offers the reserve in either battery mode."""
+    await control.async_refresh()
+    await control.set_backup_reserve(30)
+    assert control._client.calls[-1] == ("reserve", 30)
+    assert control.data.backup_reserved == 30
+    assert control.events == ["write"]
+
+
+async def test_a_backup_reserve_outside_the_range_is_refused(control):
+    await control.async_refresh()
+    with pytest.raises(ValueError):
+        await control.set_backup_reserve(4)
+    assert control._client.calls == []
+    assert control.data.backup_reserved == 5

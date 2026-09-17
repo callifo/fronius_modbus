@@ -680,3 +680,10 @@ def test_assisted_setup_converts_an_existing_float_register_map():
     client._request = lambda method, path, payload=None: sent.update(payload=payload)
     assert client.ensure_modbus_enabled(502, 200, 1) is True
     assert sent["payload"]["slave"]["sunspecMode"] == "int"
+
+
+def test_the_backup_reserve_is_written_alone(client, inverter):
+    """The reserve is independent of the SoC window: the write must not touch the SoC mode."""
+    assert client.set_backup_reserve(30) is True
+
+    assert posted(inverter, "/api/config/batteries") == {"HYB_BACKUP_RESERVED": 30}

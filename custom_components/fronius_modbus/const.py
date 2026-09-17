@@ -193,6 +193,7 @@ SENSOR_STATE_OPTIONS = {
     "charge_status": _state_values(CHARGE_STATUS),
     "grid_charging": _state_values(CHARGE_GRID_STATUS),
     "api_modbus_control": _state_values(CONTROL_STATUS),
+    "api_soc_mode": [*API_SOC_MODE.values(), UNKNOWN_STATE],
     "api_modbus_restriction": _state_values(CONTROL_STATUS),
 }
 

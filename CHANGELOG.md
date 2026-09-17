@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 1.1.0
+
+The battery web controls follow the inverter's own two switches. Display names change, unique ids
+and entity ids do not; automations keep working, only the names in the UI differ.
 
 ### Changed
 - The web SoC window follows the inverter's own switch. `SoC Maximum` and the new `SoC Minimum (Web API)` are writable while `BAT_M0_SOC_MODE` is manual, whatever the energy management mode; switching `HYB_EM_MODE` no longer rewrites the SoC window or forces its mode. Before, both hung on the wrong switch, and a minimum set in the inverter's UI never reached Home Assistant.

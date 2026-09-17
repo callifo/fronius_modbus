@@ -2,6 +2,7 @@ name: Test
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 # This workflow only checks out and runs tests, so read access to the repo

@@ -632,6 +632,9 @@ class FroniusWebClient:
         }
         return self._post_ok("/api/config/batteries", payload)
 
+    def set_soc_mode(self, mode: str) -> bool:
+        return self._post_ok("/api/config/batteries", {"BAT_M0_SOC_MODE": mode})
+
     def set_backup_reserve(self, percent: int) -> bool:
         return self._post_ok(
             "/api/config/batteries", {"HYB_BACKUP_RESERVED": int(percent)}

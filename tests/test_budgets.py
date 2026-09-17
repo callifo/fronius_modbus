@@ -38,7 +38,7 @@ LINE_BUDGETS = {
     # +29: the translation-key map that keeps hassfest happy (upstream data keys
     # are not valid translation keys), table file, ~85 % declarative
     # 1832 + the throttling sensor (callifo #112)
-    "entities.py": 1880,  # + the backup reserve, the SoC mode and the web SoC minimum (callifo #136)
+    "entities.py": 1884,  # + the backup reserve, the SoC mode and the web SoC minimum (callifo #136)
 }
 
 # SonarSource's own default. Above it, a function is one somebody has to

@@ -76,6 +76,11 @@ class FakeWebClient:
         self.calls.append(("sources", grid, ac))
         return True
 
+    def set_soc_mode(self, mode):
+        self.calls.append(("soc_mode", mode))
+        self.battery["BAT_M0_SOC_MODE"] = mode
+        return True
+
     def set_backup_reserve(self, percent):
         self.calls.append(("reserve", percent))
         self.battery["HYB_BACKUP_RESERVED"] = percent
@@ -387,3 +392,16 @@ async def test_the_modbus_reserve_mirrors_to_the_web_api_in_manual_soc_mode(hass
         control.shutdown()
     assert written == [9]
     assert client.calls[-1] == ("soc", 9, 100, 5)
+
+
+async def test_the_soc_mode_select_opens_the_window_for_writing(control):
+    await control.async_refresh()
+    assert not control.soc_mode_is_manual
+    await control.set_soc_mode(manual=True)
+    assert control._client.calls[-1] == ("soc_mode", "manual")
+    assert control.soc_mode_is_manual
+    assert control.data.soc_mode == "manual"
+    assert control.events == ["write"]
+    await control.set_soc_mode(manual=False)
+    assert control._client.calls[-1] == ("soc_mode", "auto")
+    assert not control.soc_mode_is_manual

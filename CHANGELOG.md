@@ -9,7 +9,7 @@
 ### Added
 - A `SoC Minimum (Web API)` number shows and sets `BAT_M0_SOC_MIN`, the minimum the inverter's own UI shows.
 - A `Backup reserve` number sets the battery share kept for backup power (`HYB_BACKUP_RESERVED`), in either battery mode.
-- A diagnostic `Web API SoC mode` sensor shows the inverter's `BAT_M0_SOC_MODE`, the value that decides whether `SoC Maximum` is writable. The README had claimed it was shown already.
+- A `Web API SoC mode` select shows and switches the inverter's `BAT_M0_SOC_MODE`, the switch that decides whether the SoC window is writable. The README had claimed it was shown already.
 
 ## 1.0.0
 

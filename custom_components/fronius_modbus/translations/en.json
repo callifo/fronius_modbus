@@ -141,6 +141,13 @@
           "disabled": "Disabled",
           "enabled": "Enabled"
         }
+      },
+      "api_soc_mode": {
+        "name": "Web API SoC mode",
+        "state": {
+          "automatic": "Automatic",
+          "manual": "Manual"
+        }
       }
     },
     "sensor": {
@@ -474,14 +481,6 @@
           "active_power_control": "Active power control",
           "export_limit": "Export limit",
           "several": "Several reasons",
-          "unknown": "Unknown"
-        }
-      },
-      "api_soc_mode": {
-        "name": "Web API SoC mode",
-        "state": {
-          "automatic": "Automatic",
-          "manual": "Manual",
           "unknown": "Unknown"
         }
       }

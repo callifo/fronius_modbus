@@ -285,5 +285,12 @@
     "old": "        self._set_effective_battery_mode(mode, self.data.soc_mode_raw)\n        if mode == BATTERY_MODE_MANUAL:\n            self.data.battery_power_w = display_power",
     "new": "        self._set_effective_battery_mode(mode, self.data.soc_mode_raw)\n        if mode == BATTERY_MODE_MANUAL:\n            self.data.battery_power_w = display_power\n        else:\n            self.data.soc_min = SOC_LOWEST",
     "tests": "switching_the_energy_management_leaves_the_soc_window_alone"
+  },
+  {
+    "label": "web_client: the SoC mode write leaves the limits alone",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "{\"BAT_M0_SOC_MODE\": mode}",
+    "new": "{\"BAT_M0_SOC_MODE\": mode, \"BAT_M0_SOC_MIN\": 5}",
+    "tests": "the_soc_mode_is_written_alone"
   }
 ]

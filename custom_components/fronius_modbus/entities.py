@@ -36,6 +36,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (
     AC_LIMIT_STATUS,
     API_BATTERY_MODE,
+    API_SOC_MODE_OPTIONS,
     CHARGE_GRID_STATUS,
     CHARGE_STATUS,
     CONNECTION_STATUS_CONDENSED,
@@ -47,6 +48,7 @@ from .const import (
     INVERTER_EVENTS,
     INVERTER_STATUS,
     SENSOR_STATE_OPTIONS,
+    SOC_MODE_MANUAL_CODE,
     STORAGE_CONTROL_MODE,
     STORAGE_EXT_CONTROL_MODE,
     UNKNOWN_STATE,
@@ -769,15 +771,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         unit="°C",
         icon="mdi:thermometer",
-    ),
-    _sensor(
-        "api_soc_mode",
-        "api_soc_mode",
-        device="storage",
-        source="web",
-        value_fn=lambda r: _web_field(r, "soc_mode"),
-        exists_fn=lambda r: _storage_present(r) and _web_configured(r),
-        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     _sensor(
         "control_mode",
@@ -1510,6 +1503,17 @@ _SELECT_DESCRIPTIONS: tuple[FroniusSelectDescription, ...] = (
         ),
         set_fn=lambda r, code: r.async_set_extended_mode(code),
         exists_fn=_storage_present,
+    ),
+    _select(
+        "api_soc_mode",
+        device="storage",
+        source="web",
+        options_map=API_SOC_MODE_OPTIONS,
+        value_fn=lambda r: _web_field(r, "soc_mode"),
+        set_fn=lambda r, code: assume_present(r.web_control).set_soc_mode(
+            manual=code == SOC_MODE_MANUAL_CODE
+        ),
+        exists_fn=lambda r: _storage_present(r) and _web_configured(r),
     ),
     _select(
         "api_battery_mode",

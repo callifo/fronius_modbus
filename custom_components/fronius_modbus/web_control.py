@@ -52,7 +52,7 @@ SOLAR_API_MINIMUM_VERSION_TEXT = "1.40.7-1"
 SOLAR_API_WARNING_TRANSLATION_KEY = "solar_api_low_firmware"
 _FIRMWARE_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)(?:-(\d+))?$")
 BATTERY_MODE_AUTO, BATTERY_MODE_MANUAL = 0, 1
-SOC_MODE_MANUAL = "manual"
+SOC_MODE_AUTO, SOC_MODE_MANUAL = "auto", "manual"
 SOC_LOWEST, SOC_HIGHEST, SOC_MAX_DEFAULT = 5, 100, 99
 
 
@@ -669,6 +669,18 @@ class FroniusWebControl:
         if not self._client:
             raise RuntimeError(WEB_API_NOT_CONFIGURED)
         await self._set_api_soc_manual(soc_min=soc_min, control_name="SoC Minimum")
+
+    @_serialised
+    async def set_soc_mode(self, *, manual: bool) -> None:
+        """Switch the SoC window between the inverter's automatic and manual control."""
+        if not self._client:
+            raise RuntimeError(WEB_API_NOT_CONFIGURED)
+        mode = SOC_MODE_MANUAL if manual else SOC_MODE_AUTO
+        await self._async_web_job(
+            self._client.set_soc_mode, mode, raise_on_auth_failure=True
+        )
+        self._set_effective_battery_mode(self.data.battery_mode_raw, mode)
+        self._start_battery_write_transition("SoC mode")
 
     @_serialised
     async def set_backup_reserve(self, percent: int) -> None:

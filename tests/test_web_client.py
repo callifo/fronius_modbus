@@ -676,6 +676,13 @@ def test_assisted_setup_converts_an_existing_float_register_map():
     assert sent["payload"]["slave"]["sunspecMode"] == "int"
 
 
+def test_the_soc_mode_is_written_alone(client, inverter):
+    """Switching the window to manual must not rewrite the limits the inverter holds."""
+    assert client.set_soc_mode("manual") is True
+
+    assert posted(inverter, "/api/config/batteries") == {"BAT_M0_SOC_MODE": "manual"}
+
+
 def test_the_backup_reserve_is_written_alone(client, inverter):
     """The reserve is independent of the SoC window: the write must not touch the SoC mode."""
     assert client.set_backup_reserve(30) is True

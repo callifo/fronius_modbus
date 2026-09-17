@@ -141,6 +141,13 @@
           "disabled": "Deaktiviert",
           "enabled": "Aktiviert"
         }
+      },
+      "api_soc_mode": {
+        "name": "Web-API-SoC-Modus",
+        "state": {
+          "automatic": "Automatisch",
+          "manual": "Manuell"
+        }
       }
     },
     "sensor": {
@@ -474,14 +481,6 @@
           "active_power_control": "Wirkleistungsvorgabe",
           "export_limit": "Einspeisebegrenzung",
           "several": "Mehrere Gründe",
-          "unknown": "Unbekannt"
-        }
-      },
-      "api_soc_mode": {
-        "name": "Web-API-SoC-Modus",
-        "state": {
-          "automatic": "Automatisch",
-          "manual": "Manuell",
           "unknown": "Unbekannt"
         }
       }

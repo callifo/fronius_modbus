@@ -445,9 +445,15 @@ async def test_the_battery_web_fields_show_once_storage_and_web_are_there(
     )
     try:
         reserve = _description(entities.number_descriptions(runtime), "backup_reserve")
-        soc_mode = _description(entities.sensor_descriptions(runtime), "api_soc_mode")
+        soc_mode = _description(entities.select_descriptions(runtime), "api_soc_mode")
         assert reserve.value_fn(runtime) == 35
         assert soc_mode.value_fn(runtime) == "automatic"
+        assert soc_mode.options == ["automatic", "manual"]
+        await soc_mode.set_fn(runtime, 1)
+        assert web_control._client.calls[-1] == ("soc_mode", "manual")
+        assert not any(
+            d.key == "api_soc_mode" for d in entities.sensor_descriptions(runtime)
+        )
     finally:
         web_control.shutdown()
 

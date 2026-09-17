@@ -92,7 +92,7 @@ If Web API credentials are configured, the integration exposes both Modbus batte
 The inverter keeps two independent switches, and the entities follow them:
 
 - `Self-consumption optimisation` is `HYB_EM_MODE`, the inverter's automatic/manual energy management. `Target Feed In` belongs to it.
-- `Web API SoC mode` is `BAT_M0_SOC_MODE`, the automatic/manual switch of the SoC window. `SoC Minimum (Web API)` and `SoC Maximum` belong to it and are only writable while it is `manual`; switching self-consumption optimisation does not touch the window.
+- `Web API SoC mode` is `BAT_M0_SOC_MODE`, the automatic/manual switch of the SoC window, and can be switched from Home Assistant. `SoC Minimum (Web API)` and `SoC Maximum` belong to it and are only writable while it is `manual`; switching self-consumption optimisation does not touch the window.
 - `Modbus storage reserve` is model 124 `MinRsvPct`. The inverter only applies it while a Modbus storage control mode is active; it is not the SoC minimum shown in the inverter's own UI. While the SoC mode is `manual`, writing it also writes `SoC Minimum (Web API)`.
 - entering Modbus `Charge from Grid` also enables the Web API `Charge from grid` and `Charge from AC` toggles when Web API is configured
 - turning on the Web API `Charge from grid` switch also enables `Charge from AC`

@@ -177,3 +177,36 @@ async def test_a_web_server_error_is_still_an_error(hass, caplog):
     """Audit E04: requests' HTTPError is an OSError, so a 500 read as an outage."""
     await _web_refresh_failing_with(hass, FroniusWebResponseError("HTTP 500"), caplog)
     assert _fetch_failure_levels(caplog) == [logging.ERROR]
+
+
+# The one function allowed to call into requests: its errors carry the URL.
+REQUESTS_BOUNDARY = "_http"
+
+
+def _requests_calls_outside_the_boundary(tree: ast.Module) -> list[int]:
+    offences = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef) or node.name == REQUESTS_BOUNDARY:
+            continue
+        for call in ast.walk(node):
+            is_requests_call = (
+                isinstance(call, ast.Call)
+                and isinstance(call.func, ast.Attribute)
+                and isinstance(call.func.value, ast.Name)
+                and call.func.value.id == "requests"
+            )
+            if is_requests_call:
+                offences.append(call.lineno)
+    return offences
+
+
+def test_requests_is_called_in_one_place():
+    """Reaudit R02: a second call site bypassed the boundary that strips the host."""
+    offences = [
+        f"{source.name}:{line}"
+        for source in sorted(PACKAGE.rglob("*.py"))
+        for line in _requests_calls_outside_the_boundary(
+            ast.parse(source.read_text(encoding="utf-8"))
+        )
+    ]
+    assert offences == []

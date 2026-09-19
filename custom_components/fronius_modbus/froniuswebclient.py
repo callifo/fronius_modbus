@@ -41,6 +41,18 @@ class FroniusWebAuthError(RuntimeError):
     """Raised when Fronius Web API authentication fails."""
 
 
+def _http(method: str, url: str, **options: Any) -> requests.Response:
+    """The one call into requests; a guard in the tests keeps it that way.
+
+    Requests puts the URL, and with it the host, into its error text, and
+    that text used to reach the config flow's log through the login (R02).
+    """
+    try:
+        return requests.request(method, url, **options)
+    except requests.RequestException as err:
+        raise FroniusWebUnreachable(type(err).__name__) from err
+
+
 def _as_int(value: Any, fallback: int) -> int:
     try:
         return int(value)
@@ -257,7 +269,7 @@ def _hash_mode(base_url: str, user: str, timeout: float) -> str:
     if remembered is not None:
         return remembered
     try:
-        response = requests.get(f"{base_url}/api/status/common", timeout=timeout)
+        response = _http("get", f"{base_url}/api/status/common", timeout=timeout)
         response.raise_for_status()
         version = (
             response.json()
@@ -265,7 +277,7 @@ def _hash_mode(base_url: str, user: str, timeout: float) -> str:
             .get("digest", {})
             .get(f"{user}HashingVersion")
         )
-    except requests.RequestException, ValueError:
+    except FroniusWebUnreachable, requests.HTTPError, ValueError:
         return "sha256"
     mode = "md5" if version == 1 else "sha256"
     _HASH_MODES[(base_url, user)] = mode
@@ -383,7 +395,8 @@ def _login_response(
     timeout: float = 4.0,
 ) -> tuple[requests.Response, XHeaderDigestAuth]:
     auth = XHeaderDigestAuth(user, password=password, token=token, timeout=timeout)
-    response = requests.get(
+    response = _http(
+        "get",
         f"http://{host}/api/commands/Login",
         params={"user": user},
         auth=auth,
@@ -447,13 +460,10 @@ class FroniusWebClient:
         return response
 
     def _send(self, method: str, path: str, **options: Any) -> requests.Response:
-        """The one place requests is called, so its errors are translated once."""
-        try:
-            response = requests.request(
-                method, f"http://{self._host}{path}", timeout=self._timeout, **options
-            )
-        except requests.RequestException as err:
-            raise FroniusWebUnreachable(type(err).__name__) from err
+        """Answers with an error status become response errors, auth failures pass."""
+        response = _http(
+            method, f"http://{self._host}{path}", timeout=self._timeout, **options
+        )
         if response.status_code in (401, 403):
             return response
         try:

@@ -170,8 +170,8 @@
   {
     "label": "web client: a failed hash lookup is not remembered",
     "path": "custom_components/fronius_modbus/froniuswebclient.py",
-    "old": "    except requests.RequestException, ValueError:\n        return \"sha256\"",
-    "new": "    except requests.RequestException, ValueError:\n        _HASH_MODES[(base_url, user)] = \"sha256\"\n        return \"sha256\"",
+    "old": "    except FroniusWebUnreachable, requests.HTTPError, ValueError:\n        return \"sha256\"",
+    "new": "    except FroniusWebUnreachable, requests.HTTPError, ValueError:\n        _HASH_MODES[(base_url, user)] = \"sha256\"\n        return \"sha256\"",
     "tests": "timed_out_status_page_is_not_remembered_as_the_hash_mode"
   },
   {

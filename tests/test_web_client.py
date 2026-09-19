@@ -172,7 +172,7 @@ def test_an_unreadable_status_page_falls_back_to_sha256(monkeypatch):
     def refuse(*_args, **_kwargs):
         raise requests.ConnectionError
 
-    monkeypatch.setattr(requests, "get", refuse)
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", refuse)
 
     assert froniuswebclient._hash_mode(f"http://{HOST}", "customer", 4.0) == "sha256"
 
@@ -182,7 +182,7 @@ def test_a_timed_out_status_page_is_not_remembered_as_the_hash_mode(
 ):
     """Audit A07: the sha256 fallback was cached, so md5 devices never logged in again."""
     inverter.hashing_version = 1
-    answered = requests.get
+    answered = requests.adapters.HTTPAdapter.send
     attempts = []
 
     def refuse_once(*args, **kwargs):
@@ -191,7 +191,7 @@ def test_a_timed_out_status_page_is_not_remembered_as_the_hash_mode(
             raise requests.ConnectionError
         return answered(*args, **kwargs)
 
-    monkeypatch.setattr(requests, "get", refuse_once)
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", refuse_once)
 
     assert froniuswebclient._hash_mode(f"http://{HOST}", "customer", 4.0) == "sha256"
     assert froniuswebclient._hash_mode(f"http://{HOST}", "customer", 4.0) == "md5"
@@ -729,4 +729,16 @@ def test_a_server_error_is_an_answer_not_an_outage(client, inverter):
         client.get_battery_config()
     assert not isinstance(caught.value, OSError)
     assert "500" in str(caught.value)
+    assert HOST not in str(caught.value)
+
+
+def test_the_login_is_behind_the_same_boundary(monkeypatch):
+    """Reaudit R02: the login called requests itself, and the config flow logged its text."""
+
+    def refuse(adapter, request, **_kwargs):
+        raise requests.ConnectionError(f"Max retries exceeded with url: {request.url}")
+
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", refuse)
+    with pytest.raises(FroniusWebUnreachable) as caught:
+        froniuswebclient.mint_token(HOST, "customer", "secret")
     assert HOST not in str(caught.value)

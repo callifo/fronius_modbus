@@ -24,8 +24,33 @@ class ClientIpResolutionError(RuntimeError):
     """Raised when the local IP for Modbus restriction cannot be resolved."""
 
 
+class FroniusWebUnreachable(OSError):
+    """No answer from the web server: the same switched-off device as on Modbus.
+
+    Carries the requests error type only. Requests puts the URL, and with it
+    the host, into its messages, and Home Assistant logs travel with bug
+    reports (audit E01).
+    """
+
+
+class FroniusWebResponseError(RuntimeError):
+    """The web server answered with an error status: a device that is up and refusing."""
+
+
 class FroniusWebAuthError(RuntimeError):
     """Raised when Fronius Web API authentication fails."""
+
+
+def _http(method: str, url: str, **options: Any) -> requests.Response:
+    """The one call into requests; a guard in the tests keeps it that way.
+
+    Requests puts the URL, and with it the host, into its error text, and
+    that text used to reach the config flow's log through the login (R02).
+    """
+    try:
+        return requests.request(method, url, **options)
+    except requests.RequestException as err:
+        raise FroniusWebUnreachable(type(err).__name__) from err
 
 
 def _as_int(value: Any, fallback: int) -> int:
@@ -244,7 +269,7 @@ def _hash_mode(base_url: str, user: str, timeout: float) -> str:
     if remembered is not None:
         return remembered
     try:
-        response = requests.get(f"{base_url}/api/status/common", timeout=timeout)
+        response = _http("get", f"{base_url}/api/status/common", timeout=timeout)
         response.raise_for_status()
         version = (
             response.json()
@@ -252,7 +277,7 @@ def _hash_mode(base_url: str, user: str, timeout: float) -> str:
             .get("digest", {})
             .get(f"{user}HashingVersion")
         )
-    except requests.RequestException, ValueError:
+    except FroniusWebUnreachable, requests.HTTPError, ValueError:
         return "sha256"
     mode = "md5" if version == 1 else "sha256"
     _HASH_MODES[(base_url, user)] = mode
@@ -370,7 +395,8 @@ def _login_response(
     timeout: float = 4.0,
 ) -> tuple[requests.Response, XHeaderDigestAuth]:
     auth = XHeaderDigestAuth(user, password=password, token=token, timeout=timeout)
-    response = requests.get(
+    response = _http(
+        "get",
         f"http://{host}/api/commands/Login",
         params={"user": user},
         auth=auth,
@@ -424,12 +450,17 @@ class FroniusWebClient:
         )
 
     def _request(
-        self, method: str, path: str, payload: dict | None = None
+        self,
+        method: str,
+        path: str,
+        payload: dict | None = None,
+        *,
+        authenticated: bool = True,
     ) -> requests.Response:
-        response = requests.request(
+        response = _http(
             method,
             f"http://{self._host}{path}",
-            auth=self._auth,
+            auth=self._auth if authenticated else None,
             json=payload,
             timeout=self._timeout,
         )
@@ -437,19 +468,19 @@ class FroniusWebClient:
             raise FroniusWebAuthError(
                 f"Fronius Web API auth failed with status {response.status_code}"
             )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as err:
+            raise FroniusWebResponseError(
+                f"HTTP {response.status_code} on {path}"
+            ) from err
         return response
 
     def _get_json(self, path: str) -> dict[str, Any]:
         return self._request("get", path).json()
 
     def _get_public_json(self, path: str) -> dict[str, Any]:
-        response = requests.get(
-            f"http://{self._host}{path}",
-            timeout=self._timeout,
-        )
-        response.raise_for_status()
-        return response.json()
+        return self._request("get", path, authenticated=False).json()
 
     def _post_ok(self, path: str, payload: dict[str, Any] | None = None) -> bool:
         return self._request("post", path, payload=payload).ok
@@ -653,7 +684,7 @@ class FroniusWebClient:
         """Read current Export Limit Control configuration from the inverter."""
         try:
             return self._get_json("/api/config/limit_settings/powerLimits")
-        except requests.HTTPError:
+        except FroniusWebResponseError:
             return {}
 
     def set_export_soft_limit(self, power_w: int) -> bool:

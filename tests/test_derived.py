@@ -154,3 +154,19 @@ def test_a_source_that_did_not_answer_prevents_a_no():
 
 def test_a_found_reason_stands_even_while_another_source_is_silent():
     assert _reason(operating_state=5, limit_enabled=None) == "inverter_state"
+
+
+def test_an_enabled_limit_with_an_unread_percent_is_no_answer():
+    """Audit E02: `or 0.0` turned an unimplemented percent into a limit below full power."""
+    assert _reason(limit_enabled=True, limit_percent=None) is None
+
+
+def test_an_unread_enable_flag_is_no_answer():
+    assert _reason(limit_enabled=None, limit_percent=70.0) is None
+
+
+def test_an_unread_limit_does_not_hide_a_reason_that_is_known():
+    assert (
+        _reason(operating_state=5, limit_enabled=True, limit_percent=None)
+        == "inverter_state"
+    )

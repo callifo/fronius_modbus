@@ -224,6 +224,6 @@ Inverter
 
 Development happens against a WSL2 Home Assistant test environment; the integration itself only needs a recent Home Assistant.
 
-- `.github/scripts/check.sh` runs every gate CI also runs: ruff, mypy, pytest with a coverage gate, and a mutation run. Run it (or at least `pytest tests/ -q`) before calling a change done.
+- `.github/scripts/check.sh` runs the gates of the Test workflow: ruff, mypy, pip-audit, gitleaks, pytest with a coverage gate, and a mutation run. Run it (or at least `pytest tests/ -q`) before calling a change done. The HACS and hassfest validations run in CI only.
 - The default `pytest tests/ -q` run skips the end-to-end tests. Pass `-m ""` to include them.
 - `tests/fixtures/symo_gen24_fw1386.json` is a captured SunSpec register map from a Fronius Symo GEN24 10.0 running firmware 1.38.6-1. To capture a fixture from another inverter/firmware combination: download diagnostics for the integration's device (Settings -> Devices -> device -> Download diagnostics), take the `registers` object (`{unit_id: {space: {address: word}}}`), prepend the SunSpec marker registers (40000/40001, `"SunS"`) and append the end-of-chain header (a model id of `0xFFFF`) if the diagnostics dump doesn't already include them, and blank out the serial number words before committing the fixture.

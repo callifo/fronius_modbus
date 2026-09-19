@@ -14,10 +14,18 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.fronius_modbus.const import DOMAIN
-from custom_components.fronius_modbus.coordinator import FroniusModbusCoordinator
+from custom_components.fronius_modbus.coordinator import (
+    FroniusModbusCoordinator,
+    FroniusWebCoordinator,
+)
 from custom_components.fronius_modbus.fronius_modbus_api.device import FroniusInverter
+from custom_components.fronius_modbus.froniuswebclient import (
+    FroniusWebResponseError,
+    FroniusWebUnreachable,
+)
 
 from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID
+from .test_web_control import make_control
 
 PACKAGE = pathlib.Path(__file__).resolve().parents[1] / "custom_components"
 
@@ -133,3 +141,72 @@ def coordinator(hass, connection):
         primary_meter_unit_id=METER_UNIT_ID,
         meter_locations={METER_UNIT_ID: 0},
     )
+
+
+def _fetch_failure_levels(caplog) -> list[int]:
+    return [
+        record.levelno
+        for record in caplog.records
+        if record.msg.startswith("Error fetching")
+    ]
+
+
+async def _web_refresh_failing_with(hass, error: Exception, caplog) -> None:
+    entry = MockConfigEntry(domain=DOMAIN, data={"host": "192.0.2.1"})
+    entry.add_to_hass(hass)
+    control = make_control(hass)
+    control._client.get_inverter_info = lambda: (_ for _ in ()).throw(error)
+    coordinator = FroniusWebCoordinator(
+        hass, entry, control, interval=timedelta(seconds=60)
+    )
+    try:
+        with caplog.at_level(logging.DEBUG):
+            await coordinator.async_refresh()
+    finally:
+        control.shutdown()
+
+
+async def test_an_unreachable_web_api_is_not_logged_as_an_error(hass, caplog):
+    await _web_refresh_failing_with(
+        hass, FroniusWebUnreachable("ConnectionError"), caplog
+    )
+    assert _fetch_failure_levels(caplog) == [logging.INFO]
+
+
+async def test_a_web_server_error_is_still_an_error(hass, caplog):
+    """Audit E04: requests' HTTPError is an OSError, so a 500 read as an outage."""
+    await _web_refresh_failing_with(hass, FroniusWebResponseError("HTTP 500"), caplog)
+    assert _fetch_failure_levels(caplog) == [logging.ERROR]
+
+
+# The one function allowed to call into requests: its errors carry the URL.
+REQUESTS_BOUNDARY = "_http"
+
+
+def _requests_calls_outside_the_boundary(tree: ast.Module) -> list[int]:
+    offences = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef) or node.name == REQUESTS_BOUNDARY:
+            continue
+        for call in ast.walk(node):
+            is_requests_call = (
+                isinstance(call, ast.Call)
+                and isinstance(call.func, ast.Attribute)
+                and isinstance(call.func.value, ast.Name)
+                and call.func.value.id == "requests"
+            )
+            if is_requests_call:
+                offences.append(call.lineno)
+    return offences
+
+
+def test_requests_is_called_in_one_place():
+    """Reaudit R02: a second call site bypassed the boundary that strips the host."""
+    offences = [
+        f"{source.name}:{line}"
+        for source in sorted(PACKAGE.rglob("*.py"))
+        for line in _requests_calls_outside_the_boundary(
+            ast.parse(source.read_text(encoding="utf-8"))
+        )
+    ]
+    assert offences == []

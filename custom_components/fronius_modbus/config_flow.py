@@ -47,7 +47,12 @@ from .const import (
     SUPPORTED_MODELS,
 )
 from .fronius_modbus_api.device import FroniusInverter
-from .froniuswebclient import ClientIpResolutionError, FroniusWebClient, mint_token
+from .froniuswebclient import (
+    ClientIpResolutionError,
+    FroniusWebClient,
+    FroniusWebResponseError,
+    mint_token,
+)
 from .token_store import async_get_token_store, canonical_host
 
 _LOGGER = logging.getLogger(__name__)
@@ -399,7 +404,13 @@ async def _validate_input(
         raise _CannotResolveLocalIp from err
     except _InvalidApiCredentials:
         raise
-    except (ModbusError, HomeAssistantError, OSError, TimeoutError) as err:
+    except (
+        ModbusError,
+        HomeAssistantError,
+        FroniusWebResponseError,
+        OSError,
+        TimeoutError,
+    ) as err:
         _LOGGER.error("Cannot reach inverter: %s", err)
         raise _CannotConnect from err
 

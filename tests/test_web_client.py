@@ -6,6 +6,7 @@ is exercised rather than mocked away.
 """
 
 import json
+import logging
 import socket
 from urllib.parse import parse_qs, urlparse
 
@@ -17,6 +18,8 @@ from custom_components.fronius_modbus.froniuswebclient import (
     ClientIpResolutionError,
     FroniusWebAuthError,
     FroniusWebClient,
+    FroniusWebResponseError,
+    FroniusWebUnreachable,
     XHeaderDigestAuth,
     _parse_inverter_readable,
     _parse_power_meter_info,
@@ -169,7 +172,7 @@ def test_an_unreadable_status_page_falls_back_to_sha256(monkeypatch):
     def refuse(*_args, **_kwargs):
         raise requests.ConnectionError
 
-    monkeypatch.setattr(requests, "get", refuse)
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", refuse)
 
     assert froniuswebclient._hash_mode(f"http://{HOST}", "customer", 4.0) == "sha256"
 
@@ -179,7 +182,7 @@ def test_a_timed_out_status_page_is_not_remembered_as_the_hash_mode(
 ):
     """Audit A07: the sha256 fallback was cached, so md5 devices never logged in again."""
     inverter.hashing_version = 1
-    answered = requests.get
+    answered = requests.adapters.HTTPAdapter.send
     attempts = []
 
     def refuse_once(*args, **kwargs):
@@ -188,7 +191,7 @@ def test_a_timed_out_status_page_is_not_remembered_as_the_hash_mode(
             raise requests.ConnectionError
         return answered(*args, **kwargs)
 
-    monkeypatch.setattr(requests, "get", refuse_once)
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", refuse_once)
 
     assert froniuswebclient._hash_mode(f"http://{HOST}", "customer", 4.0) == "sha256"
     assert froniuswebclient._hash_mode(f"http://{HOST}", "customer", 4.0) == "md5"
@@ -688,3 +691,54 @@ def test_the_backup_reserve_is_written_alone(client, inverter):
     assert client.set_backup_reserve(30) is True
 
     assert posted(inverter, "/api/config/batteries") == {"HYB_BACKUP_RESERVED": 30}
+
+
+# -- the transport boundary (audit E01/E04) -----------------------------------------
+
+
+def test_a_transport_error_leaves_the_host_behind(client, monkeypatch):
+    """Requests puts the URL into its errors; the host must not travel into the logs."""
+
+    def refuse(adapter, request, **_kwargs):
+        raise requests.ConnectionError(f"Max retries exceeded with url: {request.url}")
+
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", refuse)
+    with pytest.raises(FroniusWebUnreachable) as caught:
+        client.get_battery_config()
+    assert HOST not in str(caught.value)
+    assert isinstance(caught.value, OSError)
+
+
+def test_the_public_meter_path_is_behind_the_same_boundary(client, monkeypatch, caplog):
+    """That path swallows the error into a debug line; the line must not name the host either."""
+
+    def refuse(adapter, request, **_kwargs):
+        raise requests.ReadTimeout(f"Read timed out: {request.url}")
+
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", refuse)
+    with caplog.at_level(logging.DEBUG):
+        assert client.get_power_meter_info() is None
+    assert caplog.records
+    assert all(HOST not in record.getMessage() for record in caplog.records)
+
+
+def test_a_server_error_is_an_answer_not_an_outage(client, inverter):
+    """HTTP 500 is a responding device; it must not read as switched off."""
+    inverter.statuses["/api/config/batteries"] = 500
+    with pytest.raises(FroniusWebResponseError) as caught:
+        client.get_battery_config()
+    assert not isinstance(caught.value, OSError)
+    assert "500" in str(caught.value)
+    assert HOST not in str(caught.value)
+
+
+def test_the_login_is_behind_the_same_boundary(monkeypatch):
+    """Reaudit R02: the login called requests itself, and the config flow logged its text."""
+
+    def refuse(adapter, request, **_kwargs):
+        raise requests.ConnectionError(f"Max retries exceeded with url: {request.url}")
+
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", refuse)
+    with pytest.raises(FroniusWebUnreachable) as caught:
+        froniuswebclient.mint_token(HOST, "customer", "secret")
+    assert HOST not in str(caught.value)

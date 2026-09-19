@@ -386,18 +386,7 @@ class FroniusInverter:
                 raise
         report = await self._async_open_report()
         for name in self._polled:
-            try:
-                await self._component(name).async_update()
-            except ModbusConnectionError:
-                raise
-            except ModbusTimeoutError as err:
-                if not report.updated and not report.failed:
-                    raise
-                report.failed[name] = err
-            except ModbusError as err:
-                report.failed[name] = err
-            else:
-                report.updated.append(name)
+            await self._async_update_component(name, report)
         await self._async_retry_undecided_meters(report)
         return report
 
@@ -422,6 +411,25 @@ class FroniusInverter:
         except (ModbusError, NotAFroniusInverter) as err:
             _LOGGER.debug("Discovery is still incomplete: %s", err)
 
+    async def _async_update_component(self, name: str, report: UpdateReport) -> None:
+        """Refresh one component and file the outcome under its report name.
+
+        A meter that fails is that meter's failure, never the poll's - the
+        retry path once read a recovered meter outside this (audit E03).
+        """
+        try:
+            await self._component(name).async_update()
+        except ModbusConnectionError:
+            raise
+        except ModbusTimeoutError as err:
+            if not report.updated and not report.failed:
+                raise
+            report.failed[name] = err
+        except ModbusError as err:
+            report.failed[name] = err
+        else:
+            report.updated.append(name)
+
     async def _async_retry_undecided_meters(self, report: UpdateReport) -> None:
         for unit_id, meter_unit in list(self._undecided_meters.items()):
             name = meter_report_name(unit_id)
@@ -435,8 +443,7 @@ class FroniusInverter:
                 continue
             if unit_id in self.meters:
                 self._polled = (*self._polled, name)
-                await self._component(name).async_update()
-                report.updated.append(name)
+                await self._async_update_component(name, report)
 
     async def async_read_raw(self) -> dict[int, dict[str, dict[int, int | bool]]]:
         """Every register read, undecoded, per unit id, minus the serial number words."""

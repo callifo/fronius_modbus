@@ -482,3 +482,20 @@ async def test_the_web_soc_limits_are_writable_in_manual_soc_mode_alone(
     finally:
         web_control.shutdown()
     assert web_control._client.calls[-1] == ("soc", 25, 100, 5)
+
+
+# Model-123 WMaxLimPct_Ena and WMaxLimPct in the captured fixture.
+LIMIT_ENABLE_ADDRESS = 40236
+LIMIT_PERCENT_ADDRESS = 40232
+UNIMPLEMENTED_UINT16 = 0xFFFF
+
+
+async def test_an_unimplemented_enable_flag_leaves_the_throttle_reason_unknown(
+    hass, entry, connection, inverter_unit
+):
+    """Audit E02: the coordinator turned the sentinel into `== 1` -> False -> `none`."""
+    inverter_unit.holding[LIMIT_ENABLE_ADDRESS] = UNIMPLEMENTED_UINT16
+    runtime = await make_runtime(hass, entry, connection)
+    assert runtime.device.controls.w_max_lim_ena is None
+    description = _description(entities.sensor_descriptions(runtime), "throttle_reason")
+    assert description.value_fn(runtime) is None

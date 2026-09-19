@@ -37,8 +37,8 @@
   {
     "label": "device: a dead link propagates instead of failing one report",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
-    "old": "                await self._component(name).async_update()\n            except ModbusConnectionError:\n                raise\n",
-    "new": "                await self._component(name).async_update()\n            except ModbusConnectionError:\n                pass\n",
+    "old": "            await self._component(name).async_update()\n        except ModbusConnectionError:\n            raise\n",
+    "new": "            await self._component(name).async_update()\n        except ModbusConnectionError:\n            pass\n",
     "tests": "link_that_dies_after_setup_still_propagates"
   },
   {
@@ -247,8 +247,8 @@
   {
     "label": "derived: a limit at full power is no throttling",
     "path": "custom_components/fronius_modbus/derived.py",
-    "old": "    limited = bool(limit_enabled) and (limit_percent or 0.0) < FULL_POWER_PERCENT",
-    "new": "    limited = bool(limit_enabled)",
+    "old": "    return limit_percent < FULL_POWER_PERCENT",
+    "new": "    return limit_percent <= FULL_POWER_PERCENT",
     "tests": "a_limit_at_full_power_is_no_reason"
   },
   {
@@ -292,5 +292,40 @@
     "old": "{\"BAT_M0_SOC_MODE\": mode}",
     "new": "{\"BAT_M0_SOC_MODE\": mode, \"BAT_M0_SOC_MIN\": 5}",
     "tests": "the_soc_mode_is_written_alone"
+  },
+  {
+    "label": "web_client: a transport error carries the type, not requests' text",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "raise FroniusWebUnreachable(type(err).__name__) from err",
+    "new": "raise FroniusWebUnreachable(str(err)) from err",
+    "tests": "a_transport_error_leaves_the_host_behind"
+  },
+  {
+    "label": "web_client: a server error is not an outage",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "class FroniusWebResponseError(RuntimeError):",
+    "new": "class FroniusWebResponseError(OSError):",
+    "tests": "a_server_error_is_an_answer_not_an_outage or a_web_server_error_is_still_an_error"
+  },
+  {
+    "label": "derived: an enabled limit with an unread percent is no answer",
+    "path": "custom_components/fronius_modbus/derived.py",
+    "old": "    if limit_percent is None:\n        return None\n    return limit_percent < FULL_POWER_PERCENT",
+    "new": "    if limit_percent is None:\n        return True\n    return limit_percent < FULL_POWER_PERCENT",
+    "tests": "an_enabled_limit_with_an_unread_percent_is_no_answer"
+  },
+  {
+    "label": "coordinator: an unread enable flag stays unread",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "                if controls is None or controls.w_max_lim_ena is None\n",
+    "new": "                if controls is None\n",
+    "tests": "an_unimplemented_enable_flag_leaves_the_throttle_reason_unknown"
+  },
+  {
+    "label": "device: a recovered meter's first read goes through the report",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "                self._polled = (*self._polled, name)\n                await self._async_update_component(name, report)",
+    "new": "                self._polled = (*self._polled, name)\n                await self._component(name).async_update()\n                report.updated.append(name)",
+    "tests": "a_recovered_meters_first_bad_read_stays_in_its_report"
   }
 ]

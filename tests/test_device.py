@@ -22,6 +22,7 @@ from custom_components.fronius_modbus.fronius_modbus_api.device import (
 from custom_components.fronius_modbus.fronius_modbus_api.exceptions import (
     NotAFroniusInverter,
 )
+from custom_components.fronius_modbus.fronius_modbus_api.sunspec_models import AcMeter
 
 from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID
 
@@ -416,3 +417,37 @@ async def test_a_component_that_did_not_move_keeps_its_readings(connection):
 
     assert REPORT_INVERTER in report.failed
     assert device.inverter.w == power
+
+
+async def test_a_recovered_meters_first_bad_read_stays_in_its_report(
+    connection, monkeypatch
+):
+    """Audit E03: the retry path updated the meter outside the per-component catch."""
+    meter_unit = connection.for_unit(METER_UNIT_ID)
+    meter_unit.fail_requests(ServerDeviceBusyError())
+    device = FroniusInverter(
+        connection.for_unit(INVERTER_UNIT_ID),
+        INVERTER_UNIT_ID,
+        {METER_UNIT_ID: meter_unit},
+    )
+    await device.async_update()
+    assert METER_UNIT_ID not in device.meters
+    meter_unit.fail_requests(None)
+
+    # The probe reads the same header the data read starts at, so the failure
+    # has to sit on the component itself to hit the data read alone.
+    original_update = AcMeter.async_update
+
+    async def fail_the_first_data_read(self):
+        monkeypatch.setattr(AcMeter, "async_update", original_update)
+        raise ServerDeviceFailureError
+
+    monkeypatch.setattr(AcMeter, "async_update", fail_the_first_data_read)
+    report = await device.async_update()
+
+    assert METER_UNIT_ID in device.meters
+    assert REPORT_INVERTER in report.updated
+    assert isinstance(
+        report.failed[meter_report_name(METER_UNIT_ID)], ServerDeviceFailureError
+    )
+    assert meter_report_name(METER_UNIT_ID) in (await device.async_update()).updated

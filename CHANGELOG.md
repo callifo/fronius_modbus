@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- Web API transport errors no longer carry the device address into the log. The client translates them at its boundary, so a bug report's log names the error type, not the host.
+- An HTTP error answer from the inverter's web server is logged as an error again. It had been classed with the switched-off device, because requests derives its HTTP errors from `OSError`.
+- The throttle reason stays unknown while the limit enable flag or the limit percent is unimplemented on the device, instead of reporting `export_limit` or `none` from a sentinel.
+- A meter that comes back after being undecided keeps its first failed read to itself. It used to fail the whole Modbus poll, taking every Modbus entity with it for that refresh.
+- The HACS and hassfest actions are pinned to a release, like the other workflow actions.
+
 ## 1.1.0
 
 The battery web controls follow the inverter's own two switches. Display names change, unique ids

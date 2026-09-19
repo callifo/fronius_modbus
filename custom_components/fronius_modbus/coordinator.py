@@ -28,6 +28,7 @@ from .fronius_modbus_api.device import (
 )
 from .fronius_modbus_api.storage import ExtendedMode, StorageControl
 from .fronius_modbus_api.sunspec_models import AcMeter
+from .froniuswebclient import FroniusWebUnreachable
 
 if TYPE_CHECKING:
     from .web_control import FroniusWebControl, WebData
@@ -362,7 +363,11 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
                 else None
             ),
             active_controls=None if status is None else status.st_act_ctl,
-            limit_enabled=None if controls is None else controls.w_max_lim_ena == 1,
+            limit_enabled=(
+                None
+                if controls is None or controls.w_max_lim_ena is None
+                else controls.w_max_lim_ena == 1
+            ),
             limit_percent=None if controls is None else controls.w_max_lim_pct,
         )
 
@@ -399,9 +404,7 @@ class FroniusWebCoordinator(DataUpdateCoordinator["WebData"]):
     async def _async_update_data(self) -> WebData:
         try:
             data = await self.web_control.async_refresh()
-        except OSError as err:
-            # requests' transport errors derive from OSError: the web API not
-            # answering is the same switched-off device as on the Modbus side.
+        except FroniusWebUnreachable as err:
             raise DeviceUnreachable(f"Fronius web API unreachable: {err}") from err
         except Exception as err:  # the client raises plain RuntimeError as well
             raise UpdateFailed(f"Fronius web API refresh failed: {err}") from err

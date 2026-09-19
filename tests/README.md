@@ -11,8 +11,9 @@ usually somebody with no memory of why any of it is here.
 ```
 
 Ruff, formatting, mypy, pip-audit, gitleaks, the test suite with its coverage floor and the mutation run, in that order,
-stopping at the first failure. CI runs the same set; a guard in
-`tests/test_guards.py` fails if the two ever drift apart. Anything
+stopping at the first failure. The Test workflow runs the same set; a guard in
+`tests/test_guards.py` fails if the two ever drift apart. The HACS and hassfest
+validations are CI-only workflows and are not part of this script. Anything
 machine-local arrives through the environment:
 
 ```sh

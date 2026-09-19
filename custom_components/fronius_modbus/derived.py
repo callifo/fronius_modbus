@@ -43,27 +43,44 @@ def throttle_reason(
     practice - an installation may leave the export limit switched on at 100
     percent for years, and that is not a throttled inverter.
     """
-    limited = bool(limit_enabled) and (limit_percent or 0.0) < FULL_POWER_PERCENT
-    reasons = [
-        reason
-        for reason, applies in (
-            (THROTTLE_REASONS[1], operating_state == THROTTLED_OPERATING_STATE),
-            (
-                THROTTLE_REASONS[2],
-                bool((active_controls or 0) & ACTIVE_POWER_CONTROL_BIT),
-            ),
-            (THROTTLE_REASONS[3], limited),
-        )
-        if applies
-    ]
+    limited = _limited(limit_enabled, limit_percent)
+    signals = (
+        (
+            THROTTLE_REASONS[1],
+            None
+            if operating_state is None
+            else operating_state == THROTTLED_OPERATING_STATE,
+        ),
+        (
+            THROTTLE_REASONS[2],
+            None
+            if active_controls is None
+            else bool(active_controls & ACTIVE_POWER_CONTROL_BIT),
+        ),
+        (THROTTLE_REASONS[3], limited),
+    )
+    reasons = [reason for reason, applies in signals if applies]
     if reasons:
         return reasons[0] if len(reasons) == 1 else SEVERAL_REASONS
     # No reason found is only an answer once every source answered: a limit we
     # could not read may be the one that is throttling.
-    unknown = (
-        operating_state is None or active_controls is None or limit_enabled is None
-    )
+    unknown = any(applies is None for _, applies in signals)
     return None if unknown else NO_REASON
+
+
+def _limited(limit_enabled: bool | None, limit_percent: float | None) -> bool | None:
+    """Whether a limit below full power is switched on; None while that is unreadable.
+
+    An unimplemented percent decodes to None, and a limit that is on with an
+    unknown percent is not a limit below full power (audit E02).
+    """
+    if limit_enabled is None:
+        return None
+    if not limit_enabled:
+        return False
+    if limit_percent is None:
+        return None
+    return limit_percent < FULL_POWER_PERCENT
 
 
 def _within(value: float, centre: float, band: float) -> bool:

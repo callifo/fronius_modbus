@@ -24,6 +24,19 @@ class ClientIpResolutionError(RuntimeError):
     """Raised when the local IP for Modbus restriction cannot be resolved."""
 
 
+class FroniusWebUnreachable(OSError):
+    """No answer from the web server: the same switched-off device as on Modbus.
+
+    Carries the requests error type only. Requests puts the URL, and with it
+    the host, into its messages, and Home Assistant logs travel with bug
+    reports (audit E01).
+    """
+
+
+class FroniusWebResponseError(RuntimeError):
+    """The web server answered with an error status: a device that is up and refusing."""
+
+
 class FroniusWebAuthError(RuntimeError):
     """Raised when Fronius Web API authentication fails."""
 
@@ -426,30 +439,36 @@ class FroniusWebClient:
     def _request(
         self, method: str, path: str, payload: dict | None = None
     ) -> requests.Response:
-        response = requests.request(
-            method,
-            f"http://{self._host}{path}",
-            auth=self._auth,
-            json=payload,
-            timeout=self._timeout,
-        )
+        response = self._send(method, path, auth=self._auth, json=payload)
         if response.status_code in (401, 403):
             raise FroniusWebAuthError(
                 f"Fronius Web API auth failed with status {response.status_code}"
             )
-        response.raise_for_status()
+        return response
+
+    def _send(self, method: str, path: str, **options: Any) -> requests.Response:
+        """The one place requests is called, so its errors are translated once."""
+        try:
+            response = requests.request(
+                method, f"http://{self._host}{path}", timeout=self._timeout, **options
+            )
+        except requests.RequestException as err:
+            raise FroniusWebUnreachable(type(err).__name__) from err
+        if response.status_code in (401, 403):
+            return response
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as err:
+            raise FroniusWebResponseError(
+                f"HTTP {response.status_code} on {path}"
+            ) from err
         return response
 
     def _get_json(self, path: str) -> dict[str, Any]:
         return self._request("get", path).json()
 
     def _get_public_json(self, path: str) -> dict[str, Any]:
-        response = requests.get(
-            f"http://{self._host}{path}",
-            timeout=self._timeout,
-        )
-        response.raise_for_status()
-        return response.json()
+        return self._send("get", path).json()
 
     def _post_ok(self, path: str, payload: dict[str, Any] | None = None) -> bool:
         return self._request("post", path, payload=payload).ok
@@ -653,7 +672,7 @@ class FroniusWebClient:
         """Read current Export Limit Control configuration from the inverter."""
         try:
             return self._get_json("/api/config/limit_settings/powerLimits")
-        except requests.HTTPError:
+        except FroniusWebResponseError:
             return {}
 
     def set_export_soft_limit(self, power_w: int) -> bool:

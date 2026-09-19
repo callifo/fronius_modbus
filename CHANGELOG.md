@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 1.1.1
+
+An audit round on 1.1.0: log hygiene on the web side, two sentinel and retry edge cases, and
+reproducible CI pins. No entity changes.
 
 ### Fixed
 - Web API transport errors no longer carry the device address into the log, on the poll and on the login. Every call into requests goes through one function that translates its errors, and a guard keeps it that way, so a bug report's log names the error type, not the host.

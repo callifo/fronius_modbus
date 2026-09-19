@@ -450,22 +450,24 @@ class FroniusWebClient:
         )
 
     def _request(
-        self, method: str, path: str, payload: dict | None = None
+        self,
+        method: str,
+        path: str,
+        payload: dict | None = None,
+        *,
+        authenticated: bool = True,
     ) -> requests.Response:
-        response = self._send(method, path, auth=self._auth, json=payload)
+        response = _http(
+            method,
+            f"http://{self._host}{path}",
+            auth=self._auth if authenticated else None,
+            json=payload,
+            timeout=self._timeout,
+        )
         if response.status_code in (401, 403):
             raise FroniusWebAuthError(
                 f"Fronius Web API auth failed with status {response.status_code}"
             )
-        return response
-
-    def _send(self, method: str, path: str, **options: Any) -> requests.Response:
-        """Answers with an error status become response errors, auth failures pass."""
-        response = _http(
-            method, f"http://{self._host}{path}", timeout=self._timeout, **options
-        )
-        if response.status_code in (401, 403):
-            return response
         try:
             response.raise_for_status()
         except requests.HTTPError as err:
@@ -478,7 +480,7 @@ class FroniusWebClient:
         return self._request("get", path).json()
 
     def _get_public_json(self, path: str) -> dict[str, Any]:
-        return self._send("get", path).json()
+        return self._request("get", path, authenticated=False).json()
 
     def _post_ok(self, path: str, payload: dict[str, Any] | None = None) -> bool:
         return self._request("post", path, payload=payload).ok

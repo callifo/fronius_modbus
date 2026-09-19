@@ -9,6 +9,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components import fronius_modbus
 from custom_components.fronius_modbus import config_flow
 from custom_components.fronius_modbus.const import DOMAIN
+from custom_components.fronius_modbus.froniuswebclient import FroniusWebResponseError
 from custom_components.fronius_modbus.token_store import async_get_token_store
 from homeassistant.data_entry_flow import FlowResultType
 
@@ -93,6 +94,22 @@ async def test_a_second_flow_for_the_same_host_aborts(hass, mock_modbus):
 
 async def test_an_unreachable_inverter_shows_cannot_connect(hass, mock_modbus):
     mock_modbus.fail_requests(INVERTER_UNIT_ID, ModbusConnectionError())
+
+    result = await run_flow(hass)
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "cannot_connect"}
+
+
+async def test_a_web_server_error_during_setup_shows_cannot_connect(
+    hass, mock_modbus, monkeypatch
+):
+    """Own reaudit: a 500 while enabling Modbus stopped being an OSError and crashed the flow."""
+
+    def refuse(self, *_args):
+        raise FroniusWebResponseError("HTTP 500 on /api/config/modbus")
+
+    monkeypatch.setattr(config_flow.FroniusWebClient, "ensure_modbus_enabled", refuse)
 
     result = await run_flow(hass)
 

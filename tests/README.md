@@ -79,8 +79,9 @@ because the thing it prevents happened, here or in a sibling project.
 
 ### test_log_hygiene.py
 
-Two things at once. An AST scan over the package refuses any logger call that
-passes a host, serial, token or URL: Home Assistant logs travel to GitHub with
+Three things at once. An AST scan over the package refuses any logger call that
+passes a host, serial, token or URL, and a second scan allows exactly one
+function to call into `requests`, because its error text carries the URL: Home Assistant logs travel to GitHub with
 bug reports, and diagnostics already carry those values redacted. Drop the
 value from the message rather than adding an exception here.
 

@@ -3,8 +3,8 @@
 # validations are CI-only workflows.
 #
 # Run this before calling a change done; the Test workflow runs the same set,
-# and a guard in tests/test_guards.py fails if the two ever drift apart. The order is cheap to
-# expensive, stopping at the first failure.
+# and a guard in tests/test_guards.py fails if the two ever drift apart. The
+# order is cheap to expensive, stopping at the first failure.
 #
 # Anything machine-local arrives through the environment, never as a path in
 # this file:

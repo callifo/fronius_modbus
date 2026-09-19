@@ -327,5 +327,12 @@
     "old": "                self._polled = (*self._polled, name)\n                await self._async_update_component(name, report)",
     "new": "                self._polled = (*self._polled, name)\n                await self._component(name).async_update()\n                report.updated.append(name)",
     "tests": "a_recovered_meters_first_bad_read_stays_in_its_report"
+  },
+  {
+    "label": "config_flow: a web server error during setup is cannot_connect",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "        HomeAssistantError,\n        FroniusWebResponseError,\n        OSError,",
+    "new": "        HomeAssistantError,\n        OSError,",
+    "tests": "a_web_server_error_during_setup_shows_cannot_connect"
   }
 ]

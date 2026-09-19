@@ -1165,6 +1165,9 @@ class FroniusModbusClient(ExtModbusClient):
                 ext_control_mode = 0
             elif raw['storage_control_mode'] in [1, 3] and raw['charge_power'] == 0:
                 ext_control_mode = 7
+            elif raw['storage_control_mode'] == 1 and raw['charge_power'] < 0:
+                # what set_grid_discharge_mode() plus a target power writes
+                ext_control_mode = 5
             elif raw['storage_control_mode'] == 1:
                 ext_control_mode = 1
             elif raw['storage_control_mode'] in [2, 3] and raw['discharge_power'] < 0:

@@ -3,6 +3,7 @@
 import asyncio
 from dataclasses import replace
 from datetime import timedelta
+import logging
 import time
 from types import SimpleNamespace
 
@@ -499,3 +500,38 @@ async def test_an_unimplemented_enable_flag_leaves_the_throttle_reason_unknown(
     assert runtime.device.controls.w_max_lim_ena is None
     description = _description(entities.sensor_descriptions(runtime), "throttle_reason")
     assert description.value_fn(runtime) is None
+
+
+# Model-203 TotWhExp of the captured meter: two registers, 0 is SunSpec's "not accumulated".
+METER_EXPORTED_ADDRESS = 40107
+
+
+async def test_a_zero_accumulator_is_no_reading_not_a_reset(
+    hass, entry, connection, caplog
+):
+    """callifo #125: after a firmware update the meter served 0 Wh for a while.
+
+    Upstream's guard refused it on every poll and logged each time; a guard that
+    adopted it after three polls would hand the energy dashboard a false reset.
+    The library decodes an accumulator of 0 as None, and None is no observation.
+    """
+    runtime = await make_runtime(hass, entry, connection)
+    description = _description(
+        entities.sensor_descriptions(runtime), "meter_200_exported"
+    )
+    sensor = entities.FroniusTotalSensor(runtime, entry, description)
+    sensor.hass = hass
+    before = sensor.native_value
+    assert before
+
+    meter = connection.for_unit(METER_UNIT_ID)
+    meter.holding[METER_EXPORTED_ADDRESS] = 0
+    meter.holding[METER_EXPORTED_ADDRESS + 1] = 0
+    with caplog.at_level(logging.WARNING):
+        for _ in range(entities.TOTAL_INCREASING_RESET_POLLS + 1):
+            await runtime.modbus.async_refresh()
+            sensor._observe_poll()
+
+    assert description.value_fn(runtime) is None
+    assert sensor.native_value == before
+    assert not [r for r in caplog.records if r.name.endswith("entities")]

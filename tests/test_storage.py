@@ -1,6 +1,7 @@
 """The storage mode automaton and its write sequences, watched through the mock's write events."""
 
 import asyncio
+import logging
 from types import SimpleNamespace
 
 from modbus_connection import ServerDeviceFailureError
@@ -336,3 +337,38 @@ async def test_charge_from_grid_at_zero_watts_keeps_its_mode_across_polls(contro
         await control._storage.async_update()
         control.sync_from_device()
     assert control.extended_mode is ExtendedMode.CHARGE_FROM_GRID
+
+
+# The register images evcc writes for its battery modes (fronius-gen24 template):
+# the same extended modes on a different base mode than this integration writes.
+EVCC_IMAGES = [
+    ("hold", 2, 0, 10000, ExtendedMode.BLOCK_DISCHARGING),
+    ("holdcharge", 1, 10000, 0, ExtendedMode.BLOCK_CHARGING),
+    ("discharge", 3, 10000, -10000 & 0xFFFF, ExtendedMode.DISCHARGE_TO_GRID),
+]
+
+
+@pytest.mark.parametrize(
+    ("label", "stor_ctl_mod", "out_w_rte", "in_w_rte", "expected"), EVCC_IMAGES
+)
+async def test_a_mode_another_controller_wrote_is_adopted_once_not_every_poll(
+    control, caplog, label, stor_ctl_mod, out_w_rte, in_w_rte, expected
+):
+    """callifo #138: evcc's images map to our modes but not to the images we write.
+
+    Judging them against our own write image made every poll an "outside change".
+    """
+    unit = control._storage.modbus_unit
+    unit.holding[STOR_CTL_MOD] = stor_ctl_mod
+    unit.holding[OUT_W_RTE] = out_w_rte
+    unit.holding[IN_W_RTE] = in_w_rte
+    await control._storage.async_update()
+    control.sync_from_device()
+    assert control.extended_mode is expected
+
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        await control._storage.async_update()
+        control.sync_from_device()
+    assert control.extended_mode is expected
+    assert [r.getMessage() for r in caplog.records] == []

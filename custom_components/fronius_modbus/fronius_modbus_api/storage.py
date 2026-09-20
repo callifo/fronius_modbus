@@ -96,7 +96,14 @@ def _registers_fit(
     The grid modes leave one rate to the user, so several register images
     map to the same extended mode; a plain re-derivation would flip between
     them (Charge from Grid at 0 W reads exactly like Block Discharging).
+
+    Another controller may write the same mode on a different base mode -
+    evcc holds with StorCtl_Mod 2 where this integration writes 3 - and an
+    image that derives to the mode is that mode, whoever wrote it. Judged
+    against our own image alone, every poll was an "outside change".
     """
+    if _derive_extended_mode(mode, in_rate, out_rate) is extended_mode:
+        return True
     expected_mode, expected_in, expected_out = _MODE_TABLE[extended_mode]
     if mode != expected_mode:
         return False

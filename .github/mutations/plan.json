@@ -341,5 +341,12 @@
     "old": "            if self._tickets[method.__name__] != ticket:\n                return None\n",
     "new": "",
     "tests": "a_burst_of_values_reaches_the_device_as_first_and_last"
+  },
+  {
+    "label": "storage: an image that derives to the chosen mode fits it",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "    if _derive_extended_mode(mode, in_rate, out_rate) is extended_mode:\n        return True\n",
+    "new": "",
+    "tests": "a_mode_another_controller_wrote_is_adopted_once_not_every_poll"
   }
 ]

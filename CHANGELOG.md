@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Fixed
+- A storage mode another controller wrote on a different base mode, the way evcc holds with `StorCtl_Mod` 2 where this integration writes 3, is adopted once instead of being logged as an outside change on every poll.
+
 ### Changed
 - A burst of values for one web control reaches the inverter as its first and its last value. Calls queued behind a running write return once a newer value has taken their place, so an automation stepping a limit ten times no longer stalls the inverter's Modbus side ten times. The last caller still receives the last write's error.
 

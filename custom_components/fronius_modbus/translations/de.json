@@ -89,6 +89,9 @@
       "soc_maximum": {
         "name": "Maximaler SoC"
       },
+      "backup_reserve": {
+        "name": "Notstromreserve"
+      },
       "ac_limit_rate": {
         "name": "AC-Leistungsbegrenzung"
       },

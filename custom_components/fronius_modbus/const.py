@@ -89,6 +89,7 @@ STORAGE_MODBUS_NUMBER_TYPES = [
 STORAGE_API_NUMBER_TYPES = [
     ['api_battery_power', 'api_battery_power', {'min': -20000, 'max': 20000, 'step': 10, 'mode': 'box', 'unit': 'W'}],
     ['soc_maximum', 'soc_maximum', {'min': 0, 'max': 100, 'step': 1, 'mode': 'box', 'unit': '%'}],
+    ['backup_reserve', 'backup_reserve', {'min': 5, 'max': 100, 'step': 1, 'mode': 'slider', 'unit': '%'}],
 ]
 
 INVERTER_NUMBER_TYPES = [

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- A burst of values for one web control reaches the inverter as its first and its last value. Calls queued behind a running write return once a newer value has taken their place, so an automation stepping a limit ten times no longer stalls the inverter's Modbus side ten times. The last caller still receives the last write's error.
+
 ## 1.1.1
 
 An audit round on 1.1.0: log hygiene on the web side, two sentinel and retry edge cases, and

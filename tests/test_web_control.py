@@ -10,7 +10,10 @@ from custom_components.fronius_modbus.const import (
     DOMAIN,
     SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX,
 )
-from custom_components.fronius_modbus.froniuswebclient import FroniusWebAuthError
+from custom_components.fronius_modbus.froniuswebclient import (
+    FroniusWebAuthError,
+    FroniusWebResponseError,
+)
 from custom_components.fronius_modbus.token_store import async_get_token_store
 from custom_components.fronius_modbus.web_control import FroniusWebControl
 from homeassistant.helpers import issue_registry as ir
@@ -405,3 +408,77 @@ async def test_the_soc_mode_select_opens_the_window_for_writing(control):
     await control.set_soc_mode(manual=False)
     assert control._client.calls[-1] == ("soc_mode", "auto")
     assert not control.soc_mode_is_manual
+
+
+def _hold_the_first_write(control) -> asyncio.Event:
+    """Park the first web write until released, so a burst can pile up behind it."""
+    release = asyncio.Event()
+    job = control._async_web_job
+    held = []
+
+    async def holding_job(func, *args, **kwargs):
+        if not held:
+            held.append(True)
+            await release.wait()
+        return await job(func, *args, **kwargs)
+
+    control._async_web_job = holding_job
+    return release
+
+
+async def test_a_burst_of_values_reaches_the_device_as_first_and_last(control):
+    """Ten input-box steps were ten web writes; the inverter stalls Modbus after each."""
+    await control.async_refresh()
+    release = _hold_the_first_write(control)
+    burst = [
+        asyncio.ensure_future(control.set_backup_reserve(p))
+        for p in (10, 20, 30, 40, 50)
+    ]
+    await asyncio.sleep(0)
+    release.set()
+    await asyncio.gather(*burst)
+    assert [c for c in control._client.calls if c[0] == "reserve"] == [
+        ("reserve", 10),
+        ("reserve", 50),
+    ]
+    assert control.data.backup_reserved == 50
+
+
+async def test_the_last_writer_of_a_burst_gets_the_error(control):
+    await control.async_refresh()
+    written = control._client.set_backup_reserve
+
+    def refuse_fifty(percent):
+        if percent == 50:
+            raise FroniusWebResponseError("HTTP 500")
+        return written(percent)
+
+    control._client.set_backup_reserve = refuse_fifty
+    release = _hold_the_first_write(control)
+    burst = [
+        asyncio.ensure_future(control.set_backup_reserve(p))
+        for p in (10, 20, 30, 40, 50)
+    ]
+    await asyncio.sleep(0)
+    release.set()
+    results = await asyncio.gather(*burst, return_exceptions=True)
+    assert results[:4] == [None] * 4
+    assert isinstance(results[4], FroniusWebResponseError)
+    assert control.data.backup_reserved == 10
+
+
+async def test_different_controls_do_not_supersede_each_other(control):
+    control._client.battery.update(HYB_EM_MODE=0, BAT_M0_SOC_MODE="manual")
+    await control.async_refresh()
+    release = _hold_the_first_write(control)
+    both = [
+        asyncio.ensure_future(control.set_backup_reserve(30)),
+        asyncio.ensure_future(control.set_soc_maximum(90)),
+    ]
+    await asyncio.sleep(0)
+    release.set()
+    await asyncio.gather(*both)
+    assert [c for c in control._client.calls if c[0] in ("reserve", "soc")] == [
+        ("reserve", 30),
+        ("soc", 5, 90, 30),
+    ]

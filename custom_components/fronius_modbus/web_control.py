@@ -44,6 +44,29 @@ def _serialised(method):
     return wrapper
 
 
+def _last_writer_wins(method):
+    """Serialise like _serialised, but a burst reaches the device as its first and last value.
+
+    Every call takes a ticket; whoever holds the lock while a newer ticket
+    exists returns without writing, because that newer call carries the value
+    now. Each write the inverter takes costs it seconds of Modbus, so ten steps
+    of one control must not become ten writes. The last caller still gets the
+    last write's error.
+    """
+
+    @functools.wraps(method)
+    async def wrapper(self, *args, **kwargs):
+        ticket = self._tickets[method.__name__] = (
+            self._tickets.get(method.__name__, 0) + 1
+        )
+        async with self._write_lock:
+            if self._tickets[method.__name__] != ticket:
+                return None
+            return await method(self, *args, **kwargs)
+
+    return wrapper
+
+
 # The inverter drops Modbus for a while after a battery configuration write over the web API.
 BATTERY_WRITE_MODBUS_RECOVERY_SECONDS = 30.0
 BATTERY_WRITE_WEB_REFRESH_DELAY_SECONDS = 10.0
@@ -217,6 +240,7 @@ class FroniusWebControl:
         # One write at a time (audit F10): concurrent read-modify-write of the
         # SoC tuple or the charge-source pair lost one of the two changes.
         self._write_lock = asyncio.Lock()
+        self._tickets: dict[str, int] = {}
         self.data = WebData()
         self._coordinator: Any = None
         self._delayed_refresh_task: asyncio.Task | None = None
@@ -556,7 +580,7 @@ class FroniusWebControl:
 
         return next_soc_min, next_soc_max, next_backup_reserved
 
-    @_serialised
+    @_last_writer_wins
     async def apply_soc_minimum(
         self, soc_min: int, write_modbus: Callable[[], Awaitable[None]]
     ) -> None:
@@ -638,7 +662,7 @@ class FroniusWebControl:
             self.data.battery_power_w = display_power
         self._start_battery_write_transition("self-consumption optimisation")
 
-    @_serialised
+    @_last_writer_wins
     async def set_battery_power_w(self, value: float) -> None:
         """Set the target feed-in power in manual self-consumption optimisation."""
         if not self._client:
@@ -656,14 +680,14 @@ class FroniusWebControl:
         self._set_effective_battery_mode(BATTERY_MODE_MANUAL, self.data.soc_mode_raw)
         self._start_battery_write_transition("Target feed in")
 
-    @_serialised
+    @_last_writer_wins
     async def set_soc_maximum(self, soc_max: int) -> None:
         """Set the maximum state of charge in manual SoC mode."""
         if not self._client:
             raise RuntimeError(WEB_API_NOT_CONFIGURED)
         await self._set_api_soc_manual(soc_max=soc_max, control_name="SoC Maximum")
 
-    @_serialised
+    @_last_writer_wins
     async def set_soc_minimum_manual(self, soc_min: int) -> None:
         """Set the web API's minimum state of charge in manual SoC mode."""
         if not self._client:
@@ -682,7 +706,7 @@ class FroniusWebControl:
         self._set_effective_battery_mode(self.data.battery_mode_raw, mode)
         self._start_battery_write_transition("SoC mode")
 
-    @_serialised
+    @_last_writer_wins
     async def set_backup_reserve(self, percent: int) -> None:
         """Set the backup power reserve; the inverter offers it in either battery mode."""
         if not self._client:
@@ -733,7 +757,7 @@ class FroniusWebControl:
         self.data.charge_from_ac = next_charge_from_ac
         self._start_battery_write_transition("battery charge source")
 
-    @_serialised
+    @_last_writer_wins
     async def set_export_soft_limit_w(self, value: float) -> None:
         """Set the export soft limit; only the technician role may write it."""
         client = self._client

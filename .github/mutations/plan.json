@@ -177,7 +177,7 @@
   {
     "label": "web control: the two-protocol SoC write holds the web lock",
     "path": "custom_components/fronius_modbus/web_control.py",
-    "old": "    @_serialised\n    async def apply_soc_minimum(",
+    "old": "    @_last_writer_wins\n    async def apply_soc_minimum(",
     "new": "    async def apply_soc_minimum(",
     "tests": "concurrent_maximum_cannot_slip_between_check_and_write"
   },
@@ -334,5 +334,12 @@
     "old": "        HomeAssistantError,\n        FroniusWebResponseError,\n        OSError,",
     "new": "        HomeAssistantError,\n        OSError,",
     "tests": "a_web_server_error_during_setup_shows_cannot_connect"
+  },
+  {
+    "label": "web_control: a superseded write is skipped",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "            if self._tickets[method.__name__] != ticket:\n                return None\n",
+    "new": "",
+    "tests": "a_burst_of_values_reaches_the_device_as_first_and_last"
   }
 ]

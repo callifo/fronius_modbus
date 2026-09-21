@@ -327,3 +327,27 @@ async def test_a_model_that_moves_during_a_retry_is_not_published(
     # Nothing is published at the new addresses; the entry reloads instead.
     assert coordinator.device.controls is controls_component
     reload_entry.assert_called_once_with(entry.entry_id)
+
+
+async def test_a_mode_written_while_a_poll_runs_is_neither_dropped_nor_undone(
+    coordinator, inverter_unit
+):
+    """The 0.1 line had a busy flag that dropped writes landing during a poll, silently.
+
+    Here a write and a poll share nothing but the connection, and the chosen
+    mode survives the poll that was running while it was written.
+    """
+    await coordinator.async_refresh()
+    storage = coordinator.storage_control
+    assert storage is not None
+    written = []
+    inverter_unit.on_write(written.append)
+
+    await asyncio.gather(
+        coordinator.async_refresh(), storage.set_mode(ExtendedMode.BLOCK_CHARGING)
+    )
+    await coordinator.async_refresh()
+
+    assert written
+    assert storage.extended_mode is ExtendedMode.BLOCK_CHARGING
+    assert inverter_unit.holding[STORAGE_CONTROL_MODE_ADDRESS] == 3

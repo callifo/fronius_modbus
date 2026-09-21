@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 1.1.2
+
+First field feedback on 1.1.x and a second controller on the same inverter. Three fixes, and
+write bursts are coalesced instead of hidden behind sliders.
 
 ### Fixed
 - A web write shows its value at once. The select for self-consumption optimisation snapped back to the old option and only caught up with the delayed refresh ten seconds later; every web write now hands the entities its result immediately.

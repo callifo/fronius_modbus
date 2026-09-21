@@ -89,6 +89,9 @@
       "soc_maximum": {
         "name": "SoC Maximum"
       },
+      "backup_reserve": {
+        "name": "Backup reserve"
+      },
       "ac_limit_rate": {
         "name": "AC limit rate"
       },

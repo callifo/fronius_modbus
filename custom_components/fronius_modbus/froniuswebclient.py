@@ -595,6 +595,10 @@ class FroniusWebClient:
         }
         return self._post_ok("/api/config/batteries", payload)
 
+    def set_backup_reserve(self, percent: int) -> bool:
+        """Write only the backup power reserve; the inverter offers it in either battery mode."""
+        return self._post_ok("/api/config/batteries", {"HYB_BACKUP_RESERVED": int(percent)})
+
     def set_battery_charge_sources(self, charge_from_grid: bool, charge_from_ac: bool) -> bool:
         payload = {
             "HYB_EVU_CHARGEFROMGRID": bool(charge_from_grid),

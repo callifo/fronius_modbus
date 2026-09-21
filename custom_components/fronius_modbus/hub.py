@@ -46,6 +46,22 @@ def _serialized_write(func):
     return wrapper
 
 
+def _last_write_wins(func):
+    """Serialize like _serialized_write, but a burst of calls reaches the device as its
+    first and its last value: a caller that finds a newer call queued behind it returns
+    without writing. Every write to /api/config/batteries costs the inverter seconds of
+    Modbus, so five quick steps of one control must not become five writes."""
+    @wraps(func)
+    async def wrapper(self, *args, **kwargs):
+        ticket = self._write_tickets[func.__name__] = self._write_tickets.get(func.__name__, 0) + 1
+        async with self._write_lock:
+            if self._write_tickets[func.__name__] != ticket:
+                return None
+            return await func(self, *args, **kwargs)
+
+    return wrapper
+
+
 def _export_limit_summary(config: dict[str, Any] | None) -> dict[str, Any]:
     if not isinstance(config, dict) or not config:
         return {"available": False}
@@ -83,7 +99,7 @@ WEB_API_DATA_KEYS = (
     "api_soc_mode",
     "api_soc_min",
     "soc_maximum",
-    "api_backup_reserved",
+    "backup_reserve",
     "api_charge_from_ac",
     "api_charge_from_grid",
     "export_soft_limit",
@@ -269,6 +285,7 @@ class Hub:
         self._scan_interval = timedelta(seconds=scan_interval)
         self.coordinator = None
         self._write_lock = asyncio.Lock()
+        self._write_tickets: dict[str, int] = {}
         self._battery_write_transition_until = 0.0
         self._battery_write_transition_warned = False
         self._delayed_web_refresh_task: asyncio.Task | None = None
@@ -756,7 +773,7 @@ class Hub:
         api_soc_min = self._as_int(battery_config.get('BAT_M0_SOC_MIN'))
         self.data['api_soc_min'] = api_soc_min
         self.data['soc_maximum'] = self._as_int(battery_config.get('BAT_M0_SOC_MAX'))
-        self.data['api_backup_reserved'] = self._as_int(battery_config.get('HYB_BACKUP_RESERVED'))
+        self.data['backup_reserve'] = self._as_int(battery_config.get('HYB_BACKUP_RESERVED'))
         if effective_mode == 1 and api_soc_min is not None:
             self.data['soc_minimum'] = api_soc_min
         self.data['api_charge_from_ac'] = self._enabled_bool(battery_config.get('HYB_BM_CHARGEFROMAC'))
@@ -943,7 +960,7 @@ class Hub:
             soc_min=soc_min,
             soc_max=soc_max,
         )
-        next_backup_reserved = self._as_int(self.data.get('api_backup_reserved'))
+        next_backup_reserved = self._as_int(self.data.get('backup_reserve'))
         next_backup_reserved = 5 if next_backup_reserved is None else next_backup_reserved
         if next_backup_reserved < 5 or next_backup_reserved > 100:
             raise ValueError('Battery backup reserve must be between 5 and 100')
@@ -993,7 +1010,7 @@ class Hub:
         self.data['soc_minimum'] = next_soc_min
         self.data['api_soc_min'] = next_soc_min
         self.data['soc_maximum'] = next_soc_max
-        self.data['api_backup_reserved'] = next_backup_reserved
+        self.data['backup_reserve'] = next_backup_reserved
         self._start_battery_write_transition(control_name)
         return next_soc_min, next_soc_max, next_backup_reserved
 
@@ -1292,6 +1309,23 @@ class Hub:
         self.data['api_charge_from_grid'] = next_charge_from_grid
         self.data['api_charge_from_ac'] = next_charge_from_ac
         self._start_battery_write_transition('battery charge source')
+
+    @_last_write_wins
+    async def set_backup_reserve(self, value: float) -> None:
+        """Set the backup power reserve; independent of the battery mode and the SoC window."""
+        client = self._webclient
+        if client is None:
+            raise RuntimeError("Fronius Web API is not configured")
+        percent = int(round(value))
+        if percent < 5 or percent > 100:
+            raise ValueError('Battery backup reserve must be between 5 and 100')
+        await self._async_web_job(
+            client.set_backup_reserve,
+            percent,
+            raise_on_auth_failure=True,
+        )
+        self.data['backup_reserve'] = percent
+        self._start_battery_write_transition('backup reserve')
 
     @_serialized_write
     async def set_api_charge_sources(

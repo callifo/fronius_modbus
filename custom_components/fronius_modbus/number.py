@@ -193,6 +193,8 @@ class FroniusModbusNumber(FroniusModbusBaseEntity, NumberEntity):
             await self._hub.set_api_soc_values(soc_max=int(round(value)))
         elif self._key == 'export_soft_limit':
             await self._hub.set_export_soft_limit(value)
+        elif self._key == 'backup_reserve':
+            await self._hub.set_backup_reserve(value)
 
         self.async_write_ha_state()
 
@@ -230,4 +232,6 @@ class FroniusModbusNumber(FroniusModbusBaseEntity, NumberEntity):
             )
         if self._key == 'export_soft_limit':
             return self._hub.tech_configured
+        if self._key == 'backup_reserve':
+            return self._hub.web_api_configured and data.get('backup_reserve') is not None
         return False

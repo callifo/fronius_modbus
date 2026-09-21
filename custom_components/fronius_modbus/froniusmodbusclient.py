@@ -129,6 +129,8 @@ class FroniusModbusClient(ExtModbusClient):
         self._load_meter_sample_ts: dict[int, float] = {}
         self._last_mppt_debug_summary: tuple[Any, ...] | None = None
         self.data = {}
+        # Keys whose last total-increasing reading was rejected: warned once, then quiet.
+        self._lfte_rejected: set[str] = set()
         self.reset_storage_info()
 
     def reset_storage_info(self) -> None:
@@ -811,35 +813,45 @@ class FroniusModbusClient(ExtModbusClient):
     def protect_lfte(self, key, value):
         ''' ensure lfte values are monotonically increasing to fullfil the properties of SensorStateClass.TOTAL_INCREASING.
             Therfore this function returns the previous, last known good value, in case the modbus read was erroneus:
-            * the current value from modbus is None
+            * the current value from modbus is None or 0 (SunSpec: an accumulator of 0 is "not accumulated")
             * the current value from modbus is smaller than the previous value
             * the current value from modbus is much larger then the previous value
-            This avoids wrong spikes in consumption / production on the energy dashboard
+            This avoids wrong spikes in consumption / production on the energy dashboard.
+            A rejected reading is logged once; the inverter serves the same bad value on every
+            poll after a firmware update (#125), and a warning per poll buries the log.
         '''
 
-        if key not in self.data:
+        previous = self.data.get(key)
+        if value is None or value == 0:
+            # No reading, not a reset: SunSpec accumulators report 0 while the
+            # device has nothing accumulated yet, e.g. right after a firmware
+            # update. Checked before the first-value branches: a start during
+            # that phase must not adopt 0 as the baseline, or the real counter
+            # would then exceed the step limit and be rejected for good.
+            _LOGGER.debug("No accumulated value for %s yet, keeping %s", key, previous)
+            return previous
+        elif previous is None:
             _LOGGER.debug("Initializing total-increasing guard for %s=%s", key, value)
             return value
-        elif self.data[key] is None:
-            # None is a invalid value for monotonically increasing data.
-            # hopefully never happens
-            _LOGGER.debug("Replacing initial None value for %s with %s", key, value)
-            return value
-        elif value is None:
-            _LOGGER.warning("Received implausible %s=%s. Using previous plausible value %s", key, value, self.data[key])
-            return self.data[key]
         elif value < self.data[key]:
-            _LOGGER.warning("Received implausible %s=%s below previous plausible value %s", key, value, self.data[key])
+            self._reject_lfte(key, value, "below")
             return self.data[key]
         elif value > self.data[key] + 100000:
             # we allow steps of 100 kWh. Usually, at a typicall rate every 10 seconds the steps should be far below.
             # However, when data transfer is not working for minutes or even an hour it could become relevant.
             # Also, wrong values are often by orders of magnitude to large, which should still be avoided by this check.
-
-            _LOGGER.warning("Received implausible %s=%s above previous plausible value %s", key, value, self.data[key])
+            self._reject_lfte(key, value, "above")
             return self.data[key]
         else:
+            if key in self._lfte_rejected:
+                self._lfte_rejected.discard(key)
+                _LOGGER.info("%s reads plausibly again: %s", key, value)
             return value
+
+    def _reject_lfte(self, key, value, direction: str) -> None:
+        log = _LOGGER.debug if key in self._lfte_rejected else _LOGGER.warning
+        self._lfte_rejected.add(key)
+        log("Received implausible %s=%s %s previous plausible value %s", key, value, direction, self.data[key])
 
     @_safe_read("mppt")
     async def read_mppt_data(self):

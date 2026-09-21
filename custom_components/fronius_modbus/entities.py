@@ -868,7 +868,11 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         report_name=REPORT_NAMEPLATE,
         value_fn=lambda r: assume_present(r.device.nameplate).wh_rtg,
         exists_fn=_storage_present,
-        device_class=SensorDeviceClass.ENERGY,
+        # A rating in Wh is stored energy, not energy flow: that device class
+        # allows the measurement state class the 0.3 statistics were recorded
+        # with, where the energy device class does not (discussion #6).
+        device_class=SensorDeviceClass.ENERGY_STORAGE,
+        state_class=SensorStateClass.MEASUREMENT,
         unit="Wh",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
@@ -1393,7 +1397,7 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
         native_min_value=0,
         native_max_value=100,
         native_step=1,
-        mode=NumberMode.SLIDER,
+        mode=NumberMode.BOX,
         native_unit_of_measurement="%",
     ),
     FroniusNumberDescription(
@@ -1410,7 +1414,7 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
         native_min_value=5,
         native_max_value=100,
         native_step=1,
-        mode=NumberMode.SLIDER,
+        mode=NumberMode.BOX,
         native_unit_of_measurement="%",
     ),
     FroniusNumberDescription(
@@ -1426,7 +1430,7 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
         native_min_value=5,
         native_max_value=100,
         native_step=1,
-        mode=NumberMode.SLIDER,
+        mode=NumberMode.BOX,
         native_unit_of_measurement="%",
         icon="mdi:home-battery",
     ),

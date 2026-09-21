@@ -509,8 +509,7 @@ class FroniusWebControl:
                 await asyncio.sleep(BATTERY_WRITE_WEB_REFRESH_DELAY_SECONDS)
                 if self._client:
                     await self.async_refresh()
-                    if self._coordinator is not None:
-                        self._coordinator.async_set_updated_data(replace(self.data))
+                    self._publish()
             except asyncio.CancelledError:
                 raise
             except Exception as err:
@@ -520,8 +519,18 @@ class FroniusWebControl:
 
     def _start_battery_write_transition(self, source: str) -> None:
         self._on_battery_write()
+        self._publish()
         self._schedule_delayed_web_refresh()
         _LOGGER.debug("Started the Modbus recovery window after a %s write", source)
+
+    def _publish(self) -> None:
+        """Hand the entities the state a write just produced.
+
+        The delayed refresh confirms it minutes later; until then the entity
+        would show the write undone (discussion #6).
+        """
+        if self._coordinator is not None:
+            self._coordinator.async_set_updated_data(replace(self.data))
 
     # -- setters -----------------------------------------------------------------
 
@@ -535,6 +544,7 @@ class FroniusWebControl:
             self._client.set_solar_api_enabled, enabled, raise_on_auth_failure=True
         )
         self.data.solar_api_enabled = bool(enabled)
+        self._publish()
         self._async_sync_solar_api_warning()
 
     @_serialised
@@ -772,5 +782,4 @@ class FroniusWebControl:
         if not result:
             raise RuntimeError("The inverter did not accept the export soft limit")
         self.data.export_soft_limit_w = limit_w
-        if self._coordinator is not None:
-            self._coordinator.async_set_updated_data(replace(self.data))
+        self._publish()

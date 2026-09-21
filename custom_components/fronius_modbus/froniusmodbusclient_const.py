@@ -129,17 +129,3 @@ STORAGE_EXT_CONTROL_MODE = {
     6: 'Block Discharging',
     7: 'Block Charging',
 }
-
-# Base storage control mode register values (StorCtl_Mod) that are consistent
-# with each extended mode: what the set_*_mode methods write, plus what the
-# startup derivation in read_inverter_storage_data maps to that extended mode.
-EXT_MODE_BASE_MODES = {
-    0: (0,),
-    1: (1,),
-    2: (2,),
-    3: (3,),
-    4: (2, 3),
-    5: (1, 2, 3),
-    6: (2, 3),
-    7: (1, 3),
-}

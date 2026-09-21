@@ -482,3 +482,30 @@ async def test_different_controls_do_not_supersede_each_other(control):
         ("reserve", 30),
         ("soc", 5, 90, 30),
     ]
+
+
+async def test_every_battery_write_shows_its_value_right_away(hass):
+    """Discussion #6: a select snapped back to the old value until the delayed refresh.
+
+    The control's own data was updated at once, the coordinator's copy only ten
+    seconds later, so the entity showed the write undone for that long.
+    """
+    pushed = []
+    control = make_control(hass)
+    control.attach_coordinator(
+        type("Coordinator", (), {"async_set_updated_data": pushed.append})()
+    )
+    try:
+        await control.async_refresh()
+        await control.set_battery_mode(1)
+        assert pushed[-1].battery_mode == "manual"
+        await control.set_soc_mode(manual=True)
+        assert pushed[-1].soc_mode == "manual"
+        await control.set_backup_reserve(30)
+        assert pushed[-1].backup_reserved == 30
+        await control.set_charge_sources(charge_from_grid=True)
+        assert pushed[-1].charge_from_grid is True
+        await control.set_solar_api_enabled(True)
+        assert pushed[-1].solar_api_enabled is True
+    finally:
+        control.shutdown()

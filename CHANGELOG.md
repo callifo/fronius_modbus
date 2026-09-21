@@ -3,9 +3,12 @@
 ## Unreleased
 
 ### Fixed
+- A web write shows its value at once. The select for self-consumption optimisation snapped back to the old option and only caught up with the delayed refresh ten seconds later; every web write now hands the entities its result immediately.
+- The storage `Capacity` sensor keeps its long-term statistics. 1.0.0b1 dropped its state class because Home Assistant does not allow `measurement` on the energy device class, which handed every upgrading installation a statistics repair; the rating is stored energy, and that device class allows it.
 - A storage mode another controller wrote on a different base mode, the way evcc holds with `StorCtl_Mod` 2 where this integration writes 3, is adopted once instead of being logged as an outside change on every poll.
 
 ### Changed
+- The web percent limits are input boxes again. The sliders of 1.1.0 were a stop-gap against write bursts, which the rule below now handles.
 - A burst of values for one web control reaches the inverter as its first and its last value. Calls queued behind a running write return once a newer value has taken their place, so an automation stepping a limit ten times no longer stalls the inverter's Modbus side ten times. The last caller still receives the last write's error.
 
 ## 1.1.1

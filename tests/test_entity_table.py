@@ -46,6 +46,8 @@ def test_every_legacy_key_is_still_registered():
         "button": _keys(entities.button_descriptions(runtime)),
     }
     for platform, legacy_keys in LEGACY.items():
+        if platform == "statistics":
+            continue
         assert set(legacy_keys) <= produced[platform], (
             f"{platform}: missing {set(legacy_keys) - produced[platform]}"
         )
@@ -68,6 +70,23 @@ def test_every_translation_key_has_a_name_in_every_language():
                 assert "name" in translations[platform].get(
                     description.translation_key, {}
                 ), (language, platform, description.translation_key)
+
+
+def test_every_sensor_that_carried_statistics_still_has_a_state_class():
+    """Discussion #6: dropping a state class hands every user a statistics repair.
+
+    The 0.3 line recorded long-term statistics for these; a sensor that loses its
+    state class makes Home Assistant offer to delete that history.
+    """
+    runtime = _everything_present()
+    by_key = {
+        d.key.replace("meter_200_", "meter_{unit}_").replace(
+            "mppt_module_0_", "mppt_module_{module}_"
+        ): d
+        for d in entities.sensor_descriptions(runtime)
+    }
+    without = [key for key in LEGACY["statistics"] if by_key[key].state_class is None]
+    assert without == []
 
 
 def test_no_energy_sensor_uses_the_measurement_state_class():

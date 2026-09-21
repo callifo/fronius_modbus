@@ -348,5 +348,19 @@
     "old": "    if _derive_extended_mode(mode, in_rate, out_rate) is extended_mode:\n        return True\n",
     "new": "",
     "tests": "a_mode_another_controller_wrote_is_adopted_once_not_every_poll"
+  },
+  {
+    "label": "web_control: a battery write is published to the entities at once",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        self._on_battery_write()\n        self._publish()\n",
+    "new": "        self._on_battery_write()\n",
+    "tests": "every_battery_write_shows_its_value_right_away"
+  },
+  {
+    "label": "entities: the capacity rating keeps its statistics",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "        device_class=SensorDeviceClass.ENERGY_STORAGE,\n        state_class=SensorStateClass.MEASUREMENT,\n",
+    "new": "        device_class=SensorDeviceClass.ENERGY_STORAGE,\n",
+    "tests": "every_sensor_that_carried_statistics_still_has_a_state_class"
   }
 ]

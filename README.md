@@ -91,12 +91,25 @@ The inverter keeps two independent switches, and the entities follow them:
 
 - `Self-consumption optimisation` is `HYB_EM_MODE`, the inverter's automatic/manual energy management. `Target Feed In` belongs to it.
 - `Web API SoC mode` is `BAT_M0_SOC_MODE`, the automatic/manual switch of the SoC window, and can be switched from Home Assistant. `SoC Minimum (Web API)` and `SoC Maximum` belong to it and are only writable while it is `manual`; switching self-consumption optimisation does not touch the window.
-- `Modbus storage reserve` is model 124 `MinRsvPct`. The inverter only applies it while a Modbus storage control mode is active; it is not the SoC minimum shown in the inverter's own UI. While the SoC mode is `manual`, writing it also writes `SoC Minimum (Web API)`.
+- `Modbus storage reserve` is model 124 `MinRsvPct`, a second minimum next to `SoC Minimum (Web API)`; see below.
 - entering Modbus `Charge from Grid` also enables the Web API `Charge from grid` and `Charge from AC` toggles when Web API is configured
 - turning on the Web API `Charge from grid` switch also enables `Charge from AC`
 - `Target Feed In` is ignored by the inverter when battery charging is unavailable
 - `Target Feed In` is only available while `Self-consumption optimisation` is `Manual`
 - `Backup reserve` is independent of both switches
+
+#### Two minimum SoC values
+
+The inverter has two minimum-SoC settings, read by two different regulators, and the integration shows both:
+
+| Entity                   | Register              | Who applies it                                                                                                                                                                       |
+| ------------------------ | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Modbus storage reserve` | model 124 `MinRsvPct` | The SunSpec storage control, only while a Modbus storage mode other than `Auto` is active (`StorCtl_Mod` not 0). In `Auto` the inverter ignores it.                                  |
+| `SoC Minimum (Web API)`  | `BAT_M0_SOC_MIN`      | The inverter's own battery management, the value its web UI shows, whenever `Web API SoC mode` is `manual`. In `Auto` this is the only minimum that counts.                          |
+
+Synchronisation goes one way: writing `Modbus storage reserve` also writes `SoC Minimum (Web API)` while the SoC mode is `manual`, because a web value under an automatic window would be ignored by the inverter. A change of the web minimum, in Home Assistant or in the inverter's UI, is not written into the Modbus register: that register only means something under an active Modbus mode, and the integration does not write registers whose effect depends on a mode the user did not choose.
+
+In practice: if you only use the inverter's own battery management (storage mode `Auto`), set `Web API SoC mode` to `manual` and use `SoC Minimum (Web API)` and `SoC Maximum`; leave the Modbus reserve alone. If you use the Modbus storage modes, set `Modbus storage reserve`; it is mirrored to the web window while that is `manual`.
 
 ### Controls
 

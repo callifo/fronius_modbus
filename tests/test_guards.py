@@ -27,6 +27,7 @@ PACKAGE = REPO / "custom_components" / "fronius_modbus"
 # emptying it - fails the index test below. This list is the answer to "what
 # stops the old problems coming back", for whoever asks in six months.
 GUARD_FILES = {
+    "test_step_texts.py": "no repair step borrows another flow's text; the settings form asks for no placeholder",
     "test_icon_translations.py": "icons live in icons.json and every entry names a real entity",
     "test_exception_translations.py": "every error a user can see has a message in every language",
     "test_parallel_updates.py": "every platform declares how many actions may run at once",

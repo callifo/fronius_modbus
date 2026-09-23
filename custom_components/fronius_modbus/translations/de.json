@@ -510,7 +510,7 @@
         "step": {
           "init": {
             "title": "Fronius-System prüfen",
-            "description": "Prüfe Host, lokale Web-API-Zugriffsrolle, Aktualisierungsintervalle und Modbus-IP-Beschränkung. Mindestintervall: 5 Sekunden. Die Technikerrolle schaltet zusätzlich die Einspeisebegrenzung frei.",
+            "description": "Dieser Eintrag braucht einen gültigen Token für seine Web-API-Rolle: der gespeicherte fehlt oder wurde abgelehnt. Prüfe Host, Zugriffsrolle, Aktualisierungsintervalle und Modbus-IP-Beschränkung. Im nächsten Schritt wird nur bei Bedarf nach dem Passwort gefragt.",
             "data": {
               "host": "Host",
               "scan_interval": "Aktualisierungsintervall (Sekunden)",
@@ -554,7 +554,7 @@
         "step": {
           "init": {
             "title": "Solar API deaktivieren",
-            "description": "Prüfe Host, lokale Web-API-Zugriffsrolle, Aktualisierungsintervalle und Modbus-IP-Beschränkung. Mindestintervall: 5 Sekunden. Die Technikerrolle schaltet zusätzlich die Einspeisebegrenzung frei.",
+            "description": "Der Wechselrichter \"{entry_title}\" verwendet die Firmware {current_version}, die unter der sicheren Mindestversion {minimum_version} liegt. Wenn die Solar API bei älterer Firmware aktiviert bleibt, kann dies mit der Zeit zu einem Speicherleck und zu Ausfällen des Wechselrichters führen. Wähle, ob die Solar API jetzt deaktiviert oder diese Warnung ignoriert werden soll.",
             "menu_options": {
               "fix": "Solar API deaktivieren",
               "ignore": "Warnung ignorieren"
@@ -566,11 +566,8 @@
           },
           "confirm": {
             "title": "Solar API deaktivieren",
-            "description": "Prüfe Host, lokale Web-API-Zugriffsrolle, Aktualisierungsintervalle und Modbus-IP-Beschränkung. Mindestintervall: 5 Sekunden. Die Technikerrolle schaltet zusätzlich die Einspeisebegrenzung frei.",
-            "submit": "Solar API deaktivieren",
-            "data": {
-              "api_username": "Web-API-Zugriffsrolle"
-            }
+            "description": "Klicke auf Absenden, um die Solar API am Wechselrichter \"{entry_title}\" zu deaktivieren.",
+            "submit": "Solar API deaktivieren"
           }
         },
         "error": {

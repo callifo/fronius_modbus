@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Fixed
+- The Solar API repair explains the firmware risk again. Since 1.0.0b1 its steps showed the text of the reconfigure form, and the repair raised after a rejected login told the owner nothing about why it was there.
+
 ### Changed
 - Entity icons moved from the code into `icons.json`, the way Home Assistant resolves them now. The icons themselves are unchanged.
 - Errors from a refused or failed write reach the user in their language. The library raises keyed errors, and the entities hand the key to Home Assistant; messages no longer name the control, which the user just touched anyway.

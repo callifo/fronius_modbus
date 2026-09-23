@@ -277,8 +277,10 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
         """
         for name in sorted(report.failed.keys() - self._failed):
             err = report.failed[name]
-            log = _LOGGER.info if isinstance(err, NO_ANSWER) else _LOGGER.warning
-            log("%s does not answer: %s", name, err)
+            if isinstance(err, NO_ANSWER):
+                _LOGGER.info("%s does not answer: %s", name, err)
+            else:
+                _LOGGER.warning("%s refused the read: %s", name, err)
         for name in sorted(self._failed & set(report.updated)):
             _LOGGER.info("%s answers again", name)
         self._failed = frozenset(report.failed)

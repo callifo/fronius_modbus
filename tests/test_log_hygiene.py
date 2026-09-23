@@ -255,3 +255,4 @@ async def test_a_meter_that_answers_and_refuses_is_still_a_warning(
         await coordinator.async_refresh()
 
     assert [level for level, _ in _meter_lines(caplog)] == [logging.WARNING]
+    assert "refused" in _meter_lines(caplog)[0][1]

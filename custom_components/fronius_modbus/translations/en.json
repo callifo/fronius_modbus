@@ -510,7 +510,7 @@
         "step": {
           "init": {
             "title": "Review Fronius System",
-            "description": "Review the host, the local Web API access role, the update intervals and the Modbus IP restriction. Minimum interval: 5 seconds. The technician role additionally enables the export limit control.",
+            "description": "This entry needs a valid token for its Web API role: the stored one is missing or was rejected. Review the host, the access role, the update intervals and the Modbus IP restriction. The next step asks for the password only if needed.",
             "data": {
               "host": "Host",
               "scan_interval": "Update interval (seconds)",
@@ -554,7 +554,7 @@
         "step": {
           "init": {
             "title": "Disable Solar API",
-            "description": "Review the host, the local Web API access role, the update intervals and the Modbus IP restriction. Minimum interval: 5 seconds. The technician role additionally enables the export limit control.",
+            "description": "The inverter \"{entry_title}\" is running firmware {current_version}, which is below the safe minimum {minimum_version}. When Solar API stays enabled on older firmware it can cause a memory leak and inverter outages over time. Choose whether to disable Solar API now or ignore this warning.",
             "menu_options": {
               "fix": "Disable Solar API",
               "ignore": "Ignore warning"
@@ -566,11 +566,8 @@
           },
           "confirm": {
             "title": "Disable Solar API",
-            "description": "Review the host, the local Web API access role, the update intervals and the Modbus IP restriction. Minimum interval: 5 seconds. The technician role additionally enables the export limit control.",
-            "submit": "Disable Solar API",
-            "data": {
-              "api_username": "Web API access role"
-            }
+            "description": "Press Submit to disable Solar API on the inverter \"{entry_title}\".",
+            "submit": "Disable Solar API"
           }
         },
         "error": {

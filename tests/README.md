@@ -78,6 +78,7 @@ because the thing it prevents happened, here or in a sibling project.
 | `test_exception_translations.py` | Every translated error key raised in the package has a message, with the same placeholders, in every language, and no message is orphaned |
 | `test_icon_translations.py` | No entity sets its icon in code; every `icons.json` entry names a translation key an entity carries and has an `mdi:` default |
 | `test_parallel_updates.py` | Every platform declares `PARALLEL_UPDATES`: 1 for the writing platforms, 0 for the sensors |
+| `test_step_texts.py` | No repair step shows a text copied from another flow, and the steps rendered by the settings form use no placeholder it cannot fill |
 | `test_secret_scan.py` | The gitleaks allowlist for translation keys does not hide a token on the same line (needs the gitleaks binary; skips without it) |
 
 ### test_log_hygiene.py

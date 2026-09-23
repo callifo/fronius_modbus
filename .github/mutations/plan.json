@@ -366,8 +366,8 @@
   {
     "label": "coordinator: a quiet sub-system is logged at info",
     "path": "custom_components/fronius_modbus/coordinator.py",
-    "old": "log = _LOGGER.info if isinstance(err, NO_ANSWER) else _LOGGER.warning",
-    "new": "log = _LOGGER.warning",
+    "old": "            if isinstance(err, NO_ANSWER):\n                _LOGGER.info(\"%s does not answer: %s\", name, err)",
+    "new": "            if isinstance(err, NO_ANSWER):\n                _LOGGER.warning(\"%s does not answer: %s\", name, err)",
     "tests": "a_meter_that_stops_answering_is_logged_once_at_info_and_on_return"
   },
   {

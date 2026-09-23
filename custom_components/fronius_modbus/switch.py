@@ -9,6 +9,9 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .coordinator import FroniusConfigEntry
 from .entities import FroniusEntity, FroniusSwitchDescription, switch_descriptions
 
+# One write at a time: the inverter answers requests one after the other.
+PARALLEL_UPDATES = 1
+
 # The solar-API switch is the one web write whose effect the entity must show
 # immediately; every other web write relies on the control's own delayed refresh.
 _IMMEDIATE_REFRESH_KEY = "api_solar_api_enabled"

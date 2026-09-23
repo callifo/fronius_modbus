@@ -376,5 +376,12 @@
     "old": "        for name in sorted(self._failed & set(report.updated)):\n            _LOGGER.info(\"%s answers again\", name)\n",
     "new": "",
     "tests": "a_meter_that_stops_answering_is_logged_once_at_info_and_on_return"
+  },
+  {
+    "label": "platforms: the writers run one action at a time",
+    "path": "custom_components/fronius_modbus/number.py",
+    "old": "PARALLEL_UPDATES = 1",
+    "new": "PARALLEL_UPDATES = 0",
+    "tests": "every_platform_declares_its_parallel_updates"
   }
 ]

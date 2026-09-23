@@ -9,6 +9,9 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .coordinator import FroniusConfigEntry
 from .entities import FroniusEntity, FroniusNumberDescription, number_descriptions
 
+# One write at a time: the inverter answers requests one after the other.
+PARALLEL_UPDATES = 1
+
 
 class FroniusNumber(FroniusEntity, NumberEntity):
     """A number whose value and max are its description's value_fn/max_fn."""

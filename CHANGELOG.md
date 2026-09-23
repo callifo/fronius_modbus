@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Changed
+- Every platform declares how many actions Home Assistant may run at once: one for the controls, none for the sensors.
 - A meter or other sub-system that stops answering is logged once at info, and once more when it answers again, the way the quality scale asks for an unavailable device. A sub-system that answers with a refusal is still a warning.
 
 ## 1.1.2

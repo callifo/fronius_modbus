@@ -27,6 +27,7 @@ PACKAGE = REPO / "custom_components" / "fronius_modbus"
 # emptying it - fails the index test below. This list is the answer to "what
 # stops the old problems coming back", for whoever asks in six months.
 GUARD_FILES = {
+    "test_parallel_updates.py": "every platform declares how many actions may run at once",
     "test_budgets.py": "no module or function grows past its frozen budget",
     "test_ci_matrix.py": "the CI workflow tests the Home Assistant release it claims to",
     "test_flow_messages.py": "every config-flow message has a text in every language",

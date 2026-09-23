@@ -75,6 +75,7 @@ because the thing it prevents happened, here or in a sibling project.
 | `test_mypy_scope.py` | Every module is in the mypy scope or carries a written reason why not yet |
 | `test_platform_entities.py` | Every platform builds its entities through the one shared helper |
 | `test_requirements.py` | `manifest.json` and `requirements.txt` name the same dependencies |
+| `test_parallel_updates.py` | Every platform declares `PARALLEL_UPDATES`: 1 for the writing platforms, 0 for the sensors |
 | `test_secret_scan.py` | The gitleaks allowlist for translation keys does not hide a token on the same line (needs the gitleaks binary; skips without it) |
 
 ### test_log_hygiene.py

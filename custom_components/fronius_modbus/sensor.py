@@ -14,6 +14,9 @@ from .entities import (
     sensor_descriptions,
 )
 
+# The coordinator polls; entities never fetch on their own.
+PARALLEL_UPDATES = 0
+
 _TOTAL_STATE_CLASSES = (SensorStateClass.TOTAL, SensorStateClass.TOTAL_INCREASING)
 
 

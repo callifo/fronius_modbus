@@ -9,7 +9,11 @@ from datetime import timedelta
 import logging
 import pathlib
 
-from modbus_connection import ModbusConnectionError, ServerDeviceFailureError
+from modbus_connection import (
+    GatewayTargetError,
+    ModbusConnectionError,
+    ServerDeviceFailureError,
+)
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -210,3 +214,44 @@ def test_requests_is_called_in_one_place():
         )
     ]
     assert offences == []
+
+
+def _meter_lines(caplog) -> list[tuple[int, str]]:
+    return [
+        (record.levelno, record.getMessage())
+        for record in caplog.records
+        if "meter_200" in record.getMessage()
+    ]
+
+
+async def test_a_meter_that_stops_answering_is_logged_once_at_info_and_on_return(
+    coordinator, connection, caplog
+):
+    """log-when-unavailable, per sub-system: a meter behind the inverter goes quiet
+    now and then (the inverter reports gateway target failed); that is no fault the
+    owner can fix, and the return deserves a line as much as the loss."""
+    await coordinator.async_refresh()
+    meter = connection.for_unit(METER_UNIT_ID)
+    with caplog.at_level(logging.DEBUG):
+        meter.fail_requests(GatewayTargetError())
+        await coordinator.async_refresh()
+        await coordinator.async_refresh()
+        meter.fail_requests(None)
+        await coordinator.async_refresh()
+        await coordinator.async_refresh()
+
+    lines = _meter_lines(caplog)
+    assert [level for level, _ in lines] == [logging.INFO, logging.INFO], lines
+    assert "answers again" in lines[-1][1]
+
+
+async def test_a_meter_that_answers_and_refuses_is_still_a_warning(
+    coordinator, connection, caplog
+):
+    """The counter-check: a refusal is a device telling us something is wrong."""
+    await coordinator.async_refresh()
+    with caplog.at_level(logging.DEBUG):
+        connection.for_unit(METER_UNIT_ID).fail_requests(ServerDeviceFailureError())
+        await coordinator.async_refresh()
+
+    assert [level for level, _ in _meter_lines(caplog)] == [logging.WARNING]

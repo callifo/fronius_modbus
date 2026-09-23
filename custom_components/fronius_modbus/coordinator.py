@@ -8,7 +8,13 @@ import logging
 import time
 from typing import TYPE_CHECKING, cast
 
-from modbus_connection import ModbusConnectionError, ModbusError, ModbusTimeoutError
+from modbus_connection import (
+    GatewayPathUnavailableError,
+    GatewayTargetError,
+    ModbusConnectionError,
+    ModbusError,
+    ModbusTimeoutError,
+)
 from modbus_connection.model.sunspec import SunSpecMapShiftError
 
 from homeassistant.config_entries import ConfigEntry
@@ -38,6 +44,16 @@ _LOGGER = logging.getLogger(__name__)
 
 class DeviceUnreachable(UpdateFailed):
     """The device did not answer at all - normal while it is switched off."""
+
+
+# No answer at all is the expected shape of a device that is off or of a meter
+# the inverter could not reach; a device that answers and refuses is not.
+NO_ANSWER = (
+    ModbusConnectionError,
+    ModbusTimeoutError,
+    GatewayPathUnavailableError,
+    GatewayTargetError,
+)
 
 
 class _OfflineIsNotAnError(logging.Filter):
@@ -225,9 +241,7 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
         self._tolerated_failures = 0
         if not report.updated:
             raise UpdateFailed("no sub-system answered")
-        for name in sorted(report.failed.keys() - self._failed):
-            _LOGGER.warning("Failed to read %s: %s", name, report.failed[name])
-        self._failed = frozenset(report.failed)
+        self._log_sub_system_changes(report)
         self._reload_for_new_sub_systems(report)
         self._build_controls()
         return ModbusPoll(
@@ -251,11 +265,23 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
             self._tolerated_failures = 0
             self._tolerate_until = 0.0
             await self.device.unit.disconnect()
-        # No answer at all is the expected shape of a device that is off; a
-        # device that answers and refuses is not.
-        silent = isinstance(err, ModbusConnectionError | ModbusTimeoutError)
-        failure = DeviceUnreachable if silent else UpdateFailed
+        failure = DeviceUnreachable if isinstance(err, NO_ANSWER) else UpdateFailed
         raise failure(f"Modbus communication failure: {err}") from err
+
+    def _log_sub_system_changes(self, report: UpdateReport) -> None:
+        """Log each sub-system once when it drops out and once when it is back.
+
+        The quality scale's log-when-unavailable, one level below the device:
+        a meter that goes quiet is an expected outage (info), one that answers
+        with a refusal is worth a warning.
+        """
+        for name in sorted(report.failed.keys() - self._failed):
+            err = report.failed[name]
+            log = _LOGGER.info if isinstance(err, NO_ANSWER) else _LOGGER.warning
+            log("%s does not answer: %s", name, err)
+        for name in sorted(self._failed & set(report.updated)):
+            _LOGGER.info("%s answers again", name)
+        self._failed = frozenset(report.failed)
 
     def _reload_for_new_sub_systems(self, report: UpdateReport) -> None:
         answered = frozenset(report.updated)

@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 1.2.0b1
+
+A quality-scale round: translated error messages, icons in `icons.json`, declared parallel
+updates, and outage logging per sub-system. A pre-release because the error texts a user sees
+change; entities, unique ids and entity ids do not.
 
 ### Fixed
 - The Solar API repair explains the firmware risk again. Since 1.0.0b1 its steps showed the text of the reconfigure form, and the repair raised after a rejected login told the owner nothing about why it was there.

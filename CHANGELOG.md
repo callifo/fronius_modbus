@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- A meter or other sub-system that stops answering is logged once at info, and once more when it answers again, the way the quality scale asks for an unavailable device. A sub-system that answers with a refusal is still a warning.
+
 ## 1.1.2
 
 First field feedback on 1.1.x and a second controller on the same inverter. Three fixes, and

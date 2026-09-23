@@ -240,7 +240,7 @@
   {
     "label": "coordinator: an unreachable device is not an error",
     "path": "custom_components/fronius_modbus/coordinator.py",
-    "old": "        failure = DeviceUnreachable if silent else UpdateFailed",
+    "old": "        failure = DeviceUnreachable if isinstance(err, NO_ANSWER) else UpdateFailed",
     "new": "        failure = UpdateFailed",
     "tests": "an_unreachable_device_is_not_logged_as_an_error"
   },
@@ -362,5 +362,19 @@
     "old": "        device_class=SensorDeviceClass.ENERGY_STORAGE,\n        state_class=SensorStateClass.MEASUREMENT,\n",
     "new": "        device_class=SensorDeviceClass.ENERGY_STORAGE,\n",
     "tests": "every_sensor_that_carried_statistics_still_has_a_state_class"
+  },
+  {
+    "label": "coordinator: a quiet sub-system is logged at info",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "log = _LOGGER.info if isinstance(err, NO_ANSWER) else _LOGGER.warning",
+    "new": "log = _LOGGER.warning",
+    "tests": "a_meter_that_stops_answering_is_logged_once_at_info_and_on_return"
+  },
+  {
+    "label": "coordinator: a returning sub-system is logged",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "        for name in sorted(self._failed & set(report.updated)):\n            _LOGGER.info(\"%s answers again\", name)\n",
+    "new": "",
+    "tests": "a_meter_that_stops_answering_is_logged_once_at_info_and_on_return"
   }
 ]

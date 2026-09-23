@@ -15,6 +15,7 @@ from collections.abc import Callable
 from enum import IntEnum
 import logging
 
+from .exceptions import ControlRefused
 from .sunspec_models import Storage
 
 _LOGGER = logging.getLogger(__name__)
@@ -268,7 +269,10 @@ class StorageControl:
             "in_w_rte",
             lambda: _watts_to_percent(max(watts, 0.0), self.max_charge_rate_w),
             allowed=lambda: self.extended_mode in CHARGE_LIMIT_MODES,
-            refusal="Charge limit cannot be changed in the current storage mode",
+            refusal=ControlRefused(
+                "charge_limit_not_in_mode",
+                "Charge limit cannot be changed in the current storage mode",
+            ),
         )
 
     async def set_discharge_limit_w(self, watts: float) -> None:
@@ -277,7 +281,10 @@ class StorageControl:
             "out_w_rte",
             lambda: _watts_to_percent(max(watts, 0.0), self.max_discharge_rate_w),
             allowed=lambda: self.extended_mode in DISCHARGE_LIMIT_MODES,
-            refusal="Discharge limit cannot be changed in the current storage mode",
+            refusal=ControlRefused(
+                "discharge_limit_not_in_mode",
+                "Discharge limit cannot be changed in the current storage mode",
+            ),
         )
 
     async def set_grid_charge_power_w(self, watts: float) -> None:
@@ -286,7 +293,10 @@ class StorageControl:
             "out_w_rte",
             lambda: -_watts_to_percent(max(watts, 0.0), self.max_charge_rate_w),
             allowed=lambda: self.extended_mode is ExtendedMode.CHARGE_FROM_GRID,
-            refusal="Grid charge power can only be changed in Charge from Grid mode",
+            refusal=ControlRefused(
+                "grid_charge_power_not_in_mode",
+                "Grid charge power can only be changed in Charge from Grid mode",
+            ),
         )
 
     async def set_grid_discharge_power_w(self, watts: float) -> None:
@@ -295,16 +305,24 @@ class StorageControl:
             "in_w_rte",
             lambda: -_watts_to_percent(max(watts, 0.0), self.max_discharge_rate_w),
             allowed=lambda: self.extended_mode is ExtendedMode.DISCHARGE_TO_GRID,
-            refusal="Grid discharge power can only be changed in Discharge to Grid mode",
+            refusal=ControlRefused(
+                "grid_discharge_power_not_in_mode",
+                "Grid discharge power can only be changed in Discharge to Grid mode",
+            ),
         )
 
     async def set_minimum_reserve(self, percent: int) -> None:
         """Write MinRsvPct as a whole percent between the SoC minimum bounds."""
         if not float(percent).is_integer():
-            raise ValueError("SoC Minimum must be a whole number")
+            raise ControlRefused(
+                "value_not_whole", "SoC Minimum must be a whole number"
+            )
         if not SOC_MINIMUM_LOWEST <= percent <= SOC_MINIMUM_HIGHEST:
-            raise ValueError(
-                f"SoC Minimum must be between {SOC_MINIMUM_LOWEST} and {SOC_MINIMUM_HIGHEST}"
+            raise ControlRefused(
+                "value_out_of_range",
+                f"SoC Minimum must be between {SOC_MINIMUM_LOWEST} and {SOC_MINIMUM_HIGHEST}",
+                minimum=str(SOC_MINIMUM_LOWEST),
+                maximum=str(SOC_MINIMUM_HIGHEST),
             )
         async with self._write_lock:
             await self._storage.write("min_rsv_pct", float(int(percent)))
@@ -315,12 +333,12 @@ class StorageControl:
         percent: Callable[[], float],
         *,
         allowed: Callable[[], bool],
-        refusal: str,
+        refusal: ControlRefused,
     ) -> None:
         # Decided under the lock: a mode switch queued ahead of this write
         # would otherwise be validated against the mode it is replacing
         # (audit F02), and the rate maximum may change with it.
         async with self._write_lock:
             if not allowed():
-                raise ValueError(refusal)
+                raise refusal
             await self._storage.write(field_name, percent())

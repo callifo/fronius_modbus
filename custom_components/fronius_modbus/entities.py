@@ -75,6 +75,7 @@ from .fronius_modbus_api.device import (
     REPORT_STORAGE,
     meter_report_name,
 )
+from .fronius_modbus_api.exceptions import ControlRefused, ControlUnavailable
 from .fronius_modbus_api.storage import (
     CHARGE_LIMIT_MODES,
     DISCHARGE_LIMIT_MODES,
@@ -1829,10 +1830,30 @@ class FroniusEntity(
         """Await a write action, mapping its errors to the ones HA expects."""
         try:
             await action()
+        except ControlRefused as err:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key=err.key,
+                translation_placeholders=err.placeholders,
+            ) from err
+        except ControlUnavailable as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key=err.key,
+                translation_placeholders=err.placeholders,
+            ) from err
         except ValueError as err:
-            raise ServiceValidationError(str(err)) from err
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="value_refused",
+                translation_placeholders={"error": str(err)},
+            ) from err
         except (ModbusError, RuntimeError) as err:
-            raise HomeAssistantError(str(err)) from err
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="write_failed",
+                translation_placeholders={"error": str(err)},
+            ) from err
 
 
 class FroniusTotalSensor(FroniusEntity, RestoreSensor):

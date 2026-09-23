@@ -15,5 +15,29 @@ class ControlLeftDisabledError(ModbusError):
     """A control was switched off for a write, the write failed, and switching it back on failed too."""
 
 
+class ControlRefused(ValueError):
+    """A write the device state or the value rules out; the user can change the input.
+
+    Carries a translation key and its placeholders, so the integration can show
+    the message in the user's language; the English text stays for logs.
+    """
+
+    def __init__(self, key: str, message: str, **placeholders: str) -> None:
+        """Keep the key and placeholders next to the English message."""
+        super().__init__(message)
+        self.key = key
+        self.placeholders = placeholders
+
+
+class ControlUnavailable(RuntimeError):
+    """A write the integration cannot carry out: no login, or the device declined."""
+
+    def __init__(self, key: str, message: str, **placeholders: str) -> None:
+        """Keep the key and placeholders next to the English message."""
+        super().__init__(message)
+        self.key = key
+        self.placeholders = placeholders
+
+
 class IncompleteChainError(ModbusError):
     """The SunSpec chain ended in a refused read, so later models are undecided."""

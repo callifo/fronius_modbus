@@ -23,6 +23,7 @@ from .const import (
     SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX,
     TECHNICIAN_USERNAME,
 )
+from .fronius_modbus_api.exceptions import ControlRefused, ControlUnavailable
 from .froniuswebclient import FroniusWebAuthError, FroniusWebClient, is_enabled
 from .token_store import async_get_token_store
 
@@ -343,7 +344,9 @@ class FroniusWebControl:
     async def _async_web_job(self, func, *args, raise_on_auth_failure: bool = False):
         if not self._client:
             if raise_on_auth_failure:
-                raise RuntimeError(WEB_API_NOT_CONFIGURED)
+                raise ControlUnavailable(
+                    "web_api_not_configured", WEB_API_NOT_CONFIGURED
+                )
             return None
 
         try:
@@ -351,8 +354,9 @@ class FroniusWebControl:
         except FroniusWebAuthError as err:
             await self._async_handle_web_api_auth_failure(err)
             if raise_on_auth_failure:
-                raise RuntimeError(
-                    "Fronius Web API authentication failed. Reconfigure the integration."
+                raise ControlUnavailable(
+                    "web_api_auth_failed",
+                    "Fronius Web API authentication failed. Reconfigure the integration.",
                 ) from err
             return None
 
@@ -538,7 +542,7 @@ class FroniusWebControl:
     async def set_solar_api_enabled(self, enabled: bool) -> None:
         """Enable or disable the Solar API."""
         if not self._client:
-            raise RuntimeError(WEB_API_NOT_CONFIGURED)
+            raise ControlUnavailable("web_api_not_configured", WEB_API_NOT_CONFIGURED)
 
         await self._async_web_job(
             self._client.set_solar_api_enabled, enabled, raise_on_auth_failure=True
@@ -551,7 +555,7 @@ class FroniusWebControl:
     async def reset_modbus_control(self) -> None:
         """Reset the inverter's Modbus configuration to its defaults."""
         if not self._client:
-            raise RuntimeError(WEB_API_NOT_CONFIGURED)
+            raise ControlUnavailable("web_api_not_configured", WEB_API_NOT_CONFIGURED)
 
         await self._async_web_job(
             self._client.reset_modbus_control, raise_on_auth_failure=True
@@ -567,11 +571,23 @@ class FroniusWebControl:
         next_soc_max = SOC_MAX_DEFAULT if next_soc_max is None else next_soc_max
 
         if next_soc_min < SOC_LOWEST or next_soc_min > SOC_HIGHEST:
-            raise ValueError("SoC Minimum must be between 5 and 100")
+            raise ControlRefused(
+                "value_out_of_range",
+                "SoC Minimum must be between 5 and 100",
+                minimum=str(SOC_LOWEST),
+                maximum=str(SOC_HIGHEST),
+            )
         if next_soc_max < 0 or next_soc_max > SOC_HIGHEST:
-            raise ValueError("SoC Maximum must be between 0 and 100")
+            raise ControlRefused(
+                "value_out_of_range",
+                "SoC Maximum must be between 0 and 100",
+                minimum="0",
+                maximum=str(SOC_HIGHEST),
+            )
         if next_soc_min > next_soc_max:
-            raise ValueError("SoC Minimum must not exceed SoC Maximum")
+            raise ControlRefused(
+                "soc_minimum_above_maximum", "SoC Minimum must not exceed SoC Maximum"
+            )
 
         return next_soc_min, next_soc_max
 
@@ -586,7 +602,12 @@ class FroniusWebControl:
             SOC_LOWEST if next_backup_reserved is None else next_backup_reserved
         )
         if next_backup_reserved < SOC_LOWEST or next_backup_reserved > SOC_HIGHEST:
-            raise ValueError("Battery backup reserve must be between 5 and 100")
+            raise ControlRefused(
+                "value_out_of_range",
+                "Battery backup reserve must be between 5 and 100",
+                minimum=str(SOC_LOWEST),
+                maximum=str(SOC_HIGHEST),
+            )
 
         return next_soc_min, next_soc_max, next_backup_reserved
 
@@ -609,15 +630,17 @@ class FroniusWebControl:
 
     def _require_battery_mode_manual(self, control_name: str) -> None:
         if not self.battery_mode_is_manual:
-            raise ValueError(
+            raise ControlRefused(
+                "needs_manual_self_consumption",
                 f"{control_name} can only be changed when self-consumption "
-                "optimisation is Manual"
+                "optimisation is Manual",
             )
 
     def _require_soc_mode_manual(self, control_name: str) -> None:
         if not self.soc_mode_is_manual:
-            raise ValueError(
-                f"{control_name} can only be changed when the SoC mode is Manual"
+            raise ControlRefused(
+                "needs_manual_soc_mode",
+                f"{control_name} can only be changed when the SoC mode is Manual",
             )
 
     async def _set_api_soc_manual(
@@ -627,7 +650,7 @@ class FroniusWebControl:
         control_name: str = "SoC Maximum",
     ) -> tuple[int, int, int] | None:
         if not self._client:
-            raise RuntimeError(WEB_API_NOT_CONFIGURED)
+            raise ControlUnavailable("web_api_not_configured", WEB_API_NOT_CONFIGURED)
         self._require_soc_mode_manual(control_name)
 
         next_soc_min, next_soc_max, next_backup_reserved = self._get_api_soc_values(
@@ -654,7 +677,7 @@ class FroniusWebControl:
         The SoC window is not touched: the inverter keeps its own switch for it.
         """
         if not self._client:
-            raise RuntimeError(WEB_API_NOT_CONFIGURED)
+            raise ControlUnavailable("web_api_not_configured", WEB_API_NOT_CONFIGURED)
 
         display_power = self.data.battery_power_w
         if mode == BATTERY_MODE_MANUAL and display_power is None:
@@ -676,7 +699,7 @@ class FroniusWebControl:
     async def set_battery_power_w(self, value: float) -> None:
         """Set the target feed-in power in manual self-consumption optimisation."""
         if not self._client:
-            raise RuntimeError(WEB_API_NOT_CONFIGURED)
+            raise ControlUnavailable("web_api_not_configured", WEB_API_NOT_CONFIGURED)
         self._require_battery_mode_manual("Target feed in")
 
         power = -int(round(value))
@@ -694,21 +717,21 @@ class FroniusWebControl:
     async def set_soc_maximum(self, soc_max: int) -> None:
         """Set the maximum state of charge in manual SoC mode."""
         if not self._client:
-            raise RuntimeError(WEB_API_NOT_CONFIGURED)
+            raise ControlUnavailable("web_api_not_configured", WEB_API_NOT_CONFIGURED)
         await self._set_api_soc_manual(soc_max=soc_max, control_name="SoC Maximum")
 
     @_last_writer_wins
     async def set_soc_minimum_manual(self, soc_min: int) -> None:
         """Set the web API's minimum state of charge in manual SoC mode."""
         if not self._client:
-            raise RuntimeError(WEB_API_NOT_CONFIGURED)
+            raise ControlUnavailable("web_api_not_configured", WEB_API_NOT_CONFIGURED)
         await self._set_api_soc_manual(soc_min=soc_min, control_name="SoC Minimum")
 
     @_serialised
     async def set_soc_mode(self, *, manual: bool) -> None:
         """Switch the SoC window between the inverter's automatic and manual control."""
         if not self._client:
-            raise RuntimeError(WEB_API_NOT_CONFIGURED)
+            raise ControlUnavailable("web_api_not_configured", WEB_API_NOT_CONFIGURED)
         mode = SOC_MODE_MANUAL if manual else SOC_MODE_AUTO
         await self._async_web_job(
             self._client.set_soc_mode, mode, raise_on_auth_failure=True
@@ -720,9 +743,14 @@ class FroniusWebControl:
     async def set_backup_reserve(self, percent: int) -> None:
         """Set the backup power reserve; the inverter offers it in either battery mode."""
         if not self._client:
-            raise RuntimeError(WEB_API_NOT_CONFIGURED)
+            raise ControlUnavailable("web_api_not_configured", WEB_API_NOT_CONFIGURED)
         if percent < SOC_LOWEST or percent > SOC_HIGHEST:
-            raise ValueError("Battery backup reserve must be between 5 and 100")
+            raise ControlRefused(
+                "value_out_of_range",
+                "Battery backup reserve must be between 5 and 100",
+                minimum=str(SOC_LOWEST),
+                maximum=str(SOC_HIGHEST),
+            )
         await self._async_web_job(
             self._client.set_backup_reserve, percent, raise_on_auth_failure=True
         )
@@ -738,7 +766,7 @@ class FroniusWebControl:
     ) -> None:
         """Allow charging the battery from the grid and/or from AC."""
         if not self._client:
-            raise RuntimeError(WEB_API_NOT_CONFIGURED)
+            raise ControlUnavailable("web_api_not_configured", WEB_API_NOT_CONFIGURED)
 
         if charge_from_ac is False:
             next_charge_from_grid = False
@@ -772,7 +800,9 @@ class FroniusWebControl:
         """Set the export soft limit; only the technician role may write it."""
         client = self._client
         if client is None or not self.technician_configured:
-            raise RuntimeError(TECHNICIAN_NOT_CONFIGURED)
+            raise ControlUnavailable(
+                "technician_not_configured", TECHNICIAN_NOT_CONFIGURED
+            )
         limit_w = int(round(value))
         result = await self._async_web_job(
             client.set_export_soft_limit,
@@ -780,6 +810,9 @@ class FroniusWebControl:
             raise_on_auth_failure=True,
         )
         if not result:
-            raise RuntimeError("The inverter did not accept the export soft limit")
+            raise ControlUnavailable(
+                "export_limit_not_accepted",
+                "The inverter did not accept the export soft limit",
+            )
         self.data.export_soft_limit_w = limit_w
         self._publish()

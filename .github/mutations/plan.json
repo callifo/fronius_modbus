@@ -261,7 +261,7 @@
   {
     "label": "web_control: a reserve outside the range is refused",
     "path": "custom_components/fronius_modbus/web_control.py",
-    "old": "        if percent < SOC_LOWEST or percent > SOC_HIGHEST:\n            raise ValueError(\"Battery backup reserve must be between 5 and 100\")\n        await self._async_web_job(\n            self._client.set_backup_reserve",
+    "old": "        if percent < SOC_LOWEST or percent > SOC_HIGHEST:\n            raise ControlRefused(\n                \"value_out_of_range\",\n                \"Battery backup reserve must be between 5 and 100\",\n                minimum=str(SOC_LOWEST),\n                maximum=str(SOC_HIGHEST),\n            )\n        await self._async_web_job(\n            self._client.set_backup_reserve",
     "new": "        await self._async_web_job(\n            self._client.set_backup_reserve",
     "tests": "a_backup_reserve_outside_the_range_is_refused"
   },
@@ -383,5 +383,12 @@
     "old": "PARALLEL_UPDATES = 1",
     "new": "PARALLEL_UPDATES = 0",
     "tests": "every_platform_declares_its_parallel_updates"
+  },
+  {
+    "label": "entities: a refused write reaches the user translated",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "                translation_key=err.key,\n                translation_placeholders=err.placeholders,\n            ) from err\n        except ControlUnavailable",
+    "new": "                translation_key=\"value_refused\",\n                translation_placeholders={\"error\": str(err)},\n            ) from err\n        except ControlUnavailable",
+    "tests": "a_number_write_reaches_the_register"
   }
 ]

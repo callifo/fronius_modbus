@@ -195,8 +195,12 @@ async def test_a_number_write_reaches_the_register(hass, mock_modbus):
         hass, entity_id_for(hass, entry, "number", "charge_limit")
     )
     assert charge_limit.available is False
-    with pytest.raises(ServiceValidationError):
+    with pytest.raises(ServiceValidationError) as refused:
         await charge_limit.async_set_native_value(1000)
+    # Quality scale exception-translations: the refusal reaches the user in
+    # their language, not as the English text the library raised.
+    assert refused.value.translation_domain == DOMAIN
+    assert refused.value.translation_key == "charge_limit_not_in_mode"
 
 
 async def test_the_select_changes_the_storage_mode(hass, mock_modbus):

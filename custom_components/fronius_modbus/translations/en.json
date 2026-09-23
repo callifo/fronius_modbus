@@ -632,5 +632,58 @@
         "technician": "Technician (adds the export limit control)"
       }
     }
+  },
+  "exceptions": {
+    "charge_limit_not_in_mode": {
+      "message": "The charge limit cannot be changed in the current storage mode."
+    },
+    "discharge_limit_not_in_mode": {
+      "message": "The discharge limit cannot be changed in the current storage mode."
+    },
+    "grid_charge_power_not_in_mode": {
+      "message": "Grid charge power can only be changed in the Charge from Grid storage mode."
+    },
+    "grid_discharge_power_not_in_mode": {
+      "message": "Grid discharge power can only be changed in the Discharge to Grid storage mode."
+    },
+    "value_not_whole": {
+      "message": "The value must be a whole number."
+    },
+    "value_out_of_range": {
+      "message": "The value must be between {minimum} and {maximum}."
+    },
+    "soc_minimum_above_maximum": {
+      "message": "The SoC minimum must not exceed the SoC maximum."
+    },
+    "needs_manual_self_consumption": {
+      "message": "This value can only be changed while self-consumption optimisation is Manual."
+    },
+    "needs_manual_soc_mode": {
+      "message": "This value can only be changed while the Web API SoC mode is Manual."
+    },
+    "ac_limit_without_max_power": {
+      "message": "The AC limit cannot be set: the inverter has not reported its maximum power yet."
+    },
+    "web_api_not_configured": {
+      "message": "The Fronius Web API is not configured for this entry."
+    },
+    "web_api_auth_failed": {
+      "message": "The Fronius Web API rejected the login. Reconfigure the integration."
+    },
+    "technician_not_configured": {
+      "message": "This control needs the technician role. Choose it via Configure."
+    },
+    "export_limit_not_accepted": {
+      "message": "The inverter did not accept the export soft limit."
+    },
+    "value_refused": {
+      "message": "The value was refused: {error}"
+    },
+    "write_failed": {
+      "message": "Writing to the inverter failed: {error}"
+    },
+    "unsupported_option": {
+      "message": "Unsupported option: {option}"
+    }
   }
 }

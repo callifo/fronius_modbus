@@ -390,5 +390,12 @@
     "old": "                translation_key=err.key,\n                translation_placeholders=err.placeholders,\n            ) from err\n        except ControlUnavailable",
     "new": "                translation_key=\"value_refused\",\n                translation_placeholders={\"error\": str(err)},\n            ) from err\n        except ControlUnavailable",
     "tests": "a_number_write_reaches_the_register"
+  },
+  {
+    "label": "icons.json: every icon names a key an entity carries",
+    "path": "custom_components/fronius_modbus/icons.json",
+    "old": "\"reset_modbus_control\": {",
+    "new": "\"reset_modbus_controls\": {",
+    "tests": "every_icon_names_a_translation_key_an_entity_carries"
   }
 ]

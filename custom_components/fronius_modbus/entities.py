@@ -246,7 +246,6 @@ def _sensor(
     device_class: SensorDeviceClass | None = None,
     state_class: SensorStateClass | None = None,
     unit: str | None = None,
-    icon: str | None = None,
     entity_category: EntityCategory | None = None,
 ) -> FroniusSensorDescription:
     options = _enum_sensor_options(translation_key)
@@ -264,7 +263,6 @@ def _sensor(
         device_class=SensorDeviceClass.ENUM if options is not None else device_class,
         state_class=state_class,
         native_unit_of_measurement=unit,
-        icon=icon,
         entity_category=entity_category,
         options=options,
     )
@@ -279,7 +277,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
         unit="A",
-        icon="mdi:current-ac",
     ),
     _sensor(
         "AphA",
@@ -289,7 +286,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
         unit="A",
-        icon="mdi:current-ac",
     ),
     _sensor(
         "acpower",
@@ -299,7 +295,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         unit="W",
-        icon="mdi:lightning-bolt",
     ),
     _sensor(
         "var",
@@ -308,7 +303,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         value_fn=lambda r: assume_present(r.device.inverter).v_ar,
         state_class=SensorStateClass.MEASUREMENT,
         unit="var",
-        icon="mdi:sine-wave",
     ),
     _sensor(
         "acenergy",
@@ -318,7 +312,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
         unit="Wh",
-        icon="mdi:lightning-bolt",
     ),
     _sensor(
         "pv_power",
@@ -329,7 +322,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         unit="W",
-        icon="mdi:solar-power",
     ),
     _sensor(
         "pv_connection",
@@ -393,7 +385,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         unit="V",
-        icon="mdi:lightning-bolt",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     _sensor(
@@ -404,7 +395,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         unit="V",
-        icon="mdi:lightning-bolt",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     _sensor(
@@ -415,7 +405,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         unit="W",
-        icon="mdi:lightning-bolt",
     ),
     _sensor(
         "events2",
@@ -472,7 +461,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         unit="V",
-        icon="mdi:lightning-bolt",
     ),
     _sensor(
         "i_unit_id",
@@ -490,7 +478,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         unit="W",
-        icon="mdi:chart-line",
     ),
     _sensor(
         "ac_limit_enable",
@@ -500,7 +487,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
             r, lambda c: _ac_limit_status(c.ac_limit_enabled)
         ),
         exists_fn=_controls_present,
-        icon="mdi:power-plug",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     _sensor(
@@ -510,7 +496,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         value_fn=lambda r: r.device.isolation_resistance_megaohm,
         state_class=SensorStateClass.MEASUREMENT,
         unit="MΩ",
-        icon="mdi:omega",
     ),
     # -- three-phase-only inverter sensors -----------------------------------
     _sensor(
@@ -522,7 +507,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
         unit="A",
-        icon="mdi:current-ac",
     ),
     _sensor(
         "AphC",
@@ -533,7 +517,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
         unit="A",
-        icon="mdi:current-ac",
     ),
     _sensor(
         "PhVphB",
@@ -544,7 +527,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         unit="V",
-        icon="mdi:lightning-bolt",
     ),
     _sensor(
         "PhVphC",
@@ -555,7 +537,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         unit="V",
-        icon="mdi:lightning-bolt",
     ),
     _sensor(
         "PPVphAB",
@@ -566,7 +547,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         unit="V",
-        icon="mdi:lightning-bolt",
     ),
     _sensor(
         "PPVphBC",
@@ -577,7 +557,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         unit="V",
-        icon="mdi:lightning-bolt",
     ),
     _sensor(
         "PPVphCA",
@@ -588,7 +567,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         unit="V",
-        icon="mdi:lightning-bolt",
     ),
     # -- web sensors ------------------------------------------------------------
     _sensor(
@@ -600,7 +578,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
         unit="°C",
-        icon="mdi:thermometer",
     ),
     _sensor(
         "export_soft_limit",
@@ -612,7 +589,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         unit="W",
-        icon="mdi:transmission-tower-export",
     ),
     _sensor(
         "api_modbus_mode",
@@ -664,7 +640,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
         unit="A",
-        icon="mdi:current-dc",
     ),
     _sensor(
         "storage_charge_voltage",
@@ -675,7 +650,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         unit="V",
-        icon="mdi:lightning-bolt",
     ),
     _sensor(
         "storage_charge_power",
@@ -686,7 +660,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         unit="W",
-        icon="mdi:home-battery",
     ),
     _sensor(
         "storage_charge_lfte",
@@ -697,7 +670,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
         unit="Wh",
-        icon="mdi:home-battery",
     ),
     _sensor(
         "storage_discharge_current",
@@ -710,7 +682,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
         unit="A",
-        icon="mdi:current-dc",
     ),
     _sensor(
         "storage_discharge_voltage",
@@ -723,7 +694,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         unit="V",
-        icon="mdi:lightning-bolt",
     ),
     _sensor(
         "storage_discharge_power",
@@ -736,7 +706,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         unit="W",
-        icon="mdi:home-battery",
     ),
     _sensor(
         "storage_discharge_lfte",
@@ -749,7 +718,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
         unit="Wh",
-        icon="mdi:home-battery",
     ),
     _sensor(
         "storage_connection",
@@ -771,7 +739,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
         unit="°C",
-        icon="mdi:thermometer",
     ),
     _sensor(
         "control_mode",
@@ -827,7 +794,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         value_fn=lambda r: assume_present(r.device.storage).in_w_rte,
         exists_fn=_storage_present,
         unit="%",
-        icon="mdi:gauge",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     _sensor(
@@ -838,7 +804,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         value_fn=lambda r: assume_present(r.device.storage).out_w_rte,
         exists_fn=_storage_present,
         unit="%",
-        icon="mdi:gauge",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     _sensor(
@@ -849,7 +814,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         value_fn=lambda r: assume_present(r.storage_control).soc_minimum,
         exists_fn=_storage_present,
         unit="%",
-        icon="mdi:gauge",
     ),
     _sensor(
         "grid_charging",
@@ -948,7 +912,6 @@ _METER_SENSOR_SPECS: tuple[tuple, ...] = (
         SensorDeviceClass.CURRENT,
         SensorStateClass.MEASUREMENT,
         "A",
-        "mdi:current-ac",
     ),
     (
         "AphA",
@@ -956,7 +919,6 @@ _METER_SENSOR_SPECS: tuple[tuple, ...] = (
         SensorDeviceClass.CURRENT,
         SensorStateClass.MEASUREMENT,
         "A",
-        "mdi:current-ac",
     ),
     (
         "AphB",
@@ -964,7 +926,6 @@ _METER_SENSOR_SPECS: tuple[tuple, ...] = (
         SensorDeviceClass.CURRENT,
         SensorStateClass.MEASUREMENT,
         "A",
-        "mdi:current-ac",
     ),
     (
         "AphC",
@@ -972,7 +933,6 @@ _METER_SENSOR_SPECS: tuple[tuple, ...] = (
         SensorDeviceClass.CURRENT,
         SensorStateClass.MEASUREMENT,
         "A",
-        "mdi:current-ac",
     ),
     (
         "power",
@@ -980,7 +940,6 @@ _METER_SENSOR_SPECS: tuple[tuple, ...] = (
         SensorDeviceClass.POWER,
         SensorStateClass.MEASUREMENT,
         "W",
-        "mdi:lightning-bolt",
     ),
     (
         "WphA",
@@ -988,7 +947,6 @@ _METER_SENSOR_SPECS: tuple[tuple, ...] = (
         SensorDeviceClass.POWER,
         SensorStateClass.MEASUREMENT,
         "W",
-        "mdi:lightning-bolt",
     ),
     (
         "WphB",
@@ -996,7 +954,6 @@ _METER_SENSOR_SPECS: tuple[tuple, ...] = (
         SensorDeviceClass.POWER,
         SensorStateClass.MEASUREMENT,
         "W",
-        "mdi:lightning-bolt",
     ),
     (
         "WphC",
@@ -1004,7 +961,6 @@ _METER_SENSOR_SPECS: tuple[tuple, ...] = (
         SensorDeviceClass.POWER,
         SensorStateClass.MEASUREMENT,
         "W",
-        "mdi:lightning-bolt",
     ),
     (
         "exported",
@@ -1012,7 +968,6 @@ _METER_SENSOR_SPECS: tuple[tuple, ...] = (
         SensorDeviceClass.ENERGY,
         SensorStateClass.TOTAL_INCREASING,
         "Wh",
-        "mdi:lightning-bolt",
     ),
     (
         "imported",
@@ -1020,7 +975,6 @@ _METER_SENSOR_SPECS: tuple[tuple, ...] = (
         SensorDeviceClass.ENERGY,
         SensorStateClass.TOTAL_INCREASING,
         "Wh",
-        "mdi:lightning-bolt",
     ),
     (
         "line_frequency",
@@ -1028,7 +982,6 @@ _METER_SENSOR_SPECS: tuple[tuple, ...] = (
         SensorDeviceClass.FREQUENCY,
         SensorStateClass.MEASUREMENT,
         "Hz",
-        None,
     ),
     (
         "PhVphA",
@@ -1036,7 +989,6 @@ _METER_SENSOR_SPECS: tuple[tuple, ...] = (
         SensorDeviceClass.VOLTAGE,
         SensorStateClass.MEASUREMENT,
         "V",
-        "mdi:lightning-bolt",
     ),
     (
         "PhVphB",
@@ -1044,7 +996,6 @@ _METER_SENSOR_SPECS: tuple[tuple, ...] = (
         SensorDeviceClass.VOLTAGE,
         SensorStateClass.MEASUREMENT,
         "V",
-        "mdi:lightning-bolt",
     ),
     (
         "PhVphC",
@@ -1052,7 +1003,6 @@ _METER_SENSOR_SPECS: tuple[tuple, ...] = (
         SensorDeviceClass.VOLTAGE,
         SensorStateClass.MEASUREMENT,
         "V",
-        "mdi:lightning-bolt",
     ),
     (
         "PPV",
@@ -1060,7 +1010,6 @@ _METER_SENSOR_SPECS: tuple[tuple, ...] = (
         SensorDeviceClass.VOLTAGE,
         SensorStateClass.MEASUREMENT,
         "V",
-        "mdi:lightning-bolt",
     ),
 )
 
@@ -1093,9 +1042,8 @@ def _meter_sensor_descriptions(
             device_class=device_class,
             state_class=state_class,
             unit=unit,
-            icon=icon,
         )
-        for suffix, getter, device_class, state_class, unit, icon in _METER_SENSOR_SPECS
+        for suffix, getter, device_class, state_class, unit in _METER_SENSOR_SPECS
         if phases != 1 or suffix not in _SINGLE_PHASE_UNSUPPORTED_METER_KEYS
     ]
     descriptions.append(
@@ -1119,7 +1067,6 @@ _MPPT_MODULE_SENSOR_SPECS = (
         SensorDeviceClass.CURRENT,
         SensorStateClass.MEASUREMENT,
         "A",
-        "mdi:current-dc",
     ),
     (
         "dc_voltage",
@@ -1127,7 +1074,6 @@ _MPPT_MODULE_SENSOR_SPECS = (
         SensorDeviceClass.VOLTAGE,
         SensorStateClass.MEASUREMENT,
         "V",
-        "mdi:lightning-bolt",
     ),
     (
         "dc_power",
@@ -1135,7 +1081,6 @@ _MPPT_MODULE_SENSOR_SPECS = (
         SensorDeviceClass.POWER,
         SensorStateClass.MEASUREMENT,
         "W",
-        "mdi:solar-power",
     ),
     (
         "lifetime_energy",
@@ -1143,7 +1088,6 @@ _MPPT_MODULE_SENSOR_SPECS = (
         SensorDeviceClass.ENERGY,
         SensorStateClass.TOTAL_INCREASING,
         "Wh",
-        "mdi:solar-panel",
     ),
 )
 
@@ -1158,7 +1102,6 @@ def _mppt_sensor_descriptions(
         device_class,
         state_class,
         unit,
-        icon,
     ) in _MPPT_MODULE_SENSOR_SPECS:
         if getattr(runtime.device.mppt_module(index), attribute, None) is None:
             continue
@@ -1173,7 +1116,6 @@ def _mppt_sensor_descriptions(
                 device_class=device_class,
                 state_class=state_class,
                 native_unit_of_measurement=unit,
-                icon=icon,
             )
         )
     return descriptions
@@ -1195,7 +1137,6 @@ def _load_and_grid_status_descriptions(
             device_class=SensorDeviceClass.POWER,
             state_class=SensorStateClass.MEASUREMENT,
             unit="W",
-            icon="mdi:lightning-bolt",
         ),
         _sensor(
             "grid_status",
@@ -1218,7 +1159,6 @@ def _throttle_descriptions(
             "throttle_reason",
             "throttle_reason",
             value_fn=lambda r: r.modbus.data.throttle_reason,
-            icon="mdi:speedometer-slow",
             entity_category=EntityCategory.DIAGNOSTIC,
         )
     ]
@@ -1433,7 +1373,6 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
         native_step=1,
         mode=NumberMode.BOX,
         native_unit_of_measurement="%",
-        icon="mdi:home-battery",
     ),
     FroniusNumberDescription(
         key="export_soft_limit",
@@ -1586,7 +1525,6 @@ def _switch(
     turn_on: Callable[[FroniusRuntimeData], Awaitable[None]],
     turn_off: Callable[[FroniusRuntimeData], Awaitable[None]],
     exists_fn: Callable[[FroniusRuntimeData], bool],
-    icon: str | None = None,
     entity_category: EntityCategory | None = None,
 ) -> FroniusSwitchDescription:
     return FroniusSwitchDescription(
@@ -1598,7 +1536,6 @@ def _switch(
         turn_on=turn_on,
         turn_off=turn_off,
         exists_fn=exists_fn,
-        icon=icon,
         entity_category=entity_category,
     )
 
@@ -1615,7 +1552,6 @@ _SWITCH_DESCRIPTIONS: tuple[FroniusSwitchDescription, ...] = (
             charge_from_grid=False, charge_from_ac=False
         ),
         exists_fn=lambda r: _storage_present(r) and _web_configured(r),
-        icon="mdi:power-plug-battery",
     ),
     _switch(
         "api_charge_from_grid",
@@ -1628,7 +1564,6 @@ _SWITCH_DESCRIPTIONS: tuple[FroniusSwitchDescription, ...] = (
             charge_from_grid=False
         ),
         exists_fn=lambda r: _storage_present(r) and _web_configured(r),
-        icon="mdi:transmission-tower-export",
     ),
     _switch(
         "api_solar_api_enabled",
@@ -1636,7 +1571,6 @@ _SWITCH_DESCRIPTIONS: tuple[FroniusSwitchDescription, ...] = (
         turn_on=lambda r: assume_present(r.web_control).set_solar_api_enabled(True),
         turn_off=lambda r: assume_present(r.web_control).set_solar_api_enabled(False),
         exists_fn=_web_configured,
-        icon="mdi:api",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
 )
@@ -1659,7 +1593,6 @@ _BUTTON_DESCRIPTIONS: tuple[FroniusButtonDescription, ...] = (
         value_fn=lambda r: None,
         press=lambda r: assume_present(r.web_control).reset_modbus_control(),
         exists_fn=_web_configured,
-        icon="mdi:restart",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
 )

@@ -1,0 +1,168 @@
+{
+  "entity": {
+    "button": {
+      "reset_modbus_control": {
+        "default": "mdi:restart"
+      }
+    },
+    "number": {
+      "backup_reserve": {
+        "default": "mdi:home-battery"
+      }
+    },
+    "sensor": {
+      "ac_current": {
+        "default": "mdi:current-ac"
+      },
+      "ac_current_l1": {
+        "default": "mdi:current-ac"
+      },
+      "ac_current_l2": {
+        "default": "mdi:current-ac"
+      },
+      "ac_current_l3": {
+        "default": "mdi:current-ac"
+      },
+      "ac_limit_enable": {
+        "default": "mdi:power-plug"
+      },
+      "ac_limit_rate": {
+        "default": "mdi:chart-line"
+      },
+      "ac_voltage_l1_l2": {
+        "default": "mdi:lightning-bolt"
+      },
+      "ac_voltage_l1_n": {
+        "default": "mdi:lightning-bolt"
+      },
+      "ac_voltage_l2_l3": {
+        "default": "mdi:lightning-bolt"
+      },
+      "ac_voltage_l2_n": {
+        "default": "mdi:lightning-bolt"
+      },
+      "ac_voltage_l3_l1": {
+        "default": "mdi:lightning-bolt"
+      },
+      "ac_voltage_l3_n": {
+        "default": "mdi:lightning-bolt"
+      },
+      "ac_voltage_line_line": {
+        "default": "mdi:lightning-bolt"
+      },
+      "acenergy": {
+        "default": "mdi:lightning-bolt"
+      },
+      "acpower": {
+        "default": "mdi:lightning-bolt"
+      },
+      "charging_power": {
+        "default": "mdi:gauge"
+      },
+      "discharging_power": {
+        "default": "mdi:gauge"
+      },
+      "export_soft_limit": {
+        "default": "mdi:transmission-tower-export"
+      },
+      "exported": {
+        "default": "mdi:lightning-bolt"
+      },
+      "imported": {
+        "default": "mdi:lightning-bolt"
+      },
+      "inverter_temperature": {
+        "default": "mdi:thermometer"
+      },
+      "isolation_resistance": {
+        "default": "mdi:omega"
+      },
+      "load": {
+        "default": "mdi:lightning-bolt"
+      },
+      "max_power": {
+        "default": "mdi:lightning-bolt"
+      },
+      "mppt_module_dc_current": {
+        "default": "mdi:current-dc"
+      },
+      "mppt_module_dc_power": {
+        "default": "mdi:solar-power"
+      },
+      "mppt_module_dc_voltage": {
+        "default": "mdi:lightning-bolt"
+      },
+      "mppt_module_lifetime_energy": {
+        "default": "mdi:solar-panel"
+      },
+      "power": {
+        "default": "mdi:lightning-bolt"
+      },
+      "power_l1": {
+        "default": "mdi:lightning-bolt"
+      },
+      "power_l2": {
+        "default": "mdi:lightning-bolt"
+      },
+      "power_l3": {
+        "default": "mdi:lightning-bolt"
+      },
+      "pv_power": {
+        "default": "mdi:solar-power"
+      },
+      "soc_minimum": {
+        "default": "mdi:gauge"
+      },
+      "storage_charge_current": {
+        "default": "mdi:current-dc"
+      },
+      "storage_charge_lfte": {
+        "default": "mdi:home-battery"
+      },
+      "storage_charge_power": {
+        "default": "mdi:home-battery"
+      },
+      "storage_charge_voltage": {
+        "default": "mdi:lightning-bolt"
+      },
+      "storage_discharge_current": {
+        "default": "mdi:current-dc"
+      },
+      "storage_discharge_lfte": {
+        "default": "mdi:home-battery"
+      },
+      "storage_discharge_power": {
+        "default": "mdi:home-battery"
+      },
+      "storage_discharge_voltage": {
+        "default": "mdi:lightning-bolt"
+      },
+      "storage_temperature": {
+        "default": "mdi:thermometer"
+      },
+      "throttle_reason": {
+        "default": "mdi:speedometer-slow"
+      },
+      "var": {
+        "default": "mdi:sine-wave"
+      },
+      "vref": {
+        "default": "mdi:lightning-bolt"
+      },
+      "vrefofs": {
+        "default": "mdi:lightning-bolt"
+      }
+    },
+    "switch": {
+      "api_charge_from_ac": {
+        "default": "mdi:power-plug-battery"
+      },
+      "api_charge_from_grid": {
+        "default": "mdi:transmission-tower-export"
+      },
+      "api_solar_api_enabled": {
+        "default": "mdi:api"
+      }
+    }
+  }
+}

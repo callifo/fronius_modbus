@@ -13,7 +13,7 @@ import time
 
 from modbus_connection import ModbusError
 
-from .exceptions import ControlLeftDisabledError
+from .exceptions import ControlLeftDisabledError, ControlRefused
 from .sunspec_models import Controls
 
 APPLY_TOGGLE_DELAY_SECONDS = 1.0
@@ -135,7 +135,10 @@ class InverterControls:
     async def set_ac_limit_w(self, watts: float) -> None:
         """Set the AC power limit in watts, converted to percent of max power."""
         if not self.max_power_w:
-            raise ValueError("Cannot set AC limit rate, missing max power")
+            raise ControlRefused(
+                "ac_limit_without_max_power",
+                "Cannot set AC limit rate, missing max power",
+            )
         percent = max(0.0, min(PERCENT, watts / self.max_power_w * PERCENT))
         self._ac_limit_mask_until = self._monotonic() + APPLY_MASK_SECONDS
         was_enabled = await self._write_with_pulse(
@@ -155,7 +158,12 @@ class InverterControls:
     async def set_power_factor(self, value: float) -> None:
         """Set the power factor, -1..1."""
         if not -1.0 <= value <= 1.0:
-            raise ValueError("Power factor must be between -1 and 1")
+            raise ControlRefused(
+                "value_out_of_range",
+                "Power factor must be between -1 and 1",
+                minimum="-1",
+                maximum="1",
+            )
         self._power_factor_mask_until = self._monotonic() + APPLY_MASK_SECONDS
         was_enabled = await self._write_with_pulse(
             "out_pf_set_ena", "out_pf_set", value

@@ -632,5 +632,58 @@
         "technician": "Techniker (schaltet die Einspeisebegrenzung frei)"
       }
     }
+  },
+  "exceptions": {
+    "charge_limit_not_in_mode": {
+      "message": "Die Ladegrenze kann im aktuellen Speichermodus nicht geändert werden."
+    },
+    "discharge_limit_not_in_mode": {
+      "message": "Die Entladegrenze kann im aktuellen Speichermodus nicht geändert werden."
+    },
+    "grid_charge_power_not_in_mode": {
+      "message": "Die Netzladeleistung kann nur im Speichermodus „Aus dem Netz laden“ geändert werden."
+    },
+    "grid_discharge_power_not_in_mode": {
+      "message": "Die Netzentladeleistung kann nur im Speichermodus „Ins Netz entladen“ geändert werden."
+    },
+    "value_not_whole": {
+      "message": "Der Wert muss eine ganze Zahl sein."
+    },
+    "value_out_of_range": {
+      "message": "Der Wert muss zwischen {minimum} und {maximum} liegen."
+    },
+    "soc_minimum_above_maximum": {
+      "message": "Das SoC-Minimum darf das SoC-Maximum nicht überschreiten."
+    },
+    "needs_manual_self_consumption": {
+      "message": "Dieser Wert kann nur geändert werden, während die Eigenverbrauchs-Optimierung auf Manuell steht."
+    },
+    "needs_manual_soc_mode": {
+      "message": "Dieser Wert kann nur geändert werden, während der Web-API-SoC-Modus auf Manuell steht."
+    },
+    "ac_limit_without_max_power": {
+      "message": "Die AC-Begrenzung kann nicht gesetzt werden: der Wechselrichter hat seine Maximalleistung noch nicht gemeldet."
+    },
+    "web_api_not_configured": {
+      "message": "Die Fronius-Web-API ist für diesen Eintrag nicht eingerichtet."
+    },
+    "web_api_auth_failed": {
+      "message": "Die Fronius-Web-API hat die Anmeldung abgelehnt. Bitte die Integration neu konfigurieren."
+    },
+    "technician_not_configured": {
+      "message": "Diese Steuerung braucht die Techniker-Rolle. Sie lässt sich über Konfigurieren wählen."
+    },
+    "export_limit_not_accepted": {
+      "message": "Der Wechselrichter hat die weiche Einspeisegrenze nicht übernommen."
+    },
+    "value_refused": {
+      "message": "Der Wert wurde abgelehnt: {error}"
+    },
+    "write_failed": {
+      "message": "Das Schreiben zum Wechselrichter ist fehlgeschlagen: {error}"
+    },
+    "unsupported_option": {
+      "message": "Nicht unterstützte Option: {option}"
+    }
   }
 }

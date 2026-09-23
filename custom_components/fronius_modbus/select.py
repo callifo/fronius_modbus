@@ -7,6 +7,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from .const import DOMAIN
 from .coordinator import FroniusConfigEntry
 from .entities import FroniusEntity, FroniusSelectDescription, select_descriptions
 
@@ -30,7 +31,9 @@ class FroniusSelect(FroniusEntity, SelectEntity):
         code = next((c for c, label in options_map.items() if label == option), None)
         if code is None:
             raise ServiceValidationError(
-                f"Unsupported option for {self.entity_description.key}: {option}"
+                translation_domain=DOMAIN,
+                translation_key="unsupported_option",
+                translation_placeholders={"option": option},
             )
         await self.async_run_write(
             lambda: self.entity_description.set_fn(self._runtime, code)

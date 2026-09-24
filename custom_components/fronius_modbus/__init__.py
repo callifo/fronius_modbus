@@ -92,7 +92,8 @@ async def _async_meter_topology(
             err,
         )
         await async_get_token_store(hass).async_delete_token(
-            str(_entry_value(entry, CONF_HOST)), client.username
+            str(_entry_value(entry, CONF_HOST)),
+            str(_entry_value(entry, CONF_API_USERNAME, API_USERNAME)),
         )
         return None, unconfirmed
     except Exception as err:

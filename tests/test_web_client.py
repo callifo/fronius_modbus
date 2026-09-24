@@ -1249,11 +1249,15 @@ def test_a_modbus_config_of_the_wrong_shape_is_a_response_error(config):
         {"slave": {"ctr": {"restriction": ""}}},
     ],
 )
-def test_an_empty_wrong_type_in_the_modbus_config_is_not_written_back_with_defaults(config):
+def test_an_empty_wrong_type_in_the_modbus_config_is_not_written_back_with_defaults(
+    config,
+):
     """Reaudit RE26-01: `[]`, `0` and `""` became `{}` and a POST with defaults followed."""
     client = FroniusWebClient("192.0.2.10")
     client.get_modbus_config = lambda: config
-    client._post = lambda *_args, **_kwargs: pytest.fail("posted a malformed config back")
+    client._post = lambda *_args, **_kwargs: pytest.fail(
+        "posted a malformed config back"
+    )
 
     with pytest.raises(FroniusWebResponseError, match="no object"):
         client.ensure_modbus_enabled(502, 200, 1)

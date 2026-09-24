@@ -170,6 +170,25 @@ async def test_a_battery_write_that_changed_nothing_opens_no_recovery_window(
     assert control.events == []
 
 
+class FakeClientWithReadings(FakeWebClient):
+    def get_inverter_info(self):
+        return {"temperature": 41.5, "readings": {"FANCONTROL_PERCENT_01_F32": 12.0}}
+
+    def get_storage_info(self):
+        return super().get_storage_info() | {"readings": {"sw_version": "3.26"}}
+
+
+async def test_the_refresh_hands_on_the_component_readings(hass):
+    control = make_control(hass, client=FakeClientWithReadings())
+    try:
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert data.inverter_readings == {"FANCONTROL_PERCENT_01_F32": 12.0}
+    assert data.storage_readings == {"sw_version": "3.26"}
+
+
 async def test_refresh_fills_the_web_data(control):
     data = await control.async_refresh()
     assert data.inverter_temperature == 41.5

@@ -345,8 +345,8 @@
   {
     "label": "web_control: a reserve outside the range is refused",
     "path": "custom_components/fronius_modbus/web_control.py",
-    "old": "        if percent < SOC_LOWEST or percent > SOC_HIGHEST:\n            raise ControlRefused(\n                \"value_out_of_range\",\n                \"Battery backup reserve must be between 5 and 100\",\n                minimum=str(SOC_LOWEST),\n                maximum=str(SOC_HIGHEST),\n            )\n        await self._async_web_job(\n            self._client.set_backup_reserve",
-    "new": "        await self._async_web_job(\n            self._client.set_backup_reserve",
+    "old": "        if percent < SOC_LOWEST or percent > SOC_HIGHEST:\n            raise ControlRefused(\n                \"value_out_of_range\",\n                \"Battery backup reserve must be between 5 and 100\",\n                minimum=str(SOC_LOWEST),\n                maximum=str(SOC_HIGHEST),\n            )\n        written = await self._async_web_job(\n            self._client.set_backup_reserve",
+    "new": "        written = await self._async_web_job(\n            self._client.set_backup_reserve",
     "tests": "a_backup_reserve_outside_the_range_is_refused"
   },
   {
@@ -534,14 +534,14 @@
   {
     "label": "web client: enabling the Solar API keeps the discovery switch",
     "path": "custom_components/fronius_modbus/froniuswebclient.py",
-    "old": "            **_without_descriptions(self.get_solar_api_config()),",
-    "new": "            \"activeOnExternalDevicesDiscovered\": False,",
+    "old": "        self._post(\"/api/config/solar_api\", {**current, **wanted})",
+    "new": "        self._post(\"/api/config/solar_api\", wanted)",
     "tests": "enabling_the_solar_api_keeps_the_discovery_switch"
   },
   {
     "label": "web client: disabling the Solar API clears the discovery switch",
     "path": "custom_components/fronius_modbus/froniuswebclient.py",
-    "old": "            payload[\"activeOnExternalDevicesDiscovered\"] = False",
+    "old": "            wanted[\"activeOnExternalDevicesDiscovered\"] = False",
     "new": "            pass",
     "tests": "disabling_the_solar_api_also_clears_the_discovery_flag"
   },
@@ -586,5 +586,68 @@
     "old": "        if not await registers_holding(self._storage, {field_name: value}):",
     "new": "        if True:",
     "tests": "an_unchanged_rate_or_reserve_is_not_written"
+  },
+  {
+    "label": "web client: a battery field already in place is not written",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "            if not _same(current.get(key), value)\n",
+    "new": "",
+    "tests": "a_battery_setting_already_in_place_is_not_written or only_the_battery_fields_that_differ_are_written"
+  },
+  {
+    "label": "web client: nothing to change means no write",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "        if not changes:\n            return False\n",
+    "new": "",
+    "tests": "a_battery_setting_already_in_place_is_not_written"
+  },
+  {
+    "label": "web client: an unreadable config is written in full",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "        except FroniusWebResponseError, ValueError:\n            current = {}\n",
+    "new": "        except FroniusWebResponseError, ValueError:\n            return False\n",
+    "tests": "an_unreadable_battery_config_still_writes_everything"
+  },
+  {
+    "label": "web client: a refused field in the answer is an error",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "        if refused:\n",
+    "new": "        if False:\n",
+    "tests": "a_field_the_inverter_refuses_is_an_error"
+  },
+  {
+    "label": "web client: flags compare in the inverter's spelling",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "        return is_enabled(current) == wanted\n",
+    "new": "        return current is wanted\n",
+    "tests": "the_inverters_own_spelling_counts_as_the_same_value"
+  },
+  {
+    "label": "web client: a Solar API already in that state is not written",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "        if all(_same(current.get(key), value) for key, value in wanted.items()):\n            return False\n",
+    "new": "",
+    "tests": "a_solar_api_already_in_that_state_is_not_written"
+  },
+  {
+    "label": "web client: an export limit already in place is not written",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "            return False\n        soft[\"enabled\"] = True\n",
+    "new": "            pass\n        soft[\"enabled\"] = True\n",
+    "tests": "an_export_limit_already_in_place_is_not_written"
+  },
+  {
+    "label": "web control: a write that changed nothing opens no recovery window",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        if not written:\n",
+    "new": "        if False:\n",
+    "tests": "a_battery_write_that_changed_nothing_opens_no_recovery_window"
+  },
+  {
+    "label": "web client: words compare without their case",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "        return current.casefold() == wanted.casefold()\n",
+    "new": "        return current == wanted\n",
+    "tests": "the_inverters_own_spelling_counts_as_the_same_value"
   }
 ]

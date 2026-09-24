@@ -521,7 +521,11 @@ class FroniusWebControl:
 
         self._delayed_refresh_task = self._hass.loop.create_task(delayed_refresh())
 
-    def _start_battery_write_transition(self, source: str) -> None:
+    def _after_battery_write(self, source: str, *, written: bool) -> None:
+        """Publish the new state; only a write that reached the inverter opens the window."""
+        if not written:
+            self._publish()
+            return
         self._on_battery_write()
         self._publish()
         self._schedule_delayed_web_refresh()
@@ -656,7 +660,7 @@ class FroniusWebControl:
         next_soc_min, next_soc_max, next_backup_reserved = self._get_api_soc_values(
             soc_min=soc_min, soc_max=soc_max
         )
-        await self._async_web_job(
+        written = await self._async_web_job(
             self._client.set_battery_soc_config,
             next_soc_min,
             next_soc_max,
@@ -667,7 +671,7 @@ class FroniusWebControl:
         self.data.soc_min = next_soc_min
         self.data.soc_max = next_soc_max
         self.data.backup_reserved = next_backup_reserved
-        self._start_battery_write_transition(control_name)
+        self._after_battery_write(control_name, written=written)
         return next_soc_min, next_soc_max, next_backup_reserved
 
     @_serialised
@@ -687,13 +691,13 @@ class FroniusWebControl:
             if mode == BATTERY_MODE_MANUAL and display_power is not None
             else None
         )
-        await self._async_web_job(
+        written = await self._async_web_job(
             self._client.set_battery_config, mode, power, raise_on_auth_failure=True
         )
         self._set_effective_battery_mode(mode, self.data.soc_mode_raw)
         if mode == BATTERY_MODE_MANUAL:
             self.data.battery_power_w = display_power
-        self._start_battery_write_transition("self-consumption optimisation")
+        self._after_battery_write("self-consumption optimisation", written=written)
 
     @_last_writer_wins
     async def set_battery_power_w(self, value: float) -> None:
@@ -703,7 +707,7 @@ class FroniusWebControl:
         self._require_battery_mode_manual("Target feed in")
 
         power = -int(round(value))
-        await self._async_web_job(
+        written = await self._async_web_job(
             self._client.set_battery_config,
             BATTERY_MODE_MANUAL,
             power,
@@ -711,7 +715,7 @@ class FroniusWebControl:
         )
         self.data.battery_power_w = int(round(value))
         self._set_effective_battery_mode(BATTERY_MODE_MANUAL, self.data.soc_mode_raw)
-        self._start_battery_write_transition("Target feed in")
+        self._after_battery_write("Target feed in", written=written)
 
     @_last_writer_wins
     async def set_soc_maximum(self, soc_max: int) -> None:
@@ -733,11 +737,11 @@ class FroniusWebControl:
         if not self._client:
             raise ControlUnavailable("web_api_not_configured", WEB_API_NOT_CONFIGURED)
         mode = SOC_MODE_MANUAL if manual else SOC_MODE_AUTO
-        await self._async_web_job(
+        written = await self._async_web_job(
             self._client.set_soc_mode, mode, raise_on_auth_failure=True
         )
         self._set_effective_battery_mode(self.data.battery_mode_raw, mode)
-        self._start_battery_write_transition("SoC mode")
+        self._after_battery_write("SoC mode", written=written)
 
     @_last_writer_wins
     async def set_backup_reserve(self, percent: int) -> None:
@@ -751,11 +755,11 @@ class FroniusWebControl:
                 minimum=str(SOC_LOWEST),
                 maximum=str(SOC_HIGHEST),
             )
-        await self._async_web_job(
+        written = await self._async_web_job(
             self._client.set_backup_reserve, percent, raise_on_auth_failure=True
         )
         self.data.backup_reserved = percent
-        self._start_battery_write_transition("Backup reserve")
+        self._after_battery_write("Backup reserve", written=written)
 
     @_serialised
     async def set_charge_sources(
@@ -785,7 +789,7 @@ class FroniusWebControl:
             if next_charge_from_grid and charge_from_ac is None:
                 next_charge_from_ac = True
 
-        await self._async_web_job(
+        written = await self._async_web_job(
             self._client.set_battery_charge_sources,
             next_charge_from_grid,
             next_charge_from_ac,
@@ -793,7 +797,7 @@ class FroniusWebControl:
         )
         self.data.charge_from_grid = next_charge_from_grid
         self.data.charge_from_ac = next_charge_from_ac
-        self._start_battery_write_transition("battery charge source")
+        self._after_battery_write("battery charge source", written=written)
 
     @_last_writer_wins
     async def set_export_soft_limit_w(self, value: float) -> None:
@@ -804,15 +808,10 @@ class FroniusWebControl:
                 "technician_not_configured", TECHNICIAN_NOT_CONFIGURED
             )
         limit_w = int(round(value))
-        result = await self._async_web_job(
+        await self._async_web_job(
             client.set_export_soft_limit,
             limit_w,
             raise_on_auth_failure=True,
         )
-        if not result:
-            raise ControlUnavailable(
-                "export_limit_not_accepted",
-                "The inverter did not accept the export soft limit",
-            )
         self.data.export_soft_limit_w = limit_w
         self._publish()

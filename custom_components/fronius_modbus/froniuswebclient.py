@@ -24,6 +24,15 @@ MASTER_RTUIF = {"master": {"rtuif": [{"if": "rtu0"}, {"if": "rtu1"}]}}
 # Modes in which the Modbus TCP server answers; "both" also serves RTU clients.
 TCP_MODES = ("tcp", "both")
 RESTRICTION_LIST_SEPARATOR = ","
+BATTERIES_PATH = "/api/config/batteries"
+# Lists in the answer to a config write that name the fields it did not take.
+WRITE_REFUSALS = (
+    "errors",
+    "permissionFailure",
+    "unknownNodes",
+    "validationErrors",
+    "writeFailure",
+)
 
 
 class ClientIpResolutionError(RuntimeError):
@@ -192,6 +201,20 @@ def _without_descriptions(node: Any) -> Any:
     if isinstance(node, list):
         return [_without_descriptions(value) for value in node]
     return node
+
+
+def _same(current: Any, wanted: Any) -> bool:
+    """Whether the inverter already holds what a write would set.
+
+    It answers flags and words in its own spelling ("true", 1, "Manual").
+    """
+    if current is None:
+        return False
+    if isinstance(wanted, bool):
+        return is_enabled(current) == wanted
+    if isinstance(wanted, str) and isinstance(current, str):
+        return current.casefold() == wanted.casefold()
+    return bool(current == wanted)
 
 
 def _network(entry: str) -> ipaddress.IPv4Network | ipaddress.IPv6Network | None:
@@ -531,8 +554,46 @@ class FroniusWebClient:
     def _get_public_json(self, path: str) -> dict[str, Any]:
         return self._request("get", path, authenticated=False).json()
 
-    def _post_ok(self, path: str, payload: dict[str, Any] | None = None) -> bool:
-        return self._request("post", path, payload=payload).ok
+    def _post(self, path: str, payload: dict[str, Any] | None = None) -> None:
+        """Write, and fail on a field the inverter names as refused.
+
+        It answers a config write field by field in the body (seen on a GEN24),
+        so HTTP 200 alone does not say every field was taken.
+        """
+        response = self._request("post", path, payload=payload)
+        try:
+            body = response.json()
+        except ValueError:
+            return
+        if not isinstance(body, dict):
+            return
+        refused = {key: body[key] for key in WRITE_REFUSALS if body.get(key)}
+        if refused:
+            raise FroniusWebResponseError(
+                f"HTTP {response.status_code} on {path} refused {refused}",
+                response.status_code,
+            )
+
+    def _post_changes(self, path: str, wanted: dict[str, Any]) -> bool:
+        """Write only the fields of ``wanted`` the inverter does not hold; whether any were.
+
+        Compared against a fresh read, not the last poll: a value another
+        controller changed in between would otherwise be skipped as "already
+        set". A config that cannot be read is written in full.
+        """
+        try:
+            current = _without_descriptions(self._get_json(path))
+        except FroniusWebResponseError, ValueError:
+            current = {}
+        changes = {
+            key: value
+            for key, value in wanted.items()
+            if not _same(current.get(key), value)
+        }
+        if not changes:
+            return False
+        self._post(path, changes)
+        return True
 
     def _resolve_client_ip(self) -> str:
         try:
@@ -675,7 +736,7 @@ class FroniusWebClient:
                 "ctr": {**ctr, "on": True, "restriction": wanted},
             },
         }
-        self._request("post", "/api/config/modbus", payload=payload)
+        self._post("/api/config/modbus", payload)
         _LOGGER.info(
             "Enabled Modbus TCP via the web API (port=%s inverter_id=%s meter_id=%s restriction=%s)",
             port,
@@ -694,23 +755,26 @@ class FroniusWebClient:
         Switching off clears it too: a discovered device would switch the API
         straight back on.
         """
-        payload = {
-            **_without_descriptions(self.get_solar_api_config()),
-            "SolarAPIv1Enabled": bool(enabled),
-        }
+        current = _without_descriptions(self.get_solar_api_config())
+        wanted: dict[str, Any] = {"SolarAPIv1Enabled": bool(enabled)}
         if not enabled:
-            payload["activeOnExternalDevicesDiscovered"] = False
-        return self._post_ok("/api/config/solar_api", payload)
+            wanted["activeOnExternalDevicesDiscovered"] = False
+        if all(_same(current.get(key), value) for key, value in wanted.items()):
+            return False
+        # Written whole: only the battery endpoint is known to take single fields.
+        self._post("/api/config/solar_api", {**current, **wanted})
+        return True
 
     def reset_modbus_control(self) -> bool:
-        return self._post_ok("/api/commands/ModbusReset")
+        self._post("/api/commands/ModbusReset")
+        return True
 
     def set_battery_config(self, mode: int, power: int | None = None) -> bool:
         """Self-consumption optimisation only; the SoC window has its own switch."""
-        payload: dict[str, Any] = {"HYB_EM_MODE": mode}
+        wanted: dict[str, Any] = {"HYB_EM_MODE": mode}
         if power is not None:
-            payload["HYB_EM_POWER"] = power
-        return self._post_ok("/api/config/batteries", payload)
+            wanted["HYB_EM_POWER"] = power
+        return self._post_changes(BATTERIES_PATH, wanted)
 
     def set_battery_soc_config(
         self,
@@ -718,30 +782,28 @@ class FroniusWebClient:
         soc_max: int,
         backup_reserved: int,
     ) -> bool:
-        payload: dict[str, Any] = {
+        wanted: dict[str, Any] = {
             "BAT_M0_SOC_MIN": soc_min,
             "BAT_M0_SOC_MODE": "manual",
             "BAT_M0_SOC_MAX": soc_max,
             "HYB_BACKUP_RESERVED": backup_reserved,
         }
-        return self._post_ok("/api/config/batteries", payload)
+        return self._post_changes(BATTERIES_PATH, wanted)
 
     def set_soc_mode(self, mode: str) -> bool:
-        return self._post_ok("/api/config/batteries", {"BAT_M0_SOC_MODE": mode})
+        return self._post_changes(BATTERIES_PATH, {"BAT_M0_SOC_MODE": mode})
 
     def set_backup_reserve(self, percent: int) -> bool:
-        return self._post_ok(
-            "/api/config/batteries", {"HYB_BACKUP_RESERVED": int(percent)}
-        )
+        return self._post_changes(BATTERIES_PATH, {"HYB_BACKUP_RESERVED": int(percent)})
 
     def set_battery_charge_sources(
         self, charge_from_grid: bool, charge_from_ac: bool
     ) -> bool:
-        payload = {
+        wanted = {
             "HYB_EVU_CHARGEFROMGRID": bool(charge_from_grid),
             "HYB_BM_CHARGEFROMAC": bool(charge_from_ac),
         }
-        return self._post_ok("/api/config/batteries", payload)
+        return self._post_changes(BATTERIES_PATH, wanted)
 
     def get_export_limit_config(self) -> dict[str, Any]:
         """Read current Export Limit Control configuration from the inverter."""
@@ -761,6 +823,12 @@ class FroniusWebClient:
         Mirrors read_export_limit.py: only modifies softLimit, leaves everything else unchanged.
         """
         config = self._get_json("/api/config/limit_settings/powerLimits")
-        config["exportLimits"]["activePower"]["softLimit"]["enabled"] = True
-        config["exportLimits"]["activePower"]["softLimit"]["powerLimit"] = int(power_w)
-        return self._post_ok("/api/config/limit_settings/powerLimits", config)
+        soft = config["exportLimits"]["activePower"]["softLimit"]
+        if is_enabled(soft.get("enabled")) and _same(
+            soft.get("powerLimit"), int(power_w)
+        ):
+            return False
+        soft["enabled"] = True
+        soft["powerLimit"] = int(power_w)
+        self._post("/api/config/limit_settings/powerLimits", config)
+        return True

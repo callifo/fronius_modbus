@@ -10,12 +10,12 @@ from custom_components.fronius_modbus.const import (
     DOMAIN,
     SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX,
 )
+from custom_components.fronius_modbus.fronius_modbus_api.exceptions import (
+    ControlRefused,
+)
 from custom_components.fronius_modbus.froniuswebclient import (
     FroniusWebAuthError,
     FroniusWebResponseError,
-)
-from custom_components.fronius_modbus.fronius_modbus_api.exceptions import (
-    ControlRefused,
 )
 from custom_components.fronius_modbus.token_store import async_get_token_store
 from custom_components.fronius_modbus.web_control import FroniusWebControl

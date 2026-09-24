@@ -866,5 +866,12 @@
     "old": "        addresses[unit_id] = model.address\n",
     "new": "        self._meter_addresses[unit_id] = model.address\n",
     "tests": "an_aborted_rediscovery_leaves_the_meter_addresses_alone"
+  },
+  {
+    "label": "diagnostics: an offline inverter keeps the rest of the report",
+    "path": "custom_components/fronius_modbus/diagnostics.py",
+    "old": "    except ModbusError as err:\n        return {\"error\": type(err).__name__}\n",
+    "new": "    except ZeroDivisionError as err:\n        return {\"error\": type(err).__name__}\n",
+    "tests": "diagnostics_still_answer_while_the_inverter_is_offline"
   }
 ]

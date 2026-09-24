@@ -824,3 +824,37 @@ async def test_a_placeholder_power_module_is_not_kept(
     await hass.async_block_till_done()
 
     assert er.async_get(hass).async_get(module_2) is None
+
+
+class _WebClientLosingTheEndpoint(_WebClientAnsweringEmpty):
+    """The inverter component endpoint answers 404 once it is flagged missing."""
+
+    missing = False
+
+    def get_inverter_info(self):
+        if self.missing:
+            return {"readings": None, "missing": True}
+        return super().get_inverter_info()
+
+
+async def test_a_single_404_keeps_the_registered_component_sensors(
+    hass, mock_modbus, monkeypatch
+):
+    """Audit FA0FB-03: one 404 read as firmware without the endpoint retired them."""
+    mock_modbus.add_unit(201, like=METER_UNIT_ID)
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientLosingTheEndpoint)
+    monkeypatch.setattr(
+        _WebClientLosingTheEndpoint,
+        "readings",
+        {"DEVICE_TEMPERATURE_AMBIENTMEAN_01_F32": 40.0},
+    )
+    entry = make_entry(hass)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+    await setup_entry(hass, entry)
+    temperature = entity_id_for(hass, entry, "sensor", "inverter_temperature")
+
+    monkeypatch.setattr(_WebClientLosingTheEndpoint, "missing", True)
+    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert er.async_get(hass).async_get(temperature) is not None

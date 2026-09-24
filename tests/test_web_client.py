@@ -1222,3 +1222,20 @@ def test_the_login_is_behind_the_same_boundary(monkeypatch):
     with pytest.raises(FroniusWebUnreachable) as caught:
         froniuswebclient.mint_token(HOST, "customer", "secret")
     assert HOST not in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        {"slave": ["unexpected"]},
+        {"slave": {"ctr": "unexpected"}},
+        {"slave": {"ctr": {"restriction": ["unexpected"]}}},
+    ],
+)
+def test_a_modbus_config_of_the_wrong_shape_is_a_response_error(config):
+    """Audit F24-11: an AttributeError reached the config flow as an unknown error."""
+    client = FroniusWebClient("192.0.2.10")
+    client.get_modbus_config = lambda: config
+
+    with pytest.raises(FroniusWebResponseError, match="no object"):
+        client.ensure_modbus_enabled(502, 200, 1)

@@ -23,7 +23,10 @@ from custom_components.fronius_modbus.const import (
 from custom_components.fronius_modbus.diagnostics import (
     async_get_config_entry_diagnostics,
 )
-from custom_components.fronius_modbus.froniuswebclient import FroniusWebAuthError
+from custom_components.fronius_modbus.froniuswebclient import (
+    FroniusWebAuthError,
+    FroniusWebClient,
+)
 from custom_components.fronius_modbus.token_store import async_get_token_store
 from custom_components.fronius_modbus.web_control import WebData
 from homeassistant.config_entries import ConfigEntryState
@@ -81,6 +84,12 @@ async def log_in_to_the_web_api(hass, mock_modbus, monkeypatch) -> None:
     mock_modbus.add_unit(201, like=METER_UNIT_ID)
     monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _FakeWebClientWithTopology)
     await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+
+
+def _only_what_the_real_client_has(name: str) -> None:
+    """A fake that answers any name hid a call to an attribute the client lacks."""
+    if not hasattr(FroniusWebClient, name):
+        raise AttributeError(name)
 
 
 def entity_id_for(hass, entry: MockConfigEntry, domain: str, key: str) -> str:
@@ -332,6 +341,8 @@ class _FakeWebClientDownAfterMeterInfo:
         return None
 
     def __getattr__(self, name: str):
+        _only_what_the_real_client_has(name)
+
         def _raise(*_args, **_kwargs):
             raise RuntimeError("down")
 
@@ -534,6 +545,8 @@ class _FakeWebClientWithTopology:
         return self.topology
 
     def __getattr__(self, name: str):
+        _only_what_the_real_client_has(name)
+
         def _quiet(*_args, **_kwargs):
             return None
 
@@ -677,17 +690,6 @@ async def test_a_rejected_technician_token_is_the_one_deleted(
     """
     monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientLosingItsLogin)
     monkeypatch.setattr(_WebClientLosingItsLogin, "lost_at", "get_power_meter_info")
-    monkeypatch.setattr(
-        _WebClientLosingItsLogin,
-        "username",
-        property(lambda self: self._username),
-        raising=False,
-    )
-    monkeypatch.setattr(
-        _WebClientLosingItsLogin,
-        "__init__",
-        lambda self, *_a, username, **_k: setattr(self, "_username", username),
-    )
     entry = make_entry(hass)
     store = async_get_token_store(hass)
     await store.async_save_token(HOST, realm="r", token="t", user="technician")

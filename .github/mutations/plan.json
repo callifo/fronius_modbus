@@ -807,7 +807,7 @@
   {
     "label": "web client: the SoC window is checked against the fresh read",
     "path": "custom_components/fronius_modbus/froniuswebclient.py",
-    "old": "        if _window_inverted(lower, upper):\n",
+    "old": "        if lower > upper:\n",
     "new": "        if False:\n",
     "tests": "soc_window_is_checked_against_the_fresh_read"
   },
@@ -1055,5 +1055,12 @@
     "old": "    if part is None:\n        return None\n    return _enabled_state(part.get(\"on\"))\n",
     "new": "    return _enabled_state((part or {}).get(\"on\"))\n",
     "tests": "malformed_modbus_flag_shows_as_unknown"
+  },
+  {
+    "label": "web client: a SoC window needs numeric limits",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "        if not (_is_number(lower) and _is_number(upper)):\n",
+    "new": "        if False:\n",
+    "tests": "soc_window_without_a_numeric_limit_is_unreadable"
   }
 ]

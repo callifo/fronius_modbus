@@ -204,9 +204,8 @@ def _nested_object(config: dict[str, Any], key: str, path: str) -> dict[str, Any
     return _config_object(config.get(key, {}), path)
 
 
-def _window_inverted(lower: Any, upper: Any) -> bool:
-    numbers = isinstance(lower, (int, float)) and isinstance(upper, (int, float))
-    return numbers and lower > upper
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def _same(current: Any, wanted: Any) -> bool:
@@ -822,7 +821,13 @@ class FroniusWebClient:
         current = _config_object(self._get_json(BATTERIES_PATH), BATTERIES_PATH)
         lower = soc_min if soc_min is not None else current.get("BAT_M0_SOC_MIN")
         upper = soc_max if soc_max is not None else current.get("BAT_M0_SOC_MAX")
-        if _window_inverted(lower, upper):
+        if not (_is_number(lower) and _is_number(upper)):
+            # Unknown is not "fits": Modbus would take a minimum the web API
+            # may refuse (audit RR770-04).
+            raise FroniusWebResponseError(
+                f"HTTP 200 on {BATTERIES_PATH} answered no SoC window", HTTPStatus.OK
+            )
+        if lower > upper:
             raise ControlRefused(
                 "soc_minimum_above_maximum", "SoC Minimum must not exceed SoC Maximum"
             )

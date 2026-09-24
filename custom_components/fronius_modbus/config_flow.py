@@ -441,7 +441,9 @@ async def async_update_entry_from_input(
     new_options.pop("meter_modbus_unit_id", None)
     new_data.pop("meter_modbus_unit_ids", None)
     new_options.pop("meter_modbus_unit_ids", None)
-    hass.config_entries.async_update_entry(
+    # Read before the update: its listener starts the reload right away.
+    loaded = entry.state is config_entries.ConfigEntryState.LOADED
+    changed = hass.config_entries.async_update_entry(
         entry,
         data=new_data,
         options=new_options,
@@ -450,6 +452,11 @@ async def async_update_entry_from_input(
     )
     if previous_host:
         await async_forget_unused_tokens(hass, previous_host)
+    # A change to a loaded entry reloads it through its update listener; a
+    # second call here reloaded it twice (audit F24-10). A new token alone
+    # changes nothing in the entry, so that still needs the call.
+    if changed and loaded:
+        return
     await hass.config_entries.async_reload(entry.entry_id)
 
 
@@ -561,14 +568,11 @@ class TokenFlowMixin:
             try:
                 password = str(user_input.get(CONF_API_PASSWORD, "")).strip()
                 username = state.settings[CONF_API_USERNAME]
-                if password == "" and state.existing_token is not None:
-                    token = state.existing_token
-                else:
+                minted = not (password == "" and state.existing_token is not None)
+                token = state.existing_token
+                if minted:
                     token = await _async_mint_token(
                         self.hass, state.settings[CONF_HOST], password, username
-                    )
-                    await _async_save_token(
-                        self.hass, state.settings[CONF_HOST], username, token
                     )
                 info = await _validate_input(
                     self.hass,
@@ -577,13 +581,40 @@ class TokenFlowMixin:
                     apply_modbus_config=state.apply_modbus_config,
                 )
                 self._pending_flow_state = None
-                return await on_success(state.settings, info, state.previous_host)
+                return await self._async_finish_with_token(
+                    on_success, state, info, token if minted else None
+                )
             except data_entry_flow.AbortFlow:
                 raise
             except Exception as err:  # pylint: disable=broad-except
                 _set_form_error(errors, err)
 
         return await self._async_show_password_step(step_id=step_id, errors=errors)
+
+    async def _async_finish_with_token(
+        self,
+        on_success: _FlowFinishCallback,
+        state: _PendingFlowState,
+        info: dict[str, Any],
+        minted: dict[str, str] | None,
+    ):
+        """Keep a minted token only for a checked inverter and a finished flow.
+
+        Saved first, a failed check or an aborted flow left a password-equivalent
+        credential with no entry (audit RA24-01). The entry's setup reads it, so
+        it is saved before the entry is created and dropped again if that fails.
+        """
+        host = state.settings[CONF_HOST]
+        if minted is None:
+            return await on_success(state.settings, info, state.previous_host)
+        await _async_save_token(
+            self.hass, host, state.settings[CONF_API_USERNAME], minted
+        )
+        try:
+            return await on_success(state.settings, info, state.previous_host)
+        except BaseException:
+            await async_forget_unused_tokens(self.hass, host)
+            raise
 
 
 class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):

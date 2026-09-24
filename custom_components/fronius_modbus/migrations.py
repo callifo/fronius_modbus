@@ -28,7 +28,7 @@ from .const import (
     ModbusRestriction,
 )
 from .entities import expected_device_identifiers, expected_unique_ids
-from .token_store import async_get_token_store
+from .token_store import async_forget_unused_tokens, async_get_token_store
 
 _LOGGER = logging.getLogger(__name__)
 _TRANSLATIONS_DIR = Path(__file__).resolve().parent / "translations"
@@ -214,44 +214,50 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.error("Unsupported config entry version: %s", entry.version)
         return False
 
-    if entry.version == _TARGET_VERSION and entry.minor_version < _TARGET_MINOR_VERSION:
-        new_data = dict(entry.data)
-        new_options = dict(entry.options)
-        title = entry.title
+    if entry.version != _TARGET_VERSION or entry.minor_version >= _TARGET_MINOR_VERSION:
+        return True
 
-        if entry.minor_version < _WEB_API_MINOR_VERSION:
-            new_data.pop(CONF_METER_UNIT_ID, None)
-            new_data.pop(CONF_METER_UNIT_IDS, None)
-            new_options.pop(CONF_METER_UNIT_ID, None)
-            new_options.pop(CONF_METER_UNIT_IDS, None)
-            new_data[CONF_RECONFIGURE_REQUIRED] = True
-            new_options[CONF_RECONFIGURE_REQUIRED] = True
-            title = _updated_entry_title(entry)
+    new_data = dict(entry.data)
+    new_options = dict(entry.options)
+    title = entry.title
 
-        if entry.minor_version < _SINGLE_ROLE_MINOR_VERSION:
-            api_username = await _async_stored_role(hass, entry)
-            new_data[CONF_API_USERNAME] = api_username
-            new_options[CONF_API_USERNAME] = api_username
+    if entry.minor_version < _WEB_API_MINOR_VERSION:
+        new_data.pop(CONF_METER_UNIT_ID, None)
+        new_data.pop(CONF_METER_UNIT_IDS, None)
+        new_options.pop(CONF_METER_UNIT_ID, None)
+        new_options.pop(CONF_METER_UNIT_IDS, None)
+        new_data[CONF_RECONFIGURE_REQUIRED] = True
+        new_options[CONF_RECONFIGURE_REQUIRED] = True
+        title = _updated_entry_title(entry)
 
-        if entry.minor_version < _RESTRICTION_CHOICE_MINOR_VERSION:
-            # An unchecked box wrote "off"; it becomes "keep", since lifting a
-            # restriction has to be chosen (audit A24-02).
-            choice = ModbusRestriction.KEEP
-            if _entry_value(entry, _LEGACY_RESTRICT_TO_THIS_IP, False):
-                choice = ModbusRestriction.HOME_ASSISTANT
-            for values in (new_data, new_options):
-                values.pop(_LEGACY_RESTRICT_TO_THIS_IP, None)
-            new_data[CONF_MODBUS_RESTRICTION] = choice
-            new_options[CONF_MODBUS_RESTRICTION] = choice
+    if entry.minor_version < _SINGLE_ROLE_MINOR_VERSION:
+        api_username = await _async_stored_role(hass, entry)
+        new_data[CONF_API_USERNAME] = api_username
+        new_options[CONF_API_USERNAME] = api_username
 
-        hass.config_entries.async_update_entry(
-            entry,
-            data=new_data,
-            options=new_options,
-            version=_TARGET_VERSION,
-            minor_version=_TARGET_MINOR_VERSION,
-            title=title,
-        )
+    if entry.minor_version < _RESTRICTION_CHOICE_MINOR_VERSION:
+        # An unchecked box wrote "off"; it becomes "keep", since lifting a
+        # restriction has to be chosen (audit A24-02).
+        choice = ModbusRestriction.KEEP
+        if _entry_value(entry, _LEGACY_RESTRICT_TO_THIS_IP, False):
+            choice = ModbusRestriction.HOME_ASSISTANT
+        for values in (new_data, new_options):
+            values.pop(_LEGACY_RESTRICT_TO_THIS_IP, None)
+        new_data[CONF_MODBUS_RESTRICTION] = choice
+        new_options[CONF_MODBUS_RESTRICTION] = choice
+
+    drops_a_role = entry.minor_version < _SINGLE_ROLE_MINOR_VERSION
+    hass.config_entries.async_update_entry(
+        entry,
+        data=new_data,
+        options=new_options,
+        version=_TARGET_VERSION,
+        minor_version=_TARGET_MINOR_VERSION,
+        title=title,
+    )
+    if drops_a_role:
+        # One role kept means the other role's token is unused now (audit F24-04).
+        await async_forget_unused_tokens(hass, str(_entry_value(entry, CONF_HOST, "")))
 
     return True
 

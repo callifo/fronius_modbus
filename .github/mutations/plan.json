@@ -170,8 +170,8 @@
   {
     "label": "migrations: an unchecked restriction box becomes keep, not off",
     "path": "custom_components/fronius_modbus/migrations.py",
-    "old": "            choice = ModbusRestriction.KEEP",
-    "new": "            choice = ModbusRestriction.OFF",
+    "old": "        choice = ModbusRestriction.KEEP",
+    "new": "        choice = ModbusRestriction.OFF",
     "tests": "minor_version_11_entries_turn_the_checkbox_into_a_choice"
   },
   {
@@ -824,5 +824,33 @@
     "old": "    return _config_object(config.get(key) or {}, path)\n",
     "new": "    return config.get(key) or {}\n",
     "tests": "a_modbus_config_of_the_wrong_shape_is_a_response_error"
+  },
+  {
+    "label": "config flow: a minted token is kept only after the check",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "                info = await _validate_input(\n                    self.hass,\n                    state.settings,\n",
+    "new": "                await _async_save_token(\n                    self.hass, state.settings[CONF_HOST], username, token\n                )\n                info = await _validate_input(\n                    self.hass,\n                    state.settings,\n",
+    "tests": "a_token_whose_setup_fails_is_not_kept"
+  },
+  {
+    "label": "config flow: an aborted flow drops its minted token",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "        except BaseException:\n            await async_forget_unused_tokens(self.hass, host)\n            raise\n",
+    "new": "        except BaseException:\n            raise\n",
+    "tests": "a_token_for_a_host_already_set_up_is_not_kept"
+  },
+  {
+    "label": "config flow: a changed loaded entry reloads once",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "    if changed and loaded:\n        return\n",
+    "new": "",
+    "tests": "a_reconfigure_reloads_the_entry_once"
+  },
+  {
+    "label": "migrations: the dropped role takes its token with it",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "    if drops_a_role:\n",
+    "new": "    if False:\n",
+    "tests": "the_role_a_migration_drops_takes_its_token_with_it"
   }
 ]

@@ -1261,3 +1261,15 @@ def test_an_empty_wrong_type_in_the_modbus_config_is_not_written_back_with_defau
 
     with pytest.raises(FroniusWebResponseError, match="no object"):
         client.ensure_modbus_enabled(502, 200, 1)
+
+
+def test_an_unreadable_soc_window_is_not_written(client, inverter):
+    """Audit FA0FB-04: an HTTP 500 read passed the window check as an empty config."""
+    inverter.statuses[BATTERIES] = 500
+
+    with pytest.raises(FroniusWebResponseError):
+        client.check_soc_window(soc_min=50)
+    with pytest.raises(FroniusWebResponseError):
+        client.set_soc_limits(soc_min=50)
+
+    assert posts(inverter) == []

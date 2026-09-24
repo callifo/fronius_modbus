@@ -12,6 +12,7 @@ from custom_components.fronius_modbus.const import (
 )
 from custom_components.fronius_modbus.fronius_modbus_api.exceptions import (
     ControlRefused,
+    ControlUnavailable,
 )
 from custom_components.fronius_modbus.froniuswebclient import (
     FroniusWebAuthError,
@@ -677,3 +678,28 @@ async def test_a_soc_maximum_a_stale_poll_would_refuse_reaches_the_inverter(hass
     finally:
         control.shutdown()
     assert client.calls[-1] == ("soc", None, 30)
+
+
+async def test_a_web_refusal_after_modbus_says_modbus_is_set(hass):
+    """Audit FA0FB-04: the error named the web failure, not the minimum Modbus already held."""
+    client = FakeWebClient()
+    client.battery.update(BAT_M0_SOC_MODE="manual")
+    control = make_control(hass, client=client)
+    written = []
+    try:
+        await control.async_refresh()
+
+        def refuse(soc_min=None, soc_max=None):
+            raise FroniusWebResponseError("HTTP 500", 500)
+
+        client.set_soc_limits = refuse
+
+        async def write_modbus():
+            written.append(50)
+
+        with pytest.raises(ControlUnavailable) as failed:
+            await control.apply_soc_minimum(50, write_modbus)
+    finally:
+        control.shutdown()
+    assert written == [50]
+    assert failed.value.key == "soc_minimum_web_failed"

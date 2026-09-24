@@ -198,7 +198,7 @@ Note to change the mode first then set controls active in that mode. The mode na
 
 ### Component Sensors (Web API)
 
-The inverter's component endpoints (`/api/components/inverter/readable` and `/api/components/BatteryManagementSystem/readable`) add values Modbus does not carry. They come with the web API poll that already runs; no extra request is made. A power module the inverter does not report creates no entity; any other value it does not report shows as unknown. Firmware without these endpoints (HTTP 404) gets none of these sensors. Serial numbers, part serials and device ids from these endpoints are never taken.
+The inverter's component endpoints (`/api/components/inverter/readable` and `/api/components/BatteryManagementSystem/readable`) add values Modbus does not carry. They come with the web API poll that already runs; no extra request is made. A power module the inverter does not report creates no entity; any other value it does not report shows as unknown. Firmware without these endpoints (HTTP 404) gets none of these sensors. No sensor takes their serial numbers, part serials or device ids; the battery's serial number shows on its device page, as before, and is redacted in diagnostics.
 
 | Entity                                               | Device   | Default  | Description                                                                                  |
 | ---------------------------------------------------- | -------- | -------- | -------------------------------------------------------------------------------------------- |

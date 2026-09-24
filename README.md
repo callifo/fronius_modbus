@@ -196,6 +196,29 @@ Note to change the mode first then set controls active in that mode. The mode na
 | Power                     | Net grid power measured by the smart meter.                                                                           |
 | Power L1 / L2 / L3        | Per-phase smart meter real power from SunSpec `WphA`, `WphB`, and `WphC`. The sign matches the meter power direction. |
 
+### Component Sensors (Web API)
+
+The inverter's component endpoints (`/api/components/inverter/readable` and `/api/components/BatteryManagementSystem/readable`) add values Modbus does not carry. They come with the web API poll that already runs; no extra request is made. A channel the inverter does not report creates no entity. Serial numbers, part serials and device ids from these endpoints are never taken.
+
+| Entity                                               | Device   | Default  | Description                                                                                  |
+| ---------------------------------------------------- | -------- | -------- | -------------------------------------------------------------------------------------------- |
+| Power module 1–4 temperature                         | Inverter | enabled  | Temperatures of the power modules the inverter reports.                                      |
+| Fan 1 / 2                                            | Inverter | enabled  | Fan speed in percent.                                                                        |
+| AC power L1 / L2 / L3                                | Inverter | enabled  | Per-phase active power of the inverter.                                                      |
+| Production limit / Production limit reached          | Inverter | enabled  | The active power limit in effect, and whether the inverter is running at it.                 |
+| Battery max charge / discharge power (DC-DC)         | Inverter | enabled  | What the battery converter can take or give right now.                                      |
+| Grid valid                                           | Inverter | enabled  | The inverter's own verdict on the grid at its feed-in point.                                 |
+| Power stage 1 / 2 firmware                           | Inverter | enabled  | Diagnostic.                                                                                  |
+| Feed-in point voltage L1–L3, L1-L2–L3-L1, frequency  | Inverter | disabled | Grid side of the inverter's relays; differs from the AC output only while they are open.     |
+| DC link voltage, Operating time, Power stage hardware | Inverter | disabled | Diagnostic. The operating time counts in seconds but is no exact clock.                      |
+| Time in backup mode                                  | Inverter | disabled | Total time the inverter ran in backup mode.                                                  |
+| State of health                                      | Battery  | enabled  | The battery's own estimate, in percent.                                                      |
+| Cell temperature min / max, BMS ambient temperature  | Battery  | disabled |                                                                                              |
+| Current discharge limit / Current power limit        | Battery  | disabled | The limits the battery management system reports right now.                                  |
+| Peak charge / discharge power, Manufacturer SoC min / max, Voltage range min / max, Modules, Connection | Battery | disabled | Diagnostic, from the battery's nameplate and attributes. |
+
+The battery's own firmware and hardware version appear on its device page.
+
 ### Inverter Diagnostics
 
 | Entity                                       | Description                                                                                                                                                                                                                                                                |

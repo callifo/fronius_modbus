@@ -483,6 +483,137 @@
           "several": "Mehrere Gründe",
           "unknown": "Unbekannt"
         }
+      },
+      "module_temperature_1": {
+        "name": "Temperatur Leistungsmodul 1"
+      },
+      "module_temperature_2": {
+        "name": "Temperatur Leistungsmodul 2"
+      },
+      "module_temperature_3": {
+        "name": "Temperatur Leistungsmodul 3"
+      },
+      "module_temperature_4": {
+        "name": "Temperatur Leistungsmodul 4"
+      },
+      "fan_1": {
+        "name": "Lüfter 1"
+      },
+      "fan_2": {
+        "name": "Lüfter 2"
+      },
+      "inverter_power_l1": {
+        "name": "AC-Wirkleistung L1"
+      },
+      "inverter_power_l2": {
+        "name": "AC-Wirkleistung L2"
+      },
+      "inverter_power_l3": {
+        "name": "AC-Wirkleistung L3"
+      },
+      "production_limit": {
+        "name": "Aktuelle Produktionsgrenze"
+      },
+      "production_limit_reached": {
+        "name": "Leistungsgrenze erreicht",
+        "state": {
+          "yes": "Ja",
+          "no": "Nein"
+        }
+      },
+      "battery_max_charge_power": {
+        "name": "Batterie max. Ladeleistung (DC-Wandler)"
+      },
+      "battery_max_discharge_power": {
+        "name": "Batterie max. Entladeleistung (DC-Wandler)"
+      },
+      "dc_link_voltage": {
+        "name": "Zwischenkreisspannung"
+      },
+      "grid_valid": {
+        "name": "Netz gültig",
+        "state": {
+          "yes": "Ja",
+          "no": "Nein"
+        }
+      },
+      "feed_in_voltage_l1": {
+        "name": "Einspeisepunkt Spannung L1"
+      },
+      "feed_in_voltage_l2": {
+        "name": "Einspeisepunkt Spannung L2"
+      },
+      "feed_in_voltage_l3": {
+        "name": "Einspeisepunkt Spannung L3"
+      },
+      "feed_in_voltage_l1_l2": {
+        "name": "Einspeisepunkt Spannung L1-L2"
+      },
+      "feed_in_voltage_l2_l3": {
+        "name": "Einspeisepunkt Spannung L2-L3"
+      },
+      "feed_in_voltage_l3_l1": {
+        "name": "Einspeisepunkt Spannung L3-L1"
+      },
+      "feed_in_frequency": {
+        "name": "Einspeisepunkt Frequenz"
+      },
+      "operating_time": {
+        "name": "Betriebsdauer"
+      },
+      "backup_time": {
+        "name": "Zeit im Notstrombetrieb"
+      },
+      "power_stage_firmware_1": {
+        "name": "Firmware Leistungsteil 1"
+      },
+      "power_stage_firmware_2": {
+        "name": "Firmware Leistungsteil 2"
+      },
+      "power_stage_hardware": {
+        "name": "Hardware Leistungsteil"
+      },
+      "storage_state_of_health": {
+        "name": "Gesundheit (SoH)"
+      },
+      "storage_cell_temperature_min": {
+        "name": "Zelltemperatur min"
+      },
+      "storage_cell_temperature_max": {
+        "name": "Zelltemperatur max"
+      },
+      "storage_bms_temperature": {
+        "name": "Umgebungstemperatur BMS"
+      },
+      "storage_discharge_limit": {
+        "name": "Aktuelle Entladegrenze"
+      },
+      "storage_power_limit": {
+        "name": "Aktuelle Leistungsgrenze"
+      },
+      "storage_peak_charge_power": {
+        "name": "Spitzenleistung Laden (10 s)"
+      },
+      "storage_peak_discharge_power": {
+        "name": "Spitzenleistung Entladen (10 s)"
+      },
+      "storage_rated_soc_min": {
+        "name": "Hersteller-SoC min"
+      },
+      "storage_rated_soc_max": {
+        "name": "Hersteller-SoC max"
+      },
+      "storage_voltage_min": {
+        "name": "Spannungsbereich min"
+      },
+      "storage_voltage_max": {
+        "name": "Spannungsbereich max"
+      },
+      "storage_modules": {
+        "name": "Anzahl Module"
+      },
+      "storage_link": {
+        "name": "Anbindung"
       }
     },
     "switch": {

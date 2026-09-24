@@ -33,6 +33,13 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .component_readings import (
+    COMPONENT_READINGS,
+    NO,
+    YES,
+    ComponentReading,
+    component_value,
+)
 from .const import (
     AC_LIMIT_STATUS,
     API_BATTERY_MODE,
@@ -1174,7 +1181,57 @@ def sensor_descriptions(runtime: FroniusRuntimeData) -> list[FroniusSensorDescri
         descriptions += _meter_sensor_descriptions(unit_id, info.phases)
     for index in runtime.device.mppt_channels.pv:
         descriptions += _mppt_sensor_descriptions(index, runtime)
+    if _web_configured(runtime):
+        descriptions += [
+            _component_sensor(reading)
+            for reading in COMPONENT_READINGS
+            if _component_reported(runtime, reading)
+        ]
     return descriptions
+
+
+def _component_readings(
+    runtime: FroniusRuntimeData, reading: ComponentReading
+) -> dict[str, Any] | None:
+    web_data = runtime.web_data
+    if web_data is None:
+        return None
+    if reading.component == "storage":
+        return web_data.storage_readings
+    return web_data.inverter_readings
+
+
+def _component_reported(runtime: FroniusRuntimeData, reading: ComponentReading) -> bool:
+    if reading.component == "storage" and not _storage_present(runtime):
+        return False
+    readings = _component_readings(runtime, reading)
+    # Unread is not absent: the stale-entity cleanup would retire it (audit A24-01).
+    return readings is None or any(field in readings for field in reading.fields)
+
+
+def _component_sensor(reading: ComponentReading) -> FroniusSensorDescription:
+    yes_no = reading.transform == "yes_no"
+    device_class = (
+        SensorDeviceClass(reading.device_class) if reading.device_class else None
+    )
+    if yes_no:
+        device_class = SensorDeviceClass.ENUM
+    return FroniusSensorDescription(
+        key=reading.key,
+        translation_key=reading.key,
+        device=reading.component,
+        source="web",
+        value_fn=lambda runtime: component_value(
+            reading, _component_readings(runtime, reading)
+        ),
+        device_class=device_class,
+        options=[YES, NO] if yes_no else None,
+        state_class=SensorStateClass.MEASUREMENT if reading.measurement else None,
+        native_unit_of_measurement=reading.unit,
+        suggested_unit_of_measurement=reading.suggested_unit,
+        entity_category=EntityCategory.DIAGNOSTIC if reading.diagnostic else None,
+        entity_registry_enabled_default=reading.enabled,
+    )
 
 
 # -- number table -----------------------------------------------------------------
@@ -1647,12 +1704,15 @@ def device_info(
     if kind == "storage":
         web_data = runtime.web_data
         storage_model = web_data.storage_model if web_data else None
+        readings = (web_data.storage_readings if web_data else None) or {}
         return DeviceInfo(
             identifiers={(DOMAIN, f"{key}_battery_storage")},
             name=storage_model or "Battery Storage",
             manufacturer=web_data.storage_manufacturer if web_data else None,
             model=storage_model,
             serial_number=web_data.storage_serial if web_data else None,
+            sw_version=readings.get("sw_version"),
+            hw_version=readings.get("hw_version"),
         )
     unit_id = assume_present(meter_unit_id)
     info = runtime.device.meters[unit_id]

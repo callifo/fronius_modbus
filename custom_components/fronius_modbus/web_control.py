@@ -107,6 +107,9 @@ class WebData:
     storage_manufacturer: str | None = None
     storage_model: str | None = None
     storage_serial: str | None = None
+    # None while the component endpoint has not answered: unread, not absent.
+    inverter_readings: dict[str, Any] | None = None
+    storage_readings: dict[str, Any] | None = None
 
 
 def _export_limit_summary(config: dict[str, Any] | None) -> dict[str, Any]:
@@ -413,6 +416,18 @@ class FroniusWebControl:
             battery_config.get("HYB_EVU_CHARGEFROMGRID")
         )
 
+    def _apply_storage_info(self, storage_info: Any) -> None:
+        # An unread identity keeps the last one: the device entry would flicker.
+        if not isinstance(storage_info, dict):
+            self.data.storage_temperature = None
+            self.data.storage_readings = None
+            return
+        self.data.storage_temperature = storage_info.get("cell_temperature")
+        self.data.storage_manufacturer = storage_info.get("manufacturer")
+        self.data.storage_model = storage_info.get("model")
+        self.data.storage_serial = storage_info.get("serial")
+        self.data.storage_readings = storage_info.get("readings")
+
     def _apply_web_modbus_config(self, modbus_config: dict[str, Any]) -> None:
         slave = modbus_config.get("slave") or {}
         ctr = slave.get("ctr") or {}
@@ -451,11 +466,9 @@ class FroniusWebControl:
             return replace(self.data)
 
         inverter_info = await self._async_client_job("get_inverter_info")
-        self.data.inverter_temperature = (
-            inverter_info.get("temperature")
-            if isinstance(inverter_info, dict)
-            else None
-        )
+        inverter = inverter_info if isinstance(inverter_info, dict) else {}
+        self.data.inverter_temperature = inverter.get("temperature")
+        self.data.inverter_readings = inverter.get("readings")
 
         modbus_config = await self._async_client_job("get_modbus_config")
         if isinstance(modbus_config, dict):
@@ -471,14 +484,7 @@ class FroniusWebControl:
             self.data.solar_api_enabled = None
 
         if self._storage_present:
-            storage_info = await self._async_client_job("get_storage_info")
-            if isinstance(storage_info, dict):
-                self.data.storage_temperature = storage_info.get("cell_temperature")
-                self.data.storage_manufacturer = storage_info.get("manufacturer")
-                self.data.storage_model = storage_info.get("model")
-                self.data.storage_serial = storage_info.get("serial")
-            else:
-                self.data.storage_temperature = None
+            self._apply_storage_info(await self._async_client_job("get_storage_info"))
 
             battery_config = await self._async_client_job("get_battery_config")
             if isinstance(battery_config, dict):

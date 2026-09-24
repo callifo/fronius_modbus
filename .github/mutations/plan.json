@@ -663,5 +663,68 @@
     "old": "        except FroniusWebUnreachable as err:\n",
     "new": "        except ZeroDivisionError as err:\n",
     "tests": "an_unreachable_web_interface_is_a_translated_error"
+  },
+  {
+    "label": "entities: unread component readings keep every sensor",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "    return readings is None or any(field in readings for field in reading.fields)",
+    "new": "    return readings is not None and any(field in readings for field in reading.fields)",
+    "tests": "readings_not_yet_read_keep_every_sensor"
+  },
+  {
+    "label": "entities: a channel the device does not report makes no sensor",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "    return readings is None or any(field in readings for field in reading.fields)",
+    "new": "    return True",
+    "tests": "a_channel_the_device_does_not_report_makes_no_sensor"
+  },
+  {
+    "label": "entities: a component sensor keeps the owner's default",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "        entity_registry_enabled_default=reading.enabled,",
+    "new": "        entity_registry_enabled_default=True,",
+    "tests": "the_defaults_are_the_owners_choice"
+  },
+  {
+    "label": "entities: the battery device carries its firmware",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "            sw_version=readings.get(\"sw_version\"),\n",
+    "new": "",
+    "tests": "the_battery_device_carries_its_firmware_and_hardware"
+  },
+  {
+    "label": "component readings: only listed fields leave the web client",
+    "path": "custom_components/fronius_modbus/component_readings.py",
+    "old": "    for field in readable_fields(component):",
+    "new": "    for field in {*readable_fields(component), *attributes}:",
+    "tests": "no_serial_number_or_device_id_leaves_the_web_client"
+  },
+  {
+    "label": "component readings: a negative limit is shown as positive power",
+    "path": "custom_components/fronius_modbus/component_readings.py",
+    "old": "    return abs(value)",
+    "new": "    return value",
+    "tests": "every_sensor_on_the_gen24_shows_what_its_channel_reads"
+  },
+  {
+    "label": "component readings: a set flag reads yes",
+    "path": "custom_components/fronius_modbus/component_readings.py",
+    "old": "        return YES if any(values) else NO",
+    "new": "        return NO",
+    "tests": "every_sensor_on_the_gen24_shows_what_its_channel_reads"
+  },
+  {
+    "label": "web control: the refresh hands on the inverter readings",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        self.data.inverter_readings = inverter.get(\"readings\")",
+    "new": "        self.data.inverter_readings = None",
+    "tests": "the_refresh_hands_on_the_component_readings"
+  },
+  {
+    "label": "web control: the refresh hands on the storage readings",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        self.data.storage_readings = storage_info.get(\"readings\")",
+    "new": "        self.data.storage_readings = None",
+    "tests": "the_refresh_hands_on_the_component_readings"
   }
 ]

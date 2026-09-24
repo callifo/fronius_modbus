@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import ipaddress
-import json
 import logging
 import os
 import re
@@ -15,6 +14,7 @@ import requests
 from requests.auth import AuthBase
 from requests.utils import parse_dict_header
 
+from .component_readings import json_object, take_readings
 from .const import API_USERNAME, ModbusRestriction
 
 _LOGGER = logging.getLogger(__name__)
@@ -116,19 +116,11 @@ def _is_power_meter_model(model: str | None) -> bool:
     return "meter" in model_l or "wattnode" in model_l or "42,0411" in model_l
 
 
-def _parse_json_object(value: Any) -> dict[str, Any]:
-    try:
-        parsed = json.loads(value) if isinstance(value, str) else None
-    except TypeError, ValueError, json.JSONDecodeError:
-        return {}
-    return parsed if isinstance(parsed, dict) else {}
-
-
 def _parse_storage_info(attributes: Any) -> dict[str, str | None]:
     if not isinstance(attributes, dict):
         return {"manufacturer": None, "model": "Battery Storage", "serial": None}
 
-    nameplate = _parse_json_object(attributes.get("nameplate"))
+    nameplate = json_object(attributes.get("nameplate"))
     return {
         "manufacturer": _clean_text(nameplate.get("manufacturer"))
         or _clean_text(attributes.get("manufacturer")),
@@ -143,9 +135,19 @@ def _parse_storage_info(attributes: Any) -> dict[str, str | None]:
     }
 
 
+def _component_device(payload: Any) -> dict[str, Any] | None:
+    nodes, _ = _body_data(payload, "Body", "Data")
+    if not isinstance(nodes, dict):
+        return None
+    device = next(iter(nodes.values()), None)
+    return device if isinstance(device, dict) else None
+
+
 def _parse_storage_readable(payload: Any) -> dict[str, Any]:
     info = _parse_storage_info(None)
     info["cell_temperature"] = None
+    device = _component_device(payload)
+    info["readings"] = None if device is None else take_readings(device, "storage")
 
     nodes, _ = _body_data(payload, "Body", "Data")
     if not isinstance(nodes, dict):
@@ -171,7 +173,11 @@ def _parse_storage_readable(payload: Any) -> dict[str, Any]:
 
 
 def _parse_inverter_readable(payload: Any) -> dict[str, Any]:
-    info: dict[str, Any] = {"temperature": None}
+    device = _component_device(payload)
+    info: dict[str, Any] = {
+        "temperature": None,
+        "readings": None if device is None else take_readings(device, "inverter"),
+    }
     nodes, _ = _body_data(payload, "Body", "Data")
     if not isinstance(nodes, dict):
         return info

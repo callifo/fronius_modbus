@@ -41,7 +41,8 @@ LINE_BUDGETS = {
     # 1888 + the backup reserve, the SoC mode, the web SoC minimum (callifo #136), the capacity note
     # 1909 + translated write errors (quality scale exception-translations)
     # 1842 - the icons, now in icons.json (quality scale icon-translations)
-    "entities.py": 1850,  # + the translated error for an unreachable web interface (R24-02)
+    # 1850 + the translated error for an unreachable web interface (R24-02)
+    "entities.py": 1910,  # + the component sensor builder; the table is component_readings.py
 }
 
 # SonarSource's own default. Above it, a function is one somebody has to
@@ -55,7 +56,6 @@ COMPLEXITY_BUDGETS = {
     "derived.py::LoadEstimator.update": 19,
     "froniuswebclient.py::_parse_power_meter_info": 26,
     "migrations.py::async_migrate_v019_mppt_statistics": 19,
-    "web_control.py::FroniusWebControl._async_refresh_locked": 18,
 }
 
 

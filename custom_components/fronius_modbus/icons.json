@@ -151,6 +151,51 @@
       },
       "vrefofs": {
         "default": "mdi:lightning-bolt"
+      },
+      "fan_1": {
+        "default": "mdi:fan"
+      },
+      "fan_2": {
+        "default": "mdi:fan"
+      },
+      "production_limit": {
+        "default": "mdi:solar-power-variant"
+      },
+      "production_limit_reached": {
+        "default": "mdi:speedometer"
+      },
+      "grid_valid": {
+        "default": "mdi:transmission-tower"
+      },
+      "operating_time": {
+        "default": "mdi:timer-outline"
+      },
+      "backup_time": {
+        "default": "mdi:home-battery-outline"
+      },
+      "power_stage_firmware_1": {
+        "default": "mdi:chip"
+      },
+      "power_stage_firmware_2": {
+        "default": "mdi:chip"
+      },
+      "power_stage_hardware": {
+        "default": "mdi:chip"
+      },
+      "storage_state_of_health": {
+        "default": "mdi:battery-heart-variant"
+      },
+      "storage_modules": {
+        "default": "mdi:battery-high"
+      },
+      "storage_link": {
+        "default": "mdi:connection"
+      },
+      "storage_rated_soc_min": {
+        "default": "mdi:battery-low"
+      },
+      "storage_rated_soc_max": {
+        "default": "mdi:battery-high"
       }
     },
     "switch": {

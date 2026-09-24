@@ -297,3 +297,92 @@ async def test_a_role_switch_failing_after_the_update_keeps_the_new_token(
     assert config_flow.entry_defaults(entry)["api_username"] == "technician"
     stored = await async_get_token_store(hass).async_load_token(HOST, "technician")
     assert stored == {"realm": "r", "token": "t"}
+
+
+OTHER_HOST = "192.0.2.20"
+
+
+def _record_modbus_setup(monkeypatch) -> list[tuple]:
+    applied: list[tuple] = []
+    monkeypatch.setattr(
+        config_flow.FroniusWebClient,
+        "ensure_modbus_enabled",
+        lambda self, *args: applied.append(args) or True,
+    )
+    return applied
+
+
+def _other_entry(hass) -> MockConfigEntry:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "host": OTHER_HOST,
+            "scan_interval": 10,
+            "web_scan_interval": 60,
+            "api_username": "customer",
+        },
+        unique_id=OTHER_HOST,
+        version=1,
+        minor_version=12,
+    )
+    entry.add_to_hass(hass)
+    return entry
+
+
+async def test_a_duplicate_setup_leaves_the_inverter_alone(
+    hass, mock_modbus, monkeypatch
+):
+    """Audit FA0FB-02: the duplicate was found only after Modbus was set up on it."""
+    make_entry(hass)
+    applied = _record_modbus_setup(monkeypatch)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT
+    )
+    if result["type"] is FlowResultType.FORM:
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"api_password": "secret"}
+        )
+
+    assert result["reason"] == "already_configured"
+    assert applied == []
+
+
+async def test_moving_to_a_host_taken_leaves_the_inverter_alone(
+    hass, mock_modbus, monkeypatch
+):
+    """Audit FA0FB-02: reconfigure and options moved Modbus settings before refusing."""
+    make_entry(hass)
+    other = _other_entry(hass)
+    applied = _record_modbus_setup(monkeypatch)
+    moved = {
+        "host": HOST,
+        "scan_interval": 10,
+        "web_scan_interval": 60,
+        "modbus_restriction": "keep",
+        "api_username": "customer",
+    }
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "reconfigure", "entry_id": other.entry_id}
+    )
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], moved)
+    if result.get("step_id", "").endswith("password"):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"api_password": "secret"}
+        )
+    options = await hass.config_entries.options.async_init(other.entry_id)
+    options = await hass.config_entries.options.async_configure(
+        options["flow_id"], moved
+    )
+    if options.get("step_id", "").endswith("password"):
+        options = await hass.config_entries.options.async_configure(
+            options["flow_id"], {"api_password": "secret"}
+        )
+
+    assert result["errors"]["base"] == "already_configured"
+    assert options["errors"]["base"] == "already_configured"
+    assert applied == []

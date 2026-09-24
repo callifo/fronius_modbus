@@ -215,8 +215,19 @@ class MeterTopology:
     confirmed: bool
 
 
-def _object_or_empty(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
+def _config_part(config: dict[str, Any] | None, key: str) -> dict[str, Any] | None:
+    """A nested part; None when it, or what holds it, has the wrong shape."""
+    if config is None:
+        return None
+    part = config.get(key, {})
+    return part if isinstance(part, dict) else None
+
+
+def _flag_state(part: dict[str, Any] | None) -> str | None:
+    """An unreadable flag is unknown, not "disabled" (audit RR770-03)."""
+    if part is None:
+        return None
+    return _enabled_state(part.get("on"))
 
 
 def parse_meter_topology(info: dict | None) -> MeterTopology:
@@ -455,16 +466,16 @@ class FroniusWebControl:
     def _apply_web_modbus_config(self, modbus_config: dict[str, Any]) -> None:
         # Shown only: a part of the wrong shape is unknown, not a failed poll
         # that takes every other web value down with it (audit FA0FB-06).
-        slave = _object_or_empty(modbus_config.get("slave"))
-        ctr = _object_or_empty(slave.get("ctr"))
-        restriction = _object_or_empty(ctr.get("restriction"))
-        mode = slave.get("mode")
+        slave = _config_part(modbus_config, "slave")
+        ctr = _config_part(slave, "ctr")
+        restriction = _config_part(ctr, "restriction")
+        mode = (slave or {}).get("mode")
 
         self.data.modbus_mode = str(mode).upper() if mode is not None else None
-        self.data.modbus_control = _enabled_state(ctr.get("on"))
-        self.data.sunspec_mode = slave.get("sunspecMode")
-        self.data.modbus_restriction = _enabled_state(restriction.get("on"))
-        self.data.modbus_restriction_ip = restriction.get("ip")
+        self.data.modbus_control = _flag_state(ctr)
+        self.data.sunspec_mode = (slave or {}).get("sunspecMode")
+        self.data.modbus_restriction = _flag_state(restriction)
+        self.data.modbus_restriction_ip = (restriction or {}).get("ip")
 
     def _set_effective_battery_mode(
         self, raw_mode: int | None, raw_soc_mode: str | None

@@ -996,8 +996,8 @@
   {
     "label": "web control: a malformed Modbus config part shows as unknown",
     "path": "custom_components/fronius_modbus/web_control.py",
-    "old": "    return value if isinstance(value, dict) else {}\n",
-    "new": "    return value or {}\n",
+    "old": "    return part if isinstance(part, dict) else None\n",
+    "new": "    return part or {}\n",
     "tests": "malformed_modbus_config_leaves_the_other_web_values"
   },
   {
@@ -1048,5 +1048,12 @@
     "old": "            await store.async_delete_token(host, username)\n            return\n",
     "new": "            await async_forget_unused_tokens(self.hass, host)\n            return\n",
     "tests": "aborted_setup_does_not_hand_its_token_to_another_entry"
+  },
+  {
+    "label": "web control: an unreadable Modbus flag is unknown",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "    if part is None:\n        return None\n    return _enabled_state(part.get(\"on\"))\n",
+    "new": "    return _enabled_state((part or {}).get(\"on\"))\n",
+    "tests": "malformed_modbus_flag_shows_as_unknown"
   }
 ]

@@ -127,6 +127,49 @@ def control(hass):
     control.shutdown()
 
 
+class FakeClientAlreadyThere(FakeWebClient):
+    """Every battery setting the control asks for is already on the inverter."""
+
+    def set_battery_config(self, mode, power):
+        super().set_battery_config(mode, power)
+        return False
+
+    def set_soc_mode(self, mode):
+        super().set_soc_mode(mode)
+        return False
+
+    def set_backup_reserve(self, percent):
+        super().set_backup_reserve(percent)
+        return False
+
+    def set_battery_charge_sources(self, grid, ac):
+        super().set_battery_charge_sources(grid, ac)
+        return False
+
+
+@pytest.mark.parametrize(
+    ("setter", "arguments"),
+    [
+        ("set_battery_mode", {"mode": 0}),
+        ("set_soc_mode", {"manual": False}),
+        ("set_backup_reserve", {"percent": 5}),
+        ("set_charge_sources", {"charge_from_grid": False}),
+    ],
+)
+async def test_a_battery_write_that_changed_nothing_opens_no_recovery_window(
+    hass, setter, arguments
+):
+    """Tolerating Modbus failures and a delayed refresh follow a real write only."""
+    control = make_control(hass, client=FakeClientAlreadyThere())
+    try:
+        await control.async_refresh()
+        await getattr(control, setter)(**arguments)
+    finally:
+        control.shutdown()
+
+    assert control.events == []
+
+
 async def test_refresh_fills_the_web_data(control):
     data = await control.async_refresh()
     assert data.inverter_temperature == 41.5

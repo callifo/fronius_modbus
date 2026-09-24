@@ -852,5 +852,12 @@
     "old": "    if drops_a_role:\n",
     "new": "    if False:\n",
     "tests": "the_role_a_migration_drops_takes_its_token_with_it"
+  },
+  {
+    "label": "derived: only agreeing samples confirm a new counter range",
+    "path": "custom_components/fronius_modbus/derived.py",
+    "old": "        self._suspect_polls = self._suspect_polls + 1 if continues else 1\n",
+    "new": "        self._suspect_polls += 1\n",
+    "tests": "contradicting_samples_confirm_nothing"
   }
 ]

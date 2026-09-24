@@ -442,11 +442,15 @@ class FroniusWebControl:
         if not isinstance(storage_info, dict):
             self.data.storage_readings = None
             return
+        self.data.storage_readings = storage_info.get("readings")
+        self.data.storage_endpoint_missing = bool(storage_info.get("missing"))
+        # Without the device node the identity is the parser's placeholder,
+        # not a reading (audit FA0FB-07).
+        if self.data.storage_readings is None:
+            return
         self.data.storage_manufacturer = storage_info.get("manufacturer")
         self.data.storage_model = storage_info.get("model")
         self.data.storage_serial = storage_info.get("serial")
-        self.data.storage_readings = storage_info.get("readings")
-        self.data.storage_endpoint_missing = bool(storage_info.get("missing"))
 
     def _apply_web_modbus_config(self, modbus_config: dict[str, Any]) -> None:
         # Shown only: a part of the wrong shape is unknown, not a failed poll

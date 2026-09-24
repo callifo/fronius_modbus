@@ -999,5 +999,12 @@
     "old": "    return value if isinstance(value, dict) else {}\n",
     "new": "    return value or {}\n",
     "tests": "malformed_modbus_config_leaves_the_other_web_values"
+  },
+  {
+    "label": "web control: an unread storage node keeps the battery identity",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        if self.data.storage_readings is None:\n            return\n        self.data.storage_manufacturer",
+    "new": "        self.data.storage_manufacturer",
+    "tests": "failed_storage_read_keeps_the_battery_identity"
   }
 ]

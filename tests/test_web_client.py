@@ -1308,3 +1308,45 @@ def test_a_soc_window_without_a_numeric_limit_is_unreadable(
 
     with pytest.raises(FroniusWebResponseError, match="SoC window"):
         client.check_soc_window(soc_min=50)
+
+
+@pytest.mark.parametrize("held", [[1], "garbage", 2])
+def test_a_flag_the_inverter_holds_in_no_known_form_is_written(client, inverter, held):
+    """Own reaudit E-01: an unreadable flag compared as already set, nothing was sent."""
+    inverter.bodies[BATTERIES] = {"HYB_BM_CHARGEFROMAC": held}
+
+    assert client.set_battery_charge_sources(charge_from_ac=False) is True
+
+    assert posts(inverter) == [(BATTERIES, {"HYB_BM_CHARGEFROMAC": False})]
+
+
+def test_modbus_control_in_no_known_form_is_switched_on():
+    """Own reaudit E-01: `on: [1]` read as on, and Modbus control stayed as it was."""
+    client = FroniusWebClient("192.0.2.10")
+    client.get_modbus_config = lambda: {
+        "slave": {
+            "mode": "tcp",
+            "sunspecMode": "int",
+            "port": 502,
+            "meterAddress": 200,
+            "rtu_inverter_slave_id": 1,
+            "ctr": {"on": [1], "restriction": {"on": False}},
+        }
+    }
+    sent = []
+    client._post = lambda path, payload: sent.append(payload)
+
+    assert client.ensure_modbus_enabled(502, 200, 1) is True
+
+    assert sent[0]["slave"]["ctr"]["on"] is True
+
+
+def test_an_export_limit_switched_on_in_no_known_form_is_written(client, inverter):
+    """Own reaudit E-01: `enabled: [1]` read as on, the limit counted as in place."""
+    inverter.bodies["/api/config/limit_settings/powerLimits"] = {
+        "exportLimits": {
+            "activePower": {"softLimit": {"enabled": [1], "powerLimit": 7000}}
+        }
+    }
+
+    assert client.set_export_soft_limit(7000) is True

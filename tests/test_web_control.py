@@ -798,3 +798,20 @@ async def test_a_modbus_flag_value_that_means_nothing_shows_as_unknown(
     finally:
         control.shutdown()
     assert (data.modbus_control, data.modbus_restriction) == (shown, shown)
+
+
+async def test_a_web_switch_in_no_known_form_shows_as_unknown(hass):
+    """Own reaudit E-01: `[1]` showed as on and "garbage" as off."""
+    client = FakeWebClient()
+    client.battery.update(HYB_BM_CHARGEFROMAC=[1], HYB_EVU_CHARGEFROMGRID="garbage")
+    client.get_solar_api_config = lambda: {"SolarAPIv1Enabled": [1]}
+    control = make_control(hass, client=client)
+    try:
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+    assert (data.charge_from_ac, data.charge_from_grid, data.solar_api_enabled) == (
+        None,
+        None,
+        None,
+    )

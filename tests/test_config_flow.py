@@ -88,7 +88,12 @@ async def test_a_second_flow_for_the_same_host_aborts(hass, mock_modbus):
         hass
     )
 
-    result = await run_flow(hass)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT
+    )
 
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
@@ -215,7 +220,13 @@ async def test_a_token_whose_setup_fails_is_not_kept(hass, mock_modbus):
 
 
 async def test_a_token_for_a_host_already_set_up_is_not_kept(hass, mock_modbus):
-    """The duplicate is only found after the password step; its new role token stays behind."""
+    """An entry set up while the password step was open; its new role token stayed behind."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT | {"api_username": "technician"}
+    )
     MockConfigEntry(
         domain=DOMAIN,
         data={"host": HOST, "api_username": "customer"},
@@ -223,12 +234,6 @@ async def test_a_token_for_a_host_already_set_up_is_not_kept(hass, mock_modbus):
         version=1,
         minor_version=12,
     ).add_to_hass(hass)
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": "user"}
-    )
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], USER_INPUT | {"api_username": "technician"}
-    )
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {"api_password": "secret"}
     )
@@ -242,8 +247,11 @@ async def test_a_token_for_a_host_already_set_up_is_not_kept(hass, mock_modbus):
 async def test_a_duplicate_flow_leaves_the_existing_entrys_token_alone(
     hass, monkeypatch
 ):
-    """Reaudit RE26-04: the aborted flow had already replaced the entry's token."""
-    make_entry(hass)
+    """Reaudit RE26-04: the aborted flow had already replaced the entry's token.
+
+    The entry appears while the password step is open: a host already taken
+    is refused before the login (audit FA0FB-02).
+    """
     store = async_get_token_store(hass)
     await store.async_save_token(HOST, realm="r", token="old")
 
@@ -253,8 +261,16 @@ async def test_a_duplicate_flow_leaves_the_existing_entrys_token_alone(
         return {"title": "Fronius"}
 
     monkeypatch.setattr(config_flow, "_validate_input", validate)
-
-    result = await run_flow(hass)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT
+    )
+    make_entry(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
 
     assert result["reason"] == "already_configured"
     assert await store.async_load_token(HOST) == {"realm": "r", "token": "old"}

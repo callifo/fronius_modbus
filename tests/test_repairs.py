@@ -265,3 +265,29 @@ async def test_the_entry_id_is_taken_from_the_issue_data_when_it_is_there(hass):
     )
 
     assert flow._entry_id == "from-data"
+
+
+async def test_the_reconfigure_repair_refuses_a_taken_host_before_the_inverter(
+    hass, mock_modbus, web_client, repairs_client, monkeypatch
+):
+    """Audit FA0FB-02: moving to a host another entry owns set up Modbus there first."""
+    entry = await make_entry(hass, mock_modbus, with_token=False)
+    taken = "192.0.2.20"
+    MockConfigEntry(domain=DOMAIN, data={"host": taken}, unique_id=taken).add_to_hass(
+        hass
+    )
+    applied = []
+    monkeypatch.setattr(
+        config_flow.FroniusWebClient,
+        "ensure_modbus_enabled",
+        lambda self, *args: applied.append(args) or True,
+    )
+    issue_id = f"{MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX}{entry.entry_id}"
+
+    flow = await start_fix_flow(repairs_client, issue_id)
+    flow = await advance_fix_flow(
+        repairs_client, flow["flow_id"], SETTINGS_INPUT | {"host": taken}
+    )
+
+    assert flow["errors"]["base"] == "already_configured"
+    assert applied == []

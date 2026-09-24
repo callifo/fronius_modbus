@@ -69,6 +69,7 @@ class FroniusReconfigureRepairFlow(TokenFlowMixin, RepairsFlow):
             previous_host=defaults["host"],
             previous_settings=defaults,
             force_apply_modbus_config=True,
+            claim_host=lambda settings: self._async_claim_entry_host(entry, settings),
             on_success=self._async_finish_repair,
         )
 

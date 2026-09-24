@@ -61,6 +61,7 @@ type _FlowFinishCallback = Callable[
     Awaitable[Any],
 ]
 type _FlowRestartCallback = Callable[[], Awaitable[Any]]
+type _HostClaim = Callable[[dict[str, Any]], Awaitable[None]]
 
 
 @dataclass(slots=True)
@@ -462,6 +463,12 @@ async def async_update_entry_from_input(
 
 class TokenFlowMixin:
     _pending_flow_state: _PendingFlowState | None = None
+    hass: HomeAssistant
+
+    async def _async_claim_entry_host(
+        self, entry: config_entries.ConfigEntry, settings: dict[str, Any]
+    ) -> None:
+        _claim_host(self.hass, entry, settings)
 
     async def _async_show_password_step(
         self,
@@ -496,6 +503,7 @@ class TokenFlowMixin:
         previous_settings: dict[str, Any] | None,
         force_apply_modbus_config: bool = False,
         always_ask_password: bool = False,
+        claim_host: _HostClaim,
         on_success: _FlowFinishCallback,
     ):
         errors: dict[str, str] = {}
@@ -504,6 +512,9 @@ class TokenFlowMixin:
             try:
                 settings = _expand_settings_input(user_input, defaults)
                 _validate_static_input(settings)
+                # Before the login: validation may already write the Modbus
+                # settings of a host another entry owns (audit FA0FB-02).
+                await claim_host(settings)
                 apply_modbus_config = (
                     force_apply_modbus_config
                     or _should_apply_modbus_config(
@@ -639,6 +650,13 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(config_entry):
         return FroniusModbusOptionsFlow()
 
+    async def _async_claim_new_host(self, settings: dict[str, Any]) -> None:
+        await self.async_set_unique_id(_entry_unique_id(settings))
+        self._abort_if_unique_id_configured()
+
+    async def _async_claim_reconfigured_host(self, settings: dict[str, Any]) -> None:
+        await self._async_claim_entry_host(self._get_reconfigure_entry(), settings)
+
     async def _async_finish_user(self, settings, info, previous_host):
         del previous_host
         await self.async_set_unique_id(_entry_unique_id(settings))
@@ -668,6 +686,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
             previous_host=None,
             previous_settings=None,
             force_apply_modbus_config=True,
+            claim_host=self._async_claim_new_host,
             on_success=self._async_finish_user,
         )
 
@@ -690,6 +709,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
             previous_host=defaults[CONF_HOST],
             previous_settings=defaults,
             force_apply_modbus_config=True,
+            claim_host=self._async_claim_reconfigured_host,
             on_success=self._async_finish_reconfigure,
         )
 
@@ -704,6 +724,9 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
 
 class FroniusModbusOptionsFlow(TokenFlowMixin, config_entries.OptionsFlow):
     """Handle Fronius Modbus options."""
+
+    async def _async_claim_host(self, settings: dict[str, Any]) -> None:
+        await self._async_claim_entry_host(self.config_entry, settings)
 
     async def _async_finish_options(self, settings, info, previous_host):
         del info
@@ -732,6 +755,7 @@ class FroniusModbusOptionsFlow(TokenFlowMixin, config_entries.OptionsFlow):
             # Configure is the one place to add or replace the passwords, so
             # the password step is always offered here (audit F11).
             always_ask_password=True,
+            claim_host=self._async_claim_host,
             on_success=self._async_finish_options,
         )
 

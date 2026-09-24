@@ -15,6 +15,7 @@ from modbus_connection import ModbusError
 
 from .exceptions import ControlLeftDisabledError, ControlRefused
 from .sunspec_models import Controls
+from .writes import registers_holding
 
 APPLY_TOGGLE_DELAY_SECONDS = 1.0
 # ponytail: a poll inside the pulse reads the flag as off; the state is masked to
@@ -91,12 +92,18 @@ class InverterControls:
     async def _write_with_pulse(
         self, enable_field: str, value_field: str, value: float
     ) -> bool:
-        """Write the value; pulse the enable flag off and on around it when it was on. Returns whether it was on."""
+        """Write the value; pulse the enable flag off and on around it when it was on.
+
+        Returns whether it pulsed. A value the register already holds is not
+        written at all, so a live limit is not switched off for nothing.
+        """
         # No read-back after the last write here: the device refuses a read
         # for a moment right after a write (real GEN24, fw 1.38.6-1); the
         # coordinator's next poll picks the new values up instead.
         async with self._write_lock:
             await self._controls.async_update()
+            if await registers_holding(self._controls, {value_field: value}):
+                return False
             was_enabled: bool = getattr(self._controls, enable_field) == ENABLED
             if not was_enabled:
                 await self._controls.write(value_field, value)
@@ -150,9 +157,7 @@ class InverterControls:
     async def set_ac_limit_enable(self, enabled: bool) -> None:
         """Enable or disable the AC power limit."""
         async with self._write_lock:
-            await self._controls.write(
-                "w_max_lim_ena", ENABLED if enabled else DISABLED
-            )
+            await self._write_changed("w_max_lim_ena", ENABLED if enabled else DISABLED)
             self._ac_limit_mask_until = 0.0
 
     async def set_power_factor(self, value: float) -> None:
@@ -174,7 +179,7 @@ class InverterControls:
     async def set_power_factor_enable(self, enabled: bool) -> None:
         """Enable or disable the power factor override."""
         async with self._write_lock:
-            await self._controls.write(
+            await self._write_changed(
                 "out_pf_set_ena", ENABLED if enabled else DISABLED
             )
             self._power_factor_mask_until = 0.0
@@ -182,4 +187,8 @@ class InverterControls:
     async def set_connected(self, connected: bool) -> None:
         """Connect or disconnect the inverter from the grid."""
         async with self._write_lock:
-            await self._controls.write("conn", ENABLED if connected else DISABLED)
+            await self._write_changed("conn", ENABLED if connected else DISABLED)
+
+    async def _write_changed(self, field: str, value: int) -> None:
+        if not await registers_holding(self._controls, {field: value}):
+            await self._controls.write(field, value)

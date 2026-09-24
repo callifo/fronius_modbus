@@ -100,22 +100,22 @@
   {
     "label": "storage: minimum reserve reads back inside the write lock",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "            await self._storage.write(\"min_rsv_pct\", float(int(percent)))\n",
-    "new": "            await self._storage.write(\"min_rsv_pct\", float(int(percent)))\n            await self._storage.async_update()\n",
+    "old": "            await self._write_changed(\"min_rsv_pct\", float(int(percent)))\n",
+    "new": "            await self._write_changed(\"min_rsv_pct\", float(int(percent)))\n            await self._storage.async_update()\n",
     "tests": "a_write_succeeds_when_the_read_right_after_it_is_refused"
   },
   {
     "label": "storage: the mode write reads back inside the write lock",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "                await self._storage.write(field_name, rate)\n            self._extended_mode = mode\n",
-    "new": "                await self._storage.write(field_name, rate)\n            await self._storage.async_update()\n            self._extended_mode = mode\n",
+    "old": "                    await self._storage.write(field_name, value)\n            self._extended_mode = mode\n",
+    "new": "                    await self._storage.write(field_name, value)\n            await self._storage.async_update()\n            self._extended_mode = mode\n",
     "tests": "a_mode_write_succeeds_when_the_read_right_after_it_is_refused"
   },
   {
     "label": "storage: a rate write reads back inside the write lock",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "            await self._storage.write(field_name, percent())\n",
-    "new": "            await self._storage.write(field_name, percent())\n            await self._storage.async_update()\n",
+    "old": "            await self._write_changed(field_name, percent())\n",
+    "new": "            await self._write_changed(field_name, percent())\n            await self._storage.async_update()\n",
     "tests": "a_rate_write_succeeds_when_the_read_right_after_it_is_refused"
   },
   {
@@ -544,5 +544,47 @@
     "old": "            payload[\"activeOnExternalDevicesDiscovered\"] = False",
     "new": "            pass",
     "tests": "disabling_the_solar_api_also_clears_the_discovery_flag"
+  },
+  {
+    "label": "writes: a register already holding the value is recognised",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/writes.py",
+    "old": "        if list(words) == written:",
+    "new": "        if False:",
+    "tests": "a_switch_already_in_place_is_not_written or an_unchanged_rate_or_reserve_is_not_written"
+  },
+  {
+    "label": "writes: a register that cannot be read is written anyway",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/writes.py",
+    "old": "        except ModbusError, ValueError, TypeError:\n            continue\n",
+    "new": "        except ModbusError, ValueError, TypeError:\n            holding.add(name)\n            continue\n",
+    "tests": "a_comparison_that_cannot_read_still_writes"
+  },
+  {
+    "label": "controls: an unchanged limit or power factor is not pulsed",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/controls.py",
+    "old": "            if await registers_holding(self._controls, {value_field: value}):\n                return False\n",
+    "new": "",
+    "tests": "an_unchanged_limit_is_not_pulsed or an_unchanged_power_factor_is_not_pulsed"
+  },
+  {
+    "label": "controls: a switch already in place is not written",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/controls.py",
+    "old": "        if not await registers_holding(self._controls, {field: value}):",
+    "new": "        if True:",
+    "tests": "a_switch_already_in_place_is_not_written"
+  },
+  {
+    "label": "storage: a mode already in place writes nothing",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "                if field_name not in holding:",
+    "new": "                if True:",
+    "tests": "a_mode_already_in_place_writes_nothing or a_mode_change_writes_only_the_registers_that_differ"
+  },
+  {
+    "label": "storage: an unchanged rate or reserve is not written",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        if not await registers_holding(self._storage, {field_name: value}):",
+    "new": "        if True:",
+    "tests": "an_unchanged_rate_or_reserve_is_not_written"
   }
 ]

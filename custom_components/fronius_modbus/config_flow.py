@@ -42,7 +42,6 @@ from .const import (
     MINIMUM_SCAN_INTERVAL,
     API_USERNAME,
     API_USERNAMES,
-    TECHNICIAN_USERNAME,
     SUPPORTED_MANUFACTURERS,
     SUPPORTED_MODELS,
 )
@@ -53,7 +52,7 @@ from .froniuswebclient import (
     FroniusWebResponseError,
     mint_token,
 )
-from .token_store import async_get_token_store, canonical_host
+from .token_store import async_forget_unused_tokens, async_get_token_store
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -320,20 +319,6 @@ async def _async_save_token(
     )
 
 
-def _moved_host(previous_host: str | None, host: str) -> bool:
-    """Whether the entry really moved to another host, not just to another spelling."""
-    if not previous_host:
-        return False
-    return canonical_host(previous_host) != canonical_host(host)
-
-
-async def _async_delete_token(hass: HomeAssistant, host: str | None) -> None:
-    if host:
-        token_store = async_get_token_store(hass)
-        await token_store.async_delete_token(host, API_USERNAME)
-        await token_store.async_delete_token(host, TECHNICIAN_USERNAME)
-
-
 async def _async_mint_token(
     hass: HomeAssistant,
     host: str,
@@ -463,8 +448,8 @@ async def async_update_entry_from_input(
         title=_entry_title(validated_input),
         unique_id=unique_id,
     )
-    if previous_host and _moved_host(previous_host, validated_input[CONF_HOST]):
-        await _async_delete_token(hass, previous_host)
+    if previous_host:
+        await async_forget_unused_tokens(hass, previous_host)
     await hass.config_entries.async_reload(entry.entry_id)
 
 
@@ -685,15 +670,17 @@ class FroniusModbusOptionsFlow(TokenFlowMixin, config_entries.OptionsFlow):
     async def _async_finish_options(self, settings, info, previous_host):
         del info
         unique_id = _claim_host(self.hass, self.config_entry, settings)
+        options = _entry_payload(settings, reconfigure_required=False)
+        # The options land before the tokens are sorted out: the old host or
+        # role must already be released when the unused ones are looked up.
         self.hass.config_entries.async_update_entry(
-            self.config_entry, unique_id=unique_id, title=_entry_title(settings)
+            self.config_entry,
+            unique_id=unique_id,
+            title=_entry_title(settings),
+            options=options,
         )
-        if _moved_host(previous_host, settings[CONF_HOST]):
-            await _async_delete_token(self.hass, previous_host)
-        return self.async_create_entry(
-            title="",
-            data=_entry_payload(settings, reconfigure_required=False),
-        )
+        await async_forget_unused_tokens(self.hass, previous_host)
+        return self.async_create_entry(title="", data=options)
 
     async def async_step_init(self, user_input=None):
         defaults = entry_defaults(self.config_entry)

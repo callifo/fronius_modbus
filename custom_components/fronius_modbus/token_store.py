@@ -3,10 +3,11 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import urlparse
 
+from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
-from .const import API_USERNAME, DOMAIN
+from .const import API_USERNAME, API_USERNAMES, CONF_API_USERNAME, DOMAIN
 
 _TOKEN_STORE_KEY = f"{DOMAIN}_web_api_tokens"
 _TOKEN_STORE_VERSION = 1
@@ -30,8 +31,9 @@ def _token_key(host: str, user: str = API_USERNAME) -> str:
 
 class FroniusTokenStore:
     def __init__(self, hass: HomeAssistant) -> None:
+        # The token alone authenticates to the inverter (audit A24-03).
         self._store = Store[dict[str, dict[str, str]]](
-            hass, _TOKEN_STORE_VERSION, _TOKEN_STORE_KEY
+            hass, _TOKEN_STORE_VERSION, _TOKEN_STORE_KEY, private=True
         )
         self._cache: dict[str, dict[str, str]] | None = None
 
@@ -39,6 +41,10 @@ class FroniusTokenStore:
         if self._cache is None:
             loaded = await self._store.async_load()
             self._cache = loaded if isinstance(loaded, dict) else {}
+            if self._cache:
+                # Only a write applies the private mode; a file from an older
+                # version stays world-readable until then.
+                await self._store.async_save(self._cache)
         return self._cache
 
     async def async_load_token(
@@ -69,6 +75,25 @@ class FroniusTokenStore:
         data = await self._async_load_all()
         if data.pop(_token_key(host, user), None) is not None:
             await self._store.async_save(data)
+
+
+async def async_forget_unused_tokens(hass: HomeAssistant, host: str) -> None:
+    """Delete the tokens for ``host`` that no config entry logs in with any more.
+
+    Called whenever an entry leaves a host or a role (audit A24-04). An entry
+    without a role predates single roles: its migration reads the role from
+    the stored tokens, so both stay.
+    """
+    in_use: set[str] = set()
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        values = {**entry.data, **entry.options}
+        if canonical_host(str(values.get(CONF_HOST, ""))) != canonical_host(host):
+            continue
+        role = values.get(CONF_API_USERNAME)
+        in_use |= set(API_USERNAMES) if role is None else {role}
+    token_store = async_get_token_store(hass)
+    for role in set(API_USERNAMES) - in_use:
+        await token_store.async_delete_token(host, role)
 
 
 def async_get_token_store(hass: HomeAssistant) -> FroniusTokenStore:

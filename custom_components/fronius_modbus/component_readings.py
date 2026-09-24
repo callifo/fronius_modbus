@@ -21,6 +21,7 @@ CONNECTION = "connection"
 # The battery's own firmware and hardware go to its device entry, not to a sensor.
 STORAGE_DEVICE_FIELDS = ("sw_version", "hw_version")
 YES, NO = "yes", "no"
+TRUE_WORDS = frozenset({"true", "on", "yes"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -340,21 +341,41 @@ def component_value(reading: ComponentReading, readings: dict[str, Any] | None) 
     if not values:
         return None
     if reading.transform == "yes_no":
-        return YES if any(values) else NO
+        return YES if any(_is_set(value) for value in values) else NO
     value = values[0]
-    if reading.unit is not None and isinstance(value, str):
+    if reading.unit is not None:
         value = _as_number(value)
     if value is None or reading.transform != "positive":
         return value
     return abs(value)
 
 
-def _as_number(text: str) -> float | None:
-    """Attributes carry numbers as text ("467.2"); anything else is unknown."""
+def _as_number(value: Any) -> float | None:
+    """A number, or numeric text as attributes carry it ("467.2"); else unknown.
+
+    A value Home Assistant cannot show as a number would be refused on every
+    update (audit R25-02).
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return value
+    if not isinstance(value, str):
+        return None
     try:
-        return float(text)
+        return float(value)
     except ValueError:
         return None
+
+
+def _is_set(value: Any) -> bool:
+    """A flag as the inverter sends it: 1.0, True, "1" or "true"; "0" is not set."""
+    if isinstance(value, bool):
+        return value
+    number = _as_number(value)
+    if number is not None:
+        return number != 0
+    return isinstance(value, str) and value.strip().lower() in TRUE_WORDS
 
 
 def take_readings(device: dict[str, Any], component: Component) -> dict[str, Any]:

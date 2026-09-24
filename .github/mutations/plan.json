@@ -709,7 +709,7 @@
   {
     "label": "component readings: a set flag reads yes",
     "path": "custom_components/fronius_modbus/component_readings.py",
-    "old": "        return YES if any(values) else NO",
+    "old": "        return YES if any(_is_set(value) for value in values) else NO",
     "new": "        return NO",
     "tests": "every_sensor_on_the_gen24_shows_what_its_channel_reads"
   },
@@ -768,5 +768,19 @@
     "old": "        self.data.storage_endpoint_missing = bool(storage_info.get(\"missing\"))\n",
     "new": "",
     "tests": "the_refresh_hands_on_missing_component_endpoints"
+  },
+  {
+    "label": "component readings: a sensor with a unit shows only a number",
+    "path": "custom_components/fronius_modbus/component_readings.py",
+    "old": "    if not isinstance(value, str):\n        return None\n",
+    "new": "    if not isinstance(value, str):\n        return value\n",
+    "tests": "a_sensor_with_a_unit_shows_only_a_number"
+  },
+  {
+    "label": "component readings: a flag sent as text 0 is not set",
+    "path": "custom_components/fronius_modbus/component_readings.py",
+    "old": "        return number != 0\n",
+    "new": "        return True\n",
+    "tests": "a_flag_is_set_only_by_a_true_value"
   }
 ]

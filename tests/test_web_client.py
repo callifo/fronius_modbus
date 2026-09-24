@@ -1295,6 +1295,9 @@ def test_a_malformed_master_is_not_written_back(master):
         {"BAT_M0_SOC_MIN": 20, "BAT_M0_SOC_MAX": "30"},
         {"BAT_M0_SOC_MIN": 20},
         {"BAT_M0_SOC_MIN": 20, "BAT_M0_SOC_MAX": True},
+        # Audit R730-04: the JSON decoder turns NaN and Infinity into floats.
+        {"BAT_M0_SOC_MIN": 20, "BAT_M0_SOC_MAX": float("nan")},
+        {"BAT_M0_SOC_MIN": 20, "BAT_M0_SOC_MAX": float("inf")},
     ],
 )
 def test_a_soc_window_without_a_numeric_limit_is_unreadable(

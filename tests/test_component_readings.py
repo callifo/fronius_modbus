@@ -254,3 +254,13 @@ def test_a_flag_is_set_only_by_a_true_value(value, shown):
     reading = next(r for r in COMPONENT_READINGS if r.key == "grid_valid")
 
     assert component_value(reading, {reading.fields[0]: value}) == shown
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), "nan", "-inf"])
+def test_a_value_that_is_no_finite_number_shows_nothing(value):
+    """Reaudit RE26-05: "nan" reached HA as a temperature and read as "yes" for a flag."""
+    temperature = next(r for r in COMPONENT_READINGS if r.key == "inverter_temperature")
+    grid_valid = next(r for r in COMPONENT_READINGS if r.key == "grid_valid")
+
+    assert component_value(temperature, {temperature.fields[0]: value}) is None
+    assert component_value(grid_valid, {grid_valid.fields[0]: value}) == "no"

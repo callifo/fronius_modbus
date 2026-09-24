@@ -315,6 +315,46 @@ async def test_a_role_switch_failing_after_the_update_keeps_the_new_token(
     assert stored == {"realm": "r", "token": "t"}
 
 
+async def test_a_late_failure_does_not_bring_back_a_stale_token(hass, monkeypatch):
+    """Audit D8AE-02: the stale target-role token came back over the fresh one."""
+    entry = make_entry(hass)
+    await async_get_token_store(hass).async_save_token(
+        HOST, realm="r", token="stale", user="technician"
+    )
+    monkeypatch.setattr(
+        config_flow, "_validate_input", AsyncMock(return_value={"title": "Fronius"})
+    )
+    monkeypatch.setattr(
+        hass.config_entries, "async_reload", AsyncMock(return_value=True)
+    )
+
+    def fail(self, **_kwargs):
+        raise RuntimeError("after the update")
+
+    monkeypatch.setattr(
+        config_flow.FroniusModbusOptionsFlow, "async_create_entry", fail
+    )
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "host": HOST,
+            "scan_interval": 10,
+            "web_scan_interval": 60,
+            "modbus_restriction": "keep",
+            "api_username": "technician",
+        },
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+
+    assert result["errors"]["base"] == "unknown"
+    assert config_flow.entry_defaults(entry)["api_username"] == "technician"
+    stored = await async_get_token_store(hass).async_load_token(HOST, "technician")
+    assert stored == {"realm": "r", "token": "t"}
+
+
 OTHER_HOST = "192.0.2.20"
 
 

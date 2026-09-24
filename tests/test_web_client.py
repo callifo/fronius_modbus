@@ -474,6 +474,19 @@ def test_firmware_without_a_readable_endpoint_is_not_a_warning(
 
 
 @pytest.mark.parametrize(("read", "path"), READABLE_PATHS)
+@pytest.mark.parametrize(("status", "missing"), [(404, True), (500, False)])
+def test_only_a_404_marks_a_component_endpoint_missing(
+    client, inverter, read, path, status, missing
+):
+    """A 404 is firmware without the endpoint; a 500 is a read that failed this time."""
+    inverter.statuses[path] = status
+
+    info = getattr(client, read)()
+
+    assert (info["readings"], info["missing"]) == (None, missing)
+
+
+@pytest.mark.parametrize(("read", "path"), READABLE_PATHS)
 def test_a_switched_off_inverter_is_left_to_the_refresh(
     client, monkeypatch, read, path
 ):

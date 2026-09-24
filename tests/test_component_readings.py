@@ -149,6 +149,39 @@ def test_a_channel_the_device_does_not_report_makes_no_sensor():
     assert set(sensors) == ENABLED | DISABLED
 
 
+def test_an_answer_without_a_value_keeps_its_sensor():
+    """Audit R25-01: an answered read without a field retired the sensor.
+
+    The cleanup at the next start removed 28 entities, the long-standing
+    inverter temperature among them, with the owner's entity ids.
+    """
+    readings = read_gen24()
+    readings.inverter_readings = {"FANCONTROL_PERCENT_01_F32": 0.0}
+    readings.storage_readings = {}
+    runtime = runtime_with(readings)
+    sensors = component_sensors(runtime)
+
+    assert {"inverter_temperature", "fan_2", "storage_temperature"} <= set(sensors)
+    assert sensors["inverter_temperature"].value_fn(runtime) is None
+
+
+def test_an_answer_without_any_power_module_keeps_all_four():
+    """The power modules follow the device, but an answer naming none of them is no answer."""
+    readings = read_gen24()
+    readings.inverter_readings = {"FANCONTROL_PERCENT_01_F32": 0.0}
+
+    sensors = component_sensors(runtime_with(readings))
+
+    assert {f"module_temperature_{index}" for index in (1, 2, 3, 4)} <= set(sensors)
+
+
+def test_firmware_without_the_endpoints_gets_no_component_sensors():
+    """Audit F24-06: a 404 made every component sensor, 19 of them enabled, stay unknown."""
+    readings = WebData(inverter_endpoint_missing=True, storage_endpoint_missing=True)
+
+    assert component_sensors(runtime_with(readings)) == {}
+
+
 def test_readings_not_yet_read_keep_every_sensor():
     """Not read is not absent: the stale-entity cleanup would retire them (audit A24-01)."""
     sensors = component_sensors(runtime_with(WebData()))

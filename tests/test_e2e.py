@@ -697,3 +697,35 @@ async def test_a_rejected_technician_token_is_the_one_deleted(
     await setup_entry(hass, entry)
 
     assert await store.async_load_token(HOST, "technician") is None
+
+
+class _WebClientAnsweringEmpty(_FakeWebClientWithTopology):
+    """The inverter component endpoint answers, but with a node without channels."""
+
+    readings: dict | None = None
+
+    def get_inverter_info(self):
+        return {"readings": self.readings, "missing": False}
+
+
+async def test_an_empty_component_answer_retires_no_entity(
+    hass, mock_modbus, monkeypatch
+):
+    """Audit R25-01: the cleanup at the next start removed 28 entities, this one among them."""
+    mock_modbus.add_unit(201, like=METER_UNIT_ID)
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientAnsweringEmpty)
+    entry = make_entry(hass)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+    await setup_entry(hass, entry)
+    registry = er.async_get(hass)
+    chosen = "sensor.my_inverter_temperature"
+    registry.async_update_entity(
+        entity_id_for(hass, entry, "sensor", "inverter_temperature"),
+        new_entity_id=chosen,
+    )
+
+    monkeypatch.setattr(_WebClientAnsweringEmpty, "readings", {})
+    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert registry.async_get(chosen) is not None

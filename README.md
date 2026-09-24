@@ -26,21 +26,41 @@ Verified against a Symo GEN24 10.0 with a BYD Battery-Box Premium HV and a Froni
 - battery storage entities appear if and only if model 124 is present
 - a smart meter's phase count is derived from its model id
 
-## What changed in 1.0
+## Coming from upstream
 
-For users coming from the upstream integration. Version 1.0 is a rewrite of the Modbus layer; breaking changes are listed in the CHANGELOG.
+What changes for users of [callifo/fronius_modbus](https://github.com/callifo/fronius_modbus) (checked against its 0.3.3). Breaking changes are listed in the CHANGELOG.
 
 > [!IMPORTANT]
 > Enum states are translation keys now: `Auto` became `auto`, `Charge from Grid` became `charge_from_grid`, `On grid operating` became `on_grid_operating`, `Enabled`/`Disabled` became `enabled`/`disabled`. Update automations and templates that compare against the old texts; see the CHANGELOG for the rule.
 
-- **Minimum Home Assistant version: 2026.9.0.**
-- The integration no longer opens its own Modbus TCP connection. It asks Home Assistant's built-in `modbus` integration for a unit on a shared connection (`async_get_unit`), so it can coexist with other integrations talking to the same inverter without pymodbus version conflicts.
-- The register map is discovered at runtime via SunSpec model walking (through the `modbus-connection` library) instead of a hand-written pymodbus client and fixed register list.
-- Per-value plausibility bounds are gone; SunSpec sentinel values and scale factors are decoded by the library instead.
-- The Web API is polled on its own interval instead of once per Modbus poll. A slow or unreachable Web API no longer stalls the Modbus poll or blocks the Modbus entities.
-- Diagnostics include the raw SunSpec register map, with serial numbers redacted.
+**Kept:** entity IDs, unique IDs, history/statistics and existing options. Existing entries are migrated on the first start.
+
+**Connection and data**
+
+- **Minimum Home Assistant version: 2026.9.0** (upstream: 2024.4.0).
+- The integration no longer opens its own Modbus TCP connection with its own `pymodbus`. It asks Home Assistant's built-in `modbus` integration for a unit on a shared connection (`async_get_unit`), so it can coexist with other integrations talking to the same inverter without pymodbus version conflicts.
+- Registers are decoded by the `modbus-connection` library from the SunSpec model definitions, including sentinel values and scale factors, instead of by hand-written decoding.
 - If a firmware update changes the inverter's SunSpec model chain, the integration reloads the config entry automatically.
-- Entity IDs, unique IDs, history/statistics, and existing options are unaffected; storage modes, the AC-limit/power-factor enable pulse, and the battery API controls behave the same as before, with one correction: the grid charge/discharge power entities now scale by their own rate maximum (0.3 wrote them against the opposite one).
+- The Web API is polled on its own interval (new option, default 60 s) instead of once per Modbus poll. A slow or unreachable Web API no longer stalls the Modbus poll or blocks the Modbus entities.
+- An energy total still ignores a drop and an implausible jump, but accepts a genuine counter reset, such as a replaced meter, after three readings that agree. Upstream refuses every lower value for good.
+- A control set to the value the inverter already holds writes nothing, over Modbus and over the Web API.
+
+**Setup and security**
+
+- The checkbox "Restrict Modbus to this IP" became the option **Modbus IP restriction** with three choices; the default keeps the inverter's setting. Upstream lifted the restriction whenever the box was unchecked, and a checked box replaced the allowed hosts with Home Assistant's address; allowing Home Assistant now adds its address to the hosts already allowed. Migrated entries keep their choice: checked becomes "restrict and allow this Home Assistant", unchecked becomes "keep".
+- Enabling Modbus TCP keeps the rest of the inverter's Modbus settings. Upstream writes a fixed block that moves both RS485 ports to master and turns the `TCP & RTU` mode into TCP.
+- The stored Web API token is readable by Home Assistant only, and it is deleted once no entry uses its host and role.
+
+**Battery**
+
+- The SoC window follows the inverter's own switch: `SoC Maximum` and the new `SoC Minimum (Web API)` are writable while the new `Web API SoC mode` is manual. Upstream ties them to `Self-consumption optimisation`.
+- `Grid Charge Power` and `Grid Discharge Power` scale by their own rate maximum; upstream writes each against the opposite one.
+
+**New entities and tools**
+
+- Component sensors from the inverter's Web API: power module temperatures, fans, per-phase AC power, production limit, grid validity, battery state of health and more (see [Component sensors](#component-sensors-web-api)).
+- `Throttle reason`, `Web API SoC mode`, `SoC Minimum (Web API)`.
+- Diagnostics download (Settings -> Devices -> device -> Download diagnostics), with the raw SunSpec register map; serial numbers are redacted.
 
 ## Installation
 

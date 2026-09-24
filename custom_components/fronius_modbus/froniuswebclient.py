@@ -196,8 +196,12 @@ def _config_object(payload: Any, path: str) -> dict[str, Any]:
 
 
 def _nested_object(config: dict[str, Any], key: str, path: str) -> dict[str, Any]:
-    """A nested part of a config, checked like the whole (audit F24-11)."""
-    return _config_object(config.get(key) or {}, path)
+    """A nested part of a config, checked like the whole (audit F24-11).
+
+    Only an absent part defaults to empty; a present `[]`, `0` or `""` would
+    otherwise be written back with defaults (reaudit RE26-01).
+    """
+    return _config_object(config.get(key, {}), path)
 
 
 def _window_inverted(lower: Any, upper: Any) -> bool:

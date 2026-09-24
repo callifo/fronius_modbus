@@ -821,8 +821,8 @@
   {
     "label": "web client: a nested Modbus config part must be an object",
     "path": "custom_components/fronius_modbus/froniuswebclient.py",
-    "old": "    return _config_object(config.get(key) or {}, path)\n",
-    "new": "    return config.get(key) or {}\n",
+    "old": "    return _config_object(config.get(key, {}), path)\n",
+    "new": "    return config.get(key, {})\n",
     "tests": "a_modbus_config_of_the_wrong_shape_is_a_response_error"
   },
   {
@@ -873,5 +873,12 @@
     "old": "    except ModbusError as err:\n        return {\"error\": type(err).__name__}\n",
     "new": "    except ZeroDivisionError as err:\n        return {\"error\": type(err).__name__}\n",
     "tests": "diagnostics_still_answer_while_the_inverter_is_offline"
+  },
+  {
+    "label": "web client: only an absent nested part defaults to empty",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "    return _config_object(config.get(key, {}), path)\n",
+    "new": "    return _config_object(config.get(key) or {}, path)\n",
+    "tests": "an_empty_wrong_type_in_the_modbus_config_is_not_written_back_with_defaults"
   }
 ]

@@ -931,6 +931,37 @@ def test_the_inverters_own_spelling_counts_as_the_same_value(client, inverter):
     assert posts(inverter) == []
 
 
+def test_a_config_read_that_is_no_object_still_writes_everything(client, inverter):
+    """Audit R24-01: a list instead of an object raised AttributeError, an unknown error."""
+    inverter.bodies[BATTERIES] = ["unexpected"]
+
+    client.set_backup_reserve(7)
+
+    assert posts(inverter) == [(BATTERIES, {"HYB_BACKUP_RESERVED": 7})]
+
+
+@pytest.mark.parametrize(
+    ("path", "write"),
+    [
+        ("/api/config/solar_api", lambda client: client.set_solar_api_enabled(True)),
+        (
+            "/api/config/modbus",
+            lambda client: client.ensure_modbus_enabled(502, 200, 1),
+        ),
+    ],
+)
+def test_a_config_that_must_be_written_back_but_is_no_object_is_an_error(
+    client, inverter, path, write
+):
+    """Without the object there is nothing to write back; that is a failed write, not a crash."""
+    inverter.bodies[path] = ["unexpected"]
+
+    with pytest.raises(FroniusWebResponseError, match="no object"):
+        write(client)
+
+    assert posts(inverter) == []
+
+
 def test_only_the_battery_fields_that_differ_are_written(client, inverter):
     inverter.bodies[BATTERIES] = dict(BATTERY_CONFIG)
 

@@ -625,3 +625,32 @@ async def test_a_lost_web_login_retires_no_web_entity(
 
     assert registry.async_get(chosen) is not None
     assert registry.async_get(entity_id_for(hass, entry, "sensor", "meter_201_power"))
+
+
+async def test_a_rejected_technician_token_is_the_one_deleted(
+    hass, mock_modbus, monkeypatch
+):
+    """The topology read deleted the customer token whatever role had been rejected.
+
+    The rejected technician token survived and was offered again on every start.
+    """
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientLosingItsLogin)
+    monkeypatch.setattr(_WebClientLosingItsLogin, "lost_at", "get_power_meter_info")
+    monkeypatch.setattr(
+        _WebClientLosingItsLogin,
+        "username",
+        property(lambda self: self._username),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        _WebClientLosingItsLogin,
+        "__init__",
+        lambda self, *_a, username, **_k: setattr(self, "_username", username),
+    )
+    entry = make_entry(hass)
+    store = async_get_token_store(hass)
+    await store.async_save_token(HOST, realm="r", token="t", user="technician")
+
+    await setup_entry(hass, entry)
+
+    assert await store.async_load_token(HOST, "technician") is None

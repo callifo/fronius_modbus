@@ -258,3 +258,42 @@ async def test_a_duplicate_flow_leaves_the_existing_entrys_token_alone(
 
     assert result["reason"] == "already_configured"
     assert await store.async_load_token(HOST) == {"realm": "r", "token": "old"}
+
+
+async def test_a_role_switch_failing_after_the_update_keeps_the_new_token(
+    hass, monkeypatch
+):
+    """Own reaudit R26-02: the entry already used the new role when its token went."""
+    entry = make_entry(hass)
+    monkeypatch.setattr(
+        config_flow, "_validate_input", AsyncMock(return_value={"title": "Fronius"})
+    )
+    monkeypatch.setattr(
+        hass.config_entries, "async_reload", AsyncMock(return_value=True)
+    )
+
+    def fail(self, **_kwargs):
+        raise RuntimeError("after the update")
+
+    monkeypatch.setattr(
+        config_flow.FroniusModbusOptionsFlow, "async_create_entry", fail
+    )
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "host": HOST,
+            "scan_interval": 10,
+            "web_scan_interval": 60,
+            "modbus_restriction": "keep",
+            "api_username": "technician",
+        },
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+
+    assert result["errors"]["base"] == "unknown"
+    assert config_flow.entry_defaults(entry)["api_username"] == "technician"
+    stored = await async_get_token_store(hass).async_load_token(HOST, "technician")
+    assert stored == {"realm": "r", "token": "t"}

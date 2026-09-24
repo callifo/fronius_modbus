@@ -15,7 +15,7 @@ import requests
 from requests.auth import AuthBase
 from requests.utils import parse_dict_header
 
-from .component_readings import FLAG_WORDS, json_object, take_readings
+from .component_readings import flag_value, json_object, take_readings
 from .const import API_USERNAME, ModbusRestriction
 from .fronius_modbus_api.exceptions import ControlRefused
 
@@ -87,10 +87,12 @@ def _as_int(value: Any, fallback: int) -> int:
 
 
 def is_enabled(value: Any) -> bool:
-    """Whether a Solar-API flag reads as on; the API sends both booleans and words."""
-    if isinstance(value, str):
-        return FLAG_WORDS.get(value.strip().lower(), False)
-    return bool(value)
+    """Whether a flag reads as on; a form the inverter does not use is not on.
+
+    Read as on, `[1]` counted as Modbus control already switched on, and the
+    write that switches it on was skipped (own reaudit E-01).
+    """
+    return flag_value(value) is True
 
 
 def _base_url(host_or_url: str) -> str:
@@ -220,7 +222,8 @@ def _same(current: Any, wanted: Any) -> bool:
     if current is None:
         return False
     if isinstance(wanted, bool):
-        return is_enabled(current) == wanted
+        # An unknown form is never what is wanted: it is written (E-01).
+        return flag_value(current) == wanted
     if isinstance(wanted, str) and isinstance(current, str):
         return current.casefold() == wanted.casefold()
     return bool(current == wanted)

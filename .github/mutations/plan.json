@@ -618,7 +618,7 @@
   {
     "label": "web client: flags compare in the inverter's spelling",
     "path": "custom_components/fronius_modbus/froniuswebclient.py",
-    "old": "        return is_enabled(current) == wanted\n",
+    "old": "        return flag_value(current) == wanted\n",
     "new": "        return current is wanted\n",
     "tests": "the_inverters_own_spelling_counts_as_the_same_value"
   },
@@ -1097,5 +1097,26 @@
     "old": "    return math.isfinite(value)\n",
     "new": "    return True\n",
     "tests": "soc_window_without_a_numeric_limit_is_unreadable"
+  },
+  {
+    "label": "web client: a flag in no known form is not on",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "    return flag_value(value) is True\n",
+    "new": "    return bool(flag_value(value)) or bool(value)\n",
+    "tests": "modbus_control_in_no_known_form_is_switched_on or export_limit_switched_on_in_no_known_form_is_written"
+  },
+  {
+    "label": "web client: a flag in no known form is never what is wanted",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "        return flag_value(current) == wanted\n",
+    "new": "        return is_enabled(current) == wanted\n",
+    "tests": "flag_the_inverter_holds_in_no_known_form_is_written"
+  },
+  {
+    "label": "web control: a web switch in no known form is unknown",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "            self.data.solar_api_enabled = flag_value(enabled)\n",
+    "new": "            self.data.solar_api_enabled = is_enabled(enabled)\n",
+    "tests": "web_switch_in_no_known_form_shows_as_unknown"
   }
 ]

@@ -450,8 +450,8 @@ class FroniusWebControl:
         self.data.soc_min = _as_int(battery_config.get("BAT_M0_SOC_MIN"))
         self.data.soc_max = _as_int(battery_config.get("BAT_M0_SOC_MAX"))
         self.data.backup_reserved = _as_int(battery_config.get("HYB_BACKUP_RESERVED"))
-        self.data.charge_from_ac = is_enabled(battery_config.get("HYB_BM_CHARGEFROMAC"))
-        self.data.charge_from_grid = is_enabled(
+        self.data.charge_from_ac = flag_value(battery_config.get("HYB_BM_CHARGEFROMAC"))
+        self.data.charge_from_grid = flag_value(
             battery_config.get("HYB_EVU_CHARGEFROMGRID")
         )
 
@@ -521,9 +521,7 @@ class FroniusWebControl:
         solar_api_config = await self._async_client_job("get_solar_api_config")
         if isinstance(solar_api_config, dict):
             enabled = solar_api_config.get("SolarAPIv1Enabled")
-            self.data.solar_api_enabled = (
-                is_enabled(enabled) if enabled is not None else None
-            )
+            self.data.solar_api_enabled = flag_value(enabled)
         else:
             self.data.solar_api_enabled = None
 

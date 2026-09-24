@@ -859,5 +859,12 @@
     "old": "        self._suspect_polls = self._suspect_polls + 1 if continues else 1\n",
     "new": "        self._suspect_polls += 1\n",
     "tests": "contradicting_samples_confirm_nothing"
+  },
+  {
+    "label": "device: meter addresses are published with the meters",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        addresses[unit_id] = model.address\n",
+    "new": "        self._meter_addresses[unit_id] = model.address\n",
+    "tests": "an_aborted_rediscovery_leaves_the_meter_addresses_alone"
   }
 ]

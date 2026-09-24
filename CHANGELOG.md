@@ -19,6 +19,7 @@
 - The inverter and battery component reads (inverter temperature, cell temperature, battery manufacturer, model and serial) no longer hide a failing endpoint. Their values still turn unknown instead of taking the controls down, but an error other than a 404 is logged once as a warning, and again at info when the endpoint answers. A switched-off inverter is left to the refresh, which already reports it.
 - Selecting Charge from Grid reports an error when the web interface refuses the grid charging flags. The storage mode was set and the control showed success, while the battery could not charge from the grid; the message now says so.
 - An energy total accepts a new counter range only from samples that agree with each other. A spike between two low readings (10, 100000, 10) counted as three confirmations and put a false reset into the long-term statistics.
+- A meter whose register map moved is read at its new address even when the first rediscovery was aborted. The new address was remembered before the rediscovery finished, so the retry kept the component bound to the old registers.
 - Reconfigure and Repairs reload the entry once; they reloaded it twice.
 - A web control used while the inverter's web interface does not answer shows a translated error. It surfaced as an unknown error with a traceback in the log since 1.1.1.
 

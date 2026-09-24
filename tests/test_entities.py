@@ -23,8 +23,12 @@ from custom_components.fronius_modbus.coordinator import (
     FroniusWebCoordinator,
 )
 from custom_components.fronius_modbus.fronius_modbus_api.device import FroniusInverter
-from custom_components.fronius_modbus.froniuswebclient import FroniusWebAuthError
+from custom_components.fronius_modbus.froniuswebclient import (
+    FroniusWebAuthError,
+    FroniusWebUnreachable,
+)
 from custom_components.fronius_modbus.sensor import FroniusSensor
+from homeassistant.exceptions import HomeAssistantError
 
 from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID
 from .test_web_control import make_control
@@ -535,3 +539,19 @@ async def test_a_zero_accumulator_is_no_reading_not_a_reset(
     assert description.value_fn(runtime) is None
     assert sensor.native_value == before
     assert not [r for r in caplog.records if r.name.endswith("entities")]
+
+
+async def test_an_unreachable_web_interface_is_a_translated_error():
+    """Audit R24-02: FroniusWebUnreachable is an OSError, which no write mapped.
+
+    A web control used while the inverter's web server was down ended in an
+    untranslated error with a traceback.
+    """
+
+    async def unreachable():
+        raise FroniusWebUnreachable("ConnectionError")
+
+    with pytest.raises(HomeAssistantError) as raised:
+        await entities.FroniusEntity.async_run_write(None, unreachable)
+
+    assert raised.value.translation_key == "web_api_unreachable"

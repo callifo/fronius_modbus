@@ -288,6 +288,7 @@ python_version = "3.14"
 files = [
   "custom_components/fronius_modbus/fronius_modbus_api/__init__.py",
   "custom_components/fronius_modbus/fronius_modbus_api/controls.py",
+  "custom_components/fronius_modbus/fronius_modbus_api/writes.py",
   "custom_components/fronius_modbus/fronius_modbus_api/device.py",
   "custom_components/fronius_modbus/fronius_modbus_api/exceptions.py",
   "custom_components/fronius_modbus/fronius_modbus_api/storage.py",

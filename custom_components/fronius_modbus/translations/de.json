@@ -677,9 +677,6 @@
     "technician_not_configured": {
       "message": "Diese Steuerung braucht die Techniker-Rolle. Sie lässt sich über Konfigurieren wählen."
     },
-    "export_limit_not_accepted": {
-      "message": "Der Wechselrichter hat die weiche Einspeisegrenze nicht übernommen."
-    },
     "value_refused": {
       "message": "Der Wert wurde abgelehnt: {error}"
     },
@@ -688,6 +685,9 @@
     },
     "unsupported_option": {
       "message": "Nicht unterstützte Option: {option}"
+    },
+    "web_api_unreachable": {
+      "message": "Die Weboberfläche des Wechselrichters hat nicht geantwortet. Bitte prüfen, ob der Wechselrichter eingeschaltet und erreichbar ist."
     }
   }
 }

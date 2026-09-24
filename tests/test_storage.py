@@ -8,6 +8,9 @@ from modbus_connection import ServerDeviceFailureError
 from modbus_connection.model.sunspec import scan
 import pytest
 
+from custom_components.fronius_modbus.fronius_modbus_api import (
+    storage as storage_module,
+)
 from custom_components.fronius_modbus.fronius_modbus_api.storage import (
     MODE_WRITE_GRACE_POLLS,
     ExtendedMode,
@@ -87,7 +90,8 @@ async def test_the_extended_mode_is_derived_from_the_registers(
     assert control.extended_mode is expected
 
 
-async def test_charge_from_grid_writes_mode_then_rates(control, writes):
+async def test_charge_from_grid_writes_mode_then_rates(control, writes, inverter_unit):
+    inverter_unit.holding[IN_W_RTE] = 5000
     await control.set_mode(ExtendedMode.CHARGE_FROM_GRID)
     assert _words(writes, STOR_CTL_MOD) == [2]
     assert _words(writes, IN_W_RTE) == [10000]
@@ -118,13 +122,49 @@ async def test_grid_charge_power_is_a_negative_discharge_rate(control, writes):
     assert control.grid_charge_power_pct == 25.0
 
 
+@pytest.mark.parametrize("mode", list(ExtendedMode))
+async def test_a_mode_already_in_place_writes_nothing(control, writes, mode):
+    """Picking the current mode again wrote StorCtl_Mod and both rates."""
+    await control.set_mode(mode)
+    del writes[:]
+
+    await control.set_mode(mode)
+
+    assert writes == []
+
+
+async def test_a_mode_change_writes_only_the_registers_that_differ(control, writes):
+    """Both limits and blocked discharging share the base mode; one rate moves."""
+    await control.set_mode(ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT)
+    del writes[:]
+
+    await control.set_mode(ExtendedMode.BLOCK_DISCHARGING)
+
+    assert [event.address for event in writes] == [OUT_W_RTE]
+
+
+async def test_an_unchanged_rate_or_reserve_is_not_written(control, writes):
+    await control.set_mode(ExtendedMode.PV_CHARGE_LIMIT)
+    await control.set_charge_limit_w(5120)
+    await control.set_minimum_reserve(7)
+    del writes[:]
+
+    await control.set_charge_limit_w(5120)
+    await control.set_minimum_reserve(7)
+
+    assert writes == []
+
+
 async def test_a_limit_is_refused_outside_its_mode(control):
     with pytest.raises(ValueError, match="Charge limit cannot be changed"):
         await control.set_charge_limit_w(5000)
 
 
-async def test_a_rate_above_the_maximum_is_clamped_to_100_percent(control, writes):
+async def test_a_rate_above_the_maximum_is_clamped_to_100_percent(
+    control, writes, inverter_unit
+):
     await control.set_mode(ExtendedMode.PV_CHARGE_LIMIT)
+    inverter_unit.holding[IN_W_RTE] = 5000
     await control.set_charge_limit_w(99999)
     assert _words(writes, IN_W_RTE)[-1] == 10000
 
@@ -237,6 +277,17 @@ async def test_a_rate_write_succeeds_when_the_read_right_after_it_is_refused(
     assert _words(writes, IN_W_RTE)[-1] == 5000
 
 
+@pytest.fixture
+def no_comparison(monkeypatch):
+    """For fakes without registers: the ordering is the subject, not the comparison."""
+
+    async def nothing_holds(_component, _wanted):
+        return set()
+
+    monkeypatch.setattr(storage_module, "registers_holding", nothing_holds)
+
+
+@pytest.mark.usefixtures("no_comparison")
 async def test_a_rate_queued_behind_a_mode_switch_is_judged_by_the_new_mode():
     """Audit F02: validated before the lock, a charge limit undid a fresh charging block."""
     entered = asyncio.Event()

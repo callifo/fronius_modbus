@@ -878,6 +878,158 @@ def test_enabling_the_solar_api_keeps_the_discovery_switch(client, inverter):
     }
 
 
+BATTERIES = "/api/config/batteries"
+BATTERY_CONFIG = {
+    "HYB_EM_MODE": 1,
+    "_HYB_EM_MODE_meta": {"valueType": "Integer"},
+    "HYB_EM_POWER": -2000,
+    "BAT_M0_SOC_MODE": "manual",
+    "BAT_M0_SOC_MIN": 10,
+    "BAT_M0_SOC_MAX": 95,
+    "HYB_BACKUP_RESERVED": 7,
+    "HYB_EVU_CHARGEFROMGRID": True,
+    "HYB_BM_CHARGEFROMAC": True,
+}
+
+
+def posts(inverter: FakeInverter) -> list[tuple[str, dict | None]]:
+    return [(call[1], call[2]) for call in inverter.calls if call[0] == "post"]
+
+
+@pytest.mark.parametrize(
+    ("write", "arguments"),
+    [
+        ("set_battery_config", (1, -2000)),
+        ("set_battery_soc_config", (10, 95, 7)),
+        ("set_soc_mode", ("manual",)),
+        ("set_backup_reserve", (7,)),
+        ("set_battery_charge_sources", (True, True)),
+    ],
+)
+def test_a_battery_setting_already_in_place_is_not_written(
+    client, inverter, write, arguments
+):
+    """Every battery write reconfigures the inverter; the same value again did so for nothing."""
+    inverter.bodies[BATTERIES] = dict(BATTERY_CONFIG)
+
+    assert getattr(client, write)(*arguments) is False
+
+    assert posts(inverter) == []
+
+
+def test_the_inverters_own_spelling_counts_as_the_same_value(client, inverter):
+    """It sends flags as words or numbers and modes capitalised; that is no change."""
+    inverter.bodies[BATTERIES] = BATTERY_CONFIG | {
+        "HYB_EVU_CHARGEFROMGRID": "true",
+        "HYB_BM_CHARGEFROMAC": 1,
+        "BAT_M0_SOC_MODE": "Manual",
+    }
+
+    assert client.set_battery_charge_sources(True, True) is False
+    assert client.set_soc_mode("manual") is False
+
+    assert posts(inverter) == []
+
+
+def test_a_config_read_that_is_no_object_still_writes_everything(client, inverter):
+    """Audit R24-01: a list instead of an object raised AttributeError, an unknown error."""
+    inverter.bodies[BATTERIES] = ["unexpected"]
+
+    client.set_backup_reserve(7)
+
+    assert posts(inverter) == [(BATTERIES, {"HYB_BACKUP_RESERVED": 7})]
+
+
+@pytest.mark.parametrize(
+    ("path", "write"),
+    [
+        ("/api/config/solar_api", lambda client: client.set_solar_api_enabled(True)),
+        (
+            "/api/config/modbus",
+            lambda client: client.ensure_modbus_enabled(502, 200, 1),
+        ),
+    ],
+)
+def test_a_config_that_must_be_written_back_but_is_no_object_is_an_error(
+    client, inverter, path, write
+):
+    """Without the object there is nothing to write back; that is a failed write, not a crash."""
+    inverter.bodies[path] = ["unexpected"]
+
+    with pytest.raises(FroniusWebResponseError, match="no object"):
+        write(client)
+
+    assert posts(inverter) == []
+
+
+def test_only_the_battery_fields_that_differ_are_written(client, inverter):
+    inverter.bodies[BATTERIES] = dict(BATTERY_CONFIG)
+
+    assert client.set_battery_soc_config(10, 90, 7) is True
+
+    assert posts(inverter) == [(BATTERIES, {"BAT_M0_SOC_MAX": 90})]
+
+
+def test_an_unreadable_battery_config_still_writes_everything(client, inverter):
+    """Not knowing the current value is no reason to drop the owner's input."""
+    original_handle = inverter.handle
+
+    def fail_the_read(method, path, payload, headers):
+        status, body, extra = original_handle(method, path, payload, headers)
+        if method == "get" and path == BATTERIES:
+            status = 500
+        return status, body, extra
+
+    inverter.handle = fail_the_read
+
+    client.set_backup_reserve(7)
+
+    assert posts(inverter) == [(BATTERIES, {"HYB_BACKUP_RESERVED": 7})]
+
+
+@pytest.mark.parametrize(
+    "refusal", ["writeFailure", "permissionFailure", "validationErrors", "unknownNodes"]
+)
+def test_a_field_the_inverter_refuses_is_an_error(client, inverter, refusal):
+    """The inverter reports each field in the body (seen on a GEN24); HTTP 200 alone is not success."""
+    inverter.bodies[BATTERIES] = {"HYB_BACKUP_RESERVED": 5}
+    original_handle = inverter.handle
+
+    def answer_with_a_refusal(method, path, payload, headers):
+        status, body, extra = original_handle(method, path, payload, headers)
+        if method == "post":
+            body = {"writeSuccess": [], refusal: ["HYB_BACKUP_RESERVED"]}
+        return status, body, extra
+
+    inverter.handle = answer_with_a_refusal
+
+    with pytest.raises(FroniusWebResponseError, match="HYB_BACKUP_RESERVED"):
+        client.set_backup_reserve(7)
+
+
+def test_a_solar_api_already_in_that_state_is_not_written(client, inverter):
+    inverter.bodies["/api/config/solar_api"] = {
+        "SolarAPIv1Enabled": False,
+        "activeOnExternalDevicesDiscovered": False,
+    }
+
+    assert client.set_solar_api_enabled(False) is False
+
+    assert posts(inverter) == []
+
+
+def test_an_export_limit_already_in_place_is_not_written(client, inverter):
+    inverter.bodies["/api/config/limit_settings/powerLimits"] = {
+        "exportLimits": {
+            "activePower": {"softLimit": {"enabled": True, "powerLimit": 7000}}
+        }
+    }
+
+    assert client.set_export_soft_limit(7000) is False
+
+    assert posts(inverter) == []
+
+
 def test_the_modbus_control_reset_is_a_bare_command(client, inverter):
     assert client.reset_modbus_control() is True
 
@@ -937,7 +1089,7 @@ def test_assisted_setup_converts_an_existing_float_register_map():
         }
     }
     sent = {}
-    client._request = lambda method, path, payload=None: sent.update(payload=payload)
+    client._post = lambda path, payload=None: sent.update(payload=payload)
     assert client.ensure_modbus_enabled(502, 200, 1) is True
     assert sent["payload"]["slave"]["sunspecMode"] == "int"
 

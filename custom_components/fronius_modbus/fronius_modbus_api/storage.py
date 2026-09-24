@@ -17,6 +17,7 @@ import logging
 
 from .exceptions import ControlRefused
 from .sunspec_models import Storage
+from .writes import registers_holding
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -256,10 +257,12 @@ class StorageControl:
         rate_writes = [("in_w_rte", in_rate), ("out_w_rte", out_rate)]
         if (self._storage.out_w_rte or 0.0) < out_rate:
             rate_writes.reverse()
+        writes = [("stor_ctl_mod", sunspec_mode), *rate_writes]
         async with self._write_lock:
-            await self._storage.write("stor_ctl_mod", sunspec_mode)
-            for field_name, rate in rate_writes:
-                await self._storage.write(field_name, rate)
+            holding = await registers_holding(self._storage, dict(writes))
+            for field_name, value in writes:
+                if field_name not in holding:
+                    await self._storage.write(field_name, value)
             self._extended_mode = mode
             self._unconfirmed_polls = 0
 
@@ -325,7 +328,7 @@ class StorageControl:
                 maximum=str(SOC_MINIMUM_HIGHEST),
             )
         async with self._write_lock:
-            await self._storage.write("min_rsv_pct", float(int(percent)))
+            await self._write_changed("min_rsv_pct", float(int(percent)))
 
     async def _write_rate(
         self,
@@ -341,4 +344,8 @@ class StorageControl:
         async with self._write_lock:
             if not allowed():
                 raise refusal
-            await self._storage.write(field_name, percent())
+            await self._write_changed(field_name, percent())
+
+    async def _write_changed(self, field_name: str, value: float) -> None:
+        if not await registers_holding(self._storage, {field_name: value}):
+            await self._storage.write(field_name, value)

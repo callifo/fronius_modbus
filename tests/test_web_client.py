@@ -623,6 +623,134 @@ def test_a_lifted_restriction_is_not_lifted_again(client, inverter):
     )
 
 
+def modbus_config_as_read(**slave) -> dict:
+    """The shape the inverter answers: RTU roles as lists, a _meta beside every field."""
+    config = modbus_config(**slave)
+    config["slave"] |= {"baud": 19200, "parity": "e", "demo": False}
+    config["slave"].setdefault("rtuif", [{"if": "rtu1"}])
+    config["slave"]["_mode_meta"] = {"valueType": "String"}
+    config["_slave_meta"] = {"valueType": "Object"}
+    config["master"] = {"rtuif": [{"if": "rtu0"}], "_rtuif_meta": {}}
+    return config
+
+
+def modbus_write(inverter) -> dict:
+    return next(call for call in inverter.calls if call[0] == "post")[2]
+
+
+def test_enabling_tcp_keeps_an_rtu_port_in_slave_role(client, inverter):
+    """The fixed payload moved every RS485 port to master and cut off an RTU client."""
+    inverter.bodies["/api/config/modbus"] = modbus_config_as_read(mode="rtu")
+
+    assert client.ensure_modbus_enabled(502, 200, 1) is True
+
+    write = modbus_write(inverter)
+    assert write["master"] == {"rtuif": [{"if": "rtu0"}]}
+    assert write["slave"]["rtuif"] == [{"if": "rtu1"}]
+    assert (write["slave"]["baud"], write["slave"]["parity"]) == (19200, "e")
+
+
+def test_tcp_and_rtu_together_already_serve_modbus_tcp(client, inverter):
+    """Mode "both" read as wrong and was rewritten to "tcp", ending the RTU side."""
+    inverter.bodies["/api/config/modbus"] = modbus_config_as_read(mode="both")
+
+    assert client.ensure_modbus_enabled(502, 200, 1) is False
+
+
+def test_a_rewrite_for_another_reason_keeps_mode_both(client, inverter):
+    inverter.bodies["/api/config/modbus"] = modbus_config_as_read(
+        mode="both", port=1502
+    )
+
+    assert client.ensure_modbus_enabled(502, 200, 1) is True
+
+    assert modbus_write(inverter)["slave"]["mode"] == "both"
+
+
+def test_the_field_descriptions_are_not_written_back(client, inverter):
+    inverter.bodies["/api/config/modbus"] = modbus_config_as_read(mode="rtu")
+
+    client.ensure_modbus_enabled(502, 200, 1)
+
+    def keys(node):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                yield key
+                yield from keys(value)
+        if isinstance(node, list):
+            for value in node:
+                yield from keys(value)
+
+    assert [key for key in keys(modbus_write(inverter)) if key.startswith("_")] == []
+
+
+@pytest.mark.parametrize(
+    ("allowed", "written"),
+    [
+        ("192.0.2.50", "192.0.2.50,192.0.2.99"),
+        ("192.0.2.50,198.51.100.0/24", "192.0.2.50,198.51.100.0/24,192.0.2.99"),
+    ],
+)
+def test_home_assistant_joins_the_allowed_hosts(
+    client, inverter, monkeypatch, allowed, written
+):
+    """Replacing the list locked out every other host on it, an energy manager say."""
+    inverter.bodies["/api/config/modbus"] = modbus_config_as_read(
+        ctr={"on": True, "restriction": {"on": True, "ip": allowed}}
+    )
+    monkeypatch.setattr(
+        FroniusWebClient, "_resolve_client_ip", lambda self: "192.0.2.99"
+    )
+
+    assert client.ensure_modbus_enabled(
+        502, 200, 1, restriction=ModbusRestriction.HOME_ASSISTANT
+    )
+
+    assert modbus_write(inverter)["slave"]["ctr"]["restriction"] == {
+        "on": True,
+        "ip": written,
+    }
+
+
+def test_a_network_that_covers_home_assistant_is_left_alone(
+    client, inverter, monkeypatch
+):
+    inverter.bodies["/api/config/modbus"] = modbus_config_as_read(
+        ctr={"on": True, "restriction": {"on": True, "ip": "192.0.2.0/24"}}
+    )
+    monkeypatch.setattr(
+        FroniusWebClient, "_resolve_client_ip", lambda self: "192.0.2.99"
+    )
+
+    assert (
+        client.ensure_modbus_enabled(
+            502, 200, 1, restriction=ModbusRestriction.HOME_ASSISTANT
+        )
+        is False
+    )
+
+
+def test_an_inactive_list_is_not_switched_on_with_home_assistant(
+    client, inverter, monkeypatch
+):
+    """Hosts the owner entered and switched off stay off; only Home Assistant is let in."""
+    inverter.bodies["/api/config/modbus"] = modbus_config_as_read(
+        ctr={"on": True, "restriction": {"on": False, "ip": "192.0.2.50"}}
+    )
+    monkeypatch.setattr(
+        FroniusWebClient, "_resolve_client_ip", lambda self: "192.0.2.99"
+    )
+
+    client.ensure_modbus_enabled(
+        502, 200, 1, restriction=ModbusRestriction.HOME_ASSISTANT
+    )
+
+    assert modbus_write(inverter)["slave"]["ctr"]["restriction"] == {
+        "on": True,
+        "ip": "192.0.2.99",
+    }
+
+
 def test_a_matching_restriction_is_not_rewritten(client, inverter, monkeypatch):
     inverter.bodies["/api/config/modbus"] = modbus_config(
         ctr={"on": True, "restriction": {"on": True, "ip": "192.0.2.99"}}
@@ -731,6 +859,22 @@ def test_disabling_the_solar_api_also_clears_the_discovery_flag(client, inverter
     assert posted(inverter, "/api/config/solar_api") == {
         "SolarAPIv1Enabled": False,
         "activeOnExternalDevicesDiscovered": False,
+    }
+
+
+def test_enabling_the_solar_api_keeps_the_discovery_switch(client, inverter):
+    """The switch is the owner's own setting in the web interface; enabling must not clear it."""
+    inverter.bodies["/api/config/solar_api"] = {
+        "SolarAPIv1Enabled": False,
+        "_SolarAPIv1Enabled_meta": {"valueType": "Boolean"},
+        "activeOnExternalDevicesDiscovered": True,
+    }
+
+    assert client.set_solar_api_enabled(True) is True
+
+    assert posted(inverter, "/api/config/solar_api") == {
+        "SolarAPIv1Enabled": True,
+        "activeOnExternalDevicesDiscovered": True,
     }
 
 

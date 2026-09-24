@@ -583,8 +583,11 @@ class FroniusWebClient:
         slave = current.get("slave") or {}
         ctr = slave.get("ctr") or {}
         current_restriction = ctr.get("restriction") or {}
-        restriction_on = bool(restrict_to_client_ip)
-        restriction_ip = self._resolve_client_ip() if restriction_on else None
+        # Without the checkbox the inverter's own restriction stays as it is:
+        # writing "off" opened a restricted server to every host (audit A24-02).
+        restriction = current_restriction
+        if restrict_to_client_ip:
+            restriction = {"on": True, "ip": self._resolve_client_ip()}
 
         if (
             slave.get("mode") == "tcp"
@@ -596,8 +599,9 @@ class FroniusWebClient:
             and _as_int(slave.get("meterAddress"), meter_address) == int(meter_address)
             and _as_int(slave.get("rtu_inverter_slave_id"), inverter_unit_id)
             == int(inverter_unit_id)
-            and is_enabled(current_restriction.get("on")) == restriction_on
-            and (not restriction_on or current_restriction.get("ip") == restriction_ip)
+            and is_enabled(current_restriction.get("on"))
+            == is_enabled(restriction.get("on"))
+            and current_restriction.get("ip") == restriction.get("ip")
         ):
             return False
 
@@ -612,10 +616,7 @@ class FroniusWebClient:
                 "rtu_inverter_slave_id": inverter_unit_id,
                 "ctr": {
                     "on": True,
-                    "restriction": {
-                        "on": restriction_on,
-                        **({"ip": restriction_ip} if restriction_ip else {}),
-                    },
+                    "restriction": restriction,
                 },
             },
         }
@@ -625,7 +626,7 @@ class FroniusWebClient:
             port,
             inverter_unit_id,
             meter_address,
-            restriction_on,
+            is_enabled(restriction.get("on")),
         )
         return True
 
@@ -651,9 +652,9 @@ class FroniusWebClient:
 
     def set_battery_soc_config(
         self,
-        soc_min: int = 6,
-        soc_max: int = 99,
-        backup_reserved: int = 5,
+        soc_min: int,
+        soc_max: int,
+        backup_reserved: int,
     ) -> bool:
         payload: dict[str, Any] = {
             "BAT_M0_SOC_MIN": soc_min,

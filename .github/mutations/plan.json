@@ -1020,5 +1020,19 @@
     "old": "    def _flow_entry(self) -> config_entries.ConfigEntry | None:\n        return self.config_entry\n",
     "new": "    def _flow_entry(self) -> config_entries.ConfigEntry | None:\n        return None\n",
     "tests": "late_failure_does_not_bring_back_a_stale_token"
+  },
+  {
+    "label": "config flow: reconfigure knows the entry it changes",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "            return None\n        return self._get_reconfigure_entry()\n",
+    "new": "            return None\n        return None\n",
+    "tests": "reconfigure_failing_late_keeps_the_fresh_token"
+  },
+  {
+    "label": "repairs: the repair flow knows the entry it changes",
+    "path": "custom_components/fronius_modbus/repairs.py",
+    "old": "        return self.hass.config_entries.async_get_entry(self._entry_id)\n\n    async def _async_finish_repair(",
+    "new": "        return None\n\n    async def _async_finish_repair(",
+    "tests": "repair_failing_late_keeps_the_fresh_token"
   }
 ]

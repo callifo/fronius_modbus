@@ -291,3 +291,40 @@ async def test_the_reconfigure_repair_refuses_a_taken_host_before_the_inverter(
 
     assert flow["errors"]["base"] == "already_configured"
     assert applied == []
+
+
+async def test_a_repair_failing_late_keeps_the_fresh_token(
+    hass, mock_modbus, web_client, repairs_client, monkeypatch
+):
+    """Audit D8AE-02, repair: the entry used the fresh token when the stale one came back."""
+    entry = await make_entry(hass, mock_modbus, with_token=False)
+    store = async_get_token_store(hass)
+    await store.async_save_token(HOST, realm="r", token="stale", user="technician")
+
+    async def validate(hass, settings, *, api_token, apply_modbus_config):
+        if api_token == {"realm": "r", "token": "stale"}:
+            raise config_flow._InvalidApiCredentials
+        return {"title": "Fronius"}
+
+    def fail(self, **_kwargs):
+        raise RuntimeError("after the update")
+
+    monkeypatch.setattr(config_flow, "_validate_input", validate)
+    monkeypatch.setattr(
+        repairs.FroniusReconfigureRepairFlow, "async_create_entry", fail
+    )
+    issue_id = f"{MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX}{entry.entry_id}"
+
+    flow = await start_fix_flow(repairs_client, issue_id)
+    flow = await advance_fix_flow(
+        repairs_client, flow["flow_id"], SETTINGS_INPUT | {"api_username": "technician"}
+    )
+    flow = await advance_fix_flow(repairs_client, flow["flow_id"], PASSWORD_INPUT)
+    await hass.async_block_till_done()
+
+    assert flow["errors"]["base"] == "unknown"
+    assert config_flow.entry_defaults(entry)["api_username"] == "technician"
+    assert await store.async_load_token(HOST, "technician") == {
+        "realm": "r",
+        "token": "t",
+    }

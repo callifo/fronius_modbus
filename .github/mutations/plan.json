@@ -954,8 +954,8 @@
   {
     "label": "repairs: the repair flow claims its host before the login",
     "path": "custom_components/fronius_modbus/repairs.py",
-    "old": "            await self._async_claim_entry_host(entry, settings)\n",
-    "new": "            pass\n",
+    "old": "        await self._async_claim_entry_host(entry, settings)\n",
+    "new": "        pass\n",
     "tests": "refuses_a_taken_host_before_the_inverter or rechecks_a_host_taken_during_the_password_step"
   },
   {
@@ -1069,5 +1069,12 @@
     "old": "            if claim_host is not None:\n                await claim_host()\n",
     "new": "",
     "tests": "host_taken_while_the_token_is_minted_leaves_the_inverter_alone"
+  },
+  {
+    "label": "repairs: a repair for a removed entry stops before the login",
+    "path": "custom_components/fronius_modbus/repairs.py",
+    "old": "            raise data_entry_flow.AbortFlow(\"entry_not_found\")\n",
+    "new": "            return\n",
+    "tests": "repair_for_an_entry_removed_meanwhile_stops_before_the_login"
   }
 ]

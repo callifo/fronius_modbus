@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from homeassistant import data_entry_flow
 from homeassistant.components.repairs import RepairsFlow
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST
@@ -34,8 +35,12 @@ class FroniusReconfigureRepairFlow(TokenFlowMixin, RepairsFlow):
 
     async def _async_claim_repaired_host(self, settings: dict[str, Any]) -> None:
         entry = self._flow_entry()
-        if entry is not None:
-            await self._async_claim_entry_host(entry, settings)
+        if entry is None:
+            # Deleted while the form was open: nothing may be minted or set up
+            # for it any more (audit R730-02).
+            self._resolve_issue()
+            raise data_entry_flow.AbortFlow("entry_not_found")
+        await self._async_claim_entry_host(entry, settings)
 
     async def _async_finish_repair(
         self,

@@ -835,8 +835,8 @@
   {
     "label": "config flow: an aborted flow drops its minted token",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "            if previous is None:\n                await async_forget_unused_tokens(self.hass, host)\n",
-    "new": "            if previous is None:\n                pass\n",
+    "old": "        if previous is None:\n            await async_forget_unused_tokens(self.hass, host)\n            return\n",
+    "new": "        if previous is None:\n            return\n",
     "tests": "a_token_for_a_host_already_set_up_is_not_kept"
   },
   {
@@ -905,8 +905,8 @@
   {
     "label": "config flow: an aborted flow restores the token held before",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "            else:\n                await _async_save_token(self.hass, host, username, previous)\n",
-    "new": "",
+    "old": "            return\n        await _async_save_token(self.hass, host, username, previous)\n",
+    "new": "            return\n",
     "tests": "a_duplicate_flow_leaves_the_existing_entrys_token_alone"
   },
   {
@@ -919,9 +919,9 @@
   {
     "label": "config flow: a late failure keeps a token its entry uses",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "            if previous is None:\n                await async_forget_unused_tokens(self.hass, host)\n",
-    "new": "            if previous is None:\n                await store.async_delete_token(host, username)\n",
-    "tests": "role_switch_failing_after_the_update_keeps_the_new_token"
+    "old": "            if not self._flow_entry_logs_in_with(host, username):\n",
+    "new": "            if True:\n",
+    "tests": "role_switch_failing_after_the_update_keeps_the_new_token or late_failure_does_not_bring_back_a_stale_token"
   },
   {
     "label": "migrations: only a sensor marked as reported is kept",
@@ -1013,5 +1013,12 @@
     "old": "        async_mark_reported(hass, entry, CHANNEL_KEYS)\n",
     "new": "        pass\n",
     "tests": "module_registered_before_the_marker_survives_the_upgrade"
+  },
+  {
+    "label": "config flow: the options flow knows the entry it changes",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "    def _flow_entry(self) -> config_entries.ConfigEntry | None:\n        return self.config_entry\n",
+    "new": "    def _flow_entry(self) -> config_entries.ConfigEntry | None:\n        return None\n",
+    "tests": "late_failure_does_not_bring_back_a_stale_token"
   }
 ]

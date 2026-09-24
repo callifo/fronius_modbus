@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.components.repairs import RepairsFlow
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST
 import voluptuous as vol
 from homeassistant.helpers import issue_registry as ir
@@ -27,6 +28,9 @@ class FroniusReconfigureRepairFlow(TokenFlowMixin, RepairsFlow):
 
     def _resolve_issue(self) -> None:
         ir.async_delete_issue(self.hass, DOMAIN, self._issue_id())
+
+    def _flow_entry(self) -> ConfigEntry | None:
+        return self.hass.config_entries.async_get_entry(self._entry_id)
 
     async def _async_finish_repair(
         self,

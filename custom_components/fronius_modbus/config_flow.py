@@ -52,7 +52,11 @@ from .froniuswebclient import (
     FroniusWebResponseError,
     mint_token,
 )
-from .token_store import async_forget_unused_tokens, async_get_token_store
+from .token_store import (
+    async_forget_unused_tokens,
+    async_get_token_store,
+    canonical_host,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -615,8 +619,8 @@ class TokenFlowMixin:
         credential with no entry (audit RA24-01). The entry's setup reads it, so
         it is saved before the entry is created; if that fails, the token held
         before comes back: an aborted duplicate replaced the entry's own
-        (reaudit RE26-04). Without one, the new token stays only if an entry
-        already logs in with it: a flow can fail after updating its entry (R26-02).
+        (reaudit RE26-04). A flow can fail after updating its own entry; that
+        entry then logs in with the new token, which stays (R26-02, D8AE-02).
         """
         if minted is None:
             return await on_success(state.settings, info, state.previous_host)
@@ -628,11 +632,29 @@ class TokenFlowMixin:
             await _async_save_token(self.hass, host, username, minted)
             return await on_success(state.settings, info, state.previous_host)
         except BaseException:
-            if previous is None:
-                await async_forget_unused_tokens(self.hass, host)
-            else:
-                await _async_save_token(self.hass, host, username, previous)
+            if not self._flow_entry_logs_in_with(host, username):
+                await self._async_roll_back_token(host, username, previous)
             raise
+
+    def _flow_entry(self) -> config_entries.ConfigEntry | None:
+        """The entry this flow changes; none while it creates one."""
+        return None
+
+    def _flow_entry_logs_in_with(self, host: str, username: str) -> bool:
+        entry = self._flow_entry()
+        if entry is None:
+            return False
+        settings = entry_defaults(entry)
+        same_host = canonical_host(settings[CONF_HOST]) == canonical_host(host)
+        return same_host and settings[CONF_API_USERNAME] == username
+
+    async def _async_roll_back_token(
+        self, host: str, username: str, previous: dict[str, str] | None
+    ) -> None:
+        if previous is None:
+            await async_forget_unused_tokens(self.hass, host)
+            return
+        await _async_save_token(self.hass, host, username, previous)
 
 
 class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
@@ -649,6 +671,11 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
     @callback
     def async_get_options_flow(config_entry):
         return FroniusModbusOptionsFlow()
+
+    def _flow_entry(self) -> config_entries.ConfigEntry | None:
+        if self.source != config_entries.SOURCE_RECONFIGURE:
+            return None
+        return self._get_reconfigure_entry()
 
     async def _async_claim_new_host(self, settings: dict[str, Any]) -> None:
         await self.async_set_unique_id(_entry_unique_id(settings))
@@ -724,6 +751,9 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
 
 class FroniusModbusOptionsFlow(TokenFlowMixin, config_entries.OptionsFlow):
     """Handle Fronius Modbus options."""
+
+    def _flow_entry(self) -> config_entries.ConfigEntry | None:
+        return self.config_entry
 
     async def _async_claim_host(self, settings: dict[str, Any]) -> None:
         await self._async_claim_entry_host(self.config_entry, settings)

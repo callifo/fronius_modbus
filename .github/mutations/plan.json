@@ -121,9 +121,9 @@
   {
     "label": "controls: a cancelled pulse still restores the enable flag",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/controls.py",
-    "old": "            except (ModbusError, asyncio.CancelledError) as err:",
+    "old": "            except BaseException as err:",
     "new": "            except ModbusError as err:",
-    "tests": "cancelled_write_leaves_the_control_enabled"
+    "tests": "cancelled_write_leaves_the_control_enabled or cannot_scale_leaves_the_control_enabled"
   },
   {
     "label": "entities: a stale reading is not an observation",

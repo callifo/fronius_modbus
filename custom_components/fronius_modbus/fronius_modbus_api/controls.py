@@ -115,10 +115,10 @@ class InverterControls:
                 await self._controls.write(value_field, value)
                 await self._sleep(APPLY_TOGGLE_DELAY_SECONDS)
                 await self._controls.write(enable_field, ENABLED)
-            except (ModbusError, asyncio.CancelledError) as err:
-                # The limit was live before this call. Neither a failed write
-                # nor a cancelled service call may leave it switched off
-                # (audit F01/A01), so restore it before propagating either.
+            except BaseException as err:
+                # The limit was live before this call. No failed write, not even
+                # a value the device cannot scale (FA0FB-01), and no cancelled
+                # service call may leave it switched off (audit F01/A01).
                 await self._restore_enable(enable_field, err)
                 raise
             return True

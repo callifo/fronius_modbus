@@ -9,7 +9,13 @@ import json
 import pathlib
 from unittest.mock import MagicMock
 
+import pytest
+
 from custom_components.fronius_modbus import entities
+from custom_components.fronius_modbus.component_readings import (
+    COMPONENT_READINGS,
+    component_value,
+)
 from custom_components.fronius_modbus.froniuswebclient import (
     _parse_inverter_readable,
     _parse_storage_readable,
@@ -212,3 +218,39 @@ def test_the_battery_device_carries_its_firmware_and_hardware():
 def test_a_failed_readable_read_leaves_the_readings_unread():
     assert _parse_inverter_readable(None)["readings"] is None
     assert _parse_storage_readable(None)["readings"] is None
+
+
+@pytest.mark.parametrize(
+    ("value", "shown"),
+    [
+        (44.3, 44.3),
+        (44, 44),
+        ("44.3", 44.3),
+        ("n/a", None),
+        (True, None),
+        ({"x": 1}, None),
+    ],
+)
+def test_a_sensor_with_a_unit_shows_only_a_number(value, shown):
+    """Audit R25-02: the old temperature parser took numbers only; a dict reached HA."""
+    reading = next(r for r in COMPONENT_READINGS if r.key == "inverter_temperature")
+
+    assert component_value(reading, {reading.fields[0]: value}) == shown
+
+
+@pytest.mark.parametrize(
+    ("value", "shown"),
+    [
+        (1.0, "yes"),
+        (0.0, "no"),
+        ("1", "yes"),
+        ("0", "no"),
+        ("true", "yes"),
+        (False, "no"),
+    ],
+)
+def test_a_flag_is_set_only_by_a_true_value(value, shown):
+    """Audit R25-02: the text "0" read as "yes"."""
+    reading = next(r for r in COMPONENT_READINGS if r.key == "grid_valid")
+
+    assert component_value(reading, {reading.fields[0]: value}) == shown

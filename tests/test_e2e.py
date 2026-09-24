@@ -858,3 +858,35 @@ async def test_a_single_404_keeps_the_registered_component_sensors(
     await hass.async_block_till_done()
 
     assert er.async_get(hass).async_get(temperature) is not None
+
+
+async def test_a_module_registered_before_the_marker_survives_the_upgrade(
+    hass, mock_modbus, monkeypatch
+):
+    """Audit D8AE-01: an unmarked real module fell on the first upgraded partial answer."""
+    mock_modbus.add_unit(201, like=METER_UNIT_ID)
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientAnsweringEmpty)
+    monkeypatch.setattr(
+        _WebClientAnsweringEmpty,
+        "readings",
+        {
+            "MODULE_TEMPERATURE_MEAN_01_F32": 40.0,
+            "MODULE_TEMPERATURE_MEAN_02_F32": 41.0,
+        },
+    )
+    entry = make_entry(hass)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+    await setup_entry(hass, entry)
+    module_2 = entity_id_for(hass, entry, "sensor", "module_temperature_2")
+    await hass.config_entries.async_unload(entry.entry_id)
+    # As an entry set up before the marker existed left it.
+    er.async_get(hass).async_update_entity_options(module_2, DOMAIN, None)
+    hass.config_entries.async_update_entry(entry, minor_version=12)
+
+    monkeypatch.setattr(
+        _WebClientAnsweringEmpty, "readings", {"MODULE_TEMPERATURE_MEAN_01_F32": 40.0}
+    )
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert er.async_get(hass).async_get(module_2) is not None

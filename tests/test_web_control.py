@@ -770,3 +770,31 @@ async def test_a_malformed_modbus_flag_shows_as_unknown(hass, modbus_config, unk
     finally:
         control.shutdown()
     assert [getattr(data, field) for field in unknown] == [None] * len(unknown)
+
+
+@pytest.mark.parametrize(
+    ("flag", "shown"),
+    [
+        ([1], None),
+        ("garbage", None),
+        (2, None),
+        (True, "enabled"),
+        (0, "disabled"),
+        ("off", "disabled"),
+        ("true", "enabled"),
+    ],
+)
+async def test_a_modbus_flag_value_that_means_nothing_shows_as_unknown(
+    hass, flag, shown
+):
+    """Audit R730-03: a list read as on, an unknown word as off."""
+    client = FakeWebClient()
+    client.get_modbus_config = lambda: {
+        "slave": {"ctr": {"on": flag, "restriction": {"on": flag}}}
+    }
+    control = make_control(hass, client=client)
+    try:
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+    assert (data.modbus_control, data.modbus_restriction) == (shown, shown)

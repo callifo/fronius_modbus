@@ -796,3 +796,28 @@ async def test_diagnostics_still_answer_while_the_inverter_is_offline(
 
     assert diagnostics["registers"] == {"error": "ModbusConnectionError"}
     assert diagnostics["identity"]["serial"] == "**REDACTED**"
+
+
+async def test_a_placeholder_power_module_is_not_kept(hass, mock_modbus, monkeypatch):
+    """Own reaudit R26-01: a module made while unread stayed as if reported."""
+    mock_modbus.add_unit(201, like=METER_UNIT_ID)
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientAnsweringEmpty)
+    monkeypatch.setattr(_WebClientAnsweringEmpty, "readings", None)
+    entry = make_entry(hass)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+    await setup_entry(hass, entry)
+    module_2 = entity_id_for(hass, entry, "sensor", "module_temperature_2")
+
+    monkeypatch.setattr(
+        _WebClientAnsweringEmpty,
+        "readings",
+        {
+            "MODULE_TEMPERATURE_MEAN_01_F32": 40.0,
+            "MODULE_TEMPERATURE_MEAN_03_F32": 40.0,
+            "MODULE_TEMPERATURE_MEAN_04_F32": 40.0,
+        },
+    )
+    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert er.async_get(hass).async_get(module_2) is None

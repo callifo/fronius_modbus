@@ -14,6 +14,9 @@ from custom_components.fronius_modbus.froniuswebclient import (
     FroniusWebAuthError,
     FroniusWebResponseError,
 )
+from custom_components.fronius_modbus.fronius_modbus_api.exceptions import (
+    ControlRefused,
+)
 from custom_components.fronius_modbus.token_store import async_get_token_store
 from custom_components.fronius_modbus.web_control import FroniusWebControl
 from homeassistant.helpers import issue_registry as ir
@@ -72,6 +75,10 @@ class FakeWebClient:
         return True
 
     def set_soc_limits(self, soc_min=None, soc_max=None):
+        lower = self.battery["BAT_M0_SOC_MIN"] if soc_min is None else soc_min
+        upper = self.battery["BAT_M0_SOC_MAX"] if soc_max is None else soc_max
+        if lower > upper:
+            raise ControlRefused("soc_minimum_above_maximum", "inverted window")
         self.calls.append(("soc", soc_min, soc_max))
         return True
 
@@ -625,3 +632,38 @@ async def test_every_battery_write_shows_its_value_right_away(hass):
         assert pushed[-1].solar_api_enabled is True
     finally:
         control.shutdown()
+
+
+async def test_a_soc_minimum_the_inverter_refuses_is_not_written_to_modbus_first(hass):
+    """Reaudit RE26-02: a stale poll passed, Modbus took the minimum, the web API refused it."""
+    client = FakeWebClient()
+    client.battery.update(BAT_M0_SOC_MODE="manual", BAT_M0_SOC_MIN=20, BAT_M0_SOC_MAX=90)
+    control = make_control(hass, client=client)
+    written = []
+    try:
+        await control.async_refresh()
+        client.battery.update(BAT_M0_SOC_MAX=30)
+
+        async def write_modbus():
+            written.append(50)
+
+        with pytest.raises(ControlRefused) as refused:
+            await control.apply_soc_minimum(50, write_modbus)
+    finally:
+        control.shutdown()
+    assert refused.value.key == "soc_minimum_above_maximum"
+    assert written == []
+
+
+async def test_a_soc_maximum_a_stale_poll_would_refuse_reaches_the_inverter(hass):
+    """Reaudit RE26-02: the polled minimum 50 refused a maximum the inverter would take."""
+    client = FakeWebClient()
+    client.battery.update(BAT_M0_SOC_MODE="manual", BAT_M0_SOC_MIN=50, BAT_M0_SOC_MAX=90)
+    control = make_control(hass, client=client)
+    try:
+        await control.async_refresh()
+        client.battery.update(BAT_M0_SOC_MIN=20)
+        await control.set_soc_maximum(30)
+    finally:
+        control.shutdown()
+    assert client.calls[-1] == ("soc", None, 30)

@@ -175,6 +175,27 @@
     "tests": "minor_version_11_entries_turn_the_checkbox_into_a_choice"
   },
   {
+    "label": "web client: a failing display-only read is warned about",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "                log = _LOGGER.debug if missing else _LOGGER.warning",
+    "new": "                log = _LOGGER.debug",
+    "tests": "a_failing_readable_endpoint_is_warned_about_once"
+  },
+  {
+    "label": "web client: a display-only read leaves an outage to the refresh",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "        except (FroniusWebResponseError, ValueError) as err:",
+    "new": "        except Exception as err:",
+    "tests": "a_switched_off_inverter_is_left_to_the_refresh"
+  },
+  {
+    "label": "web client: a display-only read that answers again is logged",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "            _LOGGER.info(\"%s answers again\", path)",
+    "new": "            pass",
+    "tests": "a_failing_readable_endpoint_is_warned_about_once"
+  },
+  {
     "label": "migrations: a missing web login blocks the cleanup",
     "path": "custom_components/fronius_modbus/migrations.py",
     "old": "    elif runtime.web_control is None or not runtime.web_control.configured:",

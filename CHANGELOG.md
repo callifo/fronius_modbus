@@ -11,6 +11,7 @@
 - A web login lost at setup no longer deletes the web entities, and with them the entity ids an owner chose. A rejected token read as an entry without the web API, and the stale-entity cleanup retired everything the web API provides; after a restart without the token it took the second meter's entities too. A missing login now blocks the cleanup like a failed poll.
 - A rejected technician token is the one deleted when the meter topology read fails; the customer token was deleted in its place, and the rejected one was offered again on every start.
 - An HTTP error from the export-limit endpoint fails the web refresh instead of reading as "no export limit". Only a 404, from firmware without the endpoint, still means the limit is not there.
+- The inverter and battery component reads (inverter temperature, cell temperature, battery manufacturer, model and serial) no longer hide a failing endpoint. Their values still turn unknown instead of taking the controls down, but an error other than a 404 is logged once as a warning, and again at info when the endpoint answers. A switched-off inverter is left to the refresh, which already reports it.
 
 ## 1.2.0b1
 

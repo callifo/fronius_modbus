@@ -448,6 +448,7 @@ class FroniusWebClient:
         self._username = username if username is not None else API_USERNAME
         self._password = password
         self._timeout = timeout
+        self._failing_optional_reads: set[str] = set()
         self._auth = XHeaderDigestAuth(
             self._username,
             password=password,
@@ -522,33 +523,38 @@ class FroniusWebClient:
     def get_solar_api_config(self) -> dict[str, Any]:
         return self._get_json("/api/config/solar_api")
 
-    def get_storage_info(self) -> dict[str, Any]:
+    def _get_optional_json(self, path: str) -> Any:
+        """A display-only read: when it fails its values are unknown, not the refresh.
+
+        The component endpoints differ between firmware versions, and one of
+        them failing must not take the controls down with it. A failure is
+        still logged once, and its end: a swallowed HTTP 500 read as "no
+        value" (audit A24-05). A switched-off device and a rejected login are
+        not this read's to handle.
+        """
         try:
-            return _parse_storage_readable(
-                self._get_json("/api/components/BatteryManagementSystem/readable")
-            )
-        except FroniusWebAuthError:
-            raise
-        except Exception as err:
-            _LOGGER.debug(
-                "Failed reading the storage identity via the web API: %s",
-                err,
-            )
-        return _parse_storage_readable(None)
+            payload = self._get_json(path)
+        except (FroniusWebResponseError, ValueError) as err:
+            missing = getattr(err, "status_code", None) == HTTPStatus.NOT_FOUND
+            if path not in self._failing_optional_reads:
+                self._failing_optional_reads.add(path)
+                log = _LOGGER.debug if missing else _LOGGER.warning
+                log("%s did not answer, its values stay unknown: %s", path, err)
+            return None
+        if path in self._failing_optional_reads:
+            self._failing_optional_reads.discard(path)
+            _LOGGER.info("%s answers again", path)
+        return payload
+
+    def get_storage_info(self) -> dict[str, Any]:
+        return _parse_storage_readable(
+            self._get_optional_json("/api/components/BatteryManagementSystem/readable")
+        )
 
     def get_inverter_info(self) -> dict[str, Any]:
-        try:
-            return _parse_inverter_readable(
-                self._get_json("/api/components/inverter/readable")
-            )
-        except FroniusWebAuthError:
-            raise
-        except Exception as err:
-            _LOGGER.debug(
-                "Failed reading the inverter data via the web API: %s",
-                err,
-            )
-        return _parse_inverter_readable(None)
+        return _parse_inverter_readable(
+            self._get_optional_json("/api/components/inverter/readable")
+        )
 
     def get_power_meter_info(
         self, meter_address_offset: int = 200

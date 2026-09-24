@@ -81,7 +81,8 @@ does not allow charging from the grid, whatever charge power is written over Mod
 PV charging reaches full power in the same state, which makes this look like a Modbus
 fault. Selecting `Charge from Grid` enables the `Charge from grid` and `Charge from AC`
 toggles over the Web API, so a configured Web API clears this on its own; without one,
-enable both in the inverter web UI.
+enable both in the inverter web UI. If the Web API refuses the toggles, Home Assistant
+reports an error: the storage mode is then set, but grid charging is not.
 
 # Usage
 

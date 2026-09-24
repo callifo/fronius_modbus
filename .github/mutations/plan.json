@@ -772,8 +772,8 @@
   {
     "label": "component readings: a sensor with a unit shows only a number",
     "path": "custom_components/fronius_modbus/component_readings.py",
-    "old": "    if not isinstance(value, str):\n        return None\n",
-    "new": "    if not isinstance(value, str):\n        return value\n",
+    "old": "    if not isinstance(value, (int, float)) or not math.isfinite(value):\n        return None\n",
+    "new": "    if not isinstance(value, (int, float)):\n        return value\n    if not math.isfinite(value):\n        return None\n",
     "tests": "a_sensor_with_a_unit_shows_only_a_number"
   },
   {
@@ -908,5 +908,12 @@
     "old": "            else:\n                await _async_save_token(self.hass, host, username, previous)\n",
     "new": "",
     "tests": "a_duplicate_flow_leaves_the_existing_entrys_token_alone"
+  },
+  {
+    "label": "component readings: a non-finite number is no reading",
+    "path": "custom_components/fronius_modbus/component_readings.py",
+    "old": " or not math.isfinite(value):",
+    "new": ":",
+    "tests": "no_finite_number_shows_nothing"
   }
 ]

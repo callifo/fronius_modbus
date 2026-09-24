@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import math
 from typing import Any, Literal
 
 type Component = Literal["inverter", "storage"]
@@ -354,18 +355,18 @@ def _as_number(value: Any) -> float | None:
     """A number, or numeric text as attributes carry it ("467.2"); else unknown.
 
     A value Home Assistant cannot show as a number would be refused on every
-    update (audit R25-02).
+    update (audit R25-02); "nan" and "inf" parse, but are no reading (RE26-05).
     """
     if isinstance(value, bool):
         return None
-    if isinstance(value, (int, float)):
-        return value
-    if not isinstance(value, str):
+    if isinstance(value, str):
+        try:
+            value = float(value)
+        except ValueError:
+            return None
+    if not isinstance(value, (int, float)) or not math.isfinite(value):
         return None
-    try:
-        return float(value)
-    except ValueError:
-        return None
+    return value
 
 
 def _is_set(value: Any) -> bool:

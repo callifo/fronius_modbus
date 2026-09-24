@@ -1271,6 +1271,9 @@ def test_an_unreadable_soc_window_is_not_written(client, inverter):
         client.check_soc_window(soc_min=50)
     with pytest.raises(FroniusWebResponseError):
         client.set_soc_limits(soc_min=50)
+    # Both limits given need no companion from the read, and still no write.
+    with pytest.raises(FroniusWebResponseError):
+        client.set_soc_limits(soc_min=10, soc_max=90)
 
     assert posts(inverter) == []
 

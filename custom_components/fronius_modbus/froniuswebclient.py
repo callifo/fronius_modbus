@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import ipaddress
 import logging
+import math
 import os
 import re
 import socket
@@ -222,7 +223,10 @@ def _nested_object(config: dict[str, Any], key: str, path: str) -> dict[str, Any
 
 
 def _is_number(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    """A finite number: NaN compares false with anything (audit R730-04)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    return math.isfinite(value)
 
 
 def _same(current: Any, wanted: Any) -> bool:

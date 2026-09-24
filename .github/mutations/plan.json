@@ -1090,5 +1090,12 @@
     "old": "    if isinstance(value, (int, float)) and value in (0, 1):\n",
     "new": "    if isinstance(value, (int, float)):\n",
     "tests": "modbus_flag_value_that_means_nothing_shows_as_unknown"
+  },
+  {
+    "label": "web client: a SoC limit must be finite",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "    return math.isfinite(value)\n",
+    "new": "    return True\n",
+    "tests": "soc_window_without_a_numeric_limit_is_unreadable"
   }
 ]

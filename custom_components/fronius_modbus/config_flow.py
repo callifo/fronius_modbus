@@ -604,7 +604,8 @@ class TokenFlowMixin:
         credential with no entry (audit RA24-01). The entry's setup reads it, so
         it is saved before the entry is created; if that fails, the token held
         before comes back: an aborted duplicate replaced the entry's own
-        (reaudit RE26-04).
+        (reaudit RE26-04). Without one, the new token stays only if an entry
+        already logs in with it: a flow can fail after updating its entry (R26-02).
         """
         if minted is None:
             return await on_success(state.settings, info, state.previous_host)
@@ -617,7 +618,7 @@ class TokenFlowMixin:
             return await on_success(state.settings, info, state.previous_host)
         except BaseException:
             if previous is None:
-                await store.async_delete_token(host, username)
+                await async_forget_unused_tokens(self.hass, host)
             else:
                 await _async_save_token(self.hass, host, username, previous)
             raise

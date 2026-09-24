@@ -632,7 +632,7 @@
     "modbus_restriction": {
       "options": {
         "keep": "Einstellung des Wechselrichters beibehalten",
-        "home_assistant": "Modbus auf dieses Home Assistant beschränken",
+        "home_assistant": "Modbus beschränken und dieses Home Assistant zulassen (bereits erlaubte Hosts bleiben)",
         "off": "Beschränkung aufheben (Modbus für jeden Host offen)"
       }
     }

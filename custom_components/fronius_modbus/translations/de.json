@@ -685,6 +685,9 @@
     },
     "unsupported_option": {
       "message": "Nicht unterstützte Option: {option}"
+    },
+    "web_api_unreachable": {
+      "message": "Die Weboberfläche des Wechselrichters hat nicht geantwortet. Bitte prüfen, ob der Wechselrichter eingeschaltet und erreichbar ist."
     }
   }
 }

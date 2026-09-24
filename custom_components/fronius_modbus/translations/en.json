@@ -685,6 +685,9 @@
     },
     "unsupported_option": {
       "message": "Unsupported option: {option}"
+    },
+    "web_api_unreachable": {
+      "message": "The inverter's web interface did not answer. Check that the inverter is on and reachable."
     }
   }
 }

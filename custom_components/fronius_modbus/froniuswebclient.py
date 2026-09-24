@@ -25,6 +25,8 @@ MASTER_RTUIF = {"master": {"rtuif": [{"if": "rtu0"}, {"if": "rtu1"}]}}
 TCP_MODES = ("tcp", "both")
 RESTRICTION_LIST_SEPARATOR = ","
 BATTERIES_PATH = "/api/config/batteries"
+MODBUS_PATH = "/api/config/modbus"
+SOLAR_API_PATH = "/api/config/solar_api"
 # Lists in the answer to a config write that name the fields it did not take.
 WRITE_REFUSALS = (
     "errors",
@@ -201,6 +203,19 @@ def _without_descriptions(node: Any) -> Any:
     if isinstance(node, list):
         return [_without_descriptions(value) for value in node]
     return node
+
+
+def _config_object(payload: Any, path: str) -> dict[str, Any]:
+    """A config as it is written back: without descriptions, and an object.
+
+    Anything else is a failed read, not a crash further down (audit R24-01).
+    """
+    config = _without_descriptions(payload)
+    if not isinstance(config, dict):
+        raise FroniusWebResponseError(
+            f"HTTP 200 on {path} answered no object", HTTPStatus.OK
+        )
+    return config
 
 
 def _same(current: Any, wanted: Any) -> bool:
@@ -582,7 +597,7 @@ class FroniusWebClient:
         set". A config that cannot be read is written in full.
         """
         try:
-            current = _without_descriptions(self._get_json(path))
+            current = _config_object(self._get_json(path), path)
         except FroniusWebResponseError, ValueError:
             current = {}
         changes = {
@@ -694,7 +709,7 @@ class FroniusWebClient:
         inverter_unit_id: int,
         restriction: ModbusRestriction = ModbusRestriction.KEEP,
     ) -> bool:
-        config = _without_descriptions(self.get_modbus_config())
+        config = _config_object(self.get_modbus_config(), MODBUS_PATH)
         slave = config.get("slave") or {}
         ctr = slave.get("ctr") or {}
         current_restriction = ctr.get("restriction") or {}
@@ -736,7 +751,7 @@ class FroniusWebClient:
                 "ctr": {**ctr, "on": True, "restriction": wanted},
             },
         }
-        self._post("/api/config/modbus", payload)
+        self._post(MODBUS_PATH, payload)
         _LOGGER.info(
             "Enabled Modbus TCP via the web API (port=%s inverter_id=%s meter_id=%s restriction=%s)",
             port,
@@ -755,14 +770,14 @@ class FroniusWebClient:
         Switching off clears it too: a discovered device would switch the API
         straight back on.
         """
-        current = _without_descriptions(self.get_solar_api_config())
+        current = _config_object(self.get_solar_api_config(), SOLAR_API_PATH)
         wanted: dict[str, Any] = {"SolarAPIv1Enabled": bool(enabled)}
         if not enabled:
             wanted["activeOnExternalDevicesDiscovered"] = False
         if all(_same(current.get(key), value) for key, value in wanted.items()):
             return False
         # Written whole: only the battery endpoint is known to take single fields.
-        self._post("/api/config/solar_api", {**current, **wanted})
+        self._post(SOLAR_API_PATH, {**current, **wanted})
         return True
 
     def reset_modbus_control(self) -> bool:

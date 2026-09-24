@@ -534,8 +534,8 @@
   {
     "label": "web client: enabling the Solar API keeps the discovery switch",
     "path": "custom_components/fronius_modbus/froniuswebclient.py",
-    "old": "        self._post(\"/api/config/solar_api\", {**current, **wanted})",
-    "new": "        self._post(\"/api/config/solar_api\", wanted)",
+    "old": "        self._post(SOLAR_API_PATH, {**current, **wanted})",
+    "new": "        self._post(SOLAR_API_PATH, wanted)",
     "tests": "enabling_the_solar_api_keeps_the_discovery_switch"
   },
   {
@@ -649,5 +649,19 @@
     "old": "        return current.casefold() == wanted.casefold()\n",
     "new": "        return current == wanted\n",
     "tests": "the_inverters_own_spelling_counts_as_the_same_value"
+  },
+  {
+    "label": "web client: a config read that is no object is a failed read",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "    if not isinstance(config, dict):\n        raise FroniusWebResponseError(",
+    "new": "    if False:\n        raise FroniusWebResponseError(",
+    "tests": "no_object"
+  },
+  {
+    "label": "entities: an unreachable web interface is a translated error",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "        except FroniusWebUnreachable as err:\n",
+    "new": "        except ZeroDivisionError as err:\n",
+    "tests": "an_unreachable_web_interface_is_a_translated_error"
   }
 ]

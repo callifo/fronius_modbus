@@ -82,6 +82,7 @@ from .fronius_modbus_api.storage import (
     ExtendedMode,
 )
 from .fronius_modbus_api.sunspec_models import MpptModule
+from .froniuswebclient import FroniusWebUnreachable
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -1780,6 +1781,13 @@ class FroniusEntity(
                 translation_domain=DOMAIN,
                 translation_key="value_refused",
                 translation_placeholders={"error": str(err)},
+            ) from err
+        except FroniusWebUnreachable as err:
+            # An OSError, so the switched-off device reads like a Modbus
+            # outage everywhere else; no write mapped it (audit R24-02).
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="web_api_unreachable",
             ) from err
         except (ModbusError, RuntimeError) as err:
             raise HomeAssistantError(

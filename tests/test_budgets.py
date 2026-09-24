@@ -40,7 +40,8 @@ LINE_BUDGETS = {
     # 1832 + the throttling sensor (callifo #112)
     # 1888 + the backup reserve, the SoC mode, the web SoC minimum (callifo #136), the capacity note
     # 1909 + translated write errors (quality scale exception-translations)
-    "entities.py": 1842,  # - the icons, now in icons.json (quality scale icon-translations)
+    # 1842 - the icons, now in icons.json (quality scale icon-translations)
+    "entities.py": 1850,  # + the translated error for an unreachable web interface (R24-02)
 }
 
 # SonarSource's own default. Above it, a function is one somebody has to

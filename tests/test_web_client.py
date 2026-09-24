@@ -429,6 +429,62 @@ def test_a_failing_readable_endpoint_falls_back_to_the_empty_identity(client, in
     assert client.get_inverter_info()["temperature"] is None
 
 
+READABLE_PATHS = (
+    ("get_inverter_info", "/api/components/inverter/readable"),
+    ("get_storage_info", "/api/components/BatteryManagementSystem/readable"),
+)
+
+
+def warnings(caplog) -> list[str]:
+    return [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+
+
+@pytest.mark.parametrize(("read", "path"), READABLE_PATHS)
+def test_a_failing_readable_endpoint_is_warned_about_once(
+    client, inverter, caplog, read, path
+):
+    """Its values stay unknown, but not silently: that hid a server error (audit A24-05)."""
+    inverter.statuses[path] = 500
+
+    with caplog.at_level(logging.DEBUG):
+        getattr(client, read)()
+        getattr(client, read)()
+        assert len(warnings(caplog)) == 1
+        assert path in warnings(caplog)[0]
+
+        caplog.clear()
+        inverter.statuses[path] = 200
+        getattr(client, read)()
+    assert [r.levelno for r in caplog.records if path in r.getMessage()] == [
+        logging.INFO
+    ]
+
+
+@pytest.mark.parametrize(("read", "path"), READABLE_PATHS)
+def test_firmware_without_a_readable_endpoint_is_not_a_warning(
+    client, inverter, caplog, read, path
+):
+    inverter.statuses[path] = 404
+
+    getattr(client, read)()
+
+    assert warnings(caplog) == []
+
+
+@pytest.mark.parametrize(("read", "path"), READABLE_PATHS)
+def test_a_switched_off_inverter_is_left_to_the_refresh(
+    client, monkeypatch, read, path
+):
+    """The coordinator logs an outage once; the readable read must not add its own."""
+
+    def refuse(adapter, request, **_kwargs):
+        raise requests.ConnectionError("refused")
+
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", refuse)
+    with pytest.raises(FroniusWebUnreachable):
+        getattr(client, read)()
+
+
 def test_an_auth_failure_on_a_readable_endpoint_is_not_swallowed(client, inverter):
     inverter.always_401 = True
 

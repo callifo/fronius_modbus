@@ -703,3 +703,26 @@ async def test_a_web_refusal_after_modbus_says_modbus_is_set(hass):
         control.shutdown()
     assert written == [50]
     assert failed.value.key == "soc_minimum_web_failed"
+
+
+@pytest.mark.parametrize(
+    "modbus_config",
+    [
+        {"slave": [1]},
+        {"slave": {"ctr": [1]}},
+        {"slave": {"ctr": {"restriction": [1]}}},
+    ],
+)
+async def test_a_malformed_modbus_config_leaves_the_other_web_values(
+    hass, modbus_config
+):
+    """Audit FA0FB-06: an AttributeError in its display failed the whole web poll."""
+    client = FakeWebClient()
+    client.get_modbus_config = lambda: modbus_config
+    client.battery.update(BAT_M0_SOC_MIN=20)
+    control = make_control(hass, client=client)
+    try:
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+    assert data.soc_min == 20

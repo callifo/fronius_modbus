@@ -666,16 +666,16 @@
   },
   {
     "label": "entities: unread component readings keep every sensor",
-    "path": "custom_components/fronius_modbus/entities.py",
-    "old": "    return readings is None or any(field in readings for field in reading.fields)",
-    "new": "    return readings is not None and any(field in readings for field in reading.fields)",
+    "path": "custom_components/fronius_modbus/component_readings.py",
+    "old": "    if not reading.per_channel or readings is None:\n        return True\n",
+    "new": "    if not reading.per_channel:\n        return True\n",
     "tests": "readings_not_yet_read_keep_every_sensor"
   },
   {
     "label": "entities: a channel the device does not report makes no sensor",
-    "path": "custom_components/fronius_modbus/entities.py",
-    "old": "    return readings is None or any(field in readings for field in reading.fields)",
-    "new": "    return True",
+    "path": "custom_components/fronius_modbus/component_readings.py",
+    "old": "    return any(field in readings for field in reading.fields)\n",
+    "new": "    return True\n",
     "tests": "a_channel_the_device_does_not_report_makes_no_sensor"
   },
   {
@@ -726,5 +726,47 @@
     "old": "        self.data.storage_readings = storage_info.get(\"readings\")",
     "new": "        self.data.storage_readings = None",
     "tests": "the_refresh_hands_on_the_component_readings"
+  },
+  {
+    "label": "component readings: a row without a value keeps its sensor",
+    "path": "custom_components/fronius_modbus/component_readings.py",
+    "old": "    if not reading.per_channel or readings is None:\n        return True\n",
+    "new": "    if readings is None:\n        return True\n",
+    "tests": "an_answer_without_a_value_keeps_its_sensor"
+  },
+  {
+    "label": "component readings: an answer naming no power module keeps all four",
+    "path": "custom_components/fronius_modbus/component_readings.py",
+    "old": "    if not group & readings.keys():\n        return True\n",
+    "new": "",
+    "tests": "an_answer_without_any_power_module_keeps_all_four"
+  },
+  {
+    "label": "entities: firmware without the endpoints gets no component sensors",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "    if web_data is not None and _component_endpoint_missing(web_data, reading):\n        return False\n",
+    "new": "",
+    "tests": "firmware_without_the_endpoints_gets_no_component_sensors"
+  },
+  {
+    "label": "web client: only a 404 marks a component endpoint missing",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "            return ENDPOINT_MISSING if missing else None\n",
+    "new": "            return None\n",
+    "tests": "only_a_404_marks_a_component_endpoint_missing"
+  },
+  {
+    "label": "web control: the refresh hands on a missing inverter endpoint",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        self.data.inverter_endpoint_missing = bool(inverter.get(\"missing\"))\n",
+    "new": "",
+    "tests": "the_refresh_hands_on_missing_component_endpoints"
+  },
+  {
+    "label": "web control: the refresh hands on a missing storage endpoint",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        self.data.storage_endpoint_missing = bool(storage_info.get(\"missing\"))\n",
+    "new": "",
+    "tests": "the_refresh_hands_on_missing_component_endpoints"
   }
 ]

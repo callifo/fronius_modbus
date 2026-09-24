@@ -156,7 +156,7 @@ def test_an_answer_without_a_value_keeps_its_sensor():
     inverter temperature among them, with the owner's entity ids.
     """
     readings = read_gen24()
-    readings.inverter_readings = {"FANCONTROL_PERCENT_01_F32": 0.0}
+    readings.inverter_readings = {"MODULE_TEMPERATURE_MEAN_01_F32": 40.0}
     readings.storage_readings = {}
     runtime = runtime_with(readings)
     sensors = component_sensors(runtime)

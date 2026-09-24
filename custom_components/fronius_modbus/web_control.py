@@ -108,6 +108,9 @@ class WebData:
     # None while the component endpoint has not answered: unread, not absent.
     inverter_readings: dict[str, Any] | None = None
     storage_readings: dict[str, Any] | None = None
+    # The endpoint answered 404: firmware without it, so no component sensors.
+    inverter_endpoint_missing: bool = False
+    storage_endpoint_missing: bool = False
 
 
 def _export_limit_summary(config: dict[str, Any] | None) -> dict[str, Any]:
@@ -423,6 +426,7 @@ class FroniusWebControl:
         self.data.storage_model = storage_info.get("model")
         self.data.storage_serial = storage_info.get("serial")
         self.data.storage_readings = storage_info.get("readings")
+        self.data.storage_endpoint_missing = bool(storage_info.get("missing"))
 
     def _apply_web_modbus_config(self, modbus_config: dict[str, Any]) -> None:
         slave = modbus_config.get("slave") or {}
@@ -464,6 +468,7 @@ class FroniusWebControl:
         inverter_info = await self._async_client_job("get_inverter_info")
         inverter = inverter_info if isinstance(inverter_info, dict) else {}
         self.data.inverter_readings = inverter.get("readings")
+        self.data.inverter_endpoint_missing = bool(inverter.get("missing"))
 
         modbus_config = await self._async_client_job("get_modbus_config")
         if isinstance(modbus_config, dict):

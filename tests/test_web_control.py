@@ -189,6 +189,27 @@ async def test_the_refresh_hands_on_the_component_readings(hass):
     assert data.storage_readings == {"sw_version": "3.26"}
 
 
+class FakeClientWithoutComponents(FakeWebClient):
+    def get_inverter_info(self):
+        return {"readings": None, "missing": True}
+
+    def get_storage_info(self):
+        return super().get_storage_info() | {"readings": None, "missing": True}
+
+
+async def test_the_refresh_hands_on_missing_component_endpoints(hass):
+    control = make_control(hass, client=FakeClientWithoutComponents())
+    try:
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert (data.inverter_endpoint_missing, data.storage_endpoint_missing) == (
+        True,
+        True,
+    )
+
+
 async def test_refresh_fills_the_web_data(control):
     data = await control.async_refresh()
     assert data.inverter_readings == {"DEVICE_TEMPERATURE_AMBIENTMEAN_01_F32": 41.5}

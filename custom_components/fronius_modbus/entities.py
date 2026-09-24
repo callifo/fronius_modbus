@@ -39,6 +39,7 @@ from .component_readings import (
     YES,
     ComponentReading,
     component_value,
+    reported,
 )
 from .const import (
     AC_LIMIT_STATUS,
@@ -90,6 +91,7 @@ from .fronius_modbus_api.storage import (
 )
 from .fronius_modbus_api.sunspec_models import MpptModule
 from .froniuswebclient import FroniusWebUnreachable
+from .web_control import WebData
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -1183,9 +1185,16 @@ def _component_readings(
 def _component_reported(runtime: FroniusRuntimeData, reading: ComponentReading) -> bool:
     if reading.component == "storage" and not _storage_present(runtime):
         return False
-    readings = _component_readings(runtime, reading)
-    # Unread is not absent: the stale-entity cleanup would retire it (audit A24-01).
-    return readings is None or any(field in readings for field in reading.fields)
+    web_data = runtime.web_data
+    if web_data is not None and _component_endpoint_missing(web_data, reading):
+        return False
+    return reported(reading, _component_readings(runtime, reading))
+
+
+def _component_endpoint_missing(web_data: WebData, reading: ComponentReading) -> bool:
+    if reading.component == "storage":
+        return web_data.storage_endpoint_missing
+    return web_data.inverter_endpoint_missing
 
 
 def _component_sensor(reading: ComponentReading) -> FroniusSensorDescription:

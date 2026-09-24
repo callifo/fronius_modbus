@@ -339,6 +339,7 @@ def test_the_storage_identity_prefers_the_nameplate_over_the_attributes():
         "manufacturer": "BYD",
         "model": "HVS",
         "serial": "SN-1",
+        "missing": False,
         "readings": {"BAT_TEMPERATURE_CELL_F64": 22.5},
     }
 
@@ -348,6 +349,7 @@ def test_a_storage_payload_without_data_falls_back_to_the_generic_identity():
         "manufacturer": None,
         "model": "Battery Storage",
         "serial": None,
+        "missing": False,
         "readings": None,
     }
 
@@ -375,8 +377,8 @@ def test_the_inverter_temperature_is_read_from_its_channel():
 
 
 def test_an_inverter_payload_without_channels_has_no_temperature():
-    assert _parse_inverter_readable({"Body": {"Data": {"0": {}}}}) == {"readings": {}}
-    assert _parse_inverter_readable(None) == {"readings": None}
+    assert _parse_inverter_readable({"Body": {"Data": {"0": {}}}})["readings"] == {}
+    assert _parse_inverter_readable(None) == {"readings": None, "missing": False}
 
 
 # -- the read endpoints ------------------------------------------------------------

@@ -27,6 +27,8 @@ RESTRICTION_LIST_SEPARATOR = ","
 BATTERIES_PATH = "/api/config/batteries"
 MODBUS_PATH = "/api/config/modbus"
 SOLAR_API_PATH = "/api/config/solar_api"
+# A component endpoint that answers 404: firmware without it, not a failed read.
+ENDPOINT_MISSING = object()
 # Lists in the answer to a config write that name the fields it did not take.
 WRITE_REFUSALS = (
     "errors",
@@ -145,6 +147,7 @@ def _component_device(payload: Any) -> dict[str, Any] | None:
 
 def _parse_storage_readable(payload: Any) -> dict[str, Any]:
     info: dict[str, Any] = dict(_parse_storage_info(None))
+    info["missing"] = payload is ENDPOINT_MISSING
     device = _component_device(payload)
     if device is None:
         info["readings"] = None
@@ -159,7 +162,10 @@ def _parse_storage_readable(payload: Any) -> dict[str, Any]:
 
 def _parse_inverter_readable(payload: Any) -> dict[str, Any]:
     device = _component_device(payload)
-    return {"readings": None if device is None else take_readings(device, "inverter")}
+    return {
+        "readings": None if device is None else take_readings(device, "inverter"),
+        "missing": payload is ENDPOINT_MISSING,
+    }
 
 
 def _without_descriptions(node: Any) -> Any:
@@ -628,7 +634,7 @@ class FroniusWebClient:
                 self._failing_optional_reads.add(path)
                 log = _LOGGER.debug if missing else _LOGGER.warning
                 log("%s did not answer, its values stay unknown: %s", path, err)
-            return None
+            return ENDPOINT_MISSING if missing else None
         if path in self._failing_optional_reads:
             self._failing_optional_reads.discard(path)
             _LOGGER.info("%s answers again", path)

@@ -41,6 +41,8 @@ class ComponentReading:
     enabled: bool = True
     transform: Transform = "as_is"
     suggested_unit: str | None = None
+    # Follows the device channel by channel; every other row exists with its component.
+    per_channel: bool = False
 
 
 def _module_temperature(index: int) -> ComponentReading:
@@ -50,6 +52,7 @@ def _module_temperature(index: int) -> ComponentReading:
         (f"MODULE_TEMPERATURE_MEAN_0{index}_F32",),
         "°C",
         "temperature",
+        per_channel=True,
     )
 
 
@@ -293,6 +296,27 @@ COMPONENT_READINGS: tuple[ComponentReading, ...] = (
         enabled=False,
     ),
 )
+
+
+def reported(reading: ComponentReading, readings: dict[str, Any] | None) -> bool:
+    """Whether a sensor exists for an answered or unread component.
+
+    Existence follows the component, not the field: an answer without a value
+    retired the sensor and the owner's entity id (audit R25-01). Rows that
+    follow the device channel by channel exist when reported, and also when the
+    answer names none of their group, which is no answer about them.
+    """
+    if not reading.per_channel or readings is None:
+        return True
+    group = {
+        field
+        for row in COMPONENT_READINGS
+        if row.per_channel and row.component == reading.component
+        for field in row.fields
+    }
+    if not group & readings.keys():
+        return True
+    return any(field in readings for field in reading.fields)
 
 
 def readable_fields(component: Component) -> frozenset[str]:

@@ -632,7 +632,16 @@ class FroniusWebControl:
             client.check_soc_window, soc_min, raise_on_auth_failure=True
         )
         await write_modbus()
-        await self._set_api_soc_manual(soc_min=soc_min, control_name="SoC Minimum")
+        try:
+            await self._set_api_soc_manual(soc_min=soc_min, control_name="SoC Minimum")
+        except (RuntimeError, ValueError, OSError) as err:
+            # Modbus holds the new minimum and keeps it; the owner has to know
+            # the two minimums now differ (audit FA0FB-04).
+            raise ControlUnavailable(
+                "soc_minimum_web_failed",
+                f"The Modbus reserve is set, but the web API refused it: {err}",
+                error=str(err),
+            ) from err
 
     def _require_battery_mode_manual(self, control_name: str) -> None:
         if not self.battery_mode_is_manual:

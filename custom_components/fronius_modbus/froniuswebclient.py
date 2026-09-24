@@ -811,10 +811,11 @@ class FroniusWebClient:
     ) -> dict[str, Any]:
         """Refuse a limit that would invert the window the inverter holds now.
 
-        A config that cannot be read skips the check; the inverter refuses a
-        window it cannot take. Returns the config read.
+        A config that cannot be read is an error, not an empty window: read as
+        empty it passed, and Modbus took a minimum the web API then refused
+        (audit FA0FB-04). Returns the config read.
         """
-        current = self._read_or_nothing(BATTERIES_PATH)
+        current = _config_object(self._get_json(BATTERIES_PATH), BATTERIES_PATH)
         lower = soc_min if soc_min is not None else current.get("BAT_M0_SOC_MIN")
         upper = soc_max if soc_max is not None else current.get("BAT_M0_SOC_MAX")
         if _window_inverted(lower, upper):

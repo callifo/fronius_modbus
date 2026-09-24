@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Security
+- Setup and reconfigure no longer lift a Modbus IP restriction set on the inverter. With the restriction checkbox unchecked, which is the default, the integration wrote the restriction off and opened a restricted Modbus server to every host on the network. The checkbox is now a choice between keeping the inverter's setting (the default), restricting Modbus to Home Assistant, and lifting the restriction. Existing entries migrate from checked to "restrict to Home Assistant" and from unchecked to "keep", never to "lift".
+- The stored web token is written readable by Home Assistant only. The Digest token alone authenticates to the inverter, and Home Assistant's default storage wrote it world-readable; an existing token file is rewritten on the next start.
+- A stored web token is deleted once no entry uses its host and role: on removing the entry, and on moving an entry to another host or role. It had outlived both.
+
+### Fixed
+- A web login lost at setup no longer deletes the web entities, and with them the entity ids an owner chose. A rejected token read as an entry without the web API, and the stale-entity cleanup retired everything the web API provides; after a restart without the token it took the second meter's entities too. A missing login now blocks the cleanup like a failed poll.
+- A rejected technician token is the one deleted when the meter topology read fails; the customer token was deleted in its place, and the rejected one was offered again on every start.
+- An HTTP error from the export-limit endpoint fails the web refresh instead of reading as "no export limit". Only a 404, from firmware without the endpoint, still means the limit is not there.
+- The inverter and battery component reads (inverter temperature, cell temperature, battery manufacturer, model and serial) no longer hide a failing endpoint. Their values still turn unknown instead of taking the controls down, but an error other than a 404 is logged once as a warning, and again at info when the endpoint answers. A switched-off inverter is left to the refresh, which already reports it.
+
 ## 1.2.0b1
 
 A quality-scale round: translated error messages, icons in `icons.json`, declared parallel

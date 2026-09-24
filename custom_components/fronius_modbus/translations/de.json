@@ -9,7 +9,7 @@
           "host": "Host",
           "scan_interval": "Aktualisierungsintervall (Sekunden)",
           "web_scan_interval": "Web-API-Aktualisierungsintervall (Sekunden)",
-          "restrict_modbus_to_this_ip": "Modbus auf diese IP beschränken",
+          "modbus_restriction": "Modbus-IP-Beschränkung",
           "api_username": "Web-API-Zugriffsrolle"
         }
       },
@@ -27,7 +27,7 @@
           "host": "Host",
           "scan_interval": "Aktualisierungsintervall (Sekunden)",
           "web_scan_interval": "Web-API-Aktualisierungsintervall (Sekunden)",
-          "restrict_modbus_to_this_ip": "Modbus auf diese IP beschränken",
+          "modbus_restriction": "Modbus-IP-Beschränkung",
           "api_username": "Web-API-Zugriffsrolle"
         }
       },
@@ -515,7 +515,7 @@
               "host": "Host",
               "scan_interval": "Aktualisierungsintervall (Sekunden)",
               "web_scan_interval": "Web-API-Aktualisierungsintervall (Sekunden)",
-              "restrict_modbus_to_this_ip": "Modbus auf diese IP beschränken",
+              "modbus_restriction": "Modbus-IP-Beschränkung",
               "api_username": "Web-API-Zugriffsrolle"
             }
           },
@@ -596,7 +596,7 @@
           "host": "Host",
           "scan_interval": "Aktualisierungsintervall (Sekunden)",
           "web_scan_interval": "Web-API-Aktualisierungsintervall (Sekunden)",
-          "restrict_modbus_to_this_ip": "Modbus auf diese IP beschränken",
+          "modbus_restriction": "Modbus-IP-Beschränkung",
           "api_username": "Web-API-Zugriffsrolle"
         }
       },
@@ -627,6 +627,13 @@
       "options": {
         "customer": "Kunde",
         "technician": "Techniker (schaltet die Einspeisebegrenzung frei)"
+      }
+    },
+    "modbus_restriction": {
+      "options": {
+        "keep": "Einstellung des Wechselrichters beibehalten",
+        "home_assistant": "Modbus auf dieses Home Assistant beschränken",
+        "off": "Beschränkung aufheben (Modbus für jeden Host offen)"
       }
     }
   },

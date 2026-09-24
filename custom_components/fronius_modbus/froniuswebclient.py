@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import socket
+from http import HTTPStatus
 from typing import Any
 from urllib.parse import urlparse
 
@@ -13,7 +14,7 @@ import requests
 from requests.auth import AuthBase
 from requests.utils import parse_dict_header
 
-from .const import API_USERNAME
+from .const import API_USERNAME, ModbusRestriction
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,6 +36,11 @@ class FroniusWebUnreachable(OSError):
 
 class FroniusWebResponseError(RuntimeError):
     """The web server answered with an error status: a device that is up and refusing."""
+
+    def __init__(self, message: str, status_code: int) -> None:
+        """Keep the status, so a caller can tell a missing endpoint from a failure."""
+        super().__init__(message)
+        self.status_code = status_code
 
 
 class FroniusWebAuthError(RuntimeError):
@@ -442,6 +448,7 @@ class FroniusWebClient:
         self._username = username if username is not None else API_USERNAME
         self._password = password
         self._timeout = timeout
+        self._failing_optional_reads: set[str] = set()
         self._auth = XHeaderDigestAuth(
             self._username,
             password=password,
@@ -472,7 +479,7 @@ class FroniusWebClient:
             response.raise_for_status()
         except requests.HTTPError as err:
             raise FroniusWebResponseError(
-                f"HTTP {response.status_code} on {path}"
+                f"HTTP {response.status_code} on {path}", response.status_code
             ) from err
         return response
 
@@ -516,33 +523,38 @@ class FroniusWebClient:
     def get_solar_api_config(self) -> dict[str, Any]:
         return self._get_json("/api/config/solar_api")
 
-    def get_storage_info(self) -> dict[str, Any]:
+    def _get_optional_json(self, path: str) -> Any:
+        """A display-only read: when it fails its values are unknown, not the refresh.
+
+        The component endpoints differ between firmware versions, and one of
+        them failing must not take the controls down with it. A failure is
+        still logged once, and its end: a swallowed HTTP 500 read as "no
+        value" (audit A24-05). A switched-off device and a rejected login are
+        not this read's to handle.
+        """
         try:
-            return _parse_storage_readable(
-                self._get_json("/api/components/BatteryManagementSystem/readable")
-            )
-        except FroniusWebAuthError:
-            raise
-        except Exception as err:
-            _LOGGER.debug(
-                "Failed reading the storage identity via the web API: %s",
-                err,
-            )
-        return _parse_storage_readable(None)
+            payload = self._get_json(path)
+        except (FroniusWebResponseError, ValueError) as err:
+            missing = getattr(err, "status_code", None) == HTTPStatus.NOT_FOUND
+            if path not in self._failing_optional_reads:
+                self._failing_optional_reads.add(path)
+                log = _LOGGER.debug if missing else _LOGGER.warning
+                log("%s did not answer, its values stay unknown: %s", path, err)
+            return None
+        if path in self._failing_optional_reads:
+            self._failing_optional_reads.discard(path)
+            _LOGGER.info("%s answers again", path)
+        return payload
+
+    def get_storage_info(self) -> dict[str, Any]:
+        return _parse_storage_readable(
+            self._get_optional_json("/api/components/BatteryManagementSystem/readable")
+        )
 
     def get_inverter_info(self) -> dict[str, Any]:
-        try:
-            return _parse_inverter_readable(
-                self._get_json("/api/components/inverter/readable")
-            )
-        except FroniusWebAuthError:
-            raise
-        except Exception as err:
-            _LOGGER.debug(
-                "Failed reading the inverter data via the web API: %s",
-                err,
-            )
-        return _parse_inverter_readable(None)
+        return _parse_inverter_readable(
+            self._get_optional_json("/api/components/inverter/readable")
+        )
 
     def get_power_meter_info(
         self, meter_address_offset: int = 200
@@ -577,14 +589,17 @@ class FroniusWebClient:
         port: int,
         meter_address: int,
         inverter_unit_id: int,
-        restrict_to_client_ip: bool = False,
+        restriction: ModbusRestriction = ModbusRestriction.KEEP,
     ) -> bool:
         current = self.get_modbus_config()
         slave = current.get("slave") or {}
         ctr = slave.get("ctr") or {}
         current_restriction = ctr.get("restriction") or {}
-        restriction_on = bool(restrict_to_client_ip)
-        restriction_ip = self._resolve_client_ip() if restriction_on else None
+        wanted = current_restriction
+        if restriction == ModbusRestriction.HOME_ASSISTANT:
+            wanted = {"on": True, "ip": self._resolve_client_ip()}
+        if restriction == ModbusRestriction.OFF:
+            wanted = {**current_restriction, "on": False}
 
         if (
             slave.get("mode") == "tcp"
@@ -596,8 +611,9 @@ class FroniusWebClient:
             and _as_int(slave.get("meterAddress"), meter_address) == int(meter_address)
             and _as_int(slave.get("rtu_inverter_slave_id"), inverter_unit_id)
             == int(inverter_unit_id)
-            and is_enabled(current_restriction.get("on")) == restriction_on
-            and (not restriction_on or current_restriction.get("ip") == restriction_ip)
+            and is_enabled(current_restriction.get("on"))
+            == is_enabled(wanted.get("on"))
+            and current_restriction.get("ip") == wanted.get("ip")
         ):
             return False
 
@@ -612,10 +628,7 @@ class FroniusWebClient:
                 "rtu_inverter_slave_id": inverter_unit_id,
                 "ctr": {
                     "on": True,
-                    "restriction": {
-                        "on": restriction_on,
-                        **({"ip": restriction_ip} if restriction_ip else {}),
-                    },
+                    "restriction": wanted,
                 },
             },
         }
@@ -625,7 +638,7 @@ class FroniusWebClient:
             port,
             inverter_unit_id,
             meter_address,
-            restriction_on,
+            is_enabled(wanted.get("on")),
         )
         return True
 
@@ -651,9 +664,9 @@ class FroniusWebClient:
 
     def set_battery_soc_config(
         self,
-        soc_min: int = 6,
-        soc_max: int = 99,
-        backup_reserved: int = 5,
+        soc_min: int,
+        soc_max: int,
+        backup_reserved: int,
     ) -> bool:
         payload: dict[str, Any] = {
             "BAT_M0_SOC_MIN": soc_min,
@@ -684,7 +697,11 @@ class FroniusWebClient:
         """Read current Export Limit Control configuration from the inverter."""
         try:
             return self._get_json("/api/config/limit_settings/powerLimits")
-        except FroniusWebResponseError:
+        except FroniusWebResponseError as err:
+            # Firmware without the endpoint answers 404; any other status is a
+            # failure the refresh has to report (audit A24-05).
+            if err.status_code != HTTPStatus.NOT_FOUND:
+                raise
             return {}
 
     def set_export_soft_limit(self, power_w: int) -> bool:

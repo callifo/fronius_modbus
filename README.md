@@ -54,7 +54,7 @@ After reboot of Home-Assistant, this integration can be configured through the i
 Choose either the `customer` or the `technician` local Web API role during setup and provide that role's password. The integration can then:
 
 - auto-enable Modbus TCP during setup and relevant configuration changes
-- optionally restrict auto-enabled Modbus TCP to the Home Assistant host IP
+- handle the Modbus IP restriction of auto-enabled Modbus TCP by choice: keep the inverter's setting (default), restrict it to the Home Assistant host IP, or lift it. The choice is applied again whenever the Modbus settings are written, so a lifted restriction stays lifted until you choose otherwise.
 - derive configured smart meter addresses from `/api/components/PowerMeter/readable`
 - expose authenticated battery controls from `/api/config/batteries`
 - expose Modbus service diagnostics from `/api/config/modbus`
@@ -63,7 +63,7 @@ Choose either the `customer` or the `technician` local Web API role during setup
 ![solar_login](images/solar_login.jpg?raw=true "storage")
 
 The selected role is the local `customer` or `technician` login used when you connect with a web browser directly to the inverter by its LAN IP address. Your installer should have provided it during installation. It is not the Solar Web login used for the cloud (e.g. https://www.solarweb.com/). The `technician` role covers everything the `customer` role does and additionally exposes the export limit control. An entry uses exactly one role; reconfigure it to switch.
-The integration stores a derived digest token in Home Assistant storage and does not keep the password in the config entry.
+The integration stores a derived digest token in Home Assistant storage, readable by Home Assistant only, and does not keep the password in the config entry. The token is deleted when no entry uses its host and role any more: on removing the entry, or on moving it to another host or role.
 During setup, reconfigure, or Repairs, the password is only requested if no stored token exists for the selected host and role or the existing token must be refreshed. Configure always offers the password step, so a stored token can be replaced.
 
 ### Migrating Older Entries

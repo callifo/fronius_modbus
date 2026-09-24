@@ -34,7 +34,7 @@ from .coordinator import (
 )
 from .fronius_modbus_api.device import FroniusInverter
 from .froniuswebclient import FroniusWebAuthError, FroniusWebClient
-from .token_store import async_get_token_store
+from .token_store import async_forget_unused_tokens, async_get_token_store
 from .web_control import (
     BATTERY_WRITE_MODBUS_RECOVERY_SECONDS,
     FroniusWebControl,
@@ -92,7 +92,8 @@ async def _async_meter_topology(
             err,
         )
         await async_get_token_store(hass).async_delete_token(
-            str(_entry_value(entry, CONF_HOST)), API_USERNAME
+            str(_entry_value(entry, CONF_HOST)),
+            str(_entry_value(entry, CONF_API_USERNAME, API_USERNAME)),
         )
         return None, unconfirmed
     except Exception as err:
@@ -206,3 +207,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
 async def async_unload_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> bool:
     """Unload a config entry."""
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> None:
+    """Delete the entry's web token unless another entry still logs in with it."""
+    await async_forget_unused_tokens(hass, str(_entry_value(entry, CONF_HOST, "")))

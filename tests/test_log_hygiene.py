@@ -179,7 +179,9 @@ async def test_an_unreachable_web_api_is_not_logged_as_an_error(hass, caplog):
 
 async def test_a_web_server_error_is_still_an_error(hass, caplog):
     """Audit E04: requests' HTTPError is an OSError, so a 500 read as an outage."""
-    await _web_refresh_failing_with(hass, FroniusWebResponseError("HTTP 500"), caplog)
+    await _web_refresh_failing_with(
+        hass, FroniusWebResponseError("HTTP 500", 500), caplog
+    )
     assert _fetch_failure_levels(caplog) == [logging.ERROR]
 
 

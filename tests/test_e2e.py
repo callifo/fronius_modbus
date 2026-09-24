@@ -23,6 +23,10 @@ from custom_components.fronius_modbus.const import (
 from custom_components.fronius_modbus.diagnostics import (
     async_get_config_entry_diagnostics,
 )
+from custom_components.fronius_modbus.froniuswebclient import (
+    FroniusWebAuthError,
+    FroniusWebClient,
+)
 from custom_components.fronius_modbus.token_store import async_get_token_store
 from custom_components.fronius_modbus.web_control import WebData
 from homeassistant.config_entries import ConfigEntryState
@@ -69,6 +73,23 @@ async def setup_entry(hass, entry: MockConfigEntry) -> None:
     """Run the entry through async_setup_entry and settle the event loop."""
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
+
+
+async def log_in_to_the_web_api(hass, mock_modbus, monkeypatch) -> None:
+    """A working web login with a confirmed two-meter topology.
+
+    Cleanup waits for one (audit A24-01), so a test of any other cleanup gate
+    needs it to reach that gate at all.
+    """
+    mock_modbus.add_unit(201, like=METER_UNIT_ID)
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _FakeWebClientWithTopology)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+
+
+def _only_what_the_real_client_has(name: str) -> None:
+    """A fake that answers any name hid a call to an attribute the client lacks."""
+    if not hasattr(FroniusWebClient, name):
+        raise AttributeError(name)
 
 
 def entity_id_for(hass, entry: MockConfigEntry, domain: str, key: str) -> str:
@@ -232,7 +253,7 @@ async def test_minor_version_9_entries_migrate_to_the_current_shape(hass, mock_m
     # for an entry with no stored token, masking what the migration itself did.
     assert await migrations.async_migrate_entry(hass, entry)
 
-    assert entry.minor_version == 11
+    assert entry.minor_version == 12
     # Minor 9 entries are already on the web-API shape: only the version bump
     # and the new role are expected, not the pre-web-API data migration.
     assert CONF_RECONFIGURE_REQUIRED not in entry.data
@@ -264,8 +285,11 @@ async def test_v019_mppt_entities_are_renamed(hass, mock_modbus):
     )
 
 
-async def test_a_stale_entity_is_removed_after_a_clean_first_poll(hass, mock_modbus):
+async def test_a_stale_entity_is_removed_after_a_clean_first_poll(
+    hass, mock_modbus, monkeypatch
+):
     """An entity for a key the integration no longer creates is dropped on a clean poll."""
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
     entry = make_entry(hass)
     registry = er.async_get(hass)
     unique_id = f"{entity_prefix(entry.entry_id)}_no_such_key"
@@ -317,6 +341,8 @@ class _FakeWebClientDownAfterMeterInfo:
         return None
 
     def __getattr__(self, name: str):
+        _only_what_the_real_client_has(name)
+
         def _raise(*_args, **_kwargs):
             raise RuntimeError("down")
 
@@ -397,8 +423,11 @@ async def test_a_failed_mppt_read_at_startup_keeps_the_mppt_entities(hass, mock_
     )
 
 
-async def test_a_meter_that_times_out_at_setup_keeps_its_entities(hass, mock_modbus):
+async def test_a_meter_that_times_out_at_setup_keeps_its_entities(
+    hass, mock_modbus, monkeypatch
+):
     """Audit F03: the cleanup after a timed-out meter probe removed the meter's registry entries."""
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
     entry = make_entry(hass)
     registry = er.async_get(hass)
     original = registry.async_get_or_create(
@@ -430,6 +459,34 @@ async def test_mppt_entities_appear_once_the_first_read_succeeds(hass, mock_modb
     assert hass.states.get(entity_id) is not None
 
 
+@pytest.mark.parametrize(
+    ("restricted", "choice"), [(True, "home_assistant"), (False, "keep")]
+)
+async def test_minor_version_11_entries_turn_the_checkbox_into_a_choice(
+    hass, mock_modbus, restricted, choice
+):
+    """An unchecked box used to write "off"; it migrates to "keep", never to "off".
+
+    Lifting a restriction is now a choice of its own (audit A24-02).
+    """
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={**ENTRY_DATA, "restrict_modbus_to_this_ip": restricted},
+        options={"restrict_modbus_to_this_ip": restricted},
+        unique_id=HOST,
+        version=1,
+        minor_version=11,
+    )
+    entry.add_to_hass(hass)
+
+    assert await migrations.async_migrate_entry(hass, entry)
+
+    assert entry.minor_version == 12
+    for values in (entry.data, entry.options):
+        assert values["modbus_restriction"] == choice
+        assert "restrict_modbus_to_this_ip" not in values
+
+
 async def test_minor_version_10_entries_take_the_role_of_their_stored_token(
     hass, mock_modbus
 ):
@@ -439,7 +496,7 @@ async def test_minor_version_10_entries_take_the_role_of_their_stored_token(
         HOST, realm="r", token="t", user="technician"
     )
     assert await migrations.async_migrate_entry(hass, entry)
-    assert entry.minor_version == 11
+    assert entry.minor_version == 12
     assert entry.data["api_username"] == "technician"
     assert entry.options["api_username"] == "technician"
 
@@ -449,7 +506,7 @@ async def test_minor_version_10_entries_without_a_technician_token_stay_customer
 ):
     entry = make_entry(hass, minor_version=10)
     assert await migrations.async_migrate_entry(hass, entry)
-    assert entry.minor_version == 11
+    assert entry.minor_version == 12
     assert entry.data["api_username"] == "customer"
 
 
@@ -488,6 +545,8 @@ class _FakeWebClientWithTopology:
         return self.topology
 
     def __getattr__(self, name: str):
+        _only_what_the_real_client_has(name)
+
         def _quiet(*_args, **_kwargs):
             return None
 
@@ -523,6 +582,7 @@ async def test_a_reload_retires_no_live_meter_device(hass, mock_modbus, monkeypa
     Home Assistant restores a device that comes straight back, so the damage is
     only visible as the removal itself: assert none happens.
     """
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
     entry = make_entry(hass)
     await setup_entry(hass, entry)
     removed: list[str] = []
@@ -561,3 +621,79 @@ async def test_a_confirmed_single_meter_topology_is_applied(
     runtime = hass.config_entries.async_get_entry(entry.entry_id).runtime_data
     assert runtime.topology_confirmed
     assert runtime.meter_locations == {METER_UNIT_ID: 0}
+
+
+class _WebClientLosingItsLogin(_FakeWebClientWithTopology):
+    """Answers the public topology; `lost_at` names the call the login fails on."""
+
+    lost_at: str | None = None
+
+    def __getattr__(self, name: str):
+        if name == self.lost_at:
+
+            def _refused(*_args, **_kwargs):
+                raise FroniusWebAuthError("token rejected")
+
+            return _refused
+        return super().__getattr__(name)
+
+    def get_power_meter_info(self, *_args, **_kwargs):
+        if self.lost_at == "get_power_meter_info":
+            raise FroniusWebAuthError("token rejected")
+        return self.topology
+
+
+@pytest.mark.parametrize(
+    "lose_login",
+    ["first_protected_read", "topology_read", "token_gone_before_restart"],
+)
+async def test_a_lost_web_login_retires_no_web_entity(
+    hass, mock_modbus, monkeypatch, lose_login
+):
+    """Audit A24-01: a login lost at setup read as "no web API", and cleanup deleted its entities.
+
+    The owner's chosen entity id went with them. A lost login is "not seen", like
+    a failed poll, whichever way it goes missing.
+    """
+    mock_modbus.add_unit(201, like=METER_UNIT_ID)
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientLosingItsLogin)
+    entry = make_entry(hass)
+    store = async_get_token_store(hass)
+    await store.async_save_token(HOST, realm="r", token="t")
+    await setup_entry(hass, entry)
+    registry = er.async_get(hass)
+    chosen = "sensor.my_inverter_temperature"
+    registry.async_update_entity(
+        entity_id_for(hass, entry, "sensor", "inverter_temperature"),
+        new_entity_id=chosen,
+    )
+
+    if lose_login == "first_protected_read":
+        monkeypatch.setattr(_WebClientLosingItsLogin, "lost_at", "get_inverter_info")
+    elif lose_login == "topology_read":
+        monkeypatch.setattr(_WebClientLosingItsLogin, "lost_at", "get_power_meter_info")
+    else:
+        await store.async_delete_token(HOST, "customer")
+    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert registry.async_get(chosen) is not None
+    assert registry.async_get(entity_id_for(hass, entry, "sensor", "meter_201_power"))
+
+
+async def test_a_rejected_technician_token_is_the_one_deleted(
+    hass, mock_modbus, monkeypatch
+):
+    """The topology read deleted the customer token whatever role had been rejected.
+
+    The rejected technician token survived and was offered again on every start.
+    """
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientLosingItsLogin)
+    monkeypatch.setattr(_WebClientLosingItsLogin, "lost_at", "get_power_meter_info")
+    entry = make_entry(hass)
+    store = async_get_token_store(hass)
+    await store.async_save_token(HOST, realm="r", token="t", user="technician")
+
+    await setup_entry(hass, entry)
+
+    assert await store.async_load_token(HOST, "technician") is None

@@ -147,6 +147,62 @@
     "tests": "a_topology_outage_keeps_the_second_meters_entities"
   },
   {
+    "label": "web client: an existing Modbus restriction is kept",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "        wanted = current_restriction\n",
+    "new": "        wanted = {\"on\": False}\n",
+    "tests": "an_existing_restriction_is_not_lifted or a_rewrite_for_another_reason_keeps_the_restriction"
+  },
+  {
+    "label": "web client: only a 404 makes the export limit optional",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "            if err.status_code != HTTPStatus.NOT_FOUND:",
+    "new": "            if False:",
+    "tests": "a_failing_export_limit_endpoint_is_not_an_empty_config"
+  },
+  {
+    "label": "web client: lifting the restriction writes it off",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "            wanted = {**current_restriction, \"on\": False}",
+    "new": "            wanted = current_restriction",
+    "tests": "lifting_the_restriction_is_a_choice_of_its_own"
+  },
+  {
+    "label": "migrations: an unchecked restriction box becomes keep, not off",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "            choice = ModbusRestriction.KEEP",
+    "new": "            choice = ModbusRestriction.OFF",
+    "tests": "minor_version_11_entries_turn_the_checkbox_into_a_choice"
+  },
+  {
+    "label": "web client: a failing display-only read is warned about",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "                log = _LOGGER.debug if missing else _LOGGER.warning",
+    "new": "                log = _LOGGER.debug",
+    "tests": "a_failing_readable_endpoint_is_warned_about_once"
+  },
+  {
+    "label": "web client: a display-only read leaves an outage to the refresh",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "        except (FroniusWebResponseError, ValueError) as err:",
+    "new": "        except Exception as err:",
+    "tests": "a_switched_off_inverter_is_left_to_the_refresh"
+  },
+  {
+    "label": "web client: a display-only read that answers again is logged",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "            _LOGGER.info(\"%s answers again\", path)",
+    "new": "            pass",
+    "tests": "a_failing_readable_endpoint_is_warned_about_once"
+  },
+  {
+    "label": "migrations: a missing web login blocks the cleanup",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "    elif runtime.web_control is None or not runtime.web_control.configured:",
+    "new": "    elif False:",
+    "tests": "a_lost_web_login_retires_no_web_entity"
+  },
+  {
     "label": "migrations: live devices are never retired as legacy ones",
     "path": "custom_components/fronius_modbus/migrations.py",
     "old": "        and identifier not in current\n",
@@ -161,11 +217,39 @@
     "tests": "invalid_soc_minimum_writes_nothing"
   },
   {
-    "label": "config flow: only a real host move deletes the token",
-    "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "    return canonical_host(previous_host) != canonical_host(host)",
-    "new": "    return previous_host != host",
-    "tests": "changing_only_the_host_spelling_keeps_the_stored_token"
+    "label": "token store: another spelling of the host still uses the token",
+    "path": "custom_components/fronius_modbus/token_store.py",
+    "old": "        if canonical_host(str(values.get(CONF_HOST, \"\"))) != canonical_host(host):",
+    "new": "        if str(values.get(CONF_HOST, \"\")) != host:",
+    "tests": "changing_only_the_host_spelling_keeps_the_stored_token or a_token_another_entry_logs_in_with_is_kept"
+  },
+  {
+    "label": "token store: a role no entry uses is forgotten",
+    "path": "custom_components/fronius_modbus/token_store.py",
+    "old": "        in_use |= set(API_USERNAMES) if role is None else {role}",
+    "new": "        in_use |= set(API_USERNAMES)",
+    "tests": "switching_the_role_deletes_the_old_roles_token or removing_the_entry_deletes_its_token"
+  },
+  {
+    "label": "token store: an entry without a role keeps both tokens",
+    "path": "custom_components/fronius_modbus/token_store.py",
+    "old": "        in_use |= set(API_USERNAMES) if role is None else {role}",
+    "new": "        in_use |= {role}",
+    "tests": "an_entry_not_yet_migrated_keeps_both_roles"
+  },
+  {
+    "label": "token store: the token file is private",
+    "path": "custom_components/fronius_modbus/token_store.py",
+    "old": "_TOKEN_STORE_KEY, private=True",
+    "new": "_TOKEN_STORE_KEY",
+    "tests": "the_token_file_is_private"
+  },
+  {
+    "label": "token store: an older token file is rewritten privately",
+    "path": "custom_components/fronius_modbus/token_store.py",
+    "old": "            if self._cache:\n",
+    "new": "            if False:\n",
+    "tests": "a_token_file_written_before_is_rewritten_privately"
   },
   {
     "label": "web client: a failed hash lookup is not remembered",

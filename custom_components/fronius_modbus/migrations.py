@@ -15,6 +15,7 @@ from homeassistant.helpers import issue_registry as ir
 from .const import (
     API_USERNAME,
     CONF_API_USERNAME,
+    CONF_MODBUS_RESTRICTION,
     CONF_METER_UNIT_ID,
     CONF_METER_UNIT_IDS,
     CONF_RECONFIGURE_REQUIRED,
@@ -24,6 +25,7 @@ from .const import (
     TECHNICIAN_USERNAME,
     entity_prefix,
     instance_key,
+    ModbusRestriction,
 )
 from .entities import expected_device_identifiers, expected_unique_ids
 from .token_store import async_get_token_store
@@ -33,12 +35,15 @@ _TRANSLATIONS_DIR = Path(__file__).resolve().parent / "translations"
 _TRANSLATION_CACHE: dict[str, dict] = {}
 
 _TARGET_VERSION = 1
-_TARGET_MINOR_VERSION = 11
+_TARGET_MINOR_VERSION = 12
 # Entries below this minor version predate the web API integration and still
 # carry the dropped meter-unit config, so only they need the data migration.
 _WEB_API_MINOR_VERSION = 9
 # Entries below this minor version predate the single web API role.
 _SINGLE_ROLE_MINOR_VERSION = 11
+# Entries below this minor version store the restriction as a checkbox.
+_RESTRICTION_CHOICE_MINOR_VERSION = 12
+_LEGACY_RESTRICT_TO_THIS_IP = "restrict_modbus_to_this_ip"
 
 _LEGACY_METER_DEVICE_RE = re.compile(r".*_meter_?\d+")
 _V019_MPPT_UNIQUE_ID_MAPPINGS = (
@@ -227,6 +232,17 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             api_username = await _async_stored_role(hass, entry)
             new_data[CONF_API_USERNAME] = api_username
             new_options[CONF_API_USERNAME] = api_username
+
+        if entry.minor_version < _RESTRICTION_CHOICE_MINOR_VERSION:
+            # An unchecked box wrote "off"; it becomes "keep", since lifting a
+            # restriction has to be chosen (audit A24-02).
+            choice = ModbusRestriction.KEEP
+            if _entry_value(entry, _LEGACY_RESTRICT_TO_THIS_IP, False):
+                choice = ModbusRestriction.HOME_ASSISTANT
+            for values in (new_data, new_options):
+                values.pop(_LEGACY_RESTRICT_TO_THIS_IP, None)
+            new_data[CONF_MODBUS_RESTRICTION] = choice
+            new_options[CONF_MODBUS_RESTRICTION] = choice
 
         hass.config_entries.async_update_entry(
             entry,
@@ -422,7 +438,8 @@ def _retirement_blocked(entry: ConfigEntry, what: str) -> bool:
     """Whether the current picture of the device is too uncertain to retire anything.
 
     The one gate in front of every destructive cleanup: a failed poll, a failed
-    web refresh or an unread meter topology all mean "not seen", never "gone"
+    web refresh, a missing web login or an unread meter topology all mean
+    "not seen", never "gone"
     (audit A03/A04). Without it a single outage takes entities and their
     history with it.
     """
@@ -432,6 +449,10 @@ def _retirement_blocked(entry: ConfigEntry, what: str) -> bool:
         reason = "a poll did not succeed everywhere"
     elif runtime.web is not None and not runtime.web.last_update_success:
         reason = "the web API refresh failed"
+    elif runtime.web_control is None or not runtime.web_control.configured:
+        # Every entry has a login; without one the web entities are unread, not
+        # gone (audit A24-01: an auth failure at setup retired them).
+        reason = "the web API login is missing"
     elif not runtime.topology_confirmed:
         reason = "the meter topology could not be read"
     if reason is None:

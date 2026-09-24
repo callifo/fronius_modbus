@@ -655,8 +655,14 @@ class TokenFlowMixin:
     async def _async_roll_back_token(
         self, host: str, username: str, previous: dict[str, str] | None
     ) -> None:
+        """Put back what the store held before this flow's token.
+
+        The token this flow minted goes, even when another entry uses the
+        same host and role: that entry did not log in with it (audit RR770-02).
+        """
+        store = async_get_token_store(self.hass)
         if previous is None:
-            await async_forget_unused_tokens(self.hass, host)
+            await store.async_delete_token(host, username)
             return
         await _async_save_token(self.hass, host, username, previous)
 

@@ -819,6 +819,9 @@
     },
     "web_api_unreachable": {
       "message": "The inverter's web interface did not answer. Check that the inverter is on and reachable."
+    },
+    "grid_charge_sources_failed": {
+      "message": "The storage mode is set to Charge from Grid, but the inverter's web interface did not allow charging from the grid: {error}"
     }
   }
 }

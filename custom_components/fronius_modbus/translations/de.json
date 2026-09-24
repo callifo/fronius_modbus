@@ -819,6 +819,9 @@
     },
     "web_api_unreachable": {
       "message": "Die Weboberfläche des Wechselrichters hat nicht geantwortet. Bitte prüfen, ob der Wechselrichter eingeschaltet und erreichbar ist."
+    },
+    "grid_charge_sources_failed": {
+      "message": "Der Speichermodus steht auf „Aus dem Netz laden“, aber die Weboberfläche des Wechselrichters hat das Netzladen nicht freigegeben: {error}"
     }
   }
 }

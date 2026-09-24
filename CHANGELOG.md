@@ -17,6 +17,7 @@
 - A rejected technician token is the one deleted when the meter topology read fails; the customer token was deleted in its place, and the rejected one was offered again on every start.
 - An HTTP error from the export-limit endpoint fails the web refresh instead of reading as "no export limit". Only a 404, from firmware without the endpoint, still means the limit is not there.
 - The inverter and battery component reads (inverter temperature, cell temperature, battery manufacturer, model and serial) no longer hide a failing endpoint. Their values still turn unknown instead of taking the controls down, but an error other than a 404 is logged once as a warning, and again at info when the endpoint answers. A switched-off inverter is left to the refresh, which already reports it.
+- Selecting Charge from Grid reports an error when the web interface refuses the grid charging flags. The storage mode was set and the control showed success, while the battery could not charge from the grid; the message now says so.
 - A web control used while the inverter's web interface does not answer shows a translated error. It surfaced as an unknown error with a traceback in the log since 1.1.1.
 
 ### Changed

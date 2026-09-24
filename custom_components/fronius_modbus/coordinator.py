@@ -32,6 +32,7 @@ from .fronius_modbus_api.device import (
     UpdateReport,
     meter_report_name,
 )
+from .fronius_modbus_api.exceptions import ControlUnavailable
 from .fronius_modbus_api.storage import ExtendedMode, StorageControl
 from .fronius_modbus_api.sunspec_models import AcMeter
 from .froniuswebclient import FroniusWebUnreachable
@@ -171,10 +172,14 @@ class FroniusRuntimeData:
                 await web_control.set_charge_sources(
                     charge_from_grid=True, charge_from_ac=True
                 )
-            except (ModbusError, RuntimeError, ValueError) as err:
-                _LOGGER.warning(
-                    "Failed to enable charge from grid via the web API: %s", err
-                )
+            except (ModbusError, RuntimeError, ValueError, OSError) as err:
+                # The Modbus mode is already set and stays; the owner has to
+                # know that grid charging is not (audit F24-02).
+                raise ControlUnavailable(
+                    "grid_charge_sources_failed",
+                    f"Charge from Grid is set, but grid charging was refused: {err}",
+                    error=str(err),
+                ) from err
 
 
 type FroniusConfigEntry = ConfigEntry[FroniusRuntimeData]

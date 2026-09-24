@@ -810,5 +810,12 @@
     "old": "        if _window_inverted(lower, upper):\n",
     "new": "        if False:\n",
     "tests": "soc_window_is_checked_against_the_fresh_read"
+  },
+  {
+    "label": "coordinator: refused grid charging is an error",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "                raise ControlUnavailable(\n                    \"grid_charge_sources_failed\",",
+    "new": "                return\n                raise ControlUnavailable(\n                    \"grid_charge_sources_failed\",",
+    "tests": "grid_charging_that_the_web_api_refuses_is_an_error"
   }
 ]

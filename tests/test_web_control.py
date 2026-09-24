@@ -74,12 +74,18 @@ class FakeWebClient:
         self.battery.update(HYB_EM_MODE=mode)
         return True
 
-    def set_soc_limits(self, soc_min=None, soc_max=None):
+    def check_soc_window(self, soc_min=None, soc_max=None):
         lower = self.battery["BAT_M0_SOC_MIN"] if soc_min is None else soc_min
         upper = self.battery["BAT_M0_SOC_MAX"] if soc_max is None else soc_max
         if lower > upper:
             raise ControlRefused("soc_minimum_above_maximum", "inverted window")
+        return dict(self.battery)
+
+    def set_soc_limits(self, soc_min=None, soc_max=None):
+        self.check_soc_window(soc_min, soc_max)
         self.calls.append(("soc", soc_min, soc_max))
+        limits = {"BAT_M0_SOC_MIN": soc_min, "BAT_M0_SOC_MAX": soc_max}
+        self.battery.update({k: v for k, v in limits.items() if v is not None})
         return True
 
     def set_battery_power(self, power):
@@ -637,7 +643,9 @@ async def test_every_battery_write_shows_its_value_right_away(hass):
 async def test_a_soc_minimum_the_inverter_refuses_is_not_written_to_modbus_first(hass):
     """Reaudit RE26-02: a stale poll passed, Modbus took the minimum, the web API refused it."""
     client = FakeWebClient()
-    client.battery.update(BAT_M0_SOC_MODE="manual", BAT_M0_SOC_MIN=20, BAT_M0_SOC_MAX=90)
+    client.battery.update(
+        BAT_M0_SOC_MODE="manual", BAT_M0_SOC_MIN=20, BAT_M0_SOC_MAX=90
+    )
     control = make_control(hass, client=client)
     written = []
     try:
@@ -658,7 +666,9 @@ async def test_a_soc_minimum_the_inverter_refuses_is_not_written_to_modbus_first
 async def test_a_soc_maximum_a_stale_poll_would_refuse_reaches_the_inverter(hass):
     """Reaudit RE26-02: the polled minimum 50 refused a maximum the inverter would take."""
     client = FakeWebClient()
-    client.battery.update(BAT_M0_SOC_MODE="manual", BAT_M0_SOC_MIN=50, BAT_M0_SOC_MAX=90)
+    client.battery.update(
+        BAT_M0_SOC_MODE="manual", BAT_M0_SOC_MIN=50, BAT_M0_SOC_MAX=90
+    )
     control = make_control(hass, client=client)
     try:
         await control.async_refresh()

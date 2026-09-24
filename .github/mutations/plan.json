@@ -212,9 +212,9 @@
   {
     "label": "web control: the SoC minimum is checked before Modbus is written",
     "path": "custom_components/fronius_modbus/web_control.py",
-    "old": "        mirror = self.configured and self.soc_mode_is_manual\n        if mirror:\n            self._get_next_soc_limits(soc_min=soc_min)\n        await write_modbus()",
-    "new": "        mirror = self.configured and self.soc_mode_is_manual\n        await write_modbus()",
-    "tests": "invalid_soc_minimum_writes_nothing"
+    "old": "        await self._async_web_job(\n            client.check_soc_window, soc_min, raise_on_auth_failure=True\n        )\n",
+    "new": "",
+    "tests": "invalid_soc_minimum_writes_nothing or not_written_to_modbus_first"
   },
   {
     "label": "token store: another spelling of the host still uses the token",
@@ -880,5 +880,12 @@
     "old": "    return _config_object(config.get(key, {}), path)\n",
     "new": "    return _config_object(config.get(key) or {}, path)\n",
     "tests": "an_empty_wrong_type_in_the_modbus_config_is_not_written_back_with_defaults"
+  },
+  {
+    "label": "web control: a stale poll does not veto the SoC window",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        self._check_soc_range(soc_min=soc_min, soc_max=soc_max)\n",
+    "new": "        self._check_soc_range(soc_min=soc_min, soc_max=soc_max)\n        if (soc_min or self.data.soc_min or 0) > (soc_max or self.data.soc_max or 100):\n            raise ControlRefused(\"soc_minimum_above_maximum\", \"stale\")\n",
+    "tests": "a_stale_poll_would_refuse_reaches_the_inverter"
   }
 ]

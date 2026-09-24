@@ -799,8 +799,20 @@ class FroniusWebClient:
         """The SoC limit asked for, checked against the window the inverter holds now.
 
         The other limit is not sent: taken from the last poll it undid a change
-        made in the inverter UI since (audit F24-01). A config that cannot be
-        read skips the check; the inverter refuses a window it cannot take.
+        made in the inverter UI since (audit F24-01).
+        """
+        current = self.check_soc_window(soc_min, soc_max)
+        limits = {"BAT_M0_SOC_MIN": soc_min, "BAT_M0_SOC_MAX": soc_max}
+        wanted = {key: int(value) for key, value in limits.items() if value is not None}
+        return self._post_changes(BATTERIES_PATH, wanted, current)
+
+    def check_soc_window(
+        self, soc_min: int | None = None, soc_max: int | None = None
+    ) -> dict[str, Any]:
+        """Refuse a limit that would invert the window the inverter holds now.
+
+        A config that cannot be read skips the check; the inverter refuses a
+        window it cannot take. Returns the config read.
         """
         current = self._read_or_nothing(BATTERIES_PATH)
         lower = soc_min if soc_min is not None else current.get("BAT_M0_SOC_MIN")
@@ -809,9 +821,7 @@ class FroniusWebClient:
             raise ControlRefused(
                 "soc_minimum_above_maximum", "SoC Minimum must not exceed SoC Maximum"
             )
-        limits = {"BAT_M0_SOC_MIN": soc_min, "BAT_M0_SOC_MAX": soc_max}
-        wanted = {key: int(value) for key, value in limits.items() if value is not None}
-        return self._post_changes(BATTERIES_PATH, wanted, current)
+        return current
 
     def set_soc_mode(self, mode: str) -> bool:
         return self._post_changes(BATTERIES_PATH, {"BAT_M0_SOC_MODE": mode})

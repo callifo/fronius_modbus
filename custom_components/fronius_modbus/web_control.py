@@ -77,7 +77,7 @@ SOLAR_API_WARNING_TRANSLATION_KEY = "solar_api_low_firmware"
 _FIRMWARE_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)(?:-(\d+))?$")
 BATTERY_MODE_AUTO, BATTERY_MODE_MANUAL = 0, 1
 SOC_MODE_AUTO, SOC_MODE_MANUAL = "auto", "manual"
-SOC_LOWEST, SOC_HIGHEST, SOC_MAX_DEFAULT = 5, 100, 99
+SOC_LOWEST, SOC_HIGHEST = 5, 100
 
 
 def _implied_charge_sources(
@@ -587,35 +587,29 @@ class FroniusWebControl:
             self._client.reset_modbus_control, raise_on_auth_failure=True
         )
 
-    def _get_next_soc_limits(
-        self, *, soc_min: int | None = None, soc_max: int | None = None
-    ) -> tuple[int, int]:
-        next_soc_min = self.data.soc_min if soc_min is None else int(soc_min)
-        next_soc_max = self.data.soc_max if soc_max is None else int(soc_max)
+    @staticmethod
+    def _check_soc_range(
+        soc_min: int | None = None, soc_max: int | None = None
+    ) -> None:
+        """Only the limit asked for; the window is checked against the inverter.
 
-        next_soc_min = SOC_LOWEST if next_soc_min is None else next_soc_min
-        next_soc_max = SOC_MAX_DEFAULT if next_soc_max is None else next_soc_max
-
-        if next_soc_min < SOC_LOWEST or next_soc_min > SOC_HIGHEST:
+        A check against the last poll refused a window the inverter would take
+        and passed one it refuses (reaudit RE26-02).
+        """
+        if soc_min is not None and not SOC_LOWEST <= soc_min <= SOC_HIGHEST:
             raise ControlRefused(
                 "value_out_of_range",
                 "SoC Minimum must be between 5 and 100",
                 minimum=str(SOC_LOWEST),
                 maximum=str(SOC_HIGHEST),
             )
-        if next_soc_max < 0 or next_soc_max > SOC_HIGHEST:
+        if soc_max is not None and not 0 <= soc_max <= SOC_HIGHEST:
             raise ControlRefused(
                 "value_out_of_range",
                 "SoC Maximum must be between 0 and 100",
                 minimum="0",
                 maximum=str(SOC_HIGHEST),
             )
-        if next_soc_min > next_soc_max:
-            raise ControlRefused(
-                "soc_minimum_above_maximum", "SoC Minimum must not exceed SoC Maximum"
-            )
-
-        return next_soc_min, next_soc_max
 
     @_last_writer_wins
     async def apply_soc_minimum(
@@ -626,13 +620,19 @@ class FroniusWebControl:
         Both writes and the check that guards them happen under this lock. A
         check outside it went stale when a concurrent maximum change landed in
         between, and Modbus then took a reserve the web API refuses (audit A05).
+        The window is read from the inverter before Modbus is written: checked
+        only at the web write, Modbus already held a refused minimum (RE26-02).
         """
-        mirror = self.configured and self.soc_mode_is_manual
-        if mirror:
-            self._get_next_soc_limits(soc_min=soc_min)
+        client = self._client
+        if client is None or not self.soc_mode_is_manual:
+            await write_modbus()
+            return
+        self._check_soc_range(soc_min=soc_min)
+        await self._async_web_job(
+            client.check_soc_window, soc_min, raise_on_auth_failure=True
+        )
         await write_modbus()
-        if mirror:
-            await self._set_api_soc_manual(soc_min=soc_min, control_name="SoC Minimum")
+        await self._set_api_soc_manual(soc_min=soc_min, control_name="SoC Minimum")
 
     def _require_battery_mode_manual(self, control_name: str) -> None:
         if not self.battery_mode_is_manual:
@@ -657,14 +657,14 @@ class FroniusWebControl:
     ) -> None:
         """Send the one limit asked for; the other stays as the inverter holds it.
 
-        The cache check here only answers early; the client checks the window
-        against a fresh read. Sending the cached other limit undid one set in
-        the inverter UI since the last poll (audit F24-01).
+        The client checks the window against a fresh read. Sending the cached
+        other limit undid one set in the inverter UI since the last poll
+        (audit F24-01).
         """
         if not self._client:
             raise ControlUnavailable("web_api_not_configured", WEB_API_NOT_CONFIGURED)
         self._require_soc_mode_manual(control_name)
-        self._get_next_soc_limits(soc_min=soc_min, soc_max=soc_max)
+        self._check_soc_range(soc_min=soc_min, soc_max=soc_max)
 
         written = await self._async_web_job(
             self._client.set_soc_limits,

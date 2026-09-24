@@ -731,6 +731,34 @@ async def test_an_empty_component_answer_retires_no_entity(
     assert registry.async_get(chosen) is not None
 
 
+async def test_a_power_module_missing_from_one_answer_keeps_its_entity(
+    hass, mock_modbus, monkeypatch
+):
+    """Reaudit RE26-03: an answer naming module 1 only retired module 2 at the next start."""
+    mock_modbus.add_unit(201, like=METER_UNIT_ID)
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientAnsweringEmpty)
+    monkeypatch.setattr(
+        _WebClientAnsweringEmpty,
+        "readings",
+        {
+            "MODULE_TEMPERATURE_MEAN_01_F32": 40.0,
+            "MODULE_TEMPERATURE_MEAN_02_F32": 41.0,
+        },
+    )
+    entry = make_entry(hass)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+    await setup_entry(hass, entry)
+    module_2 = entity_id_for(hass, entry, "sensor", "module_temperature_2")
+
+    monkeypatch.setattr(
+        _WebClientAnsweringEmpty, "readings", {"MODULE_TEMPERATURE_MEAN_01_F32": 40.0}
+    )
+    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert er.async_get(hass).async_get(module_2) is not None
+
+
 async def test_a_reconfigure_reloads_the_entry_once(hass, mock_modbus, monkeypatch):
     """Audit F24-10: the update listener and an explicit call both reloaded it."""
     entry = make_entry(hass)

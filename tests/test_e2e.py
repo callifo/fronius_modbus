@@ -23,6 +23,7 @@ from custom_components.fronius_modbus.const import (
 from custom_components.fronius_modbus.diagnostics import (
     async_get_config_entry_diagnostics,
 )
+from custom_components.fronius_modbus.froniuswebclient import FroniusWebAuthError
 from custom_components.fronius_modbus.token_store import async_get_token_store
 from custom_components.fronius_modbus.web_control import WebData
 from homeassistant.config_entries import ConfigEntryState
@@ -264,9 +265,14 @@ async def test_v019_mppt_entities_are_renamed(hass, mock_modbus):
     )
 
 
-async def test_a_stale_entity_is_removed_after_a_clean_first_poll(hass, mock_modbus):
+async def test_a_stale_entity_is_removed_after_a_clean_first_poll(
+    hass, mock_modbus, monkeypatch
+):
     """An entity for a key the integration no longer creates is dropped on a clean poll."""
+    mock_modbus.add_unit(201, like=METER_UNIT_ID)
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _FakeWebClientWithTopology)
     entry = make_entry(hass)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
     registry = er.async_get(hass)
     unique_id = f"{entity_prefix(entry.entry_id)}_no_such_key"
     registry.async_get_or_create(
@@ -561,3 +567,61 @@ async def test_a_confirmed_single_meter_topology_is_applied(
     runtime = hass.config_entries.async_get_entry(entry.entry_id).runtime_data
     assert runtime.topology_confirmed
     assert runtime.meter_locations == {METER_UNIT_ID: 0}
+
+
+class _WebClientLosingItsLogin(_FakeWebClientWithTopology):
+    """Answers the public topology; `lost_at` names the call the login fails on."""
+
+    lost_at: str | None = None
+
+    def __getattr__(self, name: str):
+        if name == self.lost_at:
+
+            def _refused(*_args, **_kwargs):
+                raise FroniusWebAuthError("token rejected")
+
+            return _refused
+        return super().__getattr__(name)
+
+    def get_power_meter_info(self, *_args, **_kwargs):
+        if self.lost_at == "get_power_meter_info":
+            raise FroniusWebAuthError("token rejected")
+        return self.topology
+
+
+@pytest.mark.parametrize(
+    "lose_login",
+    ["first_protected_read", "topology_read", "token_gone_before_restart"],
+)
+async def test_a_lost_web_login_retires_no_web_entity(
+    hass, mock_modbus, monkeypatch, lose_login
+):
+    """Audit A24-01: a login lost at setup read as "no web API", and cleanup deleted its entities.
+
+    The owner's chosen entity id went with them. A lost login is "not seen", like
+    a failed poll, whichever way it goes missing.
+    """
+    mock_modbus.add_unit(201, like=METER_UNIT_ID)
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientLosingItsLogin)
+    entry = make_entry(hass)
+    store = async_get_token_store(hass)
+    await store.async_save_token(HOST, realm="r", token="t")
+    await setup_entry(hass, entry)
+    registry = er.async_get(hass)
+    chosen = "sensor.my_inverter_temperature"
+    registry.async_update_entity(
+        entity_id_for(hass, entry, "sensor", "inverter_temperature"),
+        new_entity_id=chosen,
+    )
+
+    if lose_login == "first_protected_read":
+        monkeypatch.setattr(_WebClientLosingItsLogin, "lost_at", "get_inverter_info")
+    elif lose_login == "topology_read":
+        monkeypatch.setattr(_WebClientLosingItsLogin, "lost_at", "get_power_meter_info")
+    else:
+        await store.async_delete_token(HOST, "customer")
+    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert registry.async_get(chosen) is not None
+    assert registry.async_get(entity_id_for(hass, entry, "sensor", "meter_201_power"))

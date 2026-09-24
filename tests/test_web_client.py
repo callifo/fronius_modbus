@@ -511,6 +511,31 @@ def test_the_restriction_carries_the_resolved_client_ip(client, inverter, monkey
     }
 
 
+PRE_RESTRICTED = {"on": True, "restriction": {"on": True, "ip": "192.0.2.50"}}
+
+
+def test_an_existing_restriction_is_not_lifted(client, inverter):
+    """Audit A24-02: setup without the checkbox wrote restriction.on=false.
+
+    A restricted Modbus server then answered every host on the network.
+    """
+    inverter.bodies["/api/config/modbus"] = modbus_config(ctr=PRE_RESTRICTED)
+
+    assert client.ensure_modbus_enabled(502, 200, 1) is False
+    assert [call for call in inverter.calls if call[0] == "post"] == []
+
+
+def test_a_rewrite_for_another_reason_keeps_the_restriction(client, inverter):
+    inverter.bodies["/api/config/modbus"] = modbus_config(
+        port=1502, ctr=PRE_RESTRICTED
+    )
+
+    assert client.ensure_modbus_enabled(502, 200, 1) is True
+
+    write = next(call for call in inverter.calls if call[0] == "post")
+    assert write[2]["slave"]["ctr"]["restriction"] == PRE_RESTRICTED["restriction"]
+
+
 def test_a_matching_restriction_is_not_rewritten(client, inverter, monkeypatch):
     inverter.bodies["/api/config/modbus"] = modbus_config(
         ctr={"on": True, "restriction": {"on": True, "ip": "192.0.2.99"}}

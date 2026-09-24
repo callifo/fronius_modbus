@@ -244,7 +244,7 @@ async def test_minor_version_9_entries_migrate_to_the_current_shape(hass, mock_m
     # for an entry with no stored token, masking what the migration itself did.
     assert await migrations.async_migrate_entry(hass, entry)
 
-    assert entry.minor_version == 11
+    assert entry.minor_version == 12
     # Minor 9 entries are already on the web-API shape: only the version bump
     # and the new role are expected, not the pre-web-API data migration.
     assert CONF_RECONFIGURE_REQUIRED not in entry.data
@@ -448,6 +448,34 @@ async def test_mppt_entities_appear_once_the_first_read_succeeds(hass, mock_modb
     assert hass.states.get(entity_id) is not None
 
 
+@pytest.mark.parametrize(
+    ("restricted", "choice"), [(True, "home_assistant"), (False, "keep")]
+)
+async def test_minor_version_11_entries_turn_the_checkbox_into_a_choice(
+    hass, mock_modbus, restricted, choice
+):
+    """An unchecked box used to write "off"; it migrates to "keep", never to "off".
+
+    Lifting a restriction is now a choice of its own (audit A24-02).
+    """
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={**ENTRY_DATA, "restrict_modbus_to_this_ip": restricted},
+        options={"restrict_modbus_to_this_ip": restricted},
+        unique_id=HOST,
+        version=1,
+        minor_version=11,
+    )
+    entry.add_to_hass(hass)
+
+    assert await migrations.async_migrate_entry(hass, entry)
+
+    assert entry.minor_version == 12
+    for values in (entry.data, entry.options):
+        assert values["modbus_restriction"] == choice
+        assert "restrict_modbus_to_this_ip" not in values
+
+
 async def test_minor_version_10_entries_take_the_role_of_their_stored_token(
     hass, mock_modbus
 ):
@@ -457,7 +485,7 @@ async def test_minor_version_10_entries_take_the_role_of_their_stored_token(
         HOST, realm="r", token="t", user="technician"
     )
     assert await migrations.async_migrate_entry(hass, entry)
-    assert entry.minor_version == 11
+    assert entry.minor_version == 12
     assert entry.data["api_username"] == "technician"
     assert entry.options["api_username"] == "technician"
 
@@ -467,7 +495,7 @@ async def test_minor_version_10_entries_without_a_technician_token_stay_customer
 ):
     entry = make_entry(hass, minor_version=10)
     assert await migrations.async_migrate_entry(hass, entry)
-    assert entry.minor_version == 11
+    assert entry.minor_version == 12
     assert entry.data["api_username"] == "customer"
 
 

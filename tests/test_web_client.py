@@ -14,6 +14,7 @@ import pytest
 import requests
 
 from custom_components.fronius_modbus import froniuswebclient
+from custom_components.fronius_modbus.const import ModbusRestriction
 from custom_components.fronius_modbus.froniuswebclient import (
     ClientIpResolutionError,
     FroniusWebAuthError,
@@ -510,7 +511,12 @@ def test_the_restriction_carries_the_resolved_client_ip(client, inverter, monkey
         FroniusWebClient, "_resolve_client_ip", lambda self: "192.0.2.99"
     )
 
-    assert client.ensure_modbus_enabled(502, 200, 1, restrict_to_client_ip=True) is True
+    assert (
+        client.ensure_modbus_enabled(
+            502, 200, 1, restriction=ModbusRestriction.HOME_ASSISTANT
+        )
+        is True
+    )
 
     write = next(call for call in inverter.calls if call[0] == "post")
     assert write[2]["slave"]["ctr"]["restriction"] == {
@@ -542,6 +548,25 @@ def test_a_rewrite_for_another_reason_keeps_the_restriction(client, inverter):
     assert write[2]["slave"]["ctr"]["restriction"] == PRE_RESTRICTED["restriction"]
 
 
+def test_lifting_the_restriction_is_a_choice_of_its_own(client, inverter):
+    """Keeping is the default; "off" is written only when the owner picks it."""
+    inverter.bodies["/api/config/modbus"] = modbus_config(ctr=PRE_RESTRICTED)
+
+    assert client.ensure_modbus_enabled(502, 200, 1, restriction=ModbusRestriction.OFF)
+
+    write = next(call for call in inverter.calls if call[0] == "post")
+    assert write[2]["slave"]["ctr"]["restriction"]["on"] is False
+
+
+def test_a_lifted_restriction_is_not_lifted_again(client, inverter):
+    inverter.bodies["/api/config/modbus"] = modbus_config()
+
+    assert (
+        client.ensure_modbus_enabled(502, 200, 1, restriction=ModbusRestriction.OFF)
+        is False
+    )
+
+
 def test_a_matching_restriction_is_not_rewritten(client, inverter, monkeypatch):
     inverter.bodies["/api/config/modbus"] = modbus_config(
         ctr={"on": True, "restriction": {"on": True, "ip": "192.0.2.99"}}
@@ -551,7 +576,10 @@ def test_a_matching_restriction_is_not_rewritten(client, inverter, monkeypatch):
     )
 
     assert (
-        client.ensure_modbus_enabled(502, 200, 1, restrict_to_client_ip=True) is False
+        client.ensure_modbus_enabled(
+            502, 200, 1, restriction=ModbusRestriction.HOME_ASSISTANT
+        )
+        is False
     )
 
 
@@ -569,7 +597,9 @@ def test_an_unroutable_host_makes_the_restriction_unresolvable(client, monkeypat
     monkeypatch.setattr(socket, "socket", lambda *_args: RefusingSocket())
 
     with pytest.raises(ClientIpResolutionError):
-        client.ensure_modbus_enabled(502, 200, 1, restrict_to_client_ip=True)
+        client.ensure_modbus_enabled(
+            502, 200, 1, restriction=ModbusRestriction.HOME_ASSISTANT
+        )
 
 
 def test_a_loopback_client_ip_is_refused_as_a_restriction(client, monkeypatch):
@@ -589,7 +619,9 @@ def test_a_loopback_client_ip_is_refused_as_a_restriction(client, monkeypatch):
     monkeypatch.setattr(socket, "socket", lambda *_args: LoopbackSocket())
 
     with pytest.raises(ClientIpResolutionError):
-        client.ensure_modbus_enabled(502, 200, 1, restrict_to_client_ip=True)
+        client.ensure_modbus_enabled(
+            502, 200, 1, restriction=ModbusRestriction.HOME_ASSISTANT
+        )
 
 
 # -- the write endpoints -----------------------------------------------------------

@@ -16,7 +16,7 @@ from homeassistant.data_entry_flow import FlowResultType
 from .conftest import INVERTER_UNIT_ID
 
 HOST = "192.0.2.10"
-USER_INPUT = {"host": HOST, "scan_interval": 10, "restrict_modbus_to_this_ip": False}
+USER_INPUT = {"host": HOST, "scan_interval": 10}
 
 
 def make_entry(hass) -> MockConfigEntry:
@@ -26,7 +26,7 @@ def make_entry(hass) -> MockConfigEntry:
         data={**USER_INPUT, "web_scan_interval": 60, "api_username": "customer"},
         unique_id=HOST,
         version=1,
-        minor_version=11,
+        minor_version=12,
     )
     entry.add_to_hass(hass)
     return entry
@@ -78,7 +78,9 @@ async def test_the_config_flow_creates_an_entry(hass, mock_modbus):
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["title"] == "Fronius 192.0.2.10"
     assert result["data"]["host"] == HOST
-    assert result["minor_version"] == 11
+    assert result["minor_version"] == 12
+    # Leaving the choice alone must not lift a restriction the inverter has.
+    assert result["data"]["modbus_restriction"] == "keep"
 
 
 async def test_a_second_flow_for_the_same_host_aborts(hass, mock_modbus):
@@ -164,7 +166,7 @@ async def test_switching_the_role_asks_for_that_roles_password(hass, monkeypatch
             "host": HOST,
             "scan_interval": 10,
             "web_scan_interval": 60,
-            "restrict_modbus_to_this_ip": False,
+            "modbus_restriction": "keep",
             "api_username": "technician",
         },
     )

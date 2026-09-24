@@ -31,7 +31,7 @@ ENTRY_DATA = {
 SETTINGS_INPUT = {
     "host": HOST,
     "scan_interval": 10,
-    "restrict_modbus_to_this_ip": False,
+    "modbus_restriction": "keep",
 }
 PASSWORD_INPUT = {"api_password": "secret"}
 

@@ -726,3 +726,27 @@ async def test_a_malformed_modbus_config_leaves_the_other_web_values(
     finally:
         control.shutdown()
     assert data.soc_min == 20
+
+
+async def test_a_failed_storage_read_keeps_the_battery_identity(hass):
+    """Audit FA0FB-07: the parser's placeholder replaced a known BYD/HVS/serial."""
+    client = FakeWebClient()
+    control = make_control(hass, client=client)
+    try:
+        await control.async_refresh()
+        client.get_storage_info = lambda: {
+            "manufacturer": None,
+            "model": "Battery Storage",
+            "serial": None,
+            "readings": None,
+            "missing": False,
+        }
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+    assert (data.storage_manufacturer, data.storage_model, data.storage_serial) == (
+        "BYD",
+        "HVS",
+        "S",
+    )
+    assert data.storage_readings is None

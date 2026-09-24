@@ -22,6 +22,8 @@ FIXTURE = json.loads(
     )
 )
 ENABLED = {
+    "inverter_temperature",
+    "storage_temperature",
     "module_temperature_1",
     "module_temperature_3",
     "module_temperature_4",
@@ -123,6 +125,8 @@ def test_every_sensor_on_the_gen24_shows_what_its_channel_reads():
     sensors = component_sensors(runtime)
     value = lambda key: sensors[key].value_fn(runtime)  # noqa: E731
 
+    assert round(value("inverter_temperature"), 1) == 51.1
+    assert value("storage_temperature") == 24.5
     assert round(value("module_temperature_1"), 1) == 44.3
     assert round(value("inverter_power_l1")) == 776
     assert value("production_limit") == 10100.0

@@ -1,5 +1,7 @@
 """Tests for household load and grid status derivation."""
 
+import pytest
+
 from custom_components.fronius_modbus.derived import (
     LoadEstimator,
     TotalGuard,
@@ -97,6 +99,34 @@ def test_three_far_higher_polls_are_a_genuine_gap():
     for reading in (5000.0, 5001.0, 5002.0):
         guard.observe(reading)
     assert guard.value == 5002.0
+
+
+@pytest.mark.parametrize(
+    "readings",
+    [(10.0, 100000.0, 10.0), (100000.0, 10.0, 100000.0), (10.0, 5000.0, 20.0)],
+)
+def test_contradicting_samples_confirm_nothing(readings):
+    """Audit F24-03: 10, 100000, 10 counted as three confirmations and reset the total.
+
+    A spike between two low readings contradicts a real reset; only samples
+    that agree with each other may move the accepted range.
+    """
+    guard = _guard()
+
+    for reading in readings:
+        guard.observe(reading)
+
+    assert guard.value == 1000.0
+
+
+def test_a_new_range_may_keep_counting_while_it_is_confirmed():
+    """A reset counter goes on counting; 10, 12, 14 is one consistent new range."""
+    guard = _guard()
+
+    for reading in (10.0, 12.0, 14.0):
+        guard.observe(reading)
+
+    assert guard.value == 14.0
 
 
 def test_the_first_reading_seeds_an_unseeded_guard():

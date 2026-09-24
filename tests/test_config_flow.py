@@ -572,3 +572,21 @@ async def test_an_aborted_setup_does_not_hand_its_token_to_another_entry(
 
     assert result["reason"] == "already_configured"
     assert await async_get_token_store(hass).async_load_token(HOST) is None
+
+
+async def test_a_host_taken_while_the_token_is_minted_leaves_the_inverter_alone(
+    hass, mock_modbus, monkeypatch
+):
+    """Audit R730-01: the claim was not held through minting and validation."""
+    applied = _record_modbus_setup(monkeypatch)
+
+    async def mint_while_taken(hass, host, password, username):
+        make_entry(hass)
+        return {"realm": "r", "token": "t"}
+
+    monkeypatch.setattr(config_flow, "_async_mint_token", mint_while_taken)
+
+    result = await run_flow(hass)
+
+    assert result["reason"] == "already_configured"
+    assert applied == []

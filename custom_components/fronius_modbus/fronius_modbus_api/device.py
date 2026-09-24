@@ -268,8 +268,11 @@ class FroniusInverter:
         }
         meters: dict[int, MeterInfo] = {}
         undecided: dict[int, ModbusUnit] = {}
+        addresses = dict(self._meter_addresses)
         for unit_id, meter_unit in self._meter_units.items():
-            await self._async_place_meter(unit_id, meter_unit, meters, undecided)
+            await self._async_place_meter(
+                unit_id, meter_unit, meters, undecided, addresses
+            )
 
         self.identity = identity
         self.three_phase = inverter_model.model_id == THREE_PHASE_INVERTER_MODEL_ID
@@ -281,6 +284,7 @@ class FroniusInverter:
         self.mppt = components[REPORT_MPPT]
         self.storage = components[REPORT_STORAGE]
         self.meters = meters
+        self._meter_addresses = addresses
         self._undecided_meters = undecided
         self._polled = tuple(
             name for name, component in components.items() if component is not None
@@ -320,10 +324,15 @@ class FroniusInverter:
         meter_unit: ModbusUnit,
         meters: dict[int, MeterInfo],
         undecided: dict[int, ModbusUnit],
+        addresses: dict[int, int],
     ) -> None:
-        """Probe one meter unit and file it as present, absent or undecided."""
+        """Probe one meter unit and file it as present, absent or undecided.
+
+        Its map address goes where the meter goes: into the provisional maps of
+        a rediscovery, published with them or not at all (audit F24-07).
+        """
         try:
-            meter = await self._async_probe_meter(unit_id, meter_unit)
+            meter = await self._async_probe_meter(unit_id, meter_unit, addresses)
         except ModbusConnectionError:
             raise
         except ModbusError as err:
@@ -338,7 +347,7 @@ class FroniusInverter:
             meters[unit_id] = meter
 
     async def _async_probe_meter(
-        self, unit_id: int, meter_unit: ModbusUnit
+        self, unit_id: int, meter_unit: ModbusUnit, addresses: dict[int, int]
     ) -> MeterInfo | None:
         """A meter on ``unit_id``, or None when nothing SunSpec answers there.
 
@@ -362,7 +371,7 @@ class FroniusInverter:
         # after a rediscovery still shows the last readings (audit D02).
         known = self.meters.get(unit_id)
         moved = self._meter_addresses.get(unit_id) != model.address
-        self._meter_addresses[unit_id] = model.address
+        addresses[unit_id] = model.address
         meter = AcMeter(meter_unit, model) if known is None or moved else known.meter
         return MeterInfo(
             unit_id=unit_id,
@@ -434,7 +443,11 @@ class FroniusInverter:
         for unit_id, meter_unit in list(self._undecided_meters.items()):
             name = meter_report_name(unit_id)
             await self._async_place_meter(
-                unit_id, meter_unit, self.meters, self._undecided_meters
+                unit_id,
+                meter_unit,
+                self.meters,
+                self._undecided_meters,
+                self._meter_addresses,
             )
             if unit_id in self._undecided_meters:
                 report.failed[name] = ModbusTimeoutError(

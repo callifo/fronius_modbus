@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 import json
 import logging
 import re
 from pathlib import Path
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST, CONF_NAME
-from homeassistant.core import HomeAssistant
+from homeassistant.const import CONF_HOST, CONF_NAME, Platform
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
@@ -27,15 +28,16 @@ from .const import (
     instance_key,
     ModbusRestriction,
 )
+from .component_readings import CHANNEL_KEYS
 from .entities import expected_device_identifiers, expected_unique_ids
-from .token_store import async_get_token_store
+from .token_store import async_forget_unused_tokens, async_get_token_store
 
 _LOGGER = logging.getLogger(__name__)
 _TRANSLATIONS_DIR = Path(__file__).resolve().parent / "translations"
 _TRANSLATION_CACHE: dict[str, dict] = {}
 
 _TARGET_VERSION = 1
-_TARGET_MINOR_VERSION = 12
+_TARGET_MINOR_VERSION = 13
 # Entries below this minor version predate the web API integration and still
 # carry the dropped meter-unit config, so only they need the data migration.
 _WEB_API_MINOR_VERSION = 9
@@ -43,6 +45,9 @@ _WEB_API_MINOR_VERSION = 9
 _SINGLE_ROLE_MINOR_VERSION = 11
 # Entries below this minor version store the restriction as a checkbox.
 _RESTRICTION_CHOICE_MINOR_VERSION = 12
+# Minor 13 marks the power modules the device reported; one registered before
+# cannot be told from a placeholder and is kept (audit D8AE-01).
+_REPORTED_MARK_MINOR_VERSION = 13
 _LEGACY_RESTRICT_TO_THIS_IP = "restrict_modbus_to_this_ip"
 
 _LEGACY_METER_DEVICE_RE = re.compile(r".*_meter_?\d+")
@@ -82,8 +87,55 @@ def _entry_value(entry: ConfigEntry, key: str, default=None):
     return entry.options.get(key, entry.data.get(key, default))
 
 
+REPORTED_OPTION = "reported"
+
+
 def _entity_entries_for_config_entry(registry, entry: ConfigEntry):
     return list(er.async_entries_for_config_entry(registry, entry.entry_id))
+
+
+def _marked_reported(entity_entry: er.RegistryEntry) -> bool:
+    return bool(entity_entry.options.get(DOMAIN, {}).get(REPORTED_OPTION))
+
+
+def registered_keys(hass: HomeAssistant, entry: ConfigEntry) -> frozenset[str]:
+    """The description keys of every entity the registry holds for this entry."""
+    prefix = f"{entity_prefix(entry.entry_id)}_"
+    return frozenset(
+        unique_id.removeprefix(prefix)
+        for candidate in _entity_entries_for_config_entry(er.async_get(hass), entry)
+        if (unique_id := candidate.unique_id or "").startswith(prefix)
+    )
+
+
+def reported_keys(hass: HomeAssistant, entry: ConfigEntry) -> frozenset[str]:
+    """The description keys of the entities marked as reported by the device."""
+    prefix = f"{entity_prefix(entry.entry_id)}_"
+    return frozenset(
+        unique_id.removeprefix(prefix)
+        for candidate in _entity_entries_for_config_entry(er.async_get(hass), entry)
+        if (unique_id := candidate.unique_id or "").startswith(prefix)
+        and _marked_reported(candidate)
+    )
+
+
+@callback
+def async_mark_reported(
+    hass: HomeAssistant, entry: ConfigEntry, keys: Iterable[str]
+) -> None:
+    """Remember in the registry that the device reported these sensors."""
+    registry = er.async_get(hass)
+    prefix = entity_prefix(entry.entry_id)
+    for key in keys:
+        entity_id = registry.async_get_entity_id(
+            Platform.SENSOR, DOMAIN, f"{prefix}_{key}"
+        )
+        entity_entry = registry.async_get(entity_id) if entity_id else None
+        if entity_entry is None or _marked_reported(entity_entry):
+            continue
+        registry.async_update_entity_options(
+            entity_entry.entity_id, DOMAIN, {REPORTED_OPTION: True}
+        )
 
 
 def _migration_issue_id(entry: ConfigEntry) -> str:
@@ -214,44 +266,53 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.error("Unsupported config entry version: %s", entry.version)
         return False
 
-    if entry.version == _TARGET_VERSION and entry.minor_version < _TARGET_MINOR_VERSION:
-        new_data = dict(entry.data)
-        new_options = dict(entry.options)
-        title = entry.title
+    if entry.version != _TARGET_VERSION or entry.minor_version >= _TARGET_MINOR_VERSION:
+        return True
 
-        if entry.minor_version < _WEB_API_MINOR_VERSION:
-            new_data.pop(CONF_METER_UNIT_ID, None)
-            new_data.pop(CONF_METER_UNIT_IDS, None)
-            new_options.pop(CONF_METER_UNIT_ID, None)
-            new_options.pop(CONF_METER_UNIT_IDS, None)
-            new_data[CONF_RECONFIGURE_REQUIRED] = True
-            new_options[CONF_RECONFIGURE_REQUIRED] = True
-            title = _updated_entry_title(entry)
+    new_data = dict(entry.data)
+    new_options = dict(entry.options)
+    title = entry.title
 
-        if entry.minor_version < _SINGLE_ROLE_MINOR_VERSION:
-            api_username = await _async_stored_role(hass, entry)
-            new_data[CONF_API_USERNAME] = api_username
-            new_options[CONF_API_USERNAME] = api_username
+    if entry.minor_version < _WEB_API_MINOR_VERSION:
+        new_data.pop(CONF_METER_UNIT_ID, None)
+        new_data.pop(CONF_METER_UNIT_IDS, None)
+        new_options.pop(CONF_METER_UNIT_ID, None)
+        new_options.pop(CONF_METER_UNIT_IDS, None)
+        new_data[CONF_RECONFIGURE_REQUIRED] = True
+        new_options[CONF_RECONFIGURE_REQUIRED] = True
+        title = _updated_entry_title(entry)
 
-        if entry.minor_version < _RESTRICTION_CHOICE_MINOR_VERSION:
-            # An unchecked box wrote "off"; it becomes "keep", since lifting a
-            # restriction has to be chosen (audit A24-02).
-            choice = ModbusRestriction.KEEP
-            if _entry_value(entry, _LEGACY_RESTRICT_TO_THIS_IP, False):
-                choice = ModbusRestriction.HOME_ASSISTANT
-            for values in (new_data, new_options):
-                values.pop(_LEGACY_RESTRICT_TO_THIS_IP, None)
-            new_data[CONF_MODBUS_RESTRICTION] = choice
-            new_options[CONF_MODBUS_RESTRICTION] = choice
+    if entry.minor_version < _SINGLE_ROLE_MINOR_VERSION:
+        api_username = await _async_stored_role(hass, entry)
+        new_data[CONF_API_USERNAME] = api_username
+        new_options[CONF_API_USERNAME] = api_username
 
-        hass.config_entries.async_update_entry(
-            entry,
-            data=new_data,
-            options=new_options,
-            version=_TARGET_VERSION,
-            minor_version=_TARGET_MINOR_VERSION,
-            title=title,
-        )
+    if entry.minor_version < _RESTRICTION_CHOICE_MINOR_VERSION:
+        # An unchecked box wrote "off"; it becomes "keep", since lifting a
+        # restriction has to be chosen (audit A24-02).
+        choice = ModbusRestriction.KEEP
+        if _entry_value(entry, _LEGACY_RESTRICT_TO_THIS_IP, False):
+            choice = ModbusRestriction.HOME_ASSISTANT
+        for values in (new_data, new_options):
+            values.pop(_LEGACY_RESTRICT_TO_THIS_IP, None)
+        new_data[CONF_MODBUS_RESTRICTION] = choice
+        new_options[CONF_MODBUS_RESTRICTION] = choice
+
+    if entry.minor_version < _REPORTED_MARK_MINOR_VERSION:
+        async_mark_reported(hass, entry, CHANNEL_KEYS)
+
+    drops_a_role = entry.minor_version < _SINGLE_ROLE_MINOR_VERSION
+    hass.config_entries.async_update_entry(
+        entry,
+        data=new_data,
+        options=new_options,
+        version=_TARGET_VERSION,
+        minor_version=_TARGET_MINOR_VERSION,
+        title=title,
+    )
+    if drops_a_role:
+        # One role kept means the other role's token is unused now (audit F24-04).
+        await async_forget_unused_tokens(hass, str(_entry_value(entry, CONF_HOST, "")))
 
     return True
 

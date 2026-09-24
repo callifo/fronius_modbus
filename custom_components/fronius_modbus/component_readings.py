@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import math
 from typing import Any, Literal
 
 type Component = Literal["inverter", "storage"]
@@ -21,6 +22,11 @@ CONNECTION = "connection"
 # The battery's own firmware and hardware go to its device entry, not to a sensor.
 STORAGE_DEVICE_FIELDS = ("sw_version", "hw_version")
 YES, NO = "yes", "no"
+# How the inverter spells a flag, in its configs and its component attributes.
+FLAG_WORDS = {
+    **dict.fromkeys(("1", "true", "on", "yes", "enabled"), True),
+    **dict.fromkeys(("0", "false", "off", "no", "disabled"), False),
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +47,8 @@ class ComponentReading:
     enabled: bool = True
     transform: Transform = "as_is"
     suggested_unit: str | None = None
+    # Follows the device channel by channel; every other row exists with its component.
+    per_channel: bool = False
 
 
 def _module_temperature(index: int) -> ComponentReading:
@@ -50,6 +58,7 @@ def _module_temperature(index: int) -> ComponentReading:
         (f"MODULE_TEMPERATURE_MEAN_0{index}_F32",),
         "°C",
         "temperature",
+        per_channel=True,
     )
 
 
@@ -295,6 +304,47 @@ COMPONENT_READINGS: tuple[ComponentReading, ...] = (
 )
 
 
+def reported(reading: ComponentReading, readings: dict[str, Any] | None) -> bool:
+    """Whether a sensor exists for an answered or unread component.
+
+    Existence follows the component, not the field: an answer without a value
+    retired the sensor and the owner's entity id (audit R25-01). Rows that
+    follow the device channel by channel exist when reported, and also when the
+    answer names none of their group, which is no answer about them.
+    """
+    if not reading.per_channel or readings is None:
+        return True
+    group = {
+        field
+        for row in COMPONENT_READINGS
+        if row.per_channel and row.component == reading.component
+        for field in row.fields
+    }
+    if not group & readings.keys():
+        return True
+    return any(field in readings for field in reading.fields)
+
+
+CHANNEL_KEYS = frozenset(row.key for row in COMPONENT_READINGS if row.per_channel)
+
+
+def named_channels(component: Component, readings: dict[str, Any] | None) -> set[str]:
+    """The channel-by-channel rows an answer names; only these count as seen.
+
+    A row made while unread or while no channel was named is a placeholder,
+    and keeping it would show a module the device lacks (own reaudit R26-01).
+    """
+    if readings is None:
+        return set()
+    return {
+        row.key
+        for row in COMPONENT_READINGS
+        if row.per_channel
+        and row.component == component
+        and any(field in readings for field in row.fields)
+    }
+
+
 def readable_fields(component: Component) -> frozenset[str]:
     """Every field the web client may take from a component; nothing else leaves it."""
     fields = {
@@ -316,21 +366,52 @@ def component_value(reading: ComponentReading, readings: dict[str, Any] | None) 
     if not values:
         return None
     if reading.transform == "yes_no":
-        return YES if any(values) else NO
+        return YES if any(_is_set(value) for value in values) else NO
     value = values[0]
-    if reading.unit is not None and isinstance(value, str):
+    if reading.unit is not None:
         value = _as_number(value)
     if value is None or reading.transform != "positive":
         return value
     return abs(value)
 
 
-def _as_number(text: str) -> float | None:
-    """Attributes carry numbers as text ("467.2"); anything else is unknown."""
-    try:
-        return float(text)
-    except ValueError:
+def _as_number(value: Any) -> float | None:
+    """A number, or numeric text as attributes carry it ("467.2"); else unknown.
+
+    A value Home Assistant cannot show as a number would be refused on every
+    update (audit R25-02); "nan" and "inf" parse, but are no reading (RE26-05).
+    """
+    if isinstance(value, bool):
         return None
+    if isinstance(value, str):
+        try:
+            value = float(value)
+        except ValueError:
+            return None
+    if not isinstance(value, (int, float)) or not math.isfinite(value):
+        return None
+    return value
+
+
+def _is_set(value: Any) -> bool:
+    """A flag as the inverter sends it: 1.0, True, "1" or "true"; "0" is not set."""
+    if isinstance(value, bool):
+        return value
+    number = _as_number(value)
+    if number is not None:
+        return number != 0
+    return isinstance(value, str) and FLAG_WORDS.get(value.strip().lower(), False)
+
+
+def flag_value(value: Any) -> bool | None:
+    """A flag the inverter sent in a form it uses; anything else is unknown."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        return FLAG_WORDS.get(value.strip().lower())
+    return None
 
 
 def take_readings(device: dict[str, Any], component: Component) -> dict[str, Any]:

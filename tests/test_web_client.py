@@ -15,6 +15,9 @@ import requests
 
 from custom_components.fronius_modbus import froniuswebclient
 from custom_components.fronius_modbus.const import ModbusRestriction
+from custom_components.fronius_modbus.fronius_modbus_api.exceptions import (
+    ControlRefused,
+)
 from custom_components.fronius_modbus.froniuswebclient import (
     ClientIpResolutionError,
     FroniusWebAuthError,
@@ -339,6 +342,7 @@ def test_the_storage_identity_prefers_the_nameplate_over_the_attributes():
         "manufacturer": "BYD",
         "model": "HVS",
         "serial": "SN-1",
+        "missing": False,
         "readings": {"BAT_TEMPERATURE_CELL_F64": 22.5},
     }
 
@@ -348,6 +352,7 @@ def test_a_storage_payload_without_data_falls_back_to_the_generic_identity():
         "manufacturer": None,
         "model": "Battery Storage",
         "serial": None,
+        "missing": False,
         "readings": None,
     }
 
@@ -375,8 +380,8 @@ def test_the_inverter_temperature_is_read_from_its_channel():
 
 
 def test_an_inverter_payload_without_channels_has_no_temperature():
-    assert _parse_inverter_readable({"Body": {"Data": {"0": {}}}}) == {"readings": {}}
-    assert _parse_inverter_readable(None) == {"readings": None}
+    assert _parse_inverter_readable({"Body": {"Data": {"0": {}}}})["readings"] == {}
+    assert _parse_inverter_readable(None) == {"readings": None, "missing": False}
 
 
 # -- the read endpoints ------------------------------------------------------------
@@ -471,6 +476,19 @@ def test_firmware_without_a_readable_endpoint_is_not_a_warning(
     getattr(client, read)()
 
     assert warnings(caplog) == []
+
+
+@pytest.mark.parametrize(("read", "path"), READABLE_PATHS)
+@pytest.mark.parametrize(("status", "missing"), [(404, True), (500, False)])
+def test_only_a_404_marks_a_component_endpoint_missing(
+    client, inverter, read, path, status, missing
+):
+    """A 404 is firmware without the endpoint; a 500 is a read that failed this time."""
+    inverter.statuses[path] = status
+
+    info = getattr(client, read)()
+
+    assert (info["readings"], info["missing"]) == (None, missing)
 
 
 @pytest.mark.parametrize(("read", "path"), READABLE_PATHS)
@@ -819,14 +837,15 @@ def posted(inverter: FakeInverter, path: str) -> dict | None:
     )
 
 
-def test_manual_battery_mode_writes_the_mode_and_the_power_only(client, inverter):
+def test_the_mode_and_the_target_are_written_apart(client, inverter):
     """HYB_EM_MODE is self-consumption optimisation; the SoC window is a separate switch."""
-    assert client.set_battery_config(1, power=-2000) is True
+    assert client.set_battery_config(1) is True
+    assert client.set_battery_power(-2000) is True
 
-    assert posted(inverter, "/api/config/batteries") == {
-        "HYB_EM_MODE": 1,
-        "HYB_EM_POWER": -2000,
-    }
+    assert posts(inverter) == [
+        ("/api/config/batteries", {"HYB_EM_MODE": 1}),
+        ("/api/config/batteries", {"HYB_EM_POWER": -2000}),
+    ]
 
 
 def test_leaving_manual_battery_mode_leaves_the_soc_window_alone(client, inverter):
@@ -835,14 +854,12 @@ def test_leaving_manual_battery_mode_leaves_the_soc_window_alone(client, inverte
     assert posted(inverter, "/api/config/batteries") == {"HYB_EM_MODE": 0}
 
 
-def test_the_soc_window_write_carries_the_backup_reserve(client, inverter):
-    assert client.set_battery_soc_config(soc_min=10, soc_max=95, backup_reserved=7)
+def test_the_soc_window_write_sends_the_limits_given(client, inverter):
+    assert client.set_soc_limits(soc_min=10, soc_max=95)
 
     assert posted(inverter, "/api/config/batteries") == {
         "BAT_M0_SOC_MIN": 10,
-        "BAT_M0_SOC_MODE": "manual",
         "BAT_M0_SOC_MAX": 95,
-        "HYB_BACKUP_RESERVED": 7,
     }
 
 
@@ -901,8 +918,9 @@ def posts(inverter: FakeInverter) -> list[tuple[str, dict | None]]:
 @pytest.mark.parametrize(
     ("write", "arguments"),
     [
-        ("set_battery_config", (1, -2000)),
-        ("set_battery_soc_config", (10, 95, 7)),
+        ("set_battery_config", (1,)),
+        ("set_battery_power", (-2000,)),
+        ("set_soc_limits", (10, 95)),
         ("set_soc_mode", ("manual",)),
         ("set_backup_reserve", (7,)),
         ("set_battery_charge_sources", (True, True)),
@@ -964,10 +982,55 @@ def test_a_config_that_must_be_written_back_but_is_no_object_is_an_error(
     assert posts(inverter) == []
 
 
+DEVICE_CHANGED = BATTERY_CONFIG | {
+    # What the inverter UI or a second controller set since the last poll.
+    "BAT_M0_SOC_MIN": 20,
+    "HYB_EVU_CHARGEFROMGRID": True,
+    "HYB_BM_CHARGEFROMAC": False,
+    "HYB_EM_POWER": -500,
+}
+
+
+@pytest.mark.parametrize(
+    ("write", "sent"),
+    [
+        (lambda c: c.set_soc_limits(soc_max=90), {"BAT_M0_SOC_MAX": 90}),
+        (
+            lambda c: c.set_battery_charge_sources(charge_from_ac=True),
+            {"HYB_BM_CHARGEFROMAC": True},
+        ),
+        (lambda c: c.set_battery_config(1), None),
+        (lambda c: c.set_battery_power(-300), {"HYB_EM_POWER": -300}),
+    ],
+)
+def test_a_battery_write_sends_only_what_was_asked(client, inverter, write, sent):
+    """Audit F24-01: cached companions undid a change made since the last poll.
+
+    Changing the maximum re-sent a stale minimum, switching AC charging re-sent
+    a stale grid flag, and selecting manual mode re-sent a stale target.
+    """
+    inverter.bodies[BATTERIES] = dict(DEVICE_CHANGED)
+
+    write(client)
+
+    assert posts(inverter) == ([] if sent is None else [(BATTERIES, sent)])
+
+
+def test_the_soc_window_is_checked_against_the_fresh_read(client, inverter):
+    """A maximum below the minimum set on the inverter since the last poll is refused."""
+    inverter.bodies[BATTERIES] = dict(DEVICE_CHANGED)
+
+    with pytest.raises(ControlRefused) as refused:
+        client.set_soc_limits(soc_max=15)
+
+    assert refused.value.key == "soc_minimum_above_maximum"
+    assert posts(inverter) == []
+
+
 def test_only_the_battery_fields_that_differ_are_written(client, inverter):
     inverter.bodies[BATTERIES] = dict(BATTERY_CONFIG)
 
-    assert client.set_battery_soc_config(10, 90, 7) is True
+    assert client.set_soc_limits(10, 90) is True
 
     assert posts(inverter) == [(BATTERIES, {"BAT_M0_SOC_MAX": 90})]
 
@@ -1159,3 +1222,131 @@ def test_the_login_is_behind_the_same_boundary(monkeypatch):
     with pytest.raises(FroniusWebUnreachable) as caught:
         froniuswebclient.mint_token(HOST, "customer", "secret")
     assert HOST not in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        {"slave": ["unexpected"]},
+        {"slave": {"ctr": "unexpected"}},
+        {"slave": {"ctr": {"restriction": ["unexpected"]}}},
+    ],
+)
+def test_a_modbus_config_of_the_wrong_shape_is_a_response_error(config):
+    """Audit F24-11: an AttributeError reached the config flow as an unknown error."""
+    client = FroniusWebClient("192.0.2.10")
+    client.get_modbus_config = lambda: config
+
+    with pytest.raises(FroniusWebResponseError, match="no object"):
+        client.ensure_modbus_enabled(502, 200, 1)
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        {"slave": []},
+        {"slave": {"ctr": 0}},
+        {"slave": {"ctr": {"restriction": ""}}},
+    ],
+)
+def test_an_empty_wrong_type_in_the_modbus_config_is_not_written_back_with_defaults(
+    config,
+):
+    """Reaudit RE26-01: `[]`, `0` and `""` became `{}` and a POST with defaults followed."""
+    client = FroniusWebClient("192.0.2.10")
+    client.get_modbus_config = lambda: config
+    client._post = lambda *_args, **_kwargs: pytest.fail(
+        "posted a malformed config back"
+    )
+
+    with pytest.raises(FroniusWebResponseError, match="no object"):
+        client.ensure_modbus_enabled(502, 200, 1)
+
+
+def test_an_unreadable_soc_window_is_not_written(client, inverter):
+    """Audit FA0FB-04: an HTTP 500 read passed the window check as an empty config."""
+    inverter.statuses[BATTERIES] = 500
+
+    with pytest.raises(FroniusWebResponseError):
+        client.check_soc_window(soc_min=50)
+    with pytest.raises(FroniusWebResponseError):
+        client.set_soc_limits(soc_min=50)
+    # Both limits given need no companion from the read, and still no write.
+    with pytest.raises(FroniusWebResponseError):
+        client.set_soc_limits(soc_min=10, soc_max=90)
+
+    assert posts(inverter) == []
+
+
+@pytest.mark.parametrize("master", [[], "rtu", 0])
+def test_a_malformed_master_is_not_written_back(master):
+    """Audit FA0FB-05: `master` went into the Modbus setup POST unchecked."""
+    client = FroniusWebClient("192.0.2.10")
+    client.get_modbus_config = lambda: {"master": master, "slave": {"mode": "rtu"}}
+    client._post = lambda *_args, **_kwargs: pytest.fail("posted a malformed master")
+
+    with pytest.raises(FroniusWebResponseError, match="no object"):
+        client.ensure_modbus_enabled(502, 200, 1)
+
+
+@pytest.mark.parametrize(
+    "battery_config",
+    [
+        {"BAT_M0_SOC_MIN": 20, "BAT_M0_SOC_MAX": "30"},
+        {"BAT_M0_SOC_MIN": 20},
+        {"BAT_M0_SOC_MIN": 20, "BAT_M0_SOC_MAX": True},
+        # Audit R730-04: the JSON decoder turns NaN and Infinity into floats.
+        {"BAT_M0_SOC_MIN": 20, "BAT_M0_SOC_MAX": float("nan")},
+        {"BAT_M0_SOC_MIN": 20, "BAT_M0_SOC_MAX": float("inf")},
+    ],
+)
+def test_a_soc_window_without_a_numeric_limit_is_unreadable(
+    client, inverter, battery_config
+):
+    """Audit RR770-04: a text or missing maximum passed the check before Modbus."""
+    inverter.bodies[BATTERIES] = battery_config
+
+    with pytest.raises(FroniusWebResponseError, match="SoC window"):
+        client.check_soc_window(soc_min=50)
+
+
+@pytest.mark.parametrize("held", [[1], "garbage", 2])
+def test_a_flag_the_inverter_holds_in_no_known_form_is_written(client, inverter, held):
+    """Own reaudit E-01: an unreadable flag compared as already set, nothing was sent."""
+    inverter.bodies[BATTERIES] = {"HYB_BM_CHARGEFROMAC": held}
+
+    assert client.set_battery_charge_sources(charge_from_ac=False) is True
+
+    assert posts(inverter) == [(BATTERIES, {"HYB_BM_CHARGEFROMAC": False})]
+
+
+def test_modbus_control_in_no_known_form_is_switched_on():
+    """Own reaudit E-01: `on: [1]` read as on, and Modbus control stayed as it was."""
+    client = FroniusWebClient("192.0.2.10")
+    client.get_modbus_config = lambda: {
+        "slave": {
+            "mode": "tcp",
+            "sunspecMode": "int",
+            "port": 502,
+            "meterAddress": 200,
+            "rtu_inverter_slave_id": 1,
+            "ctr": {"on": [1], "restriction": {"on": False}},
+        }
+    }
+    sent = []
+    client._post = lambda path, payload: sent.append(payload)
+
+    assert client.ensure_modbus_enabled(502, 200, 1) is True
+
+    assert sent[0]["slave"]["ctr"]["on"] is True
+
+
+def test_an_export_limit_switched_on_in_no_known_form_is_written(client, inverter):
+    """Own reaudit E-01: `enabled: [1]` read as on, the limit counted as in place."""
+    inverter.bodies["/api/config/limit_settings/powerLimits"] = {
+        "exportLimits": {
+            "activePower": {"softLimit": {"enabled": [1], "powerLimit": 7000}}
+        }
+    }
+
+    assert client.set_export_soft_limit(7000) is True

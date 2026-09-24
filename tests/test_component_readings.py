@@ -9,7 +9,13 @@ import json
 import pathlib
 from unittest.mock import MagicMock
 
+import pytest
+
 from custom_components.fronius_modbus import entities
+from custom_components.fronius_modbus.component_readings import (
+    COMPONENT_READINGS,
+    component_value,
+)
 from custom_components.fronius_modbus.froniuswebclient import (
     _parse_inverter_readable,
     _parse_storage_readable,
@@ -149,6 +155,39 @@ def test_a_channel_the_device_does_not_report_makes_no_sensor():
     assert set(sensors) == ENABLED | DISABLED
 
 
+def test_an_answer_without_a_value_keeps_its_sensor():
+    """Audit R25-01: an answered read without a field retired the sensor.
+
+    The cleanup at the next start removed 28 entities, the long-standing
+    inverter temperature among them, with the owner's entity ids.
+    """
+    readings = read_gen24()
+    readings.inverter_readings = {"MODULE_TEMPERATURE_MEAN_01_F32": 40.0}
+    readings.storage_readings = {}
+    runtime = runtime_with(readings)
+    sensors = component_sensors(runtime)
+
+    assert {"inverter_temperature", "fan_2", "storage_temperature"} <= set(sensors)
+    assert sensors["inverter_temperature"].value_fn(runtime) is None
+
+
+def test_an_answer_without_any_power_module_keeps_all_four():
+    """The power modules follow the device, but an answer naming none of them is no answer."""
+    readings = read_gen24()
+    readings.inverter_readings = {"FANCONTROL_PERCENT_01_F32": 0.0}
+
+    sensors = component_sensors(runtime_with(readings))
+
+    assert {f"module_temperature_{index}" for index in (1, 2, 3, 4)} <= set(sensors)
+
+
+def test_firmware_without_the_endpoints_gets_no_component_sensors():
+    """Audit F24-06: a 404 made every component sensor, 19 of them enabled, stay unknown."""
+    readings = WebData(inverter_endpoint_missing=True, storage_endpoint_missing=True)
+
+    assert component_sensors(runtime_with(readings)) == {}
+
+
 def test_readings_not_yet_read_keep_every_sensor():
     """Not read is not absent: the stale-entity cleanup would retire them (audit A24-01)."""
     sensors = component_sensors(runtime_with(WebData()))
@@ -179,3 +218,49 @@ def test_the_battery_device_carries_its_firmware_and_hardware():
 def test_a_failed_readable_read_leaves_the_readings_unread():
     assert _parse_inverter_readable(None)["readings"] is None
     assert _parse_storage_readable(None)["readings"] is None
+
+
+@pytest.mark.parametrize(
+    ("value", "shown"),
+    [
+        (44.3, 44.3),
+        (44, 44),
+        ("44.3", 44.3),
+        ("n/a", None),
+        (True, None),
+        ({"x": 1}, None),
+    ],
+)
+def test_a_sensor_with_a_unit_shows_only_a_number(value, shown):
+    """Audit R25-02: the old temperature parser took numbers only; a dict reached HA."""
+    reading = next(r for r in COMPONENT_READINGS if r.key == "inverter_temperature")
+
+    assert component_value(reading, {reading.fields[0]: value}) == shown
+
+
+@pytest.mark.parametrize(
+    ("value", "shown"),
+    [
+        (1.0, "yes"),
+        (0.0, "no"),
+        ("1", "yes"),
+        ("0", "no"),
+        ("true", "yes"),
+        (False, "no"),
+    ],
+)
+def test_a_flag_is_set_only_by_a_true_value(value, shown):
+    """Audit R25-02: the text "0" read as "yes"."""
+    reading = next(r for r in COMPONENT_READINGS if r.key == "grid_valid")
+
+    assert component_value(reading, {reading.fields[0]: value}) == shown
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), "nan", "-inf"])
+def test_a_value_that_is_no_finite_number_shows_nothing(value):
+    """Reaudit RE26-05: "nan" reached HA as a temperature and read as "yes" for a flag."""
+    temperature = next(r for r in COMPONENT_READINGS if r.key == "inverter_temperature")
+    grid_valid = next(r for r in COMPONENT_READINGS if r.key == "grid_valid")
+
+    assert component_value(temperature, {temperature.fields[0]: value}) is None
+    assert component_value(grid_valid, {grid_valid.fields[0]: value}) == "no"

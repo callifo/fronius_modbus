@@ -3,12 +3,14 @@
 ## Unreleased
 
 ### Added
-- Sensors from the inverter's component endpoints, which the web API poll already reads: power module temperatures, fans, per-phase AC power, the production limit and whether it is reached, the battery converter's charge and discharge limits, grid validity, and the power stage firmware on the inverter; the battery's state of health. Feed-in point voltages and frequency, the DC link voltage, the operating time, the time in backup mode, cell and BMS temperatures, the battery's current limits and its nameplate values come disabled. The battery's firmware and hardware version appear on its device page. Serial numbers and device ids from these endpoints are not taken.
+- Sensors from the inverter's component endpoints, which the web API poll already reads: power module temperatures, fans, per-phase AC power, the production limit and whether it is reached, the battery converter's charge and discharge limits, grid validity, and the power stage firmware on the inverter; the battery's state of health. Feed-in point voltages and frequency, the DC link voltage, the operating time, the time in backup mode, cell and BMS temperatures, the battery's current limits and its nameplate values come disabled. The battery's firmware and hardware version appear on its device page. No sensor takes their serial numbers or device ids; the battery's serial number stays on its device page, as before.
 
 ### Security
 - Setup and reconfigure no longer lift a Modbus IP restriction set on the inverter. With the restriction checkbox unchecked, which is the default, the integration wrote the restriction off and opened a restricted Modbus server to every host on the network. The checkbox is now a choice between keeping the inverter's setting (the default), restricting Modbus to Home Assistant, and lifting the restriction. Existing entries migrate from checked to "restrict to Home Assistant" and from unchecked to "keep", never to "lift".
 - The stored web token is written readable by Home Assistant only. The Digest token alone authenticates to the inverter, and Home Assistant's default storage wrote it world-readable; an existing token file is rewritten on the next start.
-- A stored web token is deleted once no entry uses its host and role: on removing the entry, and on moving an entry to another host or role. It had outlived both.
+- A stored web token is deleted once no entry uses its host and role: on removing the entry, on moving an entry to another host or role, and when the migration to a single role keeps the other one. It had outlived all three. A token minted during setup is kept only once the inverter answered and the entry was created; a failed or aborted setup left it behind.
+- A setup, reconfigure, options change or repair for a host another entry already owns is refused before the inverter is contacted. It wrote the Modbus settings, including the IP restriction, and only then reported the host as taken.
+- An aborted setup leaves the stored token of the entry that already serves the host alone, and a settings change that fails late keeps the token its entry now logs in with. A stale token came back in both cases.
 
 ### Fixed
 - Enabling Modbus TCP keeps the rest of the inverter's Modbus settings. The integration wrote a fixed block that moved both RS485 ports to master and switched the `TCP & RTU` mode to TCP alone, cutting off a device that reads the inverter over RS485; it now writes back what it read and changes only its own fields. Restricting Modbus to Home Assistant adds its address to the hosts already allowed instead of replacing them.
@@ -17,12 +19,22 @@
 - A rejected technician token is the one deleted when the meter topology read fails; the customer token was deleted in its place, and the rejected one was offered again on every start.
 - An HTTP error from the export-limit endpoint fails the web refresh instead of reading as "no export limit". Only a 404, from firmware without the endpoint, still means the limit is not there.
 - The inverter and battery component reads (inverter temperature, cell temperature, battery manufacturer, model and serial) no longer hide a failing endpoint. Their values still turn unknown instead of taking the controls down, but an error other than a 404 is logged once as a warning, and again at info when the endpoint answers. A switched-off inverter is left to the refresh, which already reports it.
+- Selecting Charge from Grid reports an error when the web interface refuses the grid charging flags. The storage mode was set and the control showed success, while the battery could not charge from the grid; the message now says so.
+- An energy total accepts a new counter range only from samples that agree with each other. A spike between two low readings (10, 100000, 10) counted as three confirmations and put a false reset into the long-term statistics.
+- A meter whose register map moved is read at its new address even when the first rediscovery was aborted. The new address was remembered before the rediscovery finished, so the retry kept the component bound to the old registers.
+- Diagnostics download while the inverter is offline, with the last poll and its report; the raw registers show which error kept them from being read. The download failed as a whole.
+- Reconfigure and Repairs reload the entry once; they reloaded it twice.
 - A web control used while the inverter's web interface does not answer shows a translated error. It surfaced as an unknown error with a traceback in the log since 1.1.1.
+- An AC limit or power factor override that was on stays on when its new value cannot be written; a scale factor the value could not be converted with left the control switched off.
+- The Modbus storage reserve in manual SoC mode checks the SoC window the inverter holds before it writes Modbus, and is refused when that window cannot be read. When the web interface refuses the reserve after Modbus took it, the error says so, since the two minimums then differ.
+- One HTTP 404 from a component endpoint that answered before keeps its registered sensors, as unknown; the next start deleted them.
+- A failed battery component read keeps the battery's manufacturer, model and serial instead of replacing them with a generic name.
+- A Modbus configuration answer of the wrong shape no longer fails the whole web refresh, and its RS485 part is checked before it is written back.
 
 ### Changed
-- A control set to the value the inverter already holds writes nothing. Every write used to reach the inverter: a Modbus register, and for the AC limit and the power factor a second-long switch-off of the enable flag around it; a battery setting over the web API, and with it the Modbus recovery window and a delayed refresh. The comparison is made against a fresh read, not the last poll, so a value another controller changed in between is still written; when that read fails, the value is written as before.
-- A web write sends only the fields that differ, and a field the inverter names as refused in its answer is reported as an error.
-- The inverter temperature and the battery cell temperature are read like the new component sensors. A device that does not report the channel gets no such entity, instead of one that stays unknown.
+- A control set to the value the inverter already holds writes nothing. Every write used to reach the inverter: a Modbus register, and for the AC limit and the power factor a second-long switch-off of the enable flag around it; a battery setting over the web API, and with it the Modbus recovery window and a delayed refresh. The comparison is made against a fresh read, not the last poll, so a value another controller changed in between is still written; when that read fails, the value is written as before, except a SoC limit, which is refused without the window it has to fit.
+- A web write sends only the field asked for, and only when it differs; a field the inverter names as refused in its answer is reported as an error. Changing one SoC limit, one charge source, the target feed-in or the self-consumption mode no longer re-sends the other values from the last poll, which undid a change made in the inverter's web interface or by another controller in between. The SoC window is checked against a fresh read.
+- The inverter temperature and the battery cell temperature are read like the new component sensors. Firmware without the component endpoints (HTTP 404) gets no such entity, instead of one that stays unknown.
 
 ## 1.2.0b1
 

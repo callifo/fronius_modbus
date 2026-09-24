@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import ipaddress
 import logging
+import math
 import os
 import re
 import socket
@@ -14,8 +15,9 @@ import requests
 from requests.auth import AuthBase
 from requests.utils import parse_dict_header
 
-from .component_readings import json_object, take_readings
+from .component_readings import flag_value, json_object, take_readings
 from .const import API_USERNAME, ModbusRestriction
+from .fronius_modbus_api.exceptions import ControlRefused
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,6 +29,8 @@ RESTRICTION_LIST_SEPARATOR = ","
 BATTERIES_PATH = "/api/config/batteries"
 MODBUS_PATH = "/api/config/modbus"
 SOLAR_API_PATH = "/api/config/solar_api"
+# A component endpoint that answers 404: firmware without it, not a failed read.
+ENDPOINT_MISSING = object()
 # Lists in the answer to a config write that name the fields it did not take.
 WRITE_REFUSALS = (
     "errors",
@@ -83,10 +87,12 @@ def _as_int(value: Any, fallback: int) -> int:
 
 
 def is_enabled(value: Any) -> bool:
-    """Whether a Solar-API flag reads as on; the API sends both booleans and words."""
-    if isinstance(value, str):
-        return value.strip().lower() in {"1", "true", "on", "yes", "enabled"}
-    return bool(value)
+    """Whether a flag reads as on; a form the inverter does not use is not on.
+
+    Read as on, `[1]` counted as Modbus control already switched on, and the
+    write that switches it on was skipped (own reaudit E-01).
+    """
+    return flag_value(value) is True
 
 
 def _base_url(host_or_url: str) -> str:
@@ -145,6 +151,7 @@ def _component_device(payload: Any) -> dict[str, Any] | None:
 
 def _parse_storage_readable(payload: Any) -> dict[str, Any]:
     info: dict[str, Any] = dict(_parse_storage_info(None))
+    info["missing"] = payload is ENDPOINT_MISSING
     device = _component_device(payload)
     if device is None:
         info["readings"] = None
@@ -159,7 +166,10 @@ def _parse_storage_readable(payload: Any) -> dict[str, Any]:
 
 def _parse_inverter_readable(payload: Any) -> dict[str, Any]:
     device = _component_device(payload)
-    return {"readings": None if device is None else take_readings(device, "inverter")}
+    return {
+        "readings": None if device is None else take_readings(device, "inverter"),
+        "missing": payload is ENDPOINT_MISSING,
+    }
 
 
 def _without_descriptions(node: Any) -> Any:
@@ -188,6 +198,22 @@ def _config_object(payload: Any, path: str) -> dict[str, Any]:
     return config
 
 
+def _nested_object(config: dict[str, Any], key: str, path: str) -> dict[str, Any]:
+    """A nested part of a config, checked like the whole (audit F24-11).
+
+    Only an absent part defaults to empty; a present `[]`, `0` or `""` would
+    otherwise be written back with defaults (reaudit RE26-01).
+    """
+    return _config_object(config.get(key, {}), path)
+
+
+def _is_number(value: Any) -> bool:
+    """A finite number: NaN compares false with anything (audit R730-04)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    return math.isfinite(value)
+
+
 def _same(current: Any, wanted: Any) -> bool:
     """Whether the inverter already holds what a write would set.
 
@@ -196,7 +222,8 @@ def _same(current: Any, wanted: Any) -> bool:
     if current is None:
         return False
     if isinstance(wanted, bool):
-        return is_enabled(current) == wanted
+        # An unknown form is never what is wanted: it is written (E-01).
+        return flag_value(current) == wanted
     if isinstance(wanted, str) and isinstance(current, str):
         return current.casefold() == wanted.casefold()
     return bool(current == wanted)
@@ -559,17 +586,27 @@ class FroniusWebClient:
                 response.status_code,
             )
 
-    def _post_changes(self, path: str, wanted: dict[str, Any]) -> bool:
+    def _read_or_nothing(self, path: str) -> dict[str, Any]:
+        """A config to compare against; one that cannot be read compares as empty."""
+        try:
+            return _config_object(self._get_json(path), path)
+        except FroniusWebResponseError, ValueError:
+            return {}
+
+    def _post_changes(
+        self,
+        path: str,
+        wanted: dict[str, Any],
+        current: dict[str, Any] | None = None,
+    ) -> bool:
         """Write only the fields of ``wanted`` the inverter does not hold; whether any were.
 
         Compared against a fresh read, not the last poll: a value another
         controller changed in between would otherwise be skipped as "already
         set". A config that cannot be read is written in full.
         """
-        try:
-            current = _config_object(self._get_json(path), path)
-        except FroniusWebResponseError, ValueError:
-            current = {}
+        if current is None:
+            current = self._read_or_nothing(path)
         changes = {
             key: value
             for key, value in wanted.items()
@@ -628,7 +665,7 @@ class FroniusWebClient:
                 self._failing_optional_reads.add(path)
                 log = _LOGGER.debug if missing else _LOGGER.warning
                 log("%s did not answer, its values stay unknown: %s", path, err)
-            return None
+            return ENDPOINT_MISSING if missing else None
         if path in self._failing_optional_reads:
             self._failing_optional_reads.discard(path)
             _LOGGER.info("%s answers again", path)
@@ -680,9 +717,13 @@ class FroniusWebClient:
         restriction: ModbusRestriction = ModbusRestriction.KEEP,
     ) -> bool:
         config = _config_object(self.get_modbus_config(), MODBUS_PATH)
-        slave = config.get("slave") or {}
-        ctr = slave.get("ctr") or {}
-        current_restriction = ctr.get("restriction") or {}
+        # Checked like the slave: it is written back as read (audit FA0FB-05).
+        master = _config_object(
+            config.get("master", MASTER_RTUIF["master"]), MODBUS_PATH
+        )
+        slave = _nested_object(config, "slave", MODBUS_PATH)
+        ctr = _nested_object(slave, "ctr", MODBUS_PATH)
+        current_restriction = _nested_object(ctr, "restriction", MODBUS_PATH)
         wanted = current_restriction
         if restriction == ModbusRestriction.HOME_ASSISTANT:
             wanted = _restriction_with(current_restriction, self._resolve_client_ip())
@@ -709,7 +750,7 @@ class FroniusWebClient:
         # Everything read is written back: the RS485 roles, serial settings and
         # a "both" mode belong to other devices on the inverter.
         payload = {
-            "master": config.get("master", MASTER_RTUIF["master"]),
+            "master": master,
             "slave": {
                 **slave,
                 "rtuif": slave.get("rtuif", []),
@@ -754,26 +795,50 @@ class FroniusWebClient:
         self._post("/api/commands/ModbusReset")
         return True
 
-    def set_battery_config(self, mode: int, power: int | None = None) -> bool:
+    def set_battery_config(self, mode: int) -> bool:
         """Self-consumption optimisation only; the SoC window has its own switch."""
-        wanted: dict[str, Any] = {"HYB_EM_MODE": mode}
-        if power is not None:
-            wanted["HYB_EM_POWER"] = power
-        return self._post_changes(BATTERIES_PATH, wanted)
+        return self._post_changes(BATTERIES_PATH, {"HYB_EM_MODE": mode})
 
-    def set_battery_soc_config(
-        self,
-        soc_min: int,
-        soc_max: int,
-        backup_reserved: int,
+    def set_battery_power(self, power: int) -> bool:
+        """The target in manual self-consumption optimisation, without the mode."""
+        return self._post_changes(BATTERIES_PATH, {"HYB_EM_POWER": power})
+
+    def set_soc_limits(
+        self, soc_min: int | None = None, soc_max: int | None = None
     ) -> bool:
-        wanted: dict[str, Any] = {
-            "BAT_M0_SOC_MIN": soc_min,
-            "BAT_M0_SOC_MODE": "manual",
-            "BAT_M0_SOC_MAX": soc_max,
-            "HYB_BACKUP_RESERVED": backup_reserved,
-        }
-        return self._post_changes(BATTERIES_PATH, wanted)
+        """The SoC limit asked for, checked against the window the inverter holds now.
+
+        The other limit is not sent: taken from the last poll it undid a change
+        made in the inverter UI since (audit F24-01).
+        """
+        current = self.check_soc_window(soc_min, soc_max)
+        limits = {"BAT_M0_SOC_MIN": soc_min, "BAT_M0_SOC_MAX": soc_max}
+        wanted = {key: int(value) for key, value in limits.items() if value is not None}
+        return self._post_changes(BATTERIES_PATH, wanted, current)
+
+    def check_soc_window(
+        self, soc_min: int | None = None, soc_max: int | None = None
+    ) -> dict[str, Any]:
+        """Refuse a limit that would invert the window the inverter holds now.
+
+        A config that cannot be read is an error, not an empty window: read as
+        empty it passed, and Modbus took a minimum the web API then refused
+        (audit FA0FB-04). Returns the config read.
+        """
+        current = _config_object(self._get_json(BATTERIES_PATH), BATTERIES_PATH)
+        lower = soc_min if soc_min is not None else current.get("BAT_M0_SOC_MIN")
+        upper = soc_max if soc_max is not None else current.get("BAT_M0_SOC_MAX")
+        if not (_is_number(lower) and _is_number(upper)):
+            # Unknown is not "fits": Modbus would take a minimum the web API
+            # may refuse (audit RR770-04).
+            raise FroniusWebResponseError(
+                f"HTTP 200 on {BATTERIES_PATH} answered no SoC window", HTTPStatus.OK
+            )
+        if lower > upper:
+            raise ControlRefused(
+                "soc_minimum_above_maximum", "SoC Minimum must not exceed SoC Maximum"
+            )
+        return current
 
     def set_soc_mode(self, mode: str) -> bool:
         return self._post_changes(BATTERIES_PATH, {"BAT_M0_SOC_MODE": mode})
@@ -782,12 +847,16 @@ class FroniusWebClient:
         return self._post_changes(BATTERIES_PATH, {"HYB_BACKUP_RESERVED": int(percent)})
 
     def set_battery_charge_sources(
-        self, charge_from_grid: bool, charge_from_ac: bool
+        self,
+        charge_from_grid: bool | None = None,
+        charge_from_ac: bool | None = None,
     ) -> bool:
-        wanted = {
-            "HYB_EVU_CHARGEFROMGRID": bool(charge_from_grid),
-            "HYB_BM_CHARGEFROMAC": bool(charge_from_ac),
+        """Only the flags given; a flag not given stays as the inverter holds it."""
+        flags = {
+            "HYB_EVU_CHARGEFROMGRID": charge_from_grid,
+            "HYB_BM_CHARGEFROMAC": charge_from_ac,
         }
+        wanted = {key: bool(value) for key, value in flags.items() if value is not None}
         return self._post_changes(BATTERIES_PATH, wanted)
 
     def get_export_limit_config(self) -> dict[str, Any]:

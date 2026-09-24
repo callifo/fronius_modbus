@@ -23,8 +23,13 @@ from custom_components.fronius_modbus.coordinator import (
     FroniusWebCoordinator,
 )
 from custom_components.fronius_modbus.fronius_modbus_api.device import FroniusInverter
+from custom_components.fronius_modbus.fronius_modbus_api.exceptions import (
+    ControlUnavailable,
+)
+from custom_components.fronius_modbus.fronius_modbus_api.storage import ExtendedMode
 from custom_components.fronius_modbus.froniuswebclient import (
     FroniusWebAuthError,
+    FroniusWebResponseError,
     FroniusWebUnreachable,
 )
 from custom_components.fronius_modbus.sensor import FroniusSensor
@@ -486,7 +491,7 @@ async def test_the_web_soc_limits_are_writable_in_manual_soc_mode_alone(
         await minimum.set_fn(runtime, 25)
     finally:
         web_control.shutdown()
-    assert web_control._client.calls[-1] == ("soc", 25, 100, 5)
+    assert web_control._client.calls[-1] == ("soc", 25, None)
 
 
 # Model-123 WMaxLimPct_Ena and WMaxLimPct in the captured fixture.
@@ -555,3 +560,32 @@ async def test_an_unreachable_web_interface_is_a_translated_error():
         await entities.FroniusEntity.async_run_write(None, unreachable)
 
     assert raised.value.translation_key == "web_api_unreachable"
+
+
+async def test_grid_charging_that_the_web_api_refuses_is_an_error(
+    hass, entry, connection
+):
+    """Audit F24-02: the web failure was only a warning; the user saw success.
+
+    The Modbus mode is already switched when the web charge flags fail, so the
+    error says that the mode is set and grid charging is not.
+    """
+    runtime = await make_runtime(hass, entry, connection)
+    web_control = make_control(hass)
+
+    def refuse(charge_from_grid=None, charge_from_ac=None):
+        raise FroniusWebResponseError("HTTP 500 on /api/config/batteries", 500)
+
+    web_control._client.set_battery_charge_sources = refuse
+    await web_control.async_refresh()
+    runtime = replace(
+        runtime, web_control=web_control, web=SimpleNamespace(data=web_control.data)
+    )
+    try:
+        with pytest.raises(ControlUnavailable) as raised:
+            await runtime.async_set_extended_mode(ExtendedMode.CHARGE_FROM_GRID)
+    finally:
+        web_control.shutdown()
+
+    assert raised.value.key == "grid_charge_sources_failed"
+    assert runtime.storage_control.extended_mode is ExtendedMode.CHARGE_FROM_GRID

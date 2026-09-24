@@ -176,11 +176,12 @@ class LoadEstimator:
 class TotalGuard:
     """Accepts readings of a monotonically increasing counter, one verdict per poll.
 
-    A single lower or far-too-high sample is a bad reading and is ignored. The
-    same kind of sample on ``confirmations`` consecutive polls is the device
-    telling the truth - a counter reset after a hardware swap, or a large but
-    genuine gap while Home Assistant was offline (audit F05/F06) - and is
-    accepted. Property reads never advance this state: only observe() does.
+    A single lower or far-too-high sample is a bad reading and is ignored.
+    ``confirmations`` consecutive samples that agree with each other are the
+    device telling the truth - a counter reset after a hardware swap, or a
+    large but genuine gap while Home Assistant was offline (audit F05/F06) -
+    and are accepted. Property reads never advance this state: only observe()
+    does.
     """
 
     def __init__(self, *, max_step: float, confirmations: int) -> None:
@@ -189,22 +190,33 @@ class TotalGuard:
         self._max_step = max_step
         self._confirmations = confirmations
         self._suspect_polls = 0
+        # The last out-of-range reading: the next one has to continue from it.
+        self._last_suspect: float | None = None
 
     def seed(self, value: float | None) -> None:
         """Start from a restored value without counting it as a poll."""
         self.value = value
         self._suspect_polls = 0
+        self._last_suspect = None
 
     def observe(self, reading: float | None) -> str | None:
         """Record one poll; returns why a reading was rejected or accepted late, else None."""
         if reading is None:
             self._suspect_polls = 0
+            self._last_suspect = None
             return None
-        if self.value is None or 0 <= reading - self.value <= self._max_step:
+        if self.value is None or self._plausible_after(self.value, reading):
             self.value = reading
             self._suspect_polls = 0
+            self._last_suspect = None
             return None
-        self._suspect_polls += 1
+        # Only samples that agree with each other confirm a new range: a spike
+        # between two low readings is no reset (audit F24-03).
+        continues = self._last_suspect is not None and self._plausible_after(
+            self._last_suspect, reading
+        )
+        self._suspect_polls = self._suspect_polls + 1 if continues else 1
+        self._last_suspect = reading
         kind = "lower than" if reading < self.value else "far above"
         if self._suspect_polls < self._confirmations:
             return f"ignoring {reading}: {kind} the last value {self.value}"
@@ -214,4 +226,8 @@ class TotalGuard:
         )
         self.value = reading
         self._suspect_polls = 0
+        self._last_suspect = None
         return message
+
+    def _plausible_after(self, earlier: float, reading: float) -> bool:
+        return 0 <= reading - earlier <= self._max_step

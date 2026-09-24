@@ -292,3 +292,29 @@ async def test_a_cancelled_disable_write_leaves_the_control_enabled(
         await setting
 
     assert inverter_unit.holding[enable_address] == 1
+
+
+@pytest.mark.parametrize(
+    ("enable_address", "setter", "value"),
+    [
+        (W_MAX_LIM_ENA, "set_ac_limit_w", 5000.0),
+        (OUT_PF_SET_ENA, "set_power_factor", 0.9),
+    ],
+)
+async def test_a_value_the_device_cannot_scale_leaves_the_control_enabled(
+    controls, inverter_unit, enable_address, setter, value
+):
+    """Audit FA0FB-01: a scale-factor ValueError after the disable skipped the restore."""
+    inverter_unit.holding[enable_address] = 1
+    write = controls._controls.write
+
+    async def refuse_the_value(field, written):
+        if not field.endswith("_ena"):
+            raise ValueError("scale factor -32768 is outside the spec range")
+        await write(field, written)
+
+    controls._controls.write = refuse_the_value
+    with pytest.raises(ValueError):
+        await getattr(controls, setter)(value)
+
+    assert inverter_unit.holding[enable_address] == 1

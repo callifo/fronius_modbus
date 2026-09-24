@@ -52,7 +52,11 @@ from .froniuswebclient import (
     FroniusWebResponseError,
     mint_token,
 )
-from .token_store import async_forget_unused_tokens, async_get_token_store
+from .token_store import (
+    async_forget_unused_tokens,
+    async_get_token_store,
+    canonical_host,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -61,6 +65,7 @@ type _FlowFinishCallback = Callable[
     Awaitable[Any],
 ]
 type _FlowRestartCallback = Callable[[], Awaitable[Any]]
+type _HostClaim = Callable[[dict[str, Any]], Awaitable[None]]
 
 
 @dataclass(slots=True)
@@ -351,8 +356,15 @@ async def _validate_input(
     api_password: str = "",
     api_token: dict[str, str] | None = None,
     apply_modbus_config: bool = False,
+    claim_host: Callable[[], Awaitable[None]] | None = None,
 ) -> dict[str, Any]:
-    """Validate the user input allows us to connect."""
+    """Validate the user input allows us to connect.
+
+    ``claim_host`` runs right before the Modbus settings are written: another
+    entry can take the host while the token is minted or the login runs, and
+    the settings would then change on an inverter this flow does not own
+    (audit R730-01).
+    """
     _validate_static_input(data)
 
     if not api_password and api_token is None:
@@ -370,6 +382,8 @@ async def _validate_input(
         if apply_modbus_config and data.get(
             CONF_AUTO_ENABLE_MODBUS, DEFAULT_AUTO_ENABLE_MODBUS
         ):
+            if claim_host is not None:
+                await claim_host()
             await hass.async_add_executor_job(
                 client.ensure_modbus_enabled,
                 data[CONF_PORT],
@@ -387,7 +401,7 @@ async def _validate_input(
             identity = await FroniusInverter.async_probe(unit)
     except ClientIpResolutionError as err:
         raise _CannotResolveLocalIp from err
-    except _InvalidApiCredentials:
+    except _InvalidApiCredentials, _AlreadyConfigured, data_entry_flow.AbortFlow:
         raise
     except (
         ModbusError,
@@ -441,7 +455,9 @@ async def async_update_entry_from_input(
     new_options.pop("meter_modbus_unit_id", None)
     new_data.pop("meter_modbus_unit_ids", None)
     new_options.pop("meter_modbus_unit_ids", None)
-    hass.config_entries.async_update_entry(
+    # Read before the update: its listener starts the reload right away.
+    loaded = entry.state is config_entries.ConfigEntryState.LOADED
+    changed = hass.config_entries.async_update_entry(
         entry,
         data=new_data,
         options=new_options,
@@ -450,11 +466,22 @@ async def async_update_entry_from_input(
     )
     if previous_host:
         await async_forget_unused_tokens(hass, previous_host)
+    # A change to a loaded entry reloads it through its update listener; a
+    # second call here reloaded it twice (audit F24-10). A new token alone
+    # changes nothing in the entry, so that still needs the call.
+    if changed and loaded:
+        return
     await hass.config_entries.async_reload(entry.entry_id)
 
 
 class TokenFlowMixin:
     _pending_flow_state: _PendingFlowState | None = None
+    hass: HomeAssistant
+
+    async def _async_claim_entry_host(
+        self, entry: config_entries.ConfigEntry, settings: dict[str, Any]
+    ) -> None:
+        _claim_host(self.hass, entry, settings)
 
     async def _async_show_password_step(
         self,
@@ -489,6 +516,7 @@ class TokenFlowMixin:
         previous_settings: dict[str, Any] | None,
         force_apply_modbus_config: bool = False,
         always_ask_password: bool = False,
+        claim_host: _HostClaim,
         on_success: _FlowFinishCallback,
     ):
         errors: dict[str, str] = {}
@@ -497,6 +525,9 @@ class TokenFlowMixin:
             try:
                 settings = _expand_settings_input(user_input, defaults)
                 _validate_static_input(settings)
+                # Before the login: validation may already write the Modbus
+                # settings of a host another entry owns (audit FA0FB-02).
+                await claim_host(settings)
                 apply_modbus_config = (
                     force_apply_modbus_config
                     or _should_apply_modbus_config(
@@ -523,6 +554,7 @@ class TokenFlowMixin:
                     settings,
                     api_token=token,
                     apply_modbus_config=apply_modbus_config,
+                    claim_host=lambda: claim_host(settings),
                 )
                 self._pending_flow_state = None
                 return await on_success(settings, info, previous_host)
@@ -550,6 +582,7 @@ class TokenFlowMixin:
         user_input: dict[str, Any] | None,
         step_id: str,
         restart_step: _FlowRestartCallback,
+        claim_host: _HostClaim,
         on_success: _FlowFinishCallback,
     ):
         errors: dict[str, str] = {}
@@ -559,25 +592,28 @@ class TokenFlowMixin:
 
         if user_input is not None:
             try:
+                # Again: another entry may have taken the host while this form
+                # was open (audit RR770-01).
+                await claim_host(state.settings)
                 password = str(user_input.get(CONF_API_PASSWORD, "")).strip()
                 username = state.settings[CONF_API_USERNAME]
-                if password == "" and state.existing_token is not None:
-                    token = state.existing_token
-                else:
+                minted = not (password == "" and state.existing_token is not None)
+                token = state.existing_token
+                if minted:
                     token = await _async_mint_token(
                         self.hass, state.settings[CONF_HOST], password, username
-                    )
-                    await _async_save_token(
-                        self.hass, state.settings[CONF_HOST], username, token
                     )
                 info = await _validate_input(
                     self.hass,
                     state.settings,
                     api_token=token,
                     apply_modbus_config=state.apply_modbus_config,
+                    claim_host=lambda: claim_host(state.settings),
                 )
                 self._pending_flow_state = None
-                return await on_success(state.settings, info, state.previous_host)
+                return await self._async_finish_with_token(
+                    on_success, state, info, token if minted else None
+                )
             except data_entry_flow.AbortFlow:
                 raise
             except Exception as err:  # pylint: disable=broad-except
@@ -585,12 +621,68 @@ class TokenFlowMixin:
 
         return await self._async_show_password_step(step_id=step_id, errors=errors)
 
+    async def _async_finish_with_token(
+        self,
+        on_success: _FlowFinishCallback,
+        state: _PendingFlowState,
+        info: dict[str, Any],
+        minted: dict[str, str] | None,
+    ):
+        """Keep a minted token only for a checked inverter and a finished flow.
+
+        Saved first, a failed check or an aborted flow left a password-equivalent
+        credential with no entry (audit RA24-01). The entry's setup reads it, so
+        it is saved before the entry is created; if that fails, the token held
+        before comes back: an aborted duplicate replaced the entry's own
+        (reaudit RE26-04). A flow can fail after updating its own entry; that
+        entry then logs in with the new token, which stays (R26-02, D8AE-02).
+        """
+        if minted is None:
+            return await on_success(state.settings, info, state.previous_host)
+        host = state.settings[CONF_HOST]
+        username = state.settings[CONF_API_USERNAME]
+        store = async_get_token_store(self.hass)
+        previous = await store.async_load_token(host, username)
+        try:
+            await _async_save_token(self.hass, host, username, minted)
+            return await on_success(state.settings, info, state.previous_host)
+        except BaseException:
+            if not self._flow_entry_logs_in_with(host, username):
+                await self._async_roll_back_token(host, username, previous)
+            raise
+
+    def _flow_entry(self) -> config_entries.ConfigEntry | None:
+        """The entry this flow changes; none while it creates one."""
+        return None
+
+    def _flow_entry_logs_in_with(self, host: str, username: str) -> bool:
+        entry = self._flow_entry()
+        if entry is None:
+            return False
+        settings = entry_defaults(entry)
+        same_host = canonical_host(settings[CONF_HOST]) == canonical_host(host)
+        return same_host and settings[CONF_API_USERNAME] == username
+
+    async def _async_roll_back_token(
+        self, host: str, username: str, previous: dict[str, str] | None
+    ) -> None:
+        """Put back what the store held before this flow's token.
+
+        The token this flow minted goes, even when another entry uses the
+        same host and role: that entry did not log in with it (audit RR770-02).
+        """
+        store = async_get_token_store(self.hass)
+        if previous is None:
+            await store.async_delete_token(host, username)
+            return
+        await _async_save_token(self.hass, host, username, previous)
+
 
 class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow."""
 
     VERSION = 1
-    MINOR_VERSION = 12
+    MINOR_VERSION = 13
     CONNECTION_CLASS = config_entries.CONN_CLASS_LOCAL_POLL
 
     def __init__(self) -> None:
@@ -600,6 +692,18 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
     @callback
     def async_get_options_flow(config_entry):
         return FroniusModbusOptionsFlow()
+
+    def _flow_entry(self) -> config_entries.ConfigEntry | None:
+        if self.source != config_entries.SOURCE_RECONFIGURE:
+            return None
+        return self._get_reconfigure_entry()
+
+    async def _async_claim_new_host(self, settings: dict[str, Any]) -> None:
+        await self.async_set_unique_id(_entry_unique_id(settings))
+        self._abort_if_unique_id_configured()
+
+    async def _async_claim_reconfigured_host(self, settings: dict[str, Any]) -> None:
+        await self._async_claim_entry_host(self._get_reconfigure_entry(), settings)
 
     async def _async_finish_user(self, settings, info, previous_host):
         del previous_host
@@ -630,6 +734,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
             previous_host=None,
             previous_settings=None,
             force_apply_modbus_config=True,
+            claim_host=self._async_claim_new_host,
             on_success=self._async_finish_user,
         )
 
@@ -638,6 +743,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
             user_input=user_input,
             step_id="user_password",
             restart_step=self.async_step_user,
+            claim_host=self._async_claim_new_host,
             on_success=self._async_finish_user,
         )
 
@@ -652,6 +758,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
             previous_host=defaults[CONF_HOST],
             previous_settings=defaults,
             force_apply_modbus_config=True,
+            claim_host=self._async_claim_reconfigured_host,
             on_success=self._async_finish_reconfigure,
         )
 
@@ -660,12 +767,19 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
             user_input=user_input,
             step_id="reconfigure_password",
             restart_step=self.async_step_reconfigure,
+            claim_host=self._async_claim_reconfigured_host,
             on_success=self._async_finish_reconfigure,
         )
 
 
 class FroniusModbusOptionsFlow(TokenFlowMixin, config_entries.OptionsFlow):
     """Handle Fronius Modbus options."""
+
+    def _flow_entry(self) -> config_entries.ConfigEntry | None:
+        return self.config_entry
+
+    async def _async_claim_host(self, settings: dict[str, Any]) -> None:
+        await self._async_claim_entry_host(self.config_entry, settings)
 
     async def _async_finish_options(self, settings, info, previous_host):
         del info
@@ -694,6 +808,7 @@ class FroniusModbusOptionsFlow(TokenFlowMixin, config_entries.OptionsFlow):
             # Configure is the one place to add or replace the passwords, so
             # the password step is always offered here (audit F11).
             always_ask_password=True,
+            claim_host=self._async_claim_host,
             on_success=self._async_finish_options,
         )
 
@@ -702,5 +817,6 @@ class FroniusModbusOptionsFlow(TokenFlowMixin, config_entries.OptionsFlow):
             user_input=user_input,
             step_id="password",
             restart_step=self.async_step_init,
+            claim_host=self._async_claim_host,
             on_success=self._async_finish_options,
         )

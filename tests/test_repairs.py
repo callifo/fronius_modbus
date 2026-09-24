@@ -265,3 +265,119 @@ async def test_the_entry_id_is_taken_from_the_issue_data_when_it_is_there(hass):
     )
 
     assert flow._entry_id == "from-data"
+
+
+async def test_the_reconfigure_repair_refuses_a_taken_host_before_the_inverter(
+    hass, mock_modbus, web_client, repairs_client, monkeypatch
+):
+    """Audit FA0FB-02: moving to a host another entry owns set up Modbus there first."""
+    entry = await make_entry(hass, mock_modbus, with_token=False)
+    taken = "192.0.2.20"
+    MockConfigEntry(domain=DOMAIN, data={"host": taken}, unique_id=taken).add_to_hass(
+        hass
+    )
+    applied = []
+    monkeypatch.setattr(
+        config_flow.FroniusWebClient,
+        "ensure_modbus_enabled",
+        lambda self, *args: applied.append(args) or True,
+    )
+    issue_id = f"{MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX}{entry.entry_id}"
+
+    flow = await start_fix_flow(repairs_client, issue_id)
+    flow = await advance_fix_flow(
+        repairs_client, flow["flow_id"], SETTINGS_INPUT | {"host": taken}
+    )
+
+    assert flow["errors"]["base"] == "already_configured"
+    assert applied == []
+
+
+async def test_a_repair_failing_late_keeps_the_fresh_token(
+    hass, mock_modbus, web_client, repairs_client, monkeypatch
+):
+    """Audit D8AE-02, repair: the entry used the fresh token when the stale one came back."""
+    entry = await make_entry(hass, mock_modbus, with_token=False)
+    store = async_get_token_store(hass)
+    await store.async_save_token(HOST, realm="r", token="stale", user="technician")
+
+    async def validate(hass, settings, *, api_token, **_kwargs):
+        if api_token == {"realm": "r", "token": "stale"}:
+            raise config_flow._InvalidApiCredentials
+        return {"title": "Fronius"}
+
+    def fail(self, **_kwargs):
+        raise RuntimeError("after the update")
+
+    monkeypatch.setattr(config_flow, "_validate_input", validate)
+    monkeypatch.setattr(
+        repairs.FroniusReconfigureRepairFlow, "async_create_entry", fail
+    )
+    issue_id = f"{MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX}{entry.entry_id}"
+
+    flow = await start_fix_flow(repairs_client, issue_id)
+    flow = await advance_fix_flow(
+        repairs_client, flow["flow_id"], SETTINGS_INPUT | {"api_username": "technician"}
+    )
+    flow = await advance_fix_flow(repairs_client, flow["flow_id"], PASSWORD_INPUT)
+    await hass.async_block_till_done()
+
+    assert flow["errors"]["base"] == "unknown"
+    assert config_flow.entry_defaults(entry)["api_username"] == "technician"
+    assert await store.async_load_token(HOST, "technician") == {
+        "realm": "r",
+        "token": "t",
+    }
+
+
+async def test_the_repair_rechecks_a_host_taken_during_the_password_step(
+    hass, mock_modbus, web_client, repairs_client, monkeypatch
+):
+    """Audit RR770-01: the repair's password step set up Modbus on a host taken meanwhile."""
+    entry = await make_entry(hass, mock_modbus, with_token=False)
+    taken = "192.0.2.20"
+    applied = []
+    monkeypatch.setattr(
+        config_flow.FroniusWebClient,
+        "ensure_modbus_enabled",
+        lambda self, *args: applied.append(args) or True,
+    )
+    issue_id = f"{MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX}{entry.entry_id}"
+    flow = await start_fix_flow(repairs_client, issue_id)
+    flow = await advance_fix_flow(
+        repairs_client, flow["flow_id"], SETTINGS_INPUT | {"host": taken}
+    )
+    assert flow["step_id"] == "password"
+    MockConfigEntry(domain=DOMAIN, data={"host": taken}, unique_id=taken).add_to_hass(
+        hass
+    )
+
+    flow = await advance_fix_flow(repairs_client, flow["flow_id"], PASSWORD_INPUT)
+
+    assert flow["errors"]["base"] == "already_configured"
+    assert applied == []
+
+
+async def test_a_repair_for_an_entry_removed_meanwhile_stops_before_the_login(
+    hass, mock_modbus, web_client, repairs_client, monkeypatch
+):
+    """Audit R730-02: the repair minted a token and set up Modbus for a deleted entry."""
+    entry = await make_entry(hass, mock_modbus, with_token=False)
+    applied = []
+    monkeypatch.setattr(
+        config_flow.FroniusWebClient,
+        "ensure_modbus_enabled",
+        lambda self, *args: applied.append(args) or True,
+    )
+    issue_id = f"{MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX}{entry.entry_id}"
+    flow = await start_fix_flow(repairs_client, issue_id)
+    flow = await advance_fix_flow(repairs_client, flow["flow_id"], SETTINGS_INPUT)
+    assert flow["step_id"] == "password"
+    await hass.config_entries.async_remove(entry.entry_id)
+
+    flow = await advance_fix_flow(repairs_client, flow["flow_id"], PASSWORD_INPUT)
+
+    assert flow["type"] == "abort"
+    assert flow["reason"] == "entry_not_found"
+    assert applied == []
+    assert await async_get_token_store(hass).async_load_token(HOST) is None

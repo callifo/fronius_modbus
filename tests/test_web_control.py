@@ -10,6 +10,10 @@ from custom_components.fronius_modbus.const import (
     DOMAIN,
     SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX,
 )
+from custom_components.fronius_modbus.fronius_modbus_api.exceptions import (
+    ControlRefused,
+    ControlUnavailable,
+)
 from custom_components.fronius_modbus.froniuswebclient import (
     FroniusWebAuthError,
     FroniusWebResponseError,
@@ -66,17 +70,31 @@ class FakeWebClient:
             }
         }
 
-    def set_battery_config(self, mode, power):
+    def set_battery_config(self, mode, power=None):
         self.calls.append(("battery", mode, power))
         self.battery.update(HYB_EM_MODE=mode)
         return True
 
-    def set_battery_soc_config(self, soc_min, soc_max, backup):
-        self.calls.append(("soc", soc_min, soc_max, backup))
+    def check_soc_window(self, soc_min=None, soc_max=None):
+        lower = self.battery["BAT_M0_SOC_MIN"] if soc_min is None else soc_min
+        upper = self.battery["BAT_M0_SOC_MAX"] if soc_max is None else soc_max
+        if lower > upper:
+            raise ControlRefused("soc_minimum_above_maximum", "inverted window")
+        return dict(self.battery)
+
+    def set_soc_limits(self, soc_min=None, soc_max=None):
+        self.check_soc_window(soc_min, soc_max)
+        self.calls.append(("soc", soc_min, soc_max))
+        limits = {"BAT_M0_SOC_MIN": soc_min, "BAT_M0_SOC_MAX": soc_max}
+        self.battery.update({k: v for k, v in limits.items() if v is not None})
         return True
 
-    def set_battery_charge_sources(self, grid, ac):
-        self.calls.append(("sources", grid, ac))
+    def set_battery_power(self, power):
+        self.calls.append(("power", power))
+        return True
+
+    def set_battery_charge_sources(self, charge_from_grid=None, charge_from_ac=None):
+        self.calls.append(("sources", charge_from_grid, charge_from_ac))
         return True
 
     def set_soc_mode(self, mode):
@@ -130,7 +148,7 @@ def control(hass):
 class FakeClientAlreadyThere(FakeWebClient):
     """Every battery setting the control asks for is already on the inverter."""
 
-    def set_battery_config(self, mode, power):
+    def set_battery_config(self, mode, power=None):
         super().set_battery_config(mode, power)
         return False
 
@@ -189,6 +207,27 @@ async def test_the_refresh_hands_on_the_component_readings(hass):
     assert data.storage_readings == {"sw_version": "3.26"}
 
 
+class FakeClientWithoutComponents(FakeWebClient):
+    def get_inverter_info(self):
+        return {"readings": None, "missing": True}
+
+    def get_storage_info(self):
+        return super().get_storage_info() | {"readings": None, "missing": True}
+
+
+async def test_the_refresh_hands_on_missing_component_endpoints(hass):
+    control = make_control(hass, client=FakeClientWithoutComponents())
+    try:
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert (data.inverter_endpoint_missing, data.storage_endpoint_missing) == (
+        True,
+        True,
+    )
+
+
 async def test_refresh_fills_the_web_data(control):
     data = await control.async_refresh()
     assert data.inverter_readings == {"DEVICE_TEMPERATURE_AMBIENTMEAN_01_F32": 41.5}
@@ -214,10 +253,11 @@ async def test_auto_mode_with_a_manual_soc_mode_still_reads_as_auto(hass):
     control.shutdown()
 
 
-async def test_switching_to_manual_sends_the_power(control):
+async def test_switching_to_manual_keeps_the_target_on_the_inverter(control):
+    """Audit F24-01: the cached target went along and undid one set since the poll."""
     await control.async_refresh()
     await control.set_battery_mode(1)
-    assert control._client.calls[-1] == ("battery", 1, 0)
+    assert control._client.calls[-1] == ("battery", 1, None)
     assert control.battery_mode_is_manual
     assert control.events == ["write"]
 
@@ -233,6 +273,34 @@ async def test_charge_from_grid_implies_charge_from_ac(control):
     await control.set_charge_sources(charge_from_grid=True)
     assert control._client.calls[-1] == ("sources", True, True)
     assert (control.data.charge_from_grid, control.data.charge_from_ac) == (True, True)
+
+
+@pytest.mark.parametrize(
+    ("request_", "sent"),
+    [
+        ({"charge_from_ac": True}, ("sources", None, True)),
+        ({"charge_from_ac": False}, ("sources", False, False)),
+        ({"charge_from_grid": False}, ("sources", False, None)),
+    ],
+)
+async def test_a_charge_source_sends_only_itself_and_what_it_implies(
+    control, request_, sent
+):
+    """Audit F24-01: the other flag came from the cache and could undo a fresh change."""
+    await control.async_refresh()
+    await control.set_charge_sources(**request_)
+    assert control._client.calls[-1] == sent
+
+
+async def test_the_target_feed_in_sends_only_the_power(hass):
+    control = make_control(hass)
+    try:
+        await control.async_refresh()
+        await control.set_battery_mode(1)
+        await control.set_battery_power_w(500)
+    finally:
+        control.shutdown()
+    assert control._client.calls[-1] == ("power", -500)
 
 
 async def test_the_export_soft_limit_is_shown_right_after_the_write(hass):
@@ -349,7 +417,7 @@ async def test_concurrent_soc_writes_are_applied_one_after_the_other(hass):
             control.set_soc_minimum_manual(10), control.set_soc_maximum(90)
         )
         soc_calls = [call for call in control._client.calls if call[0] == "soc"]
-        assert soc_calls == [("soc", 10, 100, 5), ("soc", 10, 90, 5)]
+        assert soc_calls == [("soc", 10, None), ("soc", None, 90)]
         assert (control.data.soc_min, control.data.soc_max) == (10, 90)
     finally:
         control.shutdown()
@@ -423,8 +491,8 @@ async def test_the_soc_window_follows_the_soc_mode_not_the_energy_management(has
     finally:
         control.shutdown()
     assert [c for c in client.calls if c[0] == "soc"] == [
-        ("soc", 5, 90, 5),
-        ("soc", 12, 90, 5),
+        ("soc", None, 90),
+        ("soc", 12, None),
     ]
 
 
@@ -436,7 +504,7 @@ async def test_switching_the_energy_management_leaves_the_soc_window_alone(contr
     await control.set_battery_mode(0)
     assert (control.data.soc_min, control.data.soc_mode_raw) == (20, "manual")
     assert [c for c in control._client.calls if c[0] == "battery"] == [
-        ("battery", 1, 0),
+        ("battery", 1, None),
         ("battery", 0, None),
     ]
 
@@ -456,7 +524,7 @@ async def test_the_modbus_reserve_mirrors_to_the_web_api_in_manual_soc_mode(hass
     finally:
         control.shutdown()
     assert written == [9]
-    assert client.calls[-1] == ("soc", 9, 100, 5)
+    assert client.calls[-1] == ("soc", 9, None)
 
 
 async def test_the_soc_mode_select_opens_the_window_for_writing(control):
@@ -542,7 +610,7 @@ async def test_different_controls_do_not_supersede_each_other(control):
     await asyncio.gather(*both)
     assert [c for c in control._client.calls if c[0] in ("reserve", "soc")] == [
         ("reserve", 30),
-        ("soc", 5, 90, 30),
+        ("soc", None, 90),
     ]
 
 
@@ -571,3 +639,179 @@ async def test_every_battery_write_shows_its_value_right_away(hass):
         assert pushed[-1].solar_api_enabled is True
     finally:
         control.shutdown()
+
+
+async def test_a_soc_minimum_the_inverter_refuses_is_not_written_to_modbus_first(hass):
+    """Reaudit RE26-02: a stale poll passed, Modbus took the minimum, the web API refused it."""
+    client = FakeWebClient()
+    client.battery.update(
+        BAT_M0_SOC_MODE="manual", BAT_M0_SOC_MIN=20, BAT_M0_SOC_MAX=90
+    )
+    control = make_control(hass, client=client)
+    written = []
+    try:
+        await control.async_refresh()
+        client.battery.update(BAT_M0_SOC_MAX=30)
+
+        async def write_modbus():
+            written.append(50)
+
+        with pytest.raises(ControlRefused) as refused:
+            await control.apply_soc_minimum(50, write_modbus)
+    finally:
+        control.shutdown()
+    assert refused.value.key == "soc_minimum_above_maximum"
+    assert written == []
+
+
+async def test_a_soc_maximum_a_stale_poll_would_refuse_reaches_the_inverter(hass):
+    """Reaudit RE26-02: the polled minimum 50 refused a maximum the inverter would take."""
+    client = FakeWebClient()
+    client.battery.update(
+        BAT_M0_SOC_MODE="manual", BAT_M0_SOC_MIN=50, BAT_M0_SOC_MAX=90
+    )
+    control = make_control(hass, client=client)
+    try:
+        await control.async_refresh()
+        client.battery.update(BAT_M0_SOC_MIN=20)
+        await control.set_soc_maximum(30)
+    finally:
+        control.shutdown()
+    assert client.calls[-1] == ("soc", None, 30)
+
+
+async def test_a_web_refusal_after_modbus_says_modbus_is_set(hass):
+    """Audit FA0FB-04: the error named the web failure, not the minimum Modbus already held."""
+    client = FakeWebClient()
+    client.battery.update(BAT_M0_SOC_MODE="manual")
+    control = make_control(hass, client=client)
+    written = []
+    try:
+        await control.async_refresh()
+
+        def refuse(soc_min=None, soc_max=None):
+            raise FroniusWebResponseError("HTTP 500", 500)
+
+        client.set_soc_limits = refuse
+
+        async def write_modbus():
+            written.append(50)
+
+        with pytest.raises(ControlUnavailable) as failed:
+            await control.apply_soc_minimum(50, write_modbus)
+    finally:
+        control.shutdown()
+    assert written == [50]
+    assert failed.value.key == "soc_minimum_web_failed"
+
+
+@pytest.mark.parametrize(
+    "modbus_config",
+    [
+        {"slave": [1]},
+        {"slave": {"ctr": [1]}},
+        {"slave": {"ctr": {"restriction": [1]}}},
+    ],
+)
+async def test_a_malformed_modbus_config_leaves_the_other_web_values(
+    hass, modbus_config
+):
+    """Audit FA0FB-06: an AttributeError in its display failed the whole web poll."""
+    client = FakeWebClient()
+    client.get_modbus_config = lambda: modbus_config
+    client.battery.update(BAT_M0_SOC_MIN=20)
+    control = make_control(hass, client=client)
+    try:
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+    assert data.soc_min == 20
+
+
+async def test_a_failed_storage_read_keeps_the_battery_identity(hass):
+    """Audit FA0FB-07: the parser's placeholder replaced a known BYD/HVS/serial."""
+    client = FakeWebClient()
+    control = make_control(hass, client=client)
+    try:
+        await control.async_refresh()
+        client.get_storage_info = lambda: {
+            "manufacturer": None,
+            "model": "Battery Storage",
+            "serial": None,
+            "readings": None,
+            "missing": False,
+        }
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+    assert (data.storage_manufacturer, data.storage_model, data.storage_serial) == (
+        "BYD",
+        "HVS",
+        "S",
+    )
+    assert data.storage_readings is None
+
+
+@pytest.mark.parametrize(
+    ("modbus_config", "unknown"),
+    [
+        ({"slave": [1]}, ("modbus_control", "modbus_restriction")),
+        ({"slave": {"ctr": [1]}}, ("modbus_control", "modbus_restriction")),
+        ({"slave": {"ctr": {"on": True, "restriction": [1]}}}, ("modbus_restriction",)),
+    ],
+)
+async def test_a_malformed_modbus_flag_shows_as_unknown(hass, modbus_config, unknown):
+    """Audit RR770-03: an unreadable Modbus flag showed as "disabled"."""
+    client = FakeWebClient()
+    client.get_modbus_config = lambda: modbus_config
+    control = make_control(hass, client=client)
+    try:
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+    assert [getattr(data, field) for field in unknown] == [None] * len(unknown)
+
+
+@pytest.mark.parametrize(
+    ("flag", "shown"),
+    [
+        ([1], None),
+        ("garbage", None),
+        (2, None),
+        (True, "enabled"),
+        (0, "disabled"),
+        ("off", "disabled"),
+        ("true", "enabled"),
+    ],
+)
+async def test_a_modbus_flag_value_that_means_nothing_shows_as_unknown(
+    hass, flag, shown
+):
+    """Audit R730-03: a list read as on, an unknown word as off."""
+    client = FakeWebClient()
+    client.get_modbus_config = lambda: {
+        "slave": {"ctr": {"on": flag, "restriction": {"on": flag}}}
+    }
+    control = make_control(hass, client=client)
+    try:
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+    assert (data.modbus_control, data.modbus_restriction) == (shown, shown)
+
+
+async def test_a_web_switch_in_no_known_form_shows_as_unknown(hass):
+    """Own reaudit E-01: `[1]` showed as on and "garbage" as off."""
+    client = FakeWebClient()
+    client.battery.update(HYB_BM_CHARGEFROMAC=[1], HYB_EVU_CHARGEFROMGRID="garbage")
+    client.get_solar_api_config = lambda: {"SolarAPIv1Enabled": [1]}
+    control = make_control(hass, client=client)
+    try:
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+    assert (data.charge_from_ac, data.charge_from_grid, data.solar_api_enabled) == (
+        None,
+        None,
+        None,
+    )

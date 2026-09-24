@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from homeassistant import data_entry_flow
 from homeassistant.components.repairs import RepairsFlow
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST
 import voluptuous as vol
 from homeassistant.helpers import issue_registry as ir
@@ -27,6 +29,18 @@ class FroniusReconfigureRepairFlow(TokenFlowMixin, RepairsFlow):
 
     def _resolve_issue(self) -> None:
         ir.async_delete_issue(self.hass, DOMAIN, self._issue_id())
+
+    def _flow_entry(self) -> ConfigEntry | None:
+        return self.hass.config_entries.async_get_entry(self._entry_id)
+
+    async def _async_claim_repaired_host(self, settings: dict[str, Any]) -> None:
+        entry = self._flow_entry()
+        if entry is None:
+            # Deleted while the form was open: nothing may be minted or set up
+            # for it any more (audit R730-02).
+            self._resolve_issue()
+            raise data_entry_flow.AbortFlow("entry_not_found")
+        await self._async_claim_entry_host(entry, settings)
 
     async def _async_finish_repair(
         self,
@@ -69,6 +83,7 @@ class FroniusReconfigureRepairFlow(TokenFlowMixin, RepairsFlow):
             previous_host=defaults["host"],
             previous_settings=defaults,
             force_apply_modbus_config=True,
+            claim_host=self._async_claim_repaired_host,
             on_success=self._async_finish_repair,
         )
 
@@ -77,6 +92,7 @@ class FroniusReconfigureRepairFlow(TokenFlowMixin, RepairsFlow):
             user_input=user_input,
             step_id="password",
             restart_step=self.async_step_init,
+            claim_host=self._async_claim_repaired_host,
             on_success=self._async_finish_repair,
         )
 

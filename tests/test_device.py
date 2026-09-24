@@ -451,3 +451,34 @@ async def test_a_recovered_meters_first_bad_read_stays_in_its_report(
         report.failed[meter_report_name(METER_UNIT_ID)], ServerDeviceFailureError
     )
     assert meter_report_name(METER_UNIT_ID) in (await device.async_update()).updated
+
+
+async def test_an_aborted_rediscovery_leaves_the_meter_addresses_alone(
+    connection, symo_gen24
+):
+    """Audit F24-07: a probe wrote the new address before the rediscovery committed.
+
+    Meter 200 had moved and meter 201 aborted the rediscovery. The retry saw an
+    unchanged address and kept the component bound to the old registers.
+    """
+    inverter_unit = connection.for_unit(INVERTER_UNIT_ID)
+    inverter_unit.fail_read(CHAIN_END_ADDRESS, IllegalDataAddressError())
+    second = connection.for_unit(201)
+    second.load_raw(symo_gen24[METER_UNIT_ID])
+    device = FroniusInverter(
+        inverter_unit,
+        INVERTER_UNIT_ID,
+        {METER_UNIT_ID: connection.for_unit(METER_UNIT_ID), 201: second},
+    )
+    await device.async_update()
+    stale = device.meters[METER_UNIT_ID].meter
+    # As if the published component had been built for a map that has moved since.
+    device._meter_addresses[METER_UNIT_ID] = -1
+
+    second.fail_requests(ModbusConnectionError())
+    with pytest.raises(ModbusConnectionError):
+        await device.async_update()
+    second.fail_requests(None)
+    await device.async_update()
+
+    assert device.meters[METER_UNIT_ID].meter is not stale

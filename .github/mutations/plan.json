@@ -121,9 +121,9 @@
   {
     "label": "controls: a cancelled pulse still restores the enable flag",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/controls.py",
-    "old": "            except (ModbusError, asyncio.CancelledError) as err:",
+    "old": "            except BaseException as err:",
     "new": "            except ModbusError as err:",
-    "tests": "cancelled_write_leaves_the_control_enabled"
+    "tests": "cancelled_write_leaves_the_control_enabled or cannot_scale_leaves_the_control_enabled"
   },
   {
     "label": "entities: a stale reading is not an observation",
@@ -170,8 +170,8 @@
   {
     "label": "migrations: an unchecked restriction box becomes keep, not off",
     "path": "custom_components/fronius_modbus/migrations.py",
-    "old": "            choice = ModbusRestriction.KEEP",
-    "new": "            choice = ModbusRestriction.OFF",
+    "old": "        choice = ModbusRestriction.KEEP",
+    "new": "        choice = ModbusRestriction.OFF",
     "tests": "minor_version_11_entries_turn_the_checkbox_into_a_choice"
   },
   {
@@ -212,9 +212,9 @@
   {
     "label": "web control: the SoC minimum is checked before Modbus is written",
     "path": "custom_components/fronius_modbus/web_control.py",
-    "old": "        mirror = self.configured and self.soc_mode_is_manual\n        if mirror:\n            self._get_api_soc_values(soc_min=soc_min)\n        await write_modbus()",
-    "new": "        mirror = self.configured and self.soc_mode_is_manual\n        await write_modbus()",
-    "tests": "invalid_soc_minimum_writes_nothing"
+    "old": "        await self._async_web_job(\n            client.check_soc_window, soc_min, raise_on_auth_failure=True\n        )\n",
+    "new": "",
+    "tests": "invalid_soc_minimum_writes_nothing or not_written_to_modbus_first"
   },
   {
     "label": "token store: another spelling of the host still uses the token",
@@ -366,8 +366,8 @@
   {
     "label": "web_control: switching the energy management leaves the SoC window alone",
     "path": "custom_components/fronius_modbus/web_control.py",
-    "old": "        self._set_effective_battery_mode(mode, self.data.soc_mode_raw)\n        if mode == BATTERY_MODE_MANUAL:\n            self.data.battery_power_w = display_power",
-    "new": "        self._set_effective_battery_mode(mode, self.data.soc_mode_raw)\n        if mode == BATTERY_MODE_MANUAL:\n            self.data.battery_power_w = display_power\n        else:\n            self.data.soc_min = SOC_LOWEST",
+    "old": "        self._set_effective_battery_mode(mode, self.data.soc_mode_raw)\n        self._after_battery_write(\"self-consumption optimisation\", written=written)",
+    "new": "        self._set_effective_battery_mode(mode, self.data.soc_mode_raw)\n        self.data.soc_min = SOC_LOWEST\n        self._after_battery_write(\"self-consumption optimisation\", written=written)",
     "tests": "switching_the_energy_management_leaves_the_soc_window_alone"
   },
   {
@@ -485,7 +485,7 @@
   {
     "label": "web client: the RS485 master roles are written back as read",
     "path": "custom_components/fronius_modbus/froniuswebclient.py",
-    "old": "            \"master\": config.get(\"master\", MASTER_RTUIF[\"master\"]),",
+    "old": "            \"master\": master,",
     "new": "            \"master\": MASTER_RTUIF[\"master\"],",
     "tests": "enabling_tcp_keeps_an_rtu_port_in_slave_role"
   },
@@ -604,8 +604,8 @@
   {
     "label": "web client: an unreadable config is written in full",
     "path": "custom_components/fronius_modbus/froniuswebclient.py",
-    "old": "        except FroniusWebResponseError, ValueError:\n            current = {}\n",
-    "new": "        except FroniusWebResponseError, ValueError:\n            return False\n",
+    "old": "        except FroniusWebResponseError, ValueError:\n            return {}\n",
+    "new": "        except FroniusWebResponseError, ValueError:\n            raise\n",
     "tests": "an_unreadable_battery_config_still_writes_everything"
   },
   {
@@ -618,7 +618,7 @@
   {
     "label": "web client: flags compare in the inverter's spelling",
     "path": "custom_components/fronius_modbus/froniuswebclient.py",
-    "old": "        return is_enabled(current) == wanted\n",
+    "old": "        return flag_value(current) == wanted\n",
     "new": "        return current is wanted\n",
     "tests": "the_inverters_own_spelling_counts_as_the_same_value"
   },
@@ -666,16 +666,16 @@
   },
   {
     "label": "entities: unread component readings keep every sensor",
-    "path": "custom_components/fronius_modbus/entities.py",
-    "old": "    return readings is None or any(field in readings for field in reading.fields)",
-    "new": "    return readings is not None and any(field in readings for field in reading.fields)",
+    "path": "custom_components/fronius_modbus/component_readings.py",
+    "old": "    if not reading.per_channel or readings is None:\n        return True\n",
+    "new": "    if not reading.per_channel:\n        return True\n",
     "tests": "readings_not_yet_read_keep_every_sensor"
   },
   {
     "label": "entities: a channel the device does not report makes no sensor",
-    "path": "custom_components/fronius_modbus/entities.py",
-    "old": "    return readings is None or any(field in readings for field in reading.fields)",
-    "new": "    return True",
+    "path": "custom_components/fronius_modbus/component_readings.py",
+    "old": "    return any(field in readings for field in reading.fields)\n",
+    "new": "    return True\n",
     "tests": "a_channel_the_device_does_not_report_makes_no_sensor"
   },
   {
@@ -709,7 +709,7 @@
   {
     "label": "component readings: a set flag reads yes",
     "path": "custom_components/fronius_modbus/component_readings.py",
-    "old": "        return YES if any(values) else NO",
+    "old": "        return YES if any(_is_set(value) for value in values) else NO",
     "new": "        return NO",
     "tests": "every_sensor_on_the_gen24_shows_what_its_channel_reads"
   },
@@ -726,5 +726,397 @@
     "old": "        self.data.storage_readings = storage_info.get(\"readings\")",
     "new": "        self.data.storage_readings = None",
     "tests": "the_refresh_hands_on_the_component_readings"
+  },
+  {
+    "label": "component readings: a row without a value keeps its sensor",
+    "path": "custom_components/fronius_modbus/component_readings.py",
+    "old": "    if not reading.per_channel or readings is None:\n        return True\n",
+    "new": "    if readings is None:\n        return True\n",
+    "tests": "an_answer_without_a_value_keeps_its_sensor"
+  },
+  {
+    "label": "component readings: an answer naming no power module keeps all four",
+    "path": "custom_components/fronius_modbus/component_readings.py",
+    "old": "    if not group & readings.keys():\n        return True\n",
+    "new": "",
+    "tests": "an_answer_without_any_power_module_keeps_all_four"
+  },
+  {
+    "label": "entities: firmware without the endpoints gets no component sensors",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "        return reading.key in runtime.registered_keys\n",
+    "new": "        return True\n",
+    "tests": "firmware_without_the_endpoints_gets_no_component_sensors"
+  },
+  {
+    "label": "web client: only a 404 marks a component endpoint missing",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "            return ENDPOINT_MISSING if missing else None\n",
+    "new": "            return None\n",
+    "tests": "only_a_404_marks_a_component_endpoint_missing"
+  },
+  {
+    "label": "web control: the refresh hands on a missing inverter endpoint",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        self.data.inverter_endpoint_missing = bool(inverter.get(\"missing\"))\n",
+    "new": "",
+    "tests": "the_refresh_hands_on_missing_component_endpoints"
+  },
+  {
+    "label": "web control: the refresh hands on a missing storage endpoint",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        self.data.storage_endpoint_missing = bool(storage_info.get(\"missing\"))\n",
+    "new": "",
+    "tests": "the_refresh_hands_on_missing_component_endpoints"
+  },
+  {
+    "label": "component readings: a sensor with a unit shows only a number",
+    "path": "custom_components/fronius_modbus/component_readings.py",
+    "old": "    if not isinstance(value, (int, float)) or not math.isfinite(value):\n        return None\n",
+    "new": "    if not isinstance(value, (int, float)):\n        return value\n    if not math.isfinite(value):\n        return None\n",
+    "tests": "a_sensor_with_a_unit_shows_only_a_number"
+  },
+  {
+    "label": "component readings: a flag sent as text 0 is not set",
+    "path": "custom_components/fronius_modbus/component_readings.py",
+    "old": "        return number != 0\n",
+    "new": "        return True\n",
+    "tests": "a_flag_is_set_only_by_a_true_value"
+  },
+  {
+    "label": "web control: switching AC charging off takes grid charging with it",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "    if from_ac is False:\n        return False, False\n",
+    "new": "    if from_ac is False:\n        return None, False\n",
+    "tests": "a_charge_source_sends_only_itself_and_what_it_implies"
+  },
+  {
+    "label": "web control: switching grid charging on takes AC charging with it",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "    if grid:\n        return True, True\n",
+    "new": "",
+    "tests": "charge_from_grid_implies_charge_from_ac"
+  },
+  {
+    "label": "web client: a charge source not asked for is not sent",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "        wanted = {key: bool(value) for key, value in flags.items() if value is not None}\n",
+    "new": "        wanted = {key: bool(value) for key, value in flags.items()}\n",
+    "tests": "a_battery_write_sends_only_what_was_asked"
+  },
+  {
+    "label": "web client: the SoC window is checked against the fresh read",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "        if lower > upper:\n",
+    "new": "        if False:\n",
+    "tests": "soc_window_is_checked_against_the_fresh_read"
+  },
+  {
+    "label": "coordinator: refused grid charging is an error",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "                raise ControlUnavailable(\n                    \"grid_charge_sources_failed\",",
+    "new": "                return\n                raise ControlUnavailable(\n                    \"grid_charge_sources_failed\",",
+    "tests": "grid_charging_that_the_web_api_refuses_is_an_error"
+  },
+  {
+    "label": "web client: a nested Modbus config part must be an object",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "    return _config_object(config.get(key, {}), path)\n",
+    "new": "    return config.get(key, {})\n",
+    "tests": "a_modbus_config_of_the_wrong_shape_is_a_response_error"
+  },
+  {
+    "label": "config flow: a minted token is kept only after the check",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "                info = await _validate_input(\n                    self.hass,\n                    state.settings,\n",
+    "new": "                await _async_save_token(\n                    self.hass, state.settings[CONF_HOST], username, token\n                )\n                info = await _validate_input(\n                    self.hass,\n                    state.settings,\n",
+    "tests": "a_token_whose_setup_fails_is_not_kept"
+  },
+  {
+    "label": "config flow: an aborted flow drops its minted token",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "        if previous is None:\n            await store.async_delete_token(host, username)\n            return\n",
+    "new": "        if previous is None:\n            return\n",
+    "tests": "a_token_for_a_host_already_set_up_is_not_kept"
+  },
+  {
+    "label": "config flow: a changed loaded entry reloads once",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "    if changed and loaded:\n        return\n",
+    "new": "",
+    "tests": "a_reconfigure_reloads_the_entry_once"
+  },
+  {
+    "label": "migrations: the dropped role takes its token with it",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "    if drops_a_role:\n",
+    "new": "    if False:\n",
+    "tests": "the_role_a_migration_drops_takes_its_token_with_it"
+  },
+  {
+    "label": "derived: only agreeing samples confirm a new counter range",
+    "path": "custom_components/fronius_modbus/derived.py",
+    "old": "        self._suspect_polls = self._suspect_polls + 1 if continues else 1\n",
+    "new": "        self._suspect_polls += 1\n",
+    "tests": "contradicting_samples_confirm_nothing"
+  },
+  {
+    "label": "device: meter addresses are published with the meters",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        addresses[unit_id] = model.address\n",
+    "new": "        self._meter_addresses[unit_id] = model.address\n",
+    "tests": "an_aborted_rediscovery_leaves_the_meter_addresses_alone"
+  },
+  {
+    "label": "diagnostics: an offline inverter keeps the rest of the report",
+    "path": "custom_components/fronius_modbus/diagnostics.py",
+    "old": "    except ModbusError as err:\n        return {\"error\": type(err).__name__}\n",
+    "new": "    except ZeroDivisionError as err:\n        return {\"error\": type(err).__name__}\n",
+    "tests": "diagnostics_still_answer_while_the_inverter_is_offline"
+  },
+  {
+    "label": "web client: only an absent nested part defaults to empty",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "    return _config_object(config.get(key, {}), path)\n",
+    "new": "    return _config_object(config.get(key) or {}, path)\n",
+    "tests": "an_empty_wrong_type_in_the_modbus_config_is_not_written_back_with_defaults"
+  },
+  {
+    "label": "web control: a stale poll does not veto the SoC window",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        self._check_soc_range(soc_min=soc_min, soc_max=soc_max)\n",
+    "new": "        self._check_soc_range(soc_min=soc_min, soc_max=soc_max)\n        if (soc_min or self.data.soc_min or 0) > (soc_max or self.data.soc_max or 100):\n            raise ControlRefused(\"soc_minimum_above_maximum\", \"stale\")\n",
+    "tests": "a_stale_poll_would_refuse_reaches_the_inverter"
+  },
+  {
+    "label": "entities: a power module reported before stays",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "    if reading.per_channel and reading.key in runtime.reported_keys:\n        return True\n",
+    "new": "",
+    "tests": "power_module_missing_from_one_answer_keeps_its_entity"
+  },
+  {
+    "label": "setup: the runtime learns the reported keys",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "        reported_keys=migrations.reported_keys(hass, entry),\n",
+    "new": "",
+    "tests": "power_module_missing_from_one_answer_keeps_its_entity"
+  },
+  {
+    "label": "config flow: an aborted flow restores the token held before",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "            return\n        await _async_save_token(self.hass, host, username, previous)\n",
+    "new": "            return\n",
+    "tests": "a_duplicate_flow_leaves_the_existing_entrys_token_alone"
+  },
+  {
+    "label": "component readings: a non-finite number is no reading",
+    "path": "custom_components/fronius_modbus/component_readings.py",
+    "old": " or not math.isfinite(value):",
+    "new": ":",
+    "tests": "no_finite_number_shows_nothing"
+  },
+  {
+    "label": "config flow: a late failure keeps a token its entry uses",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "            if not self._flow_entry_logs_in_with(host, username):\n",
+    "new": "            if True:\n",
+    "tests": "role_switch_failing_after_the_update_keeps_the_new_token or late_failure_does_not_bring_back_a_stale_token"
+  },
+  {
+    "label": "migrations: only a sensor marked as reported is kept",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "        and _marked_reported(candidate)\n",
+    "new": "",
+    "tests": "a_placeholder_power_module_is_not_kept"
+  },
+  {
+    "label": "component readings: only a channel the answer names is seen",
+    "path": "custom_components/fronius_modbus/component_readings.py",
+    "old": "        and any(field in readings for field in row.fields)\n",
+    "new": "",
+    "tests": "a_placeholder_power_module_is_not_kept"
+  },
+  {
+    "label": "setup: modules reported at setup are marked at once",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "        _mark_reported_modules()\n",
+    "new": "",
+    "tests": "power_module_missing_from_one_answer_keeps_its_entity"
+  },
+  {
+    "label": "config flow: a taken host is refused before the login",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "                await claim_host(settings)\n",
+    "new": "",
+    "tests": "duplicate_setup_leaves_the_inverter_alone or moving_to_a_host_taken_leaves_the_inverter_alone"
+  },
+  {
+    "label": "repairs: the repair flow claims its host before the login",
+    "path": "custom_components/fronius_modbus/repairs.py",
+    "old": "        await self._async_claim_entry_host(entry, settings)\n",
+    "new": "        pass\n",
+    "tests": "refuses_a_taken_host_before_the_inverter or rechecks_a_host_taken_during_the_password_step"
+  },
+  {
+    "label": "entities: a single 404 keeps registered component sensors",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "        return reading.key in runtime.registered_keys\n",
+    "new": "        return False\n",
+    "tests": "single_404_keeps_the_registered_component_sensors"
+  },
+  {
+    "label": "setup: the runtime learns the registered keys",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "        registered_keys=migrations.registered_keys(hass, entry),\n",
+    "new": "",
+    "tests": "single_404_keeps_the_registered_component_sensors"
+  },
+  {
+    "label": "web client: an unreadable SoC window is an error",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "        current = _config_object(self._get_json(BATTERIES_PATH), BATTERIES_PATH)\n",
+    "new": "        current = self._read_or_nothing(BATTERIES_PATH)\n",
+    "tests": "unreadable_soc_window_is_not_written"
+  },
+  {
+    "label": "web control: a web refusal after Modbus says Modbus is set",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        except (RuntimeError, ValueError, OSError) as err:\n            # Modbus holds",
+    "new": "        except ZeroDivisionError as err:\n            # Modbus holds",
+    "tests": "web_refusal_after_modbus_says_modbus_is_set"
+  },
+  {
+    "label": "web client: a malformed master is not written back",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "        master = _config_object(\n            config.get(\"master\", MASTER_RTUIF[\"master\"]), MODBUS_PATH\n        )\n",
+    "new": "        master = config.get(\"master\", MASTER_RTUIF[\"master\"])\n",
+    "tests": "malformed_master_is_not_written_back"
+  },
+  {
+    "label": "web control: a malformed Modbus config part shows as unknown",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "    return part if isinstance(part, dict) else None\n",
+    "new": "    return part or {}\n",
+    "tests": "malformed_modbus_config_leaves_the_other_web_values"
+  },
+  {
+    "label": "web control: an unread storage node keeps the battery identity",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        if self.data.storage_readings is None:\n            return\n        self.data.storage_manufacturer",
+    "new": "        self.data.storage_manufacturer",
+    "tests": "failed_storage_read_keeps_the_battery_identity"
+  },
+  {
+    "label": "migrations: minor 13 marks the modules registered before",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "        async_mark_reported(hass, entry, CHANNEL_KEYS)\n",
+    "new": "        pass\n",
+    "tests": "module_registered_before_the_marker_survives_the_upgrade"
+  },
+  {
+    "label": "config flow: the options flow knows the entry it changes",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "    def _flow_entry(self) -> config_entries.ConfigEntry | None:\n        return self.config_entry\n",
+    "new": "    def _flow_entry(self) -> config_entries.ConfigEntry | None:\n        return None\n",
+    "tests": "late_failure_does_not_bring_back_a_stale_token"
+  },
+  {
+    "label": "config flow: reconfigure knows the entry it changes",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "            return None\n        return self._get_reconfigure_entry()\n",
+    "new": "            return None\n        return None\n",
+    "tests": "reconfigure_failing_late_keeps_the_fresh_token"
+  },
+  {
+    "label": "repairs: the repair flow knows the entry it changes",
+    "path": "custom_components/fronius_modbus/repairs.py",
+    "old": "        return self.hass.config_entries.async_get_entry(self._entry_id)\n\n    async def _async_claim_repaired_host(",
+    "new": "        return None\n\n    async def _async_claim_repaired_host(",
+    "tests": "repair_failing_late_keeps_the_fresh_token"
+  },
+  {
+    "label": "config flow: the password step rechecks the host",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "                await claim_host(state.settings)\n",
+    "new": "",
+    "tests": "during_the_password_step"
+  },
+  {
+    "label": "config flow: an aborted flow does not hand its token over",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "            await store.async_delete_token(host, username)\n            return\n",
+    "new": "            await async_forget_unused_tokens(self.hass, host)\n            return\n",
+    "tests": "aborted_setup_does_not_hand_its_token_to_another_entry"
+  },
+  {
+    "label": "web control: an unreadable Modbus flag is unknown",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "    if part is None:\n        return None\n    value = part.get(\"on\")\n",
+    "new": "    value = (part or {}).get(\"on\")\n",
+    "tests": "malformed_modbus_flag_shows_as_unknown"
+  },
+  {
+    "label": "web client: a SoC window needs numeric limits",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "        if not (_is_number(lower) and _is_number(upper)):\n",
+    "new": "        if False:\n",
+    "tests": "soc_window_without_a_numeric_limit_is_unreadable"
+  },
+  {
+    "label": "config flow: the host is claimed again right before the Modbus setup",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "            if claim_host is not None:\n                await claim_host()\n",
+    "new": "",
+    "tests": "host_taken_while_the_token_is_minted_leaves_the_inverter_alone"
+  },
+  {
+    "label": "repairs: a repair for a removed entry stops before the login",
+    "path": "custom_components/fronius_modbus/repairs.py",
+    "old": "            raise data_entry_flow.AbortFlow(\"entry_not_found\")\n",
+    "new": "            return\n",
+    "tests": "repair_for_an_entry_removed_meanwhile_stops_before_the_login"
+  },
+  {
+    "label": "web control: a flag value that means nothing is unknown",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "    if flag is None:\n        return None\n    return _enabled_state(flag)\n",
+    "new": "    return _enabled_state(value)\n",
+    "tests": "modbus_flag_value_that_means_nothing_shows_as_unknown"
+  },
+  {
+    "label": "component readings: only the flag forms the inverter uses count",
+    "path": "custom_components/fronius_modbus/component_readings.py",
+    "old": "    if isinstance(value, (int, float)) and value in (0, 1):\n",
+    "new": "    if isinstance(value, (int, float)):\n",
+    "tests": "modbus_flag_value_that_means_nothing_shows_as_unknown"
+  },
+  {
+    "label": "web client: a SoC limit must be finite",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "    return math.isfinite(value)\n",
+    "new": "    return True\n",
+    "tests": "soc_window_without_a_numeric_limit_is_unreadable"
+  },
+  {
+    "label": "web client: a flag in no known form is not on",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "    return flag_value(value) is True\n",
+    "new": "    return bool(flag_value(value)) or bool(value)\n",
+    "tests": "modbus_control_in_no_known_form_is_switched_on or export_limit_switched_on_in_no_known_form_is_written"
+  },
+  {
+    "label": "web client: a flag in no known form is never what is wanted",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "        return flag_value(current) == wanted\n",
+    "new": "        return is_enabled(current) == wanted\n",
+    "tests": "flag_the_inverter_holds_in_no_known_form_is_written"
+  },
+  {
+    "label": "web control: a web switch in no known form is unknown",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "            self.data.solar_api_enabled = flag_value(enabled)\n",
+    "new": "            self.data.solar_api_enabled = is_enabled(enabled)\n",
+    "tests": "web_switch_in_no_known_form_shows_as_unknown"
   }
 ]

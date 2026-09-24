@@ -12,9 +12,10 @@ from modbus_connection import ModbusTcpParams
 from homeassistant.components.modbus import async_get_unit
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL, Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 
 from . import migrations
+from .component_readings import named_channels
 from .const import (
     API_USERNAME,
     CONF_API_USERNAME,
@@ -189,6 +190,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
         meter_locations=locations,
         primary_meter_unit_id=primary,
         topology_confirmed=topology.confirmed,
+        reported_keys=migrations.reported_keys(hass, entry),
+        registered_keys=migrations.registered_keys(hass, entry),
     )
 
     await migrations.async_migrate_v019_mppt_statistics(hass, entry)
@@ -201,6 +204,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
 
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    if web is not None:
+        web_poll = web
+
+        @callback
+        def _mark_reported_modules() -> None:
+            # ponytail: the channel-by-channel rows are all inverter rows today.
+            readings = web_poll.data.inverter_readings if web_poll.data else None
+            migrations.async_mark_reported(
+                hass, entry, named_channels("inverter", readings)
+            )
+
+        _mark_reported_modules()
+        entry.async_on_unload(web.async_add_listener(_mark_reported_modules))
     return True
 
 

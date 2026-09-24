@@ -450,7 +450,7 @@ async def test_the_last_writer_of_a_burst_gets_the_error(control):
 
     def refuse_fifty(percent):
         if percent == 50:
-            raise FroniusWebResponseError("HTTP 500")
+            raise FroniusWebResponseError("HTTP 500", 500)
         return written(percent)
 
     control._client.set_backup_reserve = refuse_fifty

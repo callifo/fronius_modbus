@@ -107,7 +107,7 @@ async def test_a_web_server_error_during_setup_shows_cannot_connect(
     """Own reaudit: a 500 while enabling Modbus stopped being an OSError and crashed the flow."""
 
     def refuse(self, *_args):
-        raise FroniusWebResponseError("HTTP 500 on /api/config/modbus")
+        raise FroniusWebResponseError("HTTP 500 on /api/config/modbus", 500)
 
     monkeypatch.setattr(config_flow.FroniusWebClient, "ensure_modbus_enabled", refuse)
 

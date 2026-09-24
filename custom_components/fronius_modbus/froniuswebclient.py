@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import socket
+from http import HTTPStatus
 from typing import Any
 from urllib.parse import urlparse
 
@@ -35,6 +36,11 @@ class FroniusWebUnreachable(OSError):
 
 class FroniusWebResponseError(RuntimeError):
     """The web server answered with an error status: a device that is up and refusing."""
+
+    def __init__(self, message: str, status_code: int) -> None:
+        """Keep the status, so a caller can tell a missing endpoint from a failure."""
+        super().__init__(message)
+        self.status_code = status_code
 
 
 class FroniusWebAuthError(RuntimeError):
@@ -472,7 +478,7 @@ class FroniusWebClient:
             response.raise_for_status()
         except requests.HTTPError as err:
             raise FroniusWebResponseError(
-                f"HTTP {response.status_code} on {path}"
+                f"HTTP {response.status_code} on {path}", response.status_code
             ) from err
         return response
 
@@ -685,7 +691,11 @@ class FroniusWebClient:
         """Read current Export Limit Control configuration from the inverter."""
         try:
             return self._get_json("/api/config/limit_settings/powerLimits")
-        except FroniusWebResponseError:
+        except FroniusWebResponseError as err:
+            # Firmware without the endpoint answers 404; any other status is a
+            # failure the refresh has to report (audit A24-05).
+            if err.status_code != HTTPStatus.NOT_FOUND:
+                raise
             return {}
 
     def set_export_soft_limit(self, power_w: int) -> bool:

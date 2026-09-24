@@ -602,18 +602,24 @@ class TokenFlowMixin:
 
         Saved first, a failed check or an aborted flow left a password-equivalent
         credential with no entry (audit RA24-01). The entry's setup reads it, so
-        it is saved before the entry is created and dropped again if that fails.
+        it is saved before the entry is created; if that fails, the token held
+        before comes back: an aborted duplicate replaced the entry's own
+        (reaudit RE26-04).
         """
-        host = state.settings[CONF_HOST]
         if minted is None:
             return await on_success(state.settings, info, state.previous_host)
-        await _async_save_token(
-            self.hass, host, state.settings[CONF_API_USERNAME], minted
-        )
+        host = state.settings[CONF_HOST]
+        username = state.settings[CONF_API_USERNAME]
+        store = async_get_token_store(self.hass)
+        previous = await store.async_load_token(host, username)
         try:
+            await _async_save_token(self.hass, host, username, minted)
             return await on_success(state.settings, info, state.previous_host)
         except BaseException:
-            await async_forget_unused_tokens(self.hass, host)
+            if previous is None:
+                await store.async_delete_token(host, username)
+            else:
+                await _async_save_token(self.hass, host, username, previous)
             raise
 
 

@@ -835,8 +835,8 @@
   {
     "label": "config flow: an aborted flow drops its minted token",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "        except BaseException:\n            await async_forget_unused_tokens(self.hass, host)\n            raise\n",
-    "new": "        except BaseException:\n            raise\n",
+    "old": "            if previous is None:\n                await store.async_delete_token(host, username)\n",
+    "new": "            if previous is None:\n                pass\n",
     "tests": "a_token_for_a_host_already_set_up_is_not_kept"
   },
   {
@@ -901,5 +901,12 @@
     "old": "        registered_keys=migrations.registered_keys(hass, entry),\n",
     "new": "",
     "tests": "power_module_missing_from_one_answer_keeps_its_entity"
+  },
+  {
+    "label": "config flow: an aborted flow restores the token held before",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "            else:\n                await _async_save_token(self.hass, host, username, previous)\n",
+    "new": "",
+    "tests": "a_duplicate_flow_leaves_the_existing_entrys_token_alone"
   }
 ]

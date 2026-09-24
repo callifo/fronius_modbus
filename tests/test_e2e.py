@@ -72,6 +72,17 @@ async def setup_entry(hass, entry: MockConfigEntry) -> None:
     await hass.async_block_till_done()
 
 
+async def log_in_to_the_web_api(hass, mock_modbus, monkeypatch) -> None:
+    """A working web login with a confirmed two-meter topology.
+
+    Cleanup waits for one (audit A24-01), so a test of any other cleanup gate
+    needs it to reach that gate at all.
+    """
+    mock_modbus.add_unit(201, like=METER_UNIT_ID)
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _FakeWebClientWithTopology)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+
+
 def entity_id_for(hass, entry: MockConfigEntry, domain: str, key: str) -> str:
     """The registry entity id of one of the entry's entities, by description key."""
     unique_id = f"{entity_prefix(entry.entry_id)}_{key}"
@@ -269,10 +280,8 @@ async def test_a_stale_entity_is_removed_after_a_clean_first_poll(
     hass, mock_modbus, monkeypatch
 ):
     """An entity for a key the integration no longer creates is dropped on a clean poll."""
-    mock_modbus.add_unit(201, like=METER_UNIT_ID)
-    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _FakeWebClientWithTopology)
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
     entry = make_entry(hass)
-    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
     registry = er.async_get(hass)
     unique_id = f"{entity_prefix(entry.entry_id)}_no_such_key"
     registry.async_get_or_create(
@@ -403,8 +412,11 @@ async def test_a_failed_mppt_read_at_startup_keeps_the_mppt_entities(hass, mock_
     )
 
 
-async def test_a_meter_that_times_out_at_setup_keeps_its_entities(hass, mock_modbus):
+async def test_a_meter_that_times_out_at_setup_keeps_its_entities(
+    hass, mock_modbus, monkeypatch
+):
     """Audit F03: the cleanup after a timed-out meter probe removed the meter's registry entries."""
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
     entry = make_entry(hass)
     registry = er.async_get(hass)
     original = registry.async_get_or_create(
@@ -529,6 +541,7 @@ async def test_a_reload_retires_no_live_meter_device(hass, mock_modbus, monkeypa
     Home Assistant restores a device that comes straight back, so the damage is
     only visible as the removal itself: assert none happens.
     """
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
     entry = make_entry(hass)
     await setup_entry(hass, entry)
     removed: list[str] = []

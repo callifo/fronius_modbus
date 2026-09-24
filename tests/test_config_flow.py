@@ -486,3 +486,62 @@ async def test_a_reconfigure_failing_late_keeps_the_fresh_token(hass, monkeypatc
         "realm": "r",
         "token": "t",
     }
+
+
+async def test_a_host_taken_during_the_password_step_leaves_the_inverter_alone(
+    hass, mock_modbus, monkeypatch
+):
+    """Audit RR770-01: the password step validated, and set up Modbus, without a recheck."""
+    applied = _record_modbus_setup(monkeypatch)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT
+    )
+    assert result["step_id"] == "user_password"
+    make_entry(hass)
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+
+    assert result["reason"] == "already_configured"
+    assert applied == []
+
+
+async def test_a_move_to_a_host_taken_during_the_password_step_is_refused(
+    hass, mock_modbus, monkeypatch
+):
+    """Audit RR770-01: reconfigure and options rechecked the host only after validation."""
+    other = _other_entry(hass)
+    applied = _record_modbus_setup(monkeypatch)
+    moved = {
+        "host": HOST,
+        "scan_interval": 10,
+        "web_scan_interval": 60,
+        "modbus_restriction": "keep",
+        "api_username": "customer",
+    }
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "reconfigure", "entry_id": other.entry_id}
+    )
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], moved)
+    options = await hass.config_entries.options.async_init(other.entry_id)
+    options = await hass.config_entries.options.async_configure(
+        options["flow_id"], moved
+    )
+    assert result["step_id"] == "reconfigure_password"
+    assert options["step_id"] == "password"
+    make_entry(hass)
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+    options = await hass.config_entries.options.async_configure(
+        options["flow_id"], {"api_password": "secret"}
+    )
+
+    assert result["errors"]["base"] == "already_configured"
+    assert options["errors"]["base"] == "already_configured"
+    assert applied == []

@@ -328,3 +328,31 @@ async def test_a_repair_failing_late_keeps_the_fresh_token(
         "realm": "r",
         "token": "t",
     }
+
+
+async def test_the_repair_rechecks_a_host_taken_during_the_password_step(
+    hass, mock_modbus, web_client, repairs_client, monkeypatch
+):
+    """Audit RR770-01: the repair's password step set up Modbus on a host taken meanwhile."""
+    entry = await make_entry(hass, mock_modbus, with_token=False)
+    taken = "192.0.2.20"
+    applied = []
+    monkeypatch.setattr(
+        config_flow.FroniusWebClient,
+        "ensure_modbus_enabled",
+        lambda self, *args: applied.append(args) or True,
+    )
+    issue_id = f"{MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX}{entry.entry_id}"
+    flow = await start_fix_flow(repairs_client, issue_id)
+    flow = await advance_fix_flow(
+        repairs_client, flow["flow_id"], SETTINGS_INPUT | {"host": taken}
+    )
+    assert flow["step_id"] == "password"
+    MockConfigEntry(domain=DOMAIN, data={"host": taken}, unique_id=taken).add_to_hass(
+        hass
+    )
+
+    flow = await advance_fix_flow(repairs_client, flow["flow_id"], PASSWORD_INPUT)
+
+    assert flow["errors"]["base"] == "already_configured"
+    assert applied == []

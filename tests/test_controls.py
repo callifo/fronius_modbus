@@ -6,6 +6,9 @@ from modbus_connection import ServerDeviceFailureError
 from modbus_connection.model.sunspec import scan
 import pytest
 
+from custom_components.fronius_modbus.fronius_modbus_api import (
+    controls as controls_module,
+)
 from custom_components.fronius_modbus.fronius_modbus_api.controls import (
     APPLY_MASK_SECONDS,
     InverterControls,
@@ -121,6 +124,67 @@ async def test_the_pulse_succeeds_when_the_read_right_after_it_is_refused(
     assert [w for _, w in _at(writes, W_MAX_LIM_PCT)] == [2500]
 
 
+@pytest.fixture
+def no_comparison(monkeypatch):
+    """For fakes without registers: the pulse is the subject, not the comparison."""
+
+    async def nothing_holds(_component, _wanted):
+        return set()
+
+    monkeypatch.setattr(controls_module, "registers_holding", nothing_holds)
+
+
+async def test_an_unchanged_limit_is_not_pulsed(controls, inverter_unit, writes, clock):
+    """The same value again switched a live limit off for a second, for nothing."""
+    inverter_unit.holding[W_MAX_LIM_PCT] = 2500
+    inverter_unit.holding[W_MAX_LIM_ENA] = 1
+
+    await controls.set_ac_limit_w(2500)
+
+    assert writes == []
+    assert clock.slept == []
+
+
+async def test_an_unchanged_power_factor_is_not_pulsed(controls, inverter_unit, writes):
+    inverter_unit.holding[OUT_PF_SET] = (-950) & 0xFFFF
+    inverter_unit.holding[OUT_PF_SET_ENA] = 1
+
+    await controls.set_power_factor(-0.95)
+
+    assert writes == []
+
+
+@pytest.mark.parametrize(
+    ("address", "setter", "value"),
+    [
+        (W_MAX_LIM_ENA, "set_ac_limit_enable", True),
+        (OUT_PF_SET_ENA, "set_power_factor_enable", True),
+        (CONN, "set_connected", True),
+    ],
+)
+async def test_a_switch_already_in_place_is_not_written(
+    controls, inverter_unit, writes, address, setter, value
+):
+    inverter_unit.holding[address] = 1
+
+    await getattr(controls, setter)(value)
+
+    assert writes == []
+
+
+async def test_a_comparison_that_cannot_read_still_writes(
+    controls, inverter_unit, writes
+):
+    """Not knowing the register is no reason to drop the owner's input."""
+    inverter_unit.holding[CONN] = 1
+    inverter_unit.fail_read(CONN, ServerDeviceFailureError())
+
+    await controls.set_connected(True)
+
+    assert [w for _, w in _at(writes, CONN)] == [1]
+
+
+@pytest.mark.usefixtures("no_comparison")
 async def test_a_failed_limit_write_leaves_the_limit_enabled(clock):
     """Audit F01: the pulse switched the limit off and never back on when the value write failed."""
 
@@ -148,6 +212,7 @@ async def test_a_failed_limit_write_leaves_the_limit_enabled(clock):
     assert component.writes[-1] == ("w_max_lim_ena", 1)
 
 
+@pytest.mark.usefixtures("no_comparison")
 async def test_a_limit_that_cannot_be_re_enabled_is_reported_as_left_disabled(clock):
     class FakeControls:
         w_max_lim_ena = 1

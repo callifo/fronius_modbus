@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import logging
 import os
@@ -18,7 +19,11 @@ from .const import API_USERNAME, ModbusRestriction
 
 _LOGGER = logging.getLogger(__name__)
 
+# Only for a reply without the RS485 roles; a read one is written back as it is.
 MASTER_RTUIF = {"master": {"rtuif": [{"if": "rtu0"}, {"if": "rtu1"}]}}
+# Modes in which the Modbus TCP server answers; "both" also serves RTU clients.
+TCP_MODES = ("tcp", "both")
+RESTRICTION_LIST_SEPARATOR = ","
 
 
 class ClientIpResolutionError(RuntimeError):
@@ -174,6 +179,43 @@ def _parse_inverter_readable(payload: Any) -> dict[str, Any]:
     if isinstance(value, (int, float)):
         info["temperature"] = float(value)
     return info
+
+
+def _without_descriptions(node: Any) -> Any:
+    """A config as it is written: the inverter reads every field with a _<field>_meta."""
+    if isinstance(node, dict):
+        return {
+            key: _without_descriptions(value)
+            for key, value in node.items()
+            if not key.startswith("_")
+        }
+    if isinstance(node, list):
+        return [_without_descriptions(value) for value in node]
+    return node
+
+
+def _network(entry: str) -> ipaddress.IPv4Network | ipaddress.IPv6Network | None:
+    try:
+        return ipaddress.ip_network(entry.strip(), strict=False)
+    except ValueError:
+        return None
+
+
+def _restriction_with(restriction: dict[str, Any], address: str) -> dict[str, Any]:
+    """The restriction with ``address`` allowed, keeping every host already on it.
+
+    The inverter takes a list of hosts and networks; replacing it locked out
+    the others. A list that is switched off is not revived with it.
+    """
+    listed = str(restriction.get("ip") or "")
+    entries = [entry for entry in listed.split(RESTRICTION_LIST_SEPARATOR) if entry]
+    if not is_enabled(restriction.get("on")):
+        entries = []
+    client = ipaddress.ip_address(address)
+    networks = [_network(entry) for entry in entries]
+    if not any(network is not None and client in network for network in networks):
+        entries.append(address)
+    return {**restriction, "on": True, "ip": RESTRICTION_LIST_SEPARATOR.join(entries)}
 
 
 def _body_data(payload: Any, *path: str) -> tuple[dict[str, Any] | None, str | None]:
@@ -591,18 +633,19 @@ class FroniusWebClient:
         inverter_unit_id: int,
         restriction: ModbusRestriction = ModbusRestriction.KEEP,
     ) -> bool:
-        current = self.get_modbus_config()
-        slave = current.get("slave") or {}
+        config = _without_descriptions(self.get_modbus_config())
+        slave = config.get("slave") or {}
         ctr = slave.get("ctr") or {}
         current_restriction = ctr.get("restriction") or {}
         wanted = current_restriction
         if restriction == ModbusRestriction.HOME_ASSISTANT:
-            wanted = {"on": True, "ip": self._resolve_client_ip()}
+            wanted = _restriction_with(current_restriction, self._resolve_client_ip())
         if restriction == ModbusRestriction.OFF:
             wanted = {**current_restriction, "on": False}
+        serves_tcp = slave.get("mode") in TCP_MODES
 
         if (
-            slave.get("mode") == "tcp"
+            serves_tcp
             # The integration reads the integer+SF models only; a float map
             # would pass every other check and then fail the probe (audit F13).
             and slave.get("sunspecMode") == "int"
@@ -617,19 +660,19 @@ class FroniusWebClient:
         ):
             return False
 
+        # Everything read is written back: the RS485 roles, serial settings and
+        # a "both" mode belong to other devices on the inverter.
         payload = {
-            **MASTER_RTUIF,
+            "master": config.get("master", MASTER_RTUIF["master"]),
             "slave": {
-                "rtuif": [],
-                "mode": "tcp",
+                **slave,
+                "rtuif": slave.get("rtuif", []),
+                "mode": slave["mode"] if serves_tcp else "tcp",
                 "port": port,
                 "sunspecMode": "int",
                 "meterAddress": meter_address,
                 "rtu_inverter_slave_id": inverter_unit_id,
-                "ctr": {
-                    "on": True,
-                    "restriction": wanted,
-                },
+                "ctr": {**ctr, "on": True, "restriction": wanted},
             },
         }
         self._request("post", "/api/config/modbus", payload=payload)
@@ -646,10 +689,17 @@ class FroniusWebClient:
         return self._get_json("/api/config/batteries")
 
     def set_solar_api_enabled(self, enabled: bool) -> bool:
+        """Switch the Solar API, leaving the owner's discovery switch as it is.
+
+        Switching off clears it too: a discovered device would switch the API
+        straight back on.
+        """
         payload = {
+            **_without_descriptions(self.get_solar_api_config()),
             "SolarAPIv1Enabled": bool(enabled),
-            "activeOnExternalDevicesDiscovered": False,
         }
+        if not enabled:
+            payload["activeOnExternalDevicesDiscovered"] = False
         return self._post_ok("/api/config/solar_api", payload)
 
     def reset_modbus_control(self) -> bool:

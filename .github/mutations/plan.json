@@ -481,5 +481,68 @@
     "old": "\"reset_modbus_control\": {",
     "new": "\"reset_modbus_controls\": {",
     "tests": "every_icon_names_a_translation_key_an_entity_carries"
+  },
+  {
+    "label": "web client: the RS485 master roles are written back as read",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "            \"master\": config.get(\"master\", MASTER_RTUIF[\"master\"]),",
+    "new": "            \"master\": MASTER_RTUIF[\"master\"],",
+    "tests": "enabling_tcp_keeps_an_rtu_port_in_slave_role"
+  },
+  {
+    "label": "web client: the RS485 slave roles are written back as read",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "                \"rtuif\": slave.get(\"rtuif\", []),",
+    "new": "                \"rtuif\": [],",
+    "tests": "enabling_tcp_keeps_an_rtu_port_in_slave_role"
+  },
+  {
+    "label": "web client: mode both already serves Modbus TCP",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "TCP_MODES = (\"tcp\", \"both\")",
+    "new": "TCP_MODES = (\"tcp\",)",
+    "tests": "tcp_and_rtu_together_already_serve_modbus_tcp or a_rewrite_for_another_reason_keeps_mode_both"
+  },
+  {
+    "label": "web client: field descriptions are not written back",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "            if not key.startswith(\"_\")\n",
+    "new": "",
+    "tests": "the_field_descriptions_are_not_written_back or enabling_the_solar_api_keeps_the_discovery_switch"
+  },
+  {
+    "label": "web client: Home Assistant joins the allowed hosts",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "    entries = [entry for entry in listed.split(RESTRICTION_LIST_SEPARATOR) if entry]",
+    "new": "    entries = []",
+    "tests": "home_assistant_joins_the_allowed_hosts"
+  },
+  {
+    "label": "web client: a network covering Home Assistant is left alone",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "    if not any(network is not None and client in network for network in networks):",
+    "new": "    if True:",
+    "tests": "a_network_that_covers_home_assistant_is_left_alone"
+  },
+  {
+    "label": "web client: an inactive host list is not revived",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "    if not is_enabled(restriction.get(\"on\")):",
+    "new": "    if False:",
+    "tests": "an_inactive_list_is_not_switched_on_with_home_assistant"
+  },
+  {
+    "label": "web client: enabling the Solar API keeps the discovery switch",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "            **_without_descriptions(self.get_solar_api_config()),",
+    "new": "            \"activeOnExternalDevicesDiscovered\": False,",
+    "tests": "enabling_the_solar_api_keeps_the_discovery_switch"
+  },
+  {
+    "label": "web client: disabling the Solar API clears the discovery switch",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "            payload[\"activeOnExternalDevicesDiscovered\"] = False",
+    "new": "            pass",
+    "tests": "disabling_the_solar_api_also_clears_the_discovery_flag"
   }
 ]

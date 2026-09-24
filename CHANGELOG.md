@@ -8,6 +8,8 @@
 - A stored web token is deleted once no entry uses its host and role: on removing the entry, and on moving an entry to another host or role. It had outlived both.
 
 ### Fixed
+- Enabling Modbus TCP keeps the rest of the inverter's Modbus settings. The integration wrote a fixed block that moved both RS485 ports to master and switched the `TCP & RTU` mode to TCP alone, cutting off a device that reads the inverter over RS485; it now writes back what it read and changes only its own fields. Restricting Modbus to Home Assistant adds its address to the hosts already allowed instead of replacing them.
+- Switching the Solar API on keeps the inverter's own switch that enables it for discovered devices; it was cleared on every change. Switching the Solar API off still clears it, or a discovered device would switch the API back on.
 - A web login lost at setup no longer deletes the web entities, and with them the entity ids an owner chose. A rejected token read as an entry without the web API, and the stale-entity cleanup retired everything the web API provides; after a restart without the token it took the second meter's entities too. A missing login now blocks the cleanup like a failed poll.
 - A rejected technician token is the one deleted when the meter topology read fails; the customer token was deleted in its place, and the rejected one was offered again on every start.
 - An HTTP error from the export-limit endpoint fails the web refresh instead of reading as "no export limit". Only a 404, from firmware without the endpoint, still means the limit is not there.

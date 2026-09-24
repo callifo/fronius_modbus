@@ -1284,3 +1284,21 @@ def test_a_malformed_master_is_not_written_back(master):
 
     with pytest.raises(FroniusWebResponseError, match="no object"):
         client.ensure_modbus_enabled(502, 200, 1)
+
+
+@pytest.mark.parametrize(
+    "battery_config",
+    [
+        {"BAT_M0_SOC_MIN": 20, "BAT_M0_SOC_MAX": "30"},
+        {"BAT_M0_SOC_MIN": 20},
+        {"BAT_M0_SOC_MIN": 20, "BAT_M0_SOC_MAX": True},
+    ],
+)
+def test_a_soc_window_without_a_numeric_limit_is_unreadable(
+    client, inverter, battery_config
+):
+    """Audit RR770-04: a text or missing maximum passed the check before Modbus."""
+    inverter.bodies[BATTERIES] = battery_config
+
+    with pytest.raises(FroniusWebResponseError, match="SoC window"):
+        client.check_soc_window(soc_min=50)

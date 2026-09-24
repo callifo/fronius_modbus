@@ -555,3 +555,20 @@ async def test_a_move_to_a_host_taken_during_the_password_step_is_refused(
     assert result["errors"]["base"] == "already_configured"
     assert options["errors"]["base"] == "already_configured"
     assert applied == []
+
+
+async def test_an_aborted_setup_does_not_hand_its_token_to_another_entry(
+    hass, monkeypatch
+):
+    """Audit RR770-02: a competing entry on the same role kept the aborted flow's token."""
+
+    async def validate_while_taken(hass, settings, **_kwargs):
+        make_entry(hass)
+        return {"title": "Fronius"}
+
+    monkeypatch.setattr(config_flow, "_validate_input", validate_while_taken)
+
+    result = await run_flow(hass)
+
+    assert result["reason"] == "already_configured"
+    assert await async_get_token_store(hass).async_load_token(HOST) is None

@@ -13,7 +13,7 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components import fronius_modbus
-from custom_components.fronius_modbus import migrations
+from custom_components.fronius_modbus import config_flow, migrations
 from custom_components.fronius_modbus.const import (
     CONF_RECONFIGURE_REQUIRED,
     DOMAIN,
@@ -729,3 +729,25 @@ async def test_an_empty_component_answer_retires_no_entity(
     await hass.async_block_till_done()
 
     assert registry.async_get(chosen) is not None
+
+
+async def test_a_reconfigure_reloads_the_entry_once(hass, mock_modbus, monkeypatch):
+    """Audit F24-10: the update listener and an explicit call both reloaded it."""
+    entry = make_entry(hass)
+    await setup_entry(hass, entry)
+    reload = hass.config_entries.async_reload
+    reloads: list[str] = []
+
+    async def counting(entry_id):
+        reloads.append(entry_id)
+        return await reload(entry_id)
+
+    monkeypatch.setattr(hass.config_entries, "async_reload", counting)
+    settings = config_flow.entry_defaults(entry) | {"scan_interval": 20}
+
+    await config_flow.async_update_entry_from_input(
+        hass, entry, settings, previous_host=HOST
+    )
+    await hass.async_block_till_done()
+
+    assert reloads == [entry.entry_id]

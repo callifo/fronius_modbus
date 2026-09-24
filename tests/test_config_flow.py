@@ -199,3 +199,41 @@ async def test_changing_only_the_host_spelling_keeps_the_stored_token(
 
     stored = await async_get_token_store(hass).async_load_token(named_host)
     assert stored == {"realm": "r", "token": "stored"}
+
+
+async def test_a_token_whose_setup_fails_is_not_kept(hass, mock_modbus):
+    """Audit RA24-01: the minted token was saved before the inverter was checked.
+
+    A failed setup left a password-equivalent credential with no entry.
+    """
+    mock_modbus.fail_requests(INVERTER_UNIT_ID, ModbusConnectionError())
+
+    result = await run_flow(hass)
+
+    assert result["errors"]["base"] == "cannot_connect"
+    assert await async_get_token_store(hass).async_load_token(HOST) is None
+
+
+async def test_a_token_for_a_host_already_set_up_is_not_kept(hass, mock_modbus):
+    """The duplicate is only found after the password step; its new role token stays behind."""
+    MockConfigEntry(
+        domain=DOMAIN,
+        data={"host": HOST, "api_username": "customer"},
+        unique_id=HOST,
+        version=1,
+        minor_version=12,
+    ).add_to_hass(hass)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT | {"api_username": "technician"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+
+    assert result["reason"] == "already_configured"
+    assert (
+        await async_get_token_store(hass).async_load_token(HOST, "technician") is None
+    )

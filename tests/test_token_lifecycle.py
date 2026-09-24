@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.fronius_modbus import config_flow, token_store
+from custom_components.fronius_modbus import config_flow, migrations, token_store
 from custom_components.fronius_modbus.const import DOMAIN
 from custom_components.fronius_modbus.token_store import (
     FroniusTokenStore,
@@ -127,3 +127,14 @@ async def test_an_entry_not_yet_migrated_keeps_both_roles(hass):
     await hass.config_entries.async_remove(removed.entry_id)
 
     assert await stored_roles(hass) == {"customer", "technician"}
+
+
+async def test_the_role_a_migration_drops_takes_its_token_with_it(hass):
+    """Audit F24-04: an entry of both roles kept technician, and the customer token stayed."""
+    entry = make_entry(hass)
+    await save_both_roles(hass)
+
+    assert await migrations.async_migrate_entry(hass, entry)
+
+    assert entry.data["api_username"] == "technician"
+    assert await stored_roles(hass) == {"technician"}

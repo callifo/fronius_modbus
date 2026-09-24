@@ -485,7 +485,7 @@
   {
     "label": "web client: the RS485 master roles are written back as read",
     "path": "custom_components/fronius_modbus/froniuswebclient.py",
-    "old": "            \"master\": config.get(\"master\", MASTER_RTUIF[\"master\"]),",
+    "old": "            \"master\": master,",
     "new": "            \"master\": MASTER_RTUIF[\"master\"],",
     "tests": "enabling_tcp_keeps_an_rtu_port_in_slave_role"
   },
@@ -985,5 +985,12 @@
     "old": "        except (RuntimeError, ValueError, OSError) as err:\n            # Modbus holds",
     "new": "        except ZeroDivisionError as err:\n            # Modbus holds",
     "tests": "web_refusal_after_modbus_says_modbus_is_set"
+  },
+  {
+    "label": "web client: a malformed master is not written back",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "        master = _config_object(\n            config.get(\"master\", MASTER_RTUIF[\"master\"]), MODBUS_PATH\n        )\n",
+    "new": "        master = config.get(\"master\", MASTER_RTUIF[\"master\"])\n",
+    "tests": "malformed_master_is_not_written_back"
   }
 ]

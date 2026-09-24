@@ -711,6 +711,10 @@ class FroniusWebClient:
         restriction: ModbusRestriction = ModbusRestriction.KEEP,
     ) -> bool:
         config = _config_object(self.get_modbus_config(), MODBUS_PATH)
+        # Checked like the slave: it is written back as read (audit FA0FB-05).
+        master = _config_object(
+            config.get("master", MASTER_RTUIF["master"]), MODBUS_PATH
+        )
         slave = _nested_object(config, "slave", MODBUS_PATH)
         ctr = _nested_object(slave, "ctr", MODBUS_PATH)
         current_restriction = _nested_object(ctr, "restriction", MODBUS_PATH)
@@ -740,7 +744,7 @@ class FroniusWebClient:
         # Everything read is written back: the RS485 roles, serial settings and
         # a "both" mode belong to other devices on the inverter.
         payload = {
-            "master": config.get("master", MASTER_RTUIF["master"]),
+            "master": master,
             "slave": {
                 **slave,
                 "rtuif": slave.get("rtuif", []),

@@ -147,6 +147,13 @@
     "tests": "a_topology_outage_keeps_the_second_meters_entities"
   },
   {
+    "label": "migrations: a missing web login blocks the cleanup",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "    elif runtime.web_control is None or not runtime.web_control.configured:",
+    "new": "    elif False:",
+    "tests": "a_lost_web_login_retires_no_web_entity"
+  },
+  {
     "label": "migrations: live devices are never retired as legacy ones",
     "path": "custom_components/fronius_modbus/migrations.py",
     "old": "        and identifier not in current\n",

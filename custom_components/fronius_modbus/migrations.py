@@ -422,7 +422,8 @@ def _retirement_blocked(entry: ConfigEntry, what: str) -> bool:
     """Whether the current picture of the device is too uncertain to retire anything.
 
     The one gate in front of every destructive cleanup: a failed poll, a failed
-    web refresh or an unread meter topology all mean "not seen", never "gone"
+    web refresh, a missing web login or an unread meter topology all mean
+    "not seen", never "gone"
     (audit A03/A04). Without it a single outage takes entities and their
     history with it.
     """
@@ -432,6 +433,10 @@ def _retirement_blocked(entry: ConfigEntry, what: str) -> bool:
         reason = "a poll did not succeed everywhere"
     elif runtime.web is not None and not runtime.web.last_update_success:
         reason = "the web API refresh failed"
+    elif runtime.web_control is None or not runtime.web_control.configured:
+        # Every entry has a login; without one the web entities are unread, not
+        # gone (audit A24-01: an auth failure at setup retired them).
+        reason = "the web API login is missing"
     elif not runtime.topology_confirmed:
         reason = "the meter topology could not be read"
     if reason is None:

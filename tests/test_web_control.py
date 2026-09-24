@@ -71,12 +71,16 @@ class FakeWebClient:
         self.battery.update(HYB_EM_MODE=mode)
         return True
 
-    def set_battery_soc_config(self, soc_min, soc_max, backup):
-        self.calls.append(("soc", soc_min, soc_max, backup))
+    def set_soc_limits(self, soc_min=None, soc_max=None):
+        self.calls.append(("soc", soc_min, soc_max))
         return True
 
-    def set_battery_charge_sources(self, grid, ac):
-        self.calls.append(("sources", grid, ac))
+    def set_battery_power(self, power):
+        self.calls.append(("power", power))
+        return True
+
+    def set_battery_charge_sources(self, charge_from_grid=None, charge_from_ac=None):
+        self.calls.append(("sources", charge_from_grid, charge_from_ac))
         return True
 
     def set_soc_mode(self, mode):
@@ -235,10 +239,11 @@ async def test_auto_mode_with_a_manual_soc_mode_still_reads_as_auto(hass):
     control.shutdown()
 
 
-async def test_switching_to_manual_sends_the_power(control):
+async def test_switching_to_manual_keeps_the_target_on_the_inverter(control):
+    """Audit F24-01: the cached target went along and undid one set since the poll."""
     await control.async_refresh()
     await control.set_battery_mode(1)
-    assert control._client.calls[-1] == ("battery", 1, 0)
+    assert control._client.calls[-1] == ("battery", 1, None)
     assert control.battery_mode_is_manual
     assert control.events == ["write"]
 
@@ -254,6 +259,34 @@ async def test_charge_from_grid_implies_charge_from_ac(control):
     await control.set_charge_sources(charge_from_grid=True)
     assert control._client.calls[-1] == ("sources", True, True)
     assert (control.data.charge_from_grid, control.data.charge_from_ac) == (True, True)
+
+
+@pytest.mark.parametrize(
+    ("request_", "sent"),
+    [
+        ({"charge_from_ac": True}, ("sources", None, True)),
+        ({"charge_from_ac": False}, ("sources", False, False)),
+        ({"charge_from_grid": False}, ("sources", False, None)),
+    ],
+)
+async def test_a_charge_source_sends_only_itself_and_what_it_implies(
+    control, request_, sent
+):
+    """Audit F24-01: the other flag came from the cache and could undo a fresh change."""
+    await control.async_refresh()
+    await control.set_charge_sources(**request_)
+    assert control._client.calls[-1] == sent
+
+
+async def test_the_target_feed_in_sends_only_the_power(hass):
+    control = make_control(hass)
+    try:
+        await control.async_refresh()
+        await control.set_battery_mode(1)
+        await control.set_battery_power_w(500)
+    finally:
+        control.shutdown()
+    assert control._client.calls[-1] == ("power", -500)
 
 
 async def test_the_export_soft_limit_is_shown_right_after_the_write(hass):

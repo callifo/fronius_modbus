@@ -15,6 +15,9 @@ import requests
 
 from custom_components.fronius_modbus import froniuswebclient
 from custom_components.fronius_modbus.const import ModbusRestriction
+from custom_components.fronius_modbus.fronius_modbus_api.exceptions import (
+    ControlRefused,
+)
 from custom_components.fronius_modbus.froniuswebclient import (
     ClientIpResolutionError,
     FroniusWebAuthError,
@@ -976,6 +979,51 @@ def test_a_config_that_must_be_written_back_but_is_no_object_is_an_error(
     with pytest.raises(FroniusWebResponseError, match="no object"):
         write(client)
 
+    assert posts(inverter) == []
+
+
+DEVICE_CHANGED = BATTERY_CONFIG | {
+    # What the inverter UI or a second controller set since the last poll.
+    "BAT_M0_SOC_MIN": 20,
+    "HYB_EVU_CHARGEFROMGRID": True,
+    "HYB_BM_CHARGEFROMAC": False,
+    "HYB_EM_POWER": -500,
+}
+
+
+@pytest.mark.parametrize(
+    ("write", "sent"),
+    [
+        (lambda c: c.set_soc_limits(soc_max=90), {"BAT_M0_SOC_MAX": 90}),
+        (
+            lambda c: c.set_battery_charge_sources(charge_from_ac=True),
+            {"HYB_BM_CHARGEFROMAC": True},
+        ),
+        (lambda c: c.set_battery_config(1), None),
+        (lambda c: c.set_battery_power(-300), {"HYB_EM_POWER": -300}),
+    ],
+)
+def test_a_battery_write_sends_only_what_was_asked(client, inverter, write, sent):
+    """Audit F24-01: cached companions undid a change made since the last poll.
+
+    Changing the maximum re-sent a stale minimum, switching AC charging re-sent
+    a stale grid flag, and selecting manual mode re-sent a stale target.
+    """
+    inverter.bodies[BATTERIES] = dict(DEVICE_CHANGED)
+
+    write(client)
+
+    assert posts(inverter) == ([] if sent is None else [(BATTERIES, sent)])
+
+
+def test_the_soc_window_is_checked_against_the_fresh_read(client, inverter):
+    """A maximum below the minimum set on the inverter since the last poll is refused."""
+    inverter.bodies[BATTERIES] = dict(DEVICE_CHANGED)
+
+    with pytest.raises(ControlRefused) as refused:
+        client.set_soc_limits(soc_max=15)
+
+    assert refused.value.key == "soc_minimum_above_maximum"
     assert posts(inverter) == []
 
 

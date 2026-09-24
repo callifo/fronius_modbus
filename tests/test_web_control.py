@@ -750,3 +750,23 @@ async def test_a_failed_storage_read_keeps_the_battery_identity(hass):
         "S",
     )
     assert data.storage_readings is None
+
+
+@pytest.mark.parametrize(
+    ("modbus_config", "unknown"),
+    [
+        ({"slave": [1]}, ("modbus_control", "modbus_restriction")),
+        ({"slave": {"ctr": [1]}}, ("modbus_control", "modbus_restriction")),
+        ({"slave": {"ctr": {"on": True, "restriction": [1]}}}, ("modbus_restriction",)),
+    ],
+)
+async def test_a_malformed_modbus_flag_shows_as_unknown(hass, modbus_config, unknown):
+    """Audit RR770-03: an unreadable Modbus flag showed as "disabled"."""
+    client = FakeWebClient()
+    client.get_modbus_config = lambda: modbus_config
+    control = make_control(hass, client=client)
+    try:
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+    assert [getattr(data, field) for field in unknown] == [None] * len(unknown)

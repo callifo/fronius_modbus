@@ -78,7 +78,7 @@ async def test_the_config_flow_creates_an_entry(hass, mock_modbus):
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["title"] == "Fronius 192.0.2.10"
     assert result["data"]["host"] == HOST
-    assert result["minor_version"] == 12
+    assert result["minor_version"] == 13
     # Leaving the choice alone must not lift a restriction the inverter has.
     assert result["data"]["modbus_restriction"] == "keep"
 

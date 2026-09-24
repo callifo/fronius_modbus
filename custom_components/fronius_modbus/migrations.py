@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 import json
 import logging
 import re
@@ -27,6 +28,7 @@ from .const import (
     instance_key,
     ModbusRestriction,
 )
+from .component_readings import CHANNEL_KEYS
 from .entities import expected_device_identifiers, expected_unique_ids
 from .token_store import async_forget_unused_tokens, async_get_token_store
 
@@ -35,7 +37,7 @@ _TRANSLATIONS_DIR = Path(__file__).resolve().parent / "translations"
 _TRANSLATION_CACHE: dict[str, dict] = {}
 
 _TARGET_VERSION = 1
-_TARGET_MINOR_VERSION = 12
+_TARGET_MINOR_VERSION = 13
 # Entries below this minor version predate the web API integration and still
 # carry the dropped meter-unit config, so only they need the data migration.
 _WEB_API_MINOR_VERSION = 9
@@ -43,6 +45,9 @@ _WEB_API_MINOR_VERSION = 9
 _SINGLE_ROLE_MINOR_VERSION = 11
 # Entries below this minor version store the restriction as a checkbox.
 _RESTRICTION_CHOICE_MINOR_VERSION = 12
+# Minor 13 marks the power modules the device reported; one registered before
+# cannot be told from a placeholder and is kept (audit D8AE-01).
+_REPORTED_MARK_MINOR_VERSION = 13
 _LEGACY_RESTRICT_TO_THIS_IP = "restrict_modbus_to_this_ip"
 
 _LEGACY_METER_DEVICE_RE = re.compile(r".*_meter_?\d+")
@@ -116,7 +121,7 @@ def reported_keys(hass: HomeAssistant, entry: ConfigEntry) -> frozenset[str]:
 
 @callback
 def async_mark_reported(
-    hass: HomeAssistant, entry: ConfigEntry, keys: set[str]
+    hass: HomeAssistant, entry: ConfigEntry, keys: Iterable[str]
 ) -> None:
     """Remember in the registry that the device reported these sensors."""
     registry = er.async_get(hass)
@@ -292,6 +297,9 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             values.pop(_LEGACY_RESTRICT_TO_THIS_IP, None)
         new_data[CONF_MODBUS_RESTRICTION] = choice
         new_options[CONF_MODBUS_RESTRICTION] = choice
+
+    if entry.minor_version < _REPORTED_MARK_MINOR_VERSION:
+        async_mark_reported(hass, entry, CHANNEL_KEYS)
 
     drops_a_role = entry.minor_version < _SINGLE_ROLE_MINOR_VERSION
     hass.config_entries.async_update_entry(

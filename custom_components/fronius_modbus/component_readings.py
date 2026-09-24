@@ -321,6 +321,9 @@ def reported(reading: ComponentReading, readings: dict[str, Any] | None) -> bool
     return any(field in readings for field in reading.fields)
 
 
+CHANNEL_KEYS = frozenset(row.key for row in COMPONENT_READINGS if row.per_channel)
+
+
 def named_channels(component: Component, readings: dict[str, Any] | None) -> set[str]:
     """The channel-by-channel rows an answer names; only these count as seen.
 

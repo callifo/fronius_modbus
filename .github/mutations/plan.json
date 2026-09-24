@@ -1006,5 +1006,12 @@
     "old": "        if self.data.storage_readings is None:\n            return\n        self.data.storage_manufacturer",
     "new": "        self.data.storage_manufacturer",
     "tests": "failed_storage_read_keeps_the_battery_identity"
+  },
+  {
+    "label": "migrations: minor 13 marks the modules registered before",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "        async_mark_reported(hass, entry, CHANNEL_KEYS)\n",
+    "new": "        pass\n",
+    "tests": "module_registered_before_the_marker_survives_the_upgrade"
   }
 ]

@@ -837,14 +837,15 @@ def posted(inverter: FakeInverter, path: str) -> dict | None:
     )
 
 
-def test_manual_battery_mode_writes_the_mode_and_the_power_only(client, inverter):
+def test_the_mode_and_the_target_are_written_apart(client, inverter):
     """HYB_EM_MODE is self-consumption optimisation; the SoC window is a separate switch."""
-    assert client.set_battery_config(1, power=-2000) is True
+    assert client.set_battery_config(1) is True
+    assert client.set_battery_power(-2000) is True
 
-    assert posted(inverter, "/api/config/batteries") == {
-        "HYB_EM_MODE": 1,
-        "HYB_EM_POWER": -2000,
-    }
+    assert posts(inverter) == [
+        ("/api/config/batteries", {"HYB_EM_MODE": 1}),
+        ("/api/config/batteries", {"HYB_EM_POWER": -2000}),
+    ]
 
 
 def test_leaving_manual_battery_mode_leaves_the_soc_window_alone(client, inverter):
@@ -853,14 +854,12 @@ def test_leaving_manual_battery_mode_leaves_the_soc_window_alone(client, inverte
     assert posted(inverter, "/api/config/batteries") == {"HYB_EM_MODE": 0}
 
 
-def test_the_soc_window_write_carries_the_backup_reserve(client, inverter):
-    assert client.set_battery_soc_config(soc_min=10, soc_max=95, backup_reserved=7)
+def test_the_soc_window_write_sends_the_limits_given(client, inverter):
+    assert client.set_soc_limits(soc_min=10, soc_max=95)
 
     assert posted(inverter, "/api/config/batteries") == {
         "BAT_M0_SOC_MIN": 10,
-        "BAT_M0_SOC_MODE": "manual",
         "BAT_M0_SOC_MAX": 95,
-        "HYB_BACKUP_RESERVED": 7,
     }
 
 
@@ -919,8 +918,9 @@ def posts(inverter: FakeInverter) -> list[tuple[str, dict | None]]:
 @pytest.mark.parametrize(
     ("write", "arguments"),
     [
-        ("set_battery_config", (1, -2000)),
-        ("set_battery_soc_config", (10, 95, 7)),
+        ("set_battery_config", (1,)),
+        ("set_battery_power", (-2000,)),
+        ("set_soc_limits", (10, 95)),
         ("set_soc_mode", ("manual",)),
         ("set_backup_reserve", (7,)),
         ("set_battery_charge_sources", (True, True)),
@@ -1030,7 +1030,7 @@ def test_the_soc_window_is_checked_against_the_fresh_read(client, inverter):
 def test_only_the_battery_fields_that_differ_are_written(client, inverter):
     inverter.bodies[BATTERIES] = dict(BATTERY_CONFIG)
 
-    assert client.set_battery_soc_config(10, 90, 7) is True
+    assert client.set_soc_limits(10, 90) is True
 
     assert posts(inverter) == [(BATTERIES, {"BAT_M0_SOC_MAX": 90})]
 

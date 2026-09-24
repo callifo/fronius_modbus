@@ -212,7 +212,7 @@
   {
     "label": "web control: the SoC minimum is checked before Modbus is written",
     "path": "custom_components/fronius_modbus/web_control.py",
-    "old": "        mirror = self.configured and self.soc_mode_is_manual\n        if mirror:\n            self._get_api_soc_values(soc_min=soc_min)\n        await write_modbus()",
+    "old": "        mirror = self.configured and self.soc_mode_is_manual\n        if mirror:\n            self._get_next_soc_limits(soc_min=soc_min)\n        await write_modbus()",
     "new": "        mirror = self.configured and self.soc_mode_is_manual\n        await write_modbus()",
     "tests": "invalid_soc_minimum_writes_nothing"
   },
@@ -366,8 +366,8 @@
   {
     "label": "web_control: switching the energy management leaves the SoC window alone",
     "path": "custom_components/fronius_modbus/web_control.py",
-    "old": "        self._set_effective_battery_mode(mode, self.data.soc_mode_raw)\n        if mode == BATTERY_MODE_MANUAL:\n            self.data.battery_power_w = display_power",
-    "new": "        self._set_effective_battery_mode(mode, self.data.soc_mode_raw)\n        if mode == BATTERY_MODE_MANUAL:\n            self.data.battery_power_w = display_power\n        else:\n            self.data.soc_min = SOC_LOWEST",
+    "old": "        self._set_effective_battery_mode(mode, self.data.soc_mode_raw)\n        self._after_battery_write(\"self-consumption optimisation\", written=written)",
+    "new": "        self._set_effective_battery_mode(mode, self.data.soc_mode_raw)\n        self.data.soc_min = SOC_LOWEST\n        self._after_battery_write(\"self-consumption optimisation\", written=written)",
     "tests": "switching_the_energy_management_leaves_the_soc_window_alone"
   },
   {
@@ -604,8 +604,8 @@
   {
     "label": "web client: an unreadable config is written in full",
     "path": "custom_components/fronius_modbus/froniuswebclient.py",
-    "old": "        except FroniusWebResponseError, ValueError:\n            current = {}\n",
-    "new": "        except FroniusWebResponseError, ValueError:\n            return False\n",
+    "old": "        except FroniusWebResponseError, ValueError:\n            return {}\n",
+    "new": "        except FroniusWebResponseError, ValueError:\n            raise\n",
     "tests": "an_unreadable_battery_config_still_writes_everything"
   },
   {
@@ -782,5 +782,33 @@
     "old": "        return number != 0\n",
     "new": "        return True\n",
     "tests": "a_flag_is_set_only_by_a_true_value"
+  },
+  {
+    "label": "web control: switching AC charging off takes grid charging with it",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "    if from_ac is False:\n        return False, False\n",
+    "new": "    if from_ac is False:\n        return None, False\n",
+    "tests": "a_charge_source_sends_only_itself_and_what_it_implies"
+  },
+  {
+    "label": "web control: switching grid charging on takes AC charging with it",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "    if grid:\n        return True, True\n",
+    "new": "",
+    "tests": "charge_from_grid_implies_charge_from_ac"
+  },
+  {
+    "label": "web client: a charge source not asked for is not sent",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "        wanted = {key: bool(value) for key, value in flags.items() if value is not None}\n",
+    "new": "        wanted = {key: bool(value) for key, value in flags.items()}\n",
+    "tests": "a_battery_write_sends_only_what_was_asked"
+  },
+  {
+    "label": "web client: the SoC window is checked against the fresh read",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "        if _window_inverted(lower, upper):\n",
+    "new": "        if False:\n",
+    "tests": "soc_window_is_checked_against_the_fresh_read"
   }
 ]

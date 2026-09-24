@@ -66,7 +66,7 @@ class FakeWebClient:
             }
         }
 
-    def set_battery_config(self, mode, power):
+    def set_battery_config(self, mode, power=None):
         self.calls.append(("battery", mode, power))
         self.battery.update(HYB_EM_MODE=mode)
         return True
@@ -134,7 +134,7 @@ def control(hass):
 class FakeClientAlreadyThere(FakeWebClient):
     """Every battery setting the control asks for is already on the inverter."""
 
-    def set_battery_config(self, mode, power):
+    def set_battery_config(self, mode, power=None):
         super().set_battery_config(mode, power)
         return False
 
@@ -403,7 +403,7 @@ async def test_concurrent_soc_writes_are_applied_one_after_the_other(hass):
             control.set_soc_minimum_manual(10), control.set_soc_maximum(90)
         )
         soc_calls = [call for call in control._client.calls if call[0] == "soc"]
-        assert soc_calls == [("soc", 10, 100, 5), ("soc", 10, 90, 5)]
+        assert soc_calls == [("soc", 10, None), ("soc", None, 90)]
         assert (control.data.soc_min, control.data.soc_max) == (10, 90)
     finally:
         control.shutdown()
@@ -477,8 +477,8 @@ async def test_the_soc_window_follows_the_soc_mode_not_the_energy_management(has
     finally:
         control.shutdown()
     assert [c for c in client.calls if c[0] == "soc"] == [
-        ("soc", 5, 90, 5),
-        ("soc", 12, 90, 5),
+        ("soc", None, 90),
+        ("soc", 12, None),
     ]
 
 
@@ -490,7 +490,7 @@ async def test_switching_the_energy_management_leaves_the_soc_window_alone(contr
     await control.set_battery_mode(0)
     assert (control.data.soc_min, control.data.soc_mode_raw) == (20, "manual")
     assert [c for c in control._client.calls if c[0] == "battery"] == [
-        ("battery", 1, 0),
+        ("battery", 1, None),
         ("battery", 0, None),
     ]
 
@@ -510,7 +510,7 @@ async def test_the_modbus_reserve_mirrors_to_the_web_api_in_manual_soc_mode(hass
     finally:
         control.shutdown()
     assert written == [9]
-    assert client.calls[-1] == ("soc", 9, 100, 5)
+    assert client.calls[-1] == ("soc", 9, None)
 
 
 async def test_the_soc_mode_select_opens_the_window_for_writing(control):
@@ -596,7 +596,7 @@ async def test_different_controls_do_not_supersede_each_other(control):
     await asyncio.gather(*both)
     assert [c for c in control._client.calls if c[0] in ("reserve", "soc")] == [
         ("reserve", 30),
-        ("soc", 5, 90, 30),
+        ("soc", None, 90),
     ]
 
 

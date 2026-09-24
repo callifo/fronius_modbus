@@ -21,7 +21,7 @@
 
 ### Changed
 - A control set to the value the inverter already holds writes nothing. Every write used to reach the inverter: a Modbus register, and for the AC limit and the power factor a second-long switch-off of the enable flag around it; a battery setting over the web API, and with it the Modbus recovery window and a delayed refresh. The comparison is made against a fresh read, not the last poll, so a value another controller changed in between is still written; when that read fails, the value is written as before.
-- A web write sends only the fields that differ, and a field the inverter names as refused in its answer is reported as an error.
+- A web write sends only the field asked for, and only when it differs; a field the inverter names as refused in its answer is reported as an error. Changing one SoC limit, one charge source, the target feed-in or the self-consumption mode no longer re-sends the other values from the last poll, which undid a change made in the inverter's web interface or by another controller in between. The SoC window is checked against a fresh read.
 - The inverter temperature and the battery cell temperature are read like the new component sensors. Firmware without the component endpoints (HTTP 404) gets no such entity, instead of one that stays unknown.
 
 ## 1.2.0b1

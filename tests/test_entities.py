@@ -486,7 +486,7 @@ async def test_the_web_soc_limits_are_writable_in_manual_soc_mode_alone(
         await minimum.set_fn(runtime, 25)
     finally:
         web_control.shutdown()
-    assert web_control._client.calls[-1] == ("soc", 25, 100, 5)
+    assert web_control._client.calls[-1] == ("soc", 25, None)
 
 
 # Model-123 WMaxLimPct_Ena and WMaxLimPct in the captured fixture.

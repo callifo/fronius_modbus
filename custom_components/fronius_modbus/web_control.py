@@ -80,6 +80,22 @@ SOC_MODE_AUTO, SOC_MODE_MANUAL = "auto", "manual"
 SOC_LOWEST, SOC_HIGHEST, SOC_MAX_DEFAULT = 5, 100, 99
 
 
+def _implied_charge_sources(
+    grid: bool | None, from_ac: bool | None
+) -> tuple[bool | None, bool | None]:
+    """The flags a request sets: itself and what the inverter ties to it.
+
+    Grid charging needs AC charging, so switching AC off takes grid with it
+    and switching grid on takes AC with it. The other flag is left alone: taken
+    from the last poll, it undid a change made since (audit F24-01).
+    """
+    if from_ac is False:
+        return False, False
+    if grid:
+        return True, True
+    return grid, from_ac
+
+
 @dataclass
 class WebData:
     """The web API's contribution to the entities' state, refreshed on its own schedule."""
@@ -601,26 +617,6 @@ class FroniusWebControl:
 
         return next_soc_min, next_soc_max
 
-    def _get_api_soc_values(
-        self, *, soc_min: int | None = None, soc_max: int | None = None
-    ) -> tuple[int, int, int]:
-        next_soc_min, next_soc_max = self._get_next_soc_limits(
-            soc_min=soc_min, soc_max=soc_max
-        )
-        next_backup_reserved = self.data.backup_reserved
-        next_backup_reserved = (
-            SOC_LOWEST if next_backup_reserved is None else next_backup_reserved
-        )
-        if next_backup_reserved < SOC_LOWEST or next_backup_reserved > SOC_HIGHEST:
-            raise ControlRefused(
-                "value_out_of_range",
-                "Battery backup reserve must be between 5 and 100",
-                minimum=str(SOC_LOWEST),
-                maximum=str(SOC_HIGHEST),
-            )
-
-        return next_soc_min, next_soc_max, next_backup_reserved
-
     @_last_writer_wins
     async def apply_soc_minimum(
         self, soc_min: int, write_modbus: Callable[[], Awaitable[None]]
@@ -633,7 +629,7 @@ class FroniusWebControl:
         """
         mirror = self.configured and self.soc_mode_is_manual
         if mirror:
-            self._get_api_soc_values(soc_min=soc_min)
+            self._get_next_soc_limits(soc_min=soc_min)
         await write_modbus()
         if mirror:
             await self._set_api_soc_manual(soc_min=soc_min, control_name="SoC Minimum")
@@ -658,27 +654,29 @@ class FroniusWebControl:
         soc_min: int | None = None,
         soc_max: int | None = None,
         control_name: str = "SoC Maximum",
-    ) -> tuple[int, int, int] | None:
+    ) -> None:
+        """Send the one limit asked for; the other stays as the inverter holds it.
+
+        The cache check here only answers early; the client checks the window
+        against a fresh read. Sending the cached other limit undid one set in
+        the inverter UI since the last poll (audit F24-01).
+        """
         if not self._client:
             raise ControlUnavailable("web_api_not_configured", WEB_API_NOT_CONFIGURED)
         self._require_soc_mode_manual(control_name)
+        self._get_next_soc_limits(soc_min=soc_min, soc_max=soc_max)
 
-        next_soc_min, next_soc_max, next_backup_reserved = self._get_api_soc_values(
-            soc_min=soc_min, soc_max=soc_max
-        )
         written = await self._async_web_job(
-            self._client.set_battery_soc_config,
-            next_soc_min,
-            next_soc_max,
-            next_backup_reserved,
+            self._client.set_soc_limits,
+            soc_min,
+            soc_max,
             raise_on_auth_failure=True,
         )
-        self._set_effective_battery_mode(self.data.battery_mode_raw, SOC_MODE_MANUAL)
-        self.data.soc_min = next_soc_min
-        self.data.soc_max = next_soc_max
-        self.data.backup_reserved = next_backup_reserved
+        if soc_min is not None:
+            self.data.soc_min = int(soc_min)
+        if soc_max is not None:
+            self.data.soc_max = int(soc_max)
         self._after_battery_write(control_name, written=written)
-        return next_soc_min, next_soc_max, next_backup_reserved
 
     @_serialised
     async def set_battery_mode(self, mode: int) -> None:
@@ -689,20 +687,11 @@ class FroniusWebControl:
         if not self._client:
             raise ControlUnavailable("web_api_not_configured", WEB_API_NOT_CONFIGURED)
 
-        display_power = self.data.battery_power_w
-        if mode == BATTERY_MODE_MANUAL and display_power is None:
-            display_power = 0
-        power = (
-            -display_power
-            if mode == BATTERY_MODE_MANUAL and display_power is not None
-            else None
-        )
+        # The mode alone: the target stays as the inverter holds it (audit F24-01).
         written = await self._async_web_job(
-            self._client.set_battery_config, mode, power, raise_on_auth_failure=True
+            self._client.set_battery_config, mode, raise_on_auth_failure=True
         )
         self._set_effective_battery_mode(mode, self.data.soc_mode_raw)
-        if mode == BATTERY_MODE_MANUAL:
-            self.data.battery_power_w = display_power
         self._after_battery_write("self-consumption optimisation", written=written)
 
     @_last_writer_wins
@@ -712,15 +701,12 @@ class FroniusWebControl:
             raise ControlUnavailable("web_api_not_configured", WEB_API_NOT_CONFIGURED)
         self._require_battery_mode_manual("Target feed in")
 
-        power = -int(round(value))
         written = await self._async_web_job(
-            self._client.set_battery_config,
-            BATTERY_MODE_MANUAL,
-            power,
+            self._client.set_battery_power,
+            -int(round(value)),
             raise_on_auth_failure=True,
         )
         self.data.battery_power_w = int(round(value))
-        self._set_effective_battery_mode(BATTERY_MODE_MANUAL, self.data.soc_mode_raw)
         self._after_battery_write("Target feed in", written=written)
 
     @_last_writer_wins
@@ -778,31 +764,17 @@ class FroniusWebControl:
         if not self._client:
             raise ControlUnavailable("web_api_not_configured", WEB_API_NOT_CONFIGURED)
 
-        if charge_from_ac is False:
-            next_charge_from_grid = False
-            next_charge_from_ac = False
-        else:
-            next_charge_from_grid = (
-                is_enabled(self.data.charge_from_grid)
-                if charge_from_grid is None
-                else bool(charge_from_grid)
-            )
-            next_charge_from_ac = (
-                is_enabled(self.data.charge_from_ac)
-                if charge_from_ac is None
-                else bool(charge_from_ac)
-            )
-            if next_charge_from_grid and charge_from_ac is None:
-                next_charge_from_ac = True
-
+        grid, from_ac = _implied_charge_sources(charge_from_grid, charge_from_ac)
         written = await self._async_web_job(
             self._client.set_battery_charge_sources,
-            next_charge_from_grid,
-            next_charge_from_ac,
+            grid,
+            from_ac,
             raise_on_auth_failure=True,
         )
-        self.data.charge_from_grid = next_charge_from_grid
-        self.data.charge_from_ac = next_charge_from_ac
+        if grid is not None:
+            self.data.charge_from_grid = grid
+        if from_ac is not None:
+            self.data.charge_from_ac = from_ac
         self._after_battery_write("battery charge source", written=written)
 
     @_last_writer_wins

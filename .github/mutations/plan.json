@@ -887,5 +887,19 @@
     "old": "        self._check_soc_range(soc_min=soc_min, soc_max=soc_max)\n",
     "new": "        self._check_soc_range(soc_min=soc_min, soc_max=soc_max)\n        if (soc_min or self.data.soc_min or 0) > (soc_max or self.data.soc_max or 100):\n            raise ControlRefused(\"soc_minimum_above_maximum\", \"stale\")\n",
     "tests": "a_stale_poll_would_refuse_reaches_the_inverter"
+  },
+  {
+    "label": "entities: a power module registered before stays",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "    if reading.per_channel and reading.key in runtime.registered_keys:\n        return True\n",
+    "new": "",
+    "tests": "power_module_missing_from_one_answer_keeps_its_entity"
+  },
+  {
+    "label": "setup: the runtime learns the registered keys",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "        registered_keys=migrations.registered_keys(hass, entry),\n",
+    "new": "",
+    "tests": "power_module_missing_from_one_answer_keeps_its_entity"
   }
 ]

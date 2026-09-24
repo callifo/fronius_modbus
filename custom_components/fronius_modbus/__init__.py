@@ -189,6 +189,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
         meter_locations=locations,
         primary_meter_unit_id=primary,
         topology_confirmed=topology.confirmed,
+        registered_keys=migrations.registered_keys(hass, entry),
     )
 
     await migrations.async_migrate_v019_mppt_statistics(hass, entry)

@@ -86,6 +86,16 @@ def _entity_entries_for_config_entry(registry, entry: ConfigEntry):
     return list(er.async_entries_for_config_entry(registry, entry.entry_id))
 
 
+def registered_keys(hass: HomeAssistant, entry: ConfigEntry) -> frozenset[str]:
+    """The description keys of the entities the registry holds for this entry."""
+    prefix = f"{entity_prefix(entry.entry_id)}_"
+    return frozenset(
+        unique_id.removeprefix(prefix)
+        for candidate in _entity_entries_for_config_entry(er.async_get(hass), entry)
+        if (unique_id := candidate.unique_id or "").startswith(prefix)
+    )
+
+
 def _migration_issue_id(entry: ConfigEntry) -> str:
     return f"{MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX}{entry.entry_id}"
 

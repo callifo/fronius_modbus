@@ -817,5 +817,12 @@
     "old": "                raise ControlUnavailable(\n                    \"grid_charge_sources_failed\",",
     "new": "                return\n                raise ControlUnavailable(\n                    \"grid_charge_sources_failed\",",
     "tests": "grid_charging_that_the_web_api_refuses_is_an_error"
+  },
+  {
+    "label": "web client: a nested Modbus config part must be an object",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "    return _config_object(config.get(key) or {}, path)\n",
+    "new": "    return config.get(key) or {}\n",
+    "tests": "a_modbus_config_of_the_wrong_shape_is_a_response_error"
   }
 ]

@@ -195,6 +195,11 @@ def _config_object(payload: Any, path: str) -> dict[str, Any]:
     return config
 
 
+def _nested_object(config: dict[str, Any], key: str, path: str) -> dict[str, Any]:
+    """A nested part of a config, checked like the whole (audit F24-11)."""
+    return _config_object(config.get(key) or {}, path)
+
+
 def _window_inverted(lower: Any, upper: Any) -> bool:
     numbers = isinstance(lower, (int, float)) and isinstance(upper, (int, float))
     return numbers and lower > upper
@@ -702,9 +707,9 @@ class FroniusWebClient:
         restriction: ModbusRestriction = ModbusRestriction.KEEP,
     ) -> bool:
         config = _config_object(self.get_modbus_config(), MODBUS_PATH)
-        slave = config.get("slave") or {}
-        ctr = slave.get("ctr") or {}
-        current_restriction = ctr.get("restriction") or {}
+        slave = _nested_object(config, "slave", MODBUS_PATH)
+        ctr = _nested_object(slave, "ctr", MODBUS_PATH)
+        current_restriction = _nested_object(ctr, "restriction", MODBUS_PATH)
         wanted = current_restriction
         if restriction == ModbusRestriction.HOME_ASSISTANT:
             wanted = _restriction_with(current_restriction, self._resolve_client_ip())

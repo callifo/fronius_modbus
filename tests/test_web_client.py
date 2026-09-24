@@ -451,6 +451,14 @@ def test_an_unavailable_export_limit_config_reads_as_empty(client, inverter):
     assert client.get_export_limit_config() == {}
 
 
+def test_a_failing_export_limit_endpoint_is_not_an_empty_config(client, inverter):
+    """Audit A24-05: an HTTP 500 read as "no export limit" and the refresh succeeded."""
+    inverter.statuses["/api/config/limit_settings/powerLimits"] = 500
+
+    with pytest.raises(FroniusWebResponseError):
+        client.get_export_limit_config()
+
+
 # -- enabling Modbus ---------------------------------------------------------------
 
 

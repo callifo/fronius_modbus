@@ -301,7 +301,7 @@ async def test_a_repair_failing_late_keeps_the_fresh_token(
     store = async_get_token_store(hass)
     await store.async_save_token(HOST, realm="r", token="stale", user="technician")
 
-    async def validate(hass, settings, *, api_token, apply_modbus_config):
+    async def validate(hass, settings, *, api_token, **_kwargs):
         if api_token == {"realm": "r", "token": "stale"}:
             raise config_flow._InvalidApiCredentials
         return {"title": "Fronius"}

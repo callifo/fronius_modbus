@@ -949,7 +949,7 @@
     "path": "custom_components/fronius_modbus/config_flow.py",
     "old": "                await claim_host(settings)\n",
     "new": "",
-    "tests": "leaves_the_inverter_alone"
+    "tests": "duplicate_setup_leaves_the_inverter_alone or moving_to_a_host_taken_leaves_the_inverter_alone"
   },
   {
     "label": "repairs: the repair flow claims its host before the login",
@@ -1062,5 +1062,12 @@
     "old": "        if not (_is_number(lower) and _is_number(upper)):\n",
     "new": "        if False:\n",
     "tests": "soc_window_without_a_numeric_limit_is_unreadable"
+  },
+  {
+    "label": "config flow: the host is claimed again right before the Modbus setup",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "            if claim_host is not None:\n                await claim_host()\n",
+    "new": "",
+    "tests": "host_taken_while_the_token_is_minted_leaves_the_inverter_alone"
   }
 ]

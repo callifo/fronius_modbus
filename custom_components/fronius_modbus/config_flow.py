@@ -356,8 +356,15 @@ async def _validate_input(
     api_password: str = "",
     api_token: dict[str, str] | None = None,
     apply_modbus_config: bool = False,
+    claim_host: Callable[[], Awaitable[None]] | None = None,
 ) -> dict[str, Any]:
-    """Validate the user input allows us to connect."""
+    """Validate the user input allows us to connect.
+
+    ``claim_host`` runs right before the Modbus settings are written: another
+    entry can take the host while the token is minted or the login runs, and
+    the settings would then change on an inverter this flow does not own
+    (audit R730-01).
+    """
     _validate_static_input(data)
 
     if not api_password and api_token is None:
@@ -375,6 +382,8 @@ async def _validate_input(
         if apply_modbus_config and data.get(
             CONF_AUTO_ENABLE_MODBUS, DEFAULT_AUTO_ENABLE_MODBUS
         ):
+            if claim_host is not None:
+                await claim_host()
             await hass.async_add_executor_job(
                 client.ensure_modbus_enabled,
                 data[CONF_PORT],
@@ -392,7 +401,7 @@ async def _validate_input(
             identity = await FroniusInverter.async_probe(unit)
     except ClientIpResolutionError as err:
         raise _CannotResolveLocalIp from err
-    except _InvalidApiCredentials:
+    except _InvalidApiCredentials, _AlreadyConfigured, data_entry_flow.AbortFlow:
         raise
     except (
         ModbusError,
@@ -545,6 +554,7 @@ class TokenFlowMixin:
                     settings,
                     api_token=token,
                     apply_modbus_config=apply_modbus_config,
+                    claim_host=lambda: claim_host(settings),
                 )
                 self._pending_flow_state = None
                 return await on_success(settings, info, previous_host)
@@ -598,6 +608,7 @@ class TokenFlowMixin:
                     state.settings,
                     api_token=token,
                     apply_modbus_config=state.apply_modbus_config,
+                    claim_host=lambda: claim_host(state.settings),
                 )
                 self._pending_flow_state = None
                 return await self._async_finish_with_token(

@@ -226,6 +226,7 @@ async def test_a_token_for_a_host_already_set_up_is_not_kept(
     validate = config_flow._validate_input
 
     async def validate_while_taken(hass, settings, **kwargs):
+        info = await validate(hass, settings, **kwargs)
         MockConfigEntry(
             domain=DOMAIN,
             data={"host": HOST, "api_username": "customer"},
@@ -233,7 +234,7 @@ async def test_a_token_for_a_host_already_set_up_is_not_kept(
             version=1,
             minor_version=12,
         ).add_to_hass(hass)
-        return await validate(hass, settings, **kwargs)
+        return info
 
     monkeypatch.setattr(config_flow, "_validate_input", validate_while_taken)
     result = await hass.config_entries.flow.async_init(
@@ -263,7 +264,7 @@ async def test_a_duplicate_flow_leaves_the_existing_entrys_token_alone(
     store = async_get_token_store(hass)
     await store.async_save_token(HOST, realm="r", token="old")
 
-    async def validate(hass, settings, *, api_token, apply_modbus_config):
+    async def validate(hass, settings, *, api_token, **_kwargs):
         if api_token == {"realm": "r", "token": "old"}:
             raise config_flow._InvalidApiCredentials
         make_entry(hass)
@@ -376,6 +377,24 @@ def _record_modbus_setup(monkeypatch) -> list[tuple]:
     return applied
 
 
+def _record_contact(monkeypatch) -> list[str]:
+    """Every login and token mint: the inverter contacted at all."""
+    contacted: list[str] = []
+    monkeypatch.setattr(
+        config_flow.FroniusWebClient,
+        "login",
+        lambda self: contacted.append("login") or True,
+    )
+    monkeypatch.setattr(
+        config_flow,
+        "mint_token",
+        lambda host, user, password: (
+            contacted.append("mint") or {"realm": "r", "token": "t"}
+        ),
+    )
+    return contacted
+
+
 def _other_entry(hass) -> MockConfigEntry:
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -403,6 +422,7 @@ async def test_a_duplicate_setup_leaves_the_inverter_alone(
     """
     make_entry(hass)
     await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+    contacted = _record_contact(monkeypatch)
     applied = _record_modbus_setup(monkeypatch)
 
     result = await hass.config_entries.flow.async_init(
@@ -413,6 +433,7 @@ async def test_a_duplicate_setup_leaves_the_inverter_alone(
     )
 
     assert result["reason"] == "already_configured"
+    assert contacted == []
     assert applied == []
 
 
@@ -423,6 +444,7 @@ async def test_moving_to_a_host_taken_leaves_the_inverter_alone(
     make_entry(hass)
     await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
     other = _other_entry(hass)
+    contacted = _record_contact(monkeypatch)
     applied = _record_modbus_setup(monkeypatch)
     moved = {
         "host": HOST,
@@ -451,6 +473,7 @@ async def test_moving_to_a_host_taken_leaves_the_inverter_alone(
 
     assert result["errors"]["base"] == "already_configured"
     assert options["errors"]["base"] == "already_configured"
+    assert contacted == []
     assert applied == []
 
 
@@ -460,7 +483,7 @@ async def test_a_reconfigure_failing_late_keeps_the_fresh_token(hass, monkeypatc
     store = async_get_token_store(hass)
     await store.async_save_token(HOST, realm="r", token="stale", user="technician")
 
-    async def validate(hass, settings, *, api_token, apply_modbus_config):
+    async def validate(hass, settings, *, api_token, **_kwargs):
         if api_token == {"realm": "r", "token": "stale"}:
             raise config_flow._InvalidApiCredentials
         return {"title": "Fronius"}
@@ -502,6 +525,7 @@ async def test_a_host_taken_during_the_password_step_leaves_the_inverter_alone(
     hass, mock_modbus, monkeypatch
 ):
     """Audit RR770-01: the password step validated, and set up Modbus, without a recheck."""
+    contacted = _record_contact(monkeypatch)
     applied = _record_modbus_setup(monkeypatch)
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": "user"}
@@ -517,6 +541,7 @@ async def test_a_host_taken_during_the_password_step_leaves_the_inverter_alone(
     )
 
     assert result["reason"] == "already_configured"
+    assert contacted == []
     assert applied == []
 
 
@@ -525,6 +550,7 @@ async def test_a_move_to_a_host_taken_during_the_password_step_is_refused(
 ):
     """Audit RR770-01: reconfigure and options rechecked the host only after validation."""
     other = _other_entry(hass)
+    contacted = _record_contact(monkeypatch)
     applied = _record_modbus_setup(monkeypatch)
     moved = {
         "host": HOST,
@@ -554,6 +580,7 @@ async def test_a_move_to_a_host_taken_during_the_password_step_is_refused(
 
     assert result["errors"]["base"] == "already_configured"
     assert options["errors"]["base"] == "already_configured"
+    assert contacted == []
     assert applied == []
 
 

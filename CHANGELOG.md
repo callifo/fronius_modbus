@@ -9,6 +9,8 @@
 - Setup and reconfigure no longer lift a Modbus IP restriction set on the inverter. With the restriction checkbox unchecked, which is the default, the integration wrote the restriction off and opened a restricted Modbus server to every host on the network. The checkbox is now a choice between keeping the inverter's setting (the default), restricting Modbus to Home Assistant, and lifting the restriction. Existing entries migrate from checked to "restrict to Home Assistant" and from unchecked to "keep", never to "lift".
 - The stored web token is written readable by Home Assistant only. The Digest token alone authenticates to the inverter, and Home Assistant's default storage wrote it world-readable; an existing token file is rewritten on the next start.
 - A stored web token is deleted once no entry uses its host and role: on removing the entry, on moving an entry to another host or role, and when the migration to a single role keeps the other one. It had outlived all three. A token minted during setup is kept only once the inverter answered and the entry was created; a failed or aborted setup left it behind.
+- A setup, reconfigure, options change or repair for a host another entry already owns is refused before the inverter is contacted. It wrote the Modbus settings, including the IP restriction, and only then reported the host as taken.
+- An aborted setup leaves the stored token of the entry that already serves the host alone, and a settings change that fails late keeps the token its entry now logs in with. A stale token came back in both cases.
 
 ### Fixed
 - Enabling Modbus TCP keeps the rest of the inverter's Modbus settings. The integration wrote a fixed block that moved both RS485 ports to master and switched the `TCP & RTU` mode to TCP alone, cutting off a device that reads the inverter over RS485; it now writes back what it read and changes only its own fields. Restricting Modbus to Home Assistant adds its address to the hosts already allowed instead of replacing them.
@@ -23,6 +25,11 @@
 - Diagnostics download while the inverter is offline, with the last poll and its report; the raw registers show which error kept them from being read. The download failed as a whole.
 - Reconfigure and Repairs reload the entry once; they reloaded it twice.
 - A web control used while the inverter's web interface does not answer shows a translated error. It surfaced as an unknown error with a traceback in the log since 1.1.1.
+- An AC limit or power factor override that was on stays on when its new value cannot be written; a scale factor the value could not be converted with left the control switched off.
+- The Modbus storage reserve in manual SoC mode checks the SoC window the inverter holds before it writes Modbus, and is refused when that window cannot be read. When the web interface refuses the reserve after Modbus took it, the error says so, since the two minimums then differ.
+- One HTTP 404 from a component endpoint that answered before keeps its registered sensors, as unknown; the next start deleted them.
+- A failed battery component read keeps the battery's manufacturer, model and serial instead of replacing them with a generic name.
+- A Modbus configuration answer of the wrong shape no longer fails the whole web refresh, and its RS485 part is checked before it is written back.
 
 ### Changed
 - A control set to the value the inverter already holds writes nothing. Every write used to reach the inverter: a Modbus register, and for the AC limit and the power factor a second-long switch-off of the enable flag around it; a battery setting over the web API, and with it the Modbus recovery window and a delayed refresh. The comparison is made against a fresh read, not the last poll, so a value another controller changed in between is still written; when that read fails, the value is written as before.

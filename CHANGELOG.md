@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## 1.2.0b2
+
+An audit round on 1.2.0b1, a write policy, and new sensors. The integration writes only what
+differs from what the inverter holds and keeps the inverter settings it does not own, and it
+shows what the inverter's component endpoints add beyond Modbus. A pre-release because the
+Modbus restriction checkbox becomes a choice and entries migrate to a new minor version;
+existing entities, unique ids and entity ids do not change.
+
+Battery settings over the web API are now sent one field at a time, checked on a GEN24. If
+changing a SoC limit, the target feed-in or a charge source is refused on your inverter,
+please open an issue.
 
 ### Added
 - Sensors from the inverter's component endpoints, which the web API poll already reads: power module temperatures, fans, per-phase AC power, the production limit and whether it is reached, the battery converter's charge and discharge limits, grid validity, and the power stage firmware on the inverter; the battery's state of health. Feed-in point voltages and frequency, the DC link voltage, the operating time, the time in backup mode, cell and BMS temperatures, the battery's current limits and its nameplate values come disabled. The battery's firmware and hardware version appear on its device page. No sensor takes their serial numbers or device ids; the battery's serial number stays on its device page, as before.

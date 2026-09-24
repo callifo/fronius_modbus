@@ -24,7 +24,12 @@ from .const import (
     TECHNICIAN_USERNAME,
 )
 from .fronius_modbus_api.exceptions import ControlRefused, ControlUnavailable
-from .froniuswebclient import FroniusWebAuthError, FroniusWebClient, is_enabled
+from .froniuswebclient import (
+    FroniusWebAuthError,
+    FroniusWebClient,
+    flag_value,
+    is_enabled,
+)
 from .token_store import async_get_token_store
 
 _LOGGER = logging.getLogger(__name__)
@@ -224,10 +229,16 @@ def _config_part(config: dict[str, Any] | None, key: str) -> dict[str, Any] | No
 
 
 def _flag_state(part: dict[str, Any] | None) -> str | None:
-    """An unreadable flag is unknown, not "disabled" (audit RR770-03)."""
+    """An unreadable flag is unknown, not "disabled" (audit RR770-03, R730-03)."""
     if part is None:
         return None
-    return _enabled_state(part.get("on"))
+    value = part.get("on")
+    if value is None:
+        return _enabled_state(value)
+    flag = flag_value(value)
+    if flag is None:
+        return None
+    return _enabled_state(flag)
 
 
 def parse_meter_topology(info: dict | None) -> MeterTopology:

@@ -1052,8 +1052,8 @@
   {
     "label": "web control: an unreadable Modbus flag is unknown",
     "path": "custom_components/fronius_modbus/web_control.py",
-    "old": "    if part is None:\n        return None\n    return _enabled_state(part.get(\"on\"))\n",
-    "new": "    return _enabled_state((part or {}).get(\"on\"))\n",
+    "old": "    if part is None:\n        return None\n    value = part.get(\"on\")\n",
+    "new": "    value = (part or {}).get(\"on\")\n",
     "tests": "malformed_modbus_flag_shows_as_unknown"
   },
   {
@@ -1076,5 +1076,19 @@
     "old": "            raise data_entry_flow.AbortFlow(\"entry_not_found\")\n",
     "new": "            return\n",
     "tests": "repair_for_an_entry_removed_meanwhile_stops_before_the_login"
+  },
+  {
+    "label": "web control: a flag value that means nothing is unknown",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "    if flag is None:\n        return None\n    return _enabled_state(flag)\n",
+    "new": "    return _enabled_state(value)\n",
+    "tests": "modbus_flag_value_that_means_nothing_shows_as_unknown"
+  },
+  {
+    "label": "web client: only the flag forms the inverter uses count",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "    if isinstance(value, (int, float)) and value in (0, 1):\n",
+    "new": "    if isinstance(value, (int, float)):\n",
+    "tests": "modbus_flag_value_that_means_nothing_shows_as_unknown"
   }
 ]

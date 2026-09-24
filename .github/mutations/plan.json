@@ -744,8 +744,8 @@
   {
     "label": "entities: firmware without the endpoints gets no component sensors",
     "path": "custom_components/fronius_modbus/entities.py",
-    "old": "    if web_data is not None and _component_endpoint_missing(web_data, reading):\n        return False\n",
-    "new": "",
+    "old": "        return reading.key in runtime.registered_keys\n",
+    "new": "        return True\n",
     "tests": "firmware_without_the_endpoints_gets_no_component_sensors"
   },
   {
@@ -957,5 +957,19 @@
     "old": "self._async_claim_entry_host(entry, settings),",
     "new": "self._async_claim_entry_host(entry, {**settings, \"host\": entry.data[\"host\"]}),",
     "tests": "refuses_a_taken_host_before_the_inverter"
+  },
+  {
+    "label": "entities: a single 404 keeps registered component sensors",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "        return reading.key in runtime.registered_keys\n",
+    "new": "        return False\n",
+    "tests": "single_404_keeps_the_registered_component_sensors"
+  },
+  {
+    "label": "setup: the runtime learns the registered keys",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "        registered_keys=migrations.registered_keys(hass, entry),\n",
+    "new": "",
+    "tests": "single_404_keeps_the_registered_component_sensors"
   }
 ]

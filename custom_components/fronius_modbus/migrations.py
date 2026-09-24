@@ -93,6 +93,16 @@ def _marked_reported(entity_entry: er.RegistryEntry) -> bool:
     return bool(entity_entry.options.get(DOMAIN, {}).get(REPORTED_OPTION))
 
 
+def registered_keys(hass: HomeAssistant, entry: ConfigEntry) -> frozenset[str]:
+    """The description keys of every entity the registry holds for this entry."""
+    prefix = f"{entity_prefix(entry.entry_id)}_"
+    return frozenset(
+        unique_id.removeprefix(prefix)
+        for candidate in _entity_entries_for_config_entry(er.async_get(hass), entry)
+        if (unique_id := candidate.unique_id or "").startswith(prefix)
+    )
+
+
 def reported_keys(hass: HomeAssistant, entry: ConfigEntry) -> frozenset[str]:
     """The description keys of the entities marked as reported by the device."""
     prefix = f"{entity_prefix(entry.entry_id)}_"

@@ -128,6 +128,9 @@ class FroniusRuntimeData:
     # Reported at an earlier start: a power module seen once stays, since one
     # answer without it would otherwise retire it (reaudit RE26-03).
     reported_keys: frozenset[str] = frozenset()
+    # Registered before this setup: one 404 from an endpoint that answered
+    # before is no proof the firmware lacks it (audit FA0FB-03).
+    registered_keys: frozenset[str] = frozenset()
 
     @property
     def storage_control(self) -> StorageControl | None:

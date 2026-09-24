@@ -9,7 +9,7 @@
           "host": "Host",
           "scan_interval": "Update interval (seconds)",
           "web_scan_interval": "Web API update interval (seconds)",
-          "restrict_modbus_to_this_ip": "Restrict Modbus to this IP",
+          "modbus_restriction": "Modbus IP restriction",
           "api_username": "Web API access role"
         }
       },
@@ -27,7 +27,7 @@
           "host": "Host",
           "scan_interval": "Update interval (seconds)",
           "web_scan_interval": "Web API update interval (seconds)",
-          "restrict_modbus_to_this_ip": "Restrict Modbus to this IP",
+          "modbus_restriction": "Modbus IP restriction",
           "api_username": "Web API access role"
         }
       },
@@ -515,7 +515,7 @@
               "host": "Host",
               "scan_interval": "Update interval (seconds)",
               "web_scan_interval": "Web API update interval (seconds)",
-              "restrict_modbus_to_this_ip": "Restrict Modbus to this IP",
+              "modbus_restriction": "Modbus IP restriction",
               "api_username": "Web API access role"
             }
           },
@@ -596,7 +596,7 @@
           "host": "Host",
           "scan_interval": "Update interval (seconds)",
           "web_scan_interval": "Web API update interval (seconds)",
-          "restrict_modbus_to_this_ip": "Restrict Modbus to this IP",
+          "modbus_restriction": "Modbus IP restriction",
           "api_username": "Web API access role"
         }
       },
@@ -627,6 +627,13 @@
       "options": {
         "customer": "Customer",
         "technician": "Technician (adds the export limit control)"
+      }
+    },
+    "modbus_restriction": {
+      "options": {
+        "keep": "Keep the inverter's setting",
+        "home_assistant": "Restrict Modbus to this Home Assistant",
+        "off": "Lift the restriction (Modbus open to every host)"
       }
     }
   },

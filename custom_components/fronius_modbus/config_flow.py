@@ -28,14 +28,13 @@ from .const import (
     CONF_AUTO_ENABLE_MODBUS,
     CONF_INVERTER_UNIT_ID,
     CONF_RECONFIGURE_REQUIRED,
-    CONF_RESTRICT_MODBUS_TO_THIS_IP,
+    CONF_MODBUS_RESTRICTION,
     CONF_WEB_SCAN_INTERVAL,
     DEFAULT_AUTO_ENABLE_MODBUS,
     DEFAULT_INVERTER_UNIT_ID,
     DEFAULT_METER_UNIT_ID,
     DEFAULT_NAME,
     DEFAULT_PORT,
-    DEFAULT_RESTRICT_MODBUS_TO_THIS_IP,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_WEB_SCAN_INTERVAL,
     DOMAIN,
@@ -44,6 +43,7 @@ from .const import (
     API_USERNAMES,
     SUPPORTED_MANUFACTURERS,
     SUPPORTED_MODELS,
+    ModbusRestriction,
 )
 from .fronius_modbus_api.device import FroniusInverter
 from .froniuswebclient import (
@@ -123,7 +123,7 @@ def _default_payload() -> dict[str, Any]:
         CONF_WEB_SCAN_INTERVAL: DEFAULT_WEB_SCAN_INTERVAL,
         CONF_API_USERNAME: API_USERNAME,
         CONF_AUTO_ENABLE_MODBUS: DEFAULT_AUTO_ENABLE_MODBUS,
-        CONF_RESTRICT_MODBUS_TO_THIS_IP: DEFAULT_RESTRICT_MODBUS_TO_THIS_IP,
+        CONF_MODBUS_RESTRICTION: ModbusRestriction.KEEP,
     }
 
 
@@ -138,11 +138,8 @@ def _expand_settings_input(
     payload[CONF_SCAN_INTERVAL] = int(
         user_input.get(CONF_SCAN_INTERVAL, payload[CONF_SCAN_INTERVAL])
     )
-    payload[CONF_RESTRICT_MODBUS_TO_THIS_IP] = bool(
-        user_input.get(
-            CONF_RESTRICT_MODBUS_TO_THIS_IP,
-            payload[CONF_RESTRICT_MODBUS_TO_THIS_IP],
-        )
+    payload[CONF_MODBUS_RESTRICTION] = ModbusRestriction(
+        user_input.get(CONF_MODBUS_RESTRICTION, payload[CONF_MODBUS_RESTRICTION])
     )
     payload[CONF_WEB_SCAN_INTERVAL] = int(
         user_input.get(CONF_WEB_SCAN_INTERVAL, payload[CONF_WEB_SCAN_INTERVAL])
@@ -214,12 +211,15 @@ def _build_settings_schema(defaults: dict[str, Any]) -> vol.Schema:
                 )
             ),
             vol.Required(
-                CONF_RESTRICT_MODBUS_TO_THIS_IP,
-                default=defaults.get(
-                    CONF_RESTRICT_MODBUS_TO_THIS_IP,
-                    DEFAULT_RESTRICT_MODBUS_TO_THIS_IP,
-                ),
-            ): bool,
+                CONF_MODBUS_RESTRICTION,
+                default=defaults.get(CONF_MODBUS_RESTRICTION, ModbusRestriction.KEEP),
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=list(ModbusRestriction),
+                    mode=SelectSelectorMode.LIST,
+                    translation_key=CONF_MODBUS_RESTRICTION,
+                )
+            ),
         }
     )
 
@@ -294,10 +294,10 @@ def _should_apply_modbus_config(
         or settings[CONF_PORT] != previous_settings.get(CONF_PORT, DEFAULT_PORT)
         or settings[CONF_INVERTER_UNIT_ID]
         != previous_settings.get(CONF_INVERTER_UNIT_ID, DEFAULT_INVERTER_UNIT_ID)
-        or settings[CONF_RESTRICT_MODBUS_TO_THIS_IP]
+        or settings[CONF_MODBUS_RESTRICTION]
         != previous_settings.get(
-            CONF_RESTRICT_MODBUS_TO_THIS_IP,
-            DEFAULT_RESTRICT_MODBUS_TO_THIS_IP,
+            CONF_MODBUS_RESTRICTION,
+            ModbusRestriction.KEEP,
         )
     )
 
@@ -375,7 +375,7 @@ async def _validate_input(
                 data[CONF_PORT],
                 DEFAULT_METER_UNIT_ID,
                 data[CONF_INVERTER_UNIT_ID],
-                data[CONF_RESTRICT_MODBUS_TO_THIS_IP],
+                data[CONF_MODBUS_RESTRICTION],
             )
             # The inverter restarts its Modbus server after the settings write.
             await asyncio.sleep(1.0)
@@ -590,7 +590,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow."""
 
     VERSION = 1
-    MINOR_VERSION = 11
+    MINOR_VERSION = 12
     CONNECTION_CLASS = config_entries.CONN_CLASS_LOCAL_POLL
 
     def __init__(self) -> None:

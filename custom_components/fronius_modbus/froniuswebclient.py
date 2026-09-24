@@ -14,7 +14,7 @@ import requests
 from requests.auth import AuthBase
 from requests.utils import parse_dict_header
 
-from .const import API_USERNAME
+from .const import API_USERNAME, ModbusRestriction
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -583,17 +583,17 @@ class FroniusWebClient:
         port: int,
         meter_address: int,
         inverter_unit_id: int,
-        restrict_to_client_ip: bool = False,
+        restriction: ModbusRestriction = ModbusRestriction.KEEP,
     ) -> bool:
         current = self.get_modbus_config()
         slave = current.get("slave") or {}
         ctr = slave.get("ctr") or {}
         current_restriction = ctr.get("restriction") or {}
-        # Without the checkbox the inverter's own restriction stays as it is:
-        # writing "off" opened a restricted server to every host (audit A24-02).
-        restriction = current_restriction
-        if restrict_to_client_ip:
-            restriction = {"on": True, "ip": self._resolve_client_ip()}
+        wanted = current_restriction
+        if restriction == ModbusRestriction.HOME_ASSISTANT:
+            wanted = {"on": True, "ip": self._resolve_client_ip()}
+        if restriction == ModbusRestriction.OFF:
+            wanted = {**current_restriction, "on": False}
 
         if (
             slave.get("mode") == "tcp"
@@ -606,8 +606,8 @@ class FroniusWebClient:
             and _as_int(slave.get("rtu_inverter_slave_id"), inverter_unit_id)
             == int(inverter_unit_id)
             and is_enabled(current_restriction.get("on"))
-            == is_enabled(restriction.get("on"))
-            and current_restriction.get("ip") == restriction.get("ip")
+            == is_enabled(wanted.get("on"))
+            and current_restriction.get("ip") == wanted.get("ip")
         ):
             return False
 
@@ -622,7 +622,7 @@ class FroniusWebClient:
                 "rtu_inverter_slave_id": inverter_unit_id,
                 "ctr": {
                     "on": True,
-                    "restriction": restriction,
+                    "restriction": wanted,
                 },
             },
         }
@@ -632,7 +632,7 @@ class FroniusWebClient:
             port,
             inverter_unit_id,
             meter_address,
-            is_enabled(restriction.get("on")),
+            is_enabled(wanted.get("on")),
         )
         return True
 

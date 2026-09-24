@@ -1,6 +1,7 @@
 """Constants, SunSpec state maps, and shared value-mapping helpers."""
 
 from collections.abc import Mapping
+from enum import StrEnum
 import re
 
 DOMAIN = "fronius_modbus"
@@ -13,7 +14,6 @@ DEFAULT_PORT = 502
 DEFAULT_INVERTER_UNIT_ID = 1
 DEFAULT_METER_UNIT_ID = 200
 DEFAULT_AUTO_ENABLE_MODBUS = True
-DEFAULT_RESTRICT_MODBUS_TO_THIS_IP = False
 API_USERNAME = "customer"
 TECHNICIAN_USERNAME = "technician"
 # The local web logins an entry can use; exactly one is active per entry.
@@ -27,8 +27,22 @@ CONF_METER_UNIT_IDS = "meter_modbus_unit_ids"
 CONF_API_USERNAME = "api_username"
 CONF_API_PASSWORD = "api_password"
 CONF_AUTO_ENABLE_MODBUS = "auto_enable_modbus"
-CONF_RESTRICT_MODBUS_TO_THIS_IP = "restrict_modbus_to_this_ip"
+CONF_MODBUS_RESTRICTION = "modbus_restriction"
 CONF_WEB_SCAN_INTERVAL = "web_scan_interval"
+
+
+class ModbusRestriction(StrEnum):
+    """What setup does with the inverter's Modbus IP restriction.
+
+    Keeping is the default: lifting a restriction opens the Modbus server to
+    every host, so it has to be chosen, never implied (audit A24-02).
+    """
+
+    KEEP = "keep"
+    HOME_ASSISTANT = "home_assistant"
+    OFF = "off"
+
+
 SUPPORTED_MANUFACTURERS = ["Fronius"]
 SUPPORTED_MODELS = ["Primo GEN24", "Symo GEN24", "Verto"]
 # Every enum state is a translation key (hassfest: [a-z0-9-_]+); an unmapped

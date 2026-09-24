@@ -54,7 +54,7 @@ After reboot of Home-Assistant, this integration can be configured through the i
 Choose either the `customer` or the `technician` local Web API role during setup and provide that role's password. The integration can then:
 
 - auto-enable Modbus TCP during setup and relevant configuration changes
-- optionally restrict auto-enabled Modbus TCP to the Home Assistant host IP; left unchecked, an existing restriction on the inverter stays as it is (lift it in the inverter's web interface)
+- handle the Modbus IP restriction of auto-enabled Modbus TCP by choice: keep the inverter's setting (default), restrict it to the Home Assistant host IP, or lift it. The choice is applied again whenever the Modbus settings are written, so a lifted restriction stays lifted until you choose otherwise.
 - derive configured smart meter addresses from `/api/components/PowerMeter/readable`
 - expose authenticated battery controls from `/api/config/batteries`
 - expose Modbus service diagnostics from `/api/config/modbus`

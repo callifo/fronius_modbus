@@ -149,8 +149,8 @@
   {
     "label": "web client: an existing Modbus restriction is kept",
     "path": "custom_components/fronius_modbus/froniuswebclient.py",
-    "old": "        restriction = current_restriction\n",
-    "new": "        restriction = {\"on\": False}\n",
+    "old": "        wanted = current_restriction\n",
+    "new": "        wanted = {\"on\": False}\n",
     "tests": "an_existing_restriction_is_not_lifted or a_rewrite_for_another_reason_keeps_the_restriction"
   },
   {
@@ -159,6 +159,20 @@
     "old": "            if err.status_code != HTTPStatus.NOT_FOUND:",
     "new": "            if False:",
     "tests": "a_failing_export_limit_endpoint_is_not_an_empty_config"
+  },
+  {
+    "label": "web client: lifting the restriction writes it off",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "            wanted = {**current_restriction, \"on\": False}",
+    "new": "            wanted = current_restriction",
+    "tests": "lifting_the_restriction_is_a_choice_of_its_own"
+  },
+  {
+    "label": "migrations: an unchecked restriction box becomes keep, not off",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "            choice = ModbusRestriction.KEEP",
+    "new": "            choice = ModbusRestriction.OFF",
+    "tests": "minor_version_11_entries_turn_the_checkbox_into_a_choice"
   },
   {
     "label": "migrations: a missing web login blocks the cleanup",

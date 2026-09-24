@@ -14,6 +14,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 
+from .component_readings import flag_value
 from .const import (
     API_BATTERY_MODE,
     API_SOC_MODE,
@@ -24,12 +25,7 @@ from .const import (
     TECHNICIAN_USERNAME,
 )
 from .fronius_modbus_api.exceptions import ControlRefused, ControlUnavailable
-from .froniuswebclient import (
-    FroniusWebAuthError,
-    FroniusWebClient,
-    flag_value,
-    is_enabled,
-)
+from .froniuswebclient import FroniusWebAuthError, FroniusWebClient, is_enabled
 from .token_store import async_get_token_store
 
 _LOGGER = logging.getLogger(__name__)

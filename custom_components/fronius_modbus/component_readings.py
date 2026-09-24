@@ -22,7 +22,11 @@ CONNECTION = "connection"
 # The battery's own firmware and hardware go to its device entry, not to a sensor.
 STORAGE_DEVICE_FIELDS = ("sw_version", "hw_version")
 YES, NO = "yes", "no"
-TRUE_WORDS = frozenset({"true", "on", "yes"})
+# How the inverter spells a flag, in its configs and its component attributes.
+FLAG_WORDS = {
+    **dict.fromkeys(("1", "true", "on", "yes", "enabled"), True),
+    **dict.fromkeys(("0", "false", "off", "no", "disabled"), False),
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -396,7 +400,18 @@ def _is_set(value: Any) -> bool:
     number = _as_number(value)
     if number is not None:
         return number != 0
-    return isinstance(value, str) and value.strip().lower() in TRUE_WORDS
+    return isinstance(value, str) and FLAG_WORDS.get(value.strip().lower(), False)
+
+
+def flag_value(value: Any) -> bool | None:
+    """A flag the inverter sent in a form it uses; anything else is unknown."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        return FLAG_WORDS.get(value.strip().lower())
+    return None
 
 
 def take_readings(device: dict[str, Any], component: Component) -> dict[str, Any]:

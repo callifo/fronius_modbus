@@ -15,7 +15,7 @@ import requests
 from requests.auth import AuthBase
 from requests.utils import parse_dict_header
 
-from .component_readings import json_object, take_readings
+from .component_readings import FLAG_WORDS, json_object, take_readings
 from .const import API_USERNAME, ModbusRestriction
 from .fronius_modbus_api.exceptions import ControlRefused
 
@@ -86,28 +86,11 @@ def _as_int(value: Any, fallback: int) -> int:
         return fallback
 
 
-FLAG_WORDS = {
-    **dict.fromkeys(("1", "true", "on", "yes", "enabled"), True),
-    **dict.fromkeys(("0", "false", "off", "no", "disabled"), False),
-}
-
-
 def is_enabled(value: Any) -> bool:
     """Whether a Solar-API flag reads as on; the API sends both booleans and words."""
     if isinstance(value, str):
         return FLAG_WORDS.get(value.strip().lower(), False)
     return bool(value)
-
-
-def flag_value(value: Any) -> bool | None:
-    """A flag the inverter sent in a form it uses; anything else is unknown."""
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)) and value in (0, 1):
-        return bool(value)
-    if isinstance(value, str):
-        return FLAG_WORDS.get(value.strip().lower())
-    return None
 
 
 def _base_url(host_or_url: str) -> str:

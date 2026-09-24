@@ -215,6 +215,10 @@ class MeterTopology:
     confirmed: bool
 
 
+def _object_or_empty(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
 def parse_meter_topology(info: dict | None) -> MeterTopology:
     """The topology an answer describes, or the unconfirmed single-meter default."""
     default = MeterTopology([DEFAULT_METER_UNIT_ID], DEFAULT_METER_UNIT_ID, {}, False)
@@ -445,9 +449,11 @@ class FroniusWebControl:
         self.data.storage_endpoint_missing = bool(storage_info.get("missing"))
 
     def _apply_web_modbus_config(self, modbus_config: dict[str, Any]) -> None:
-        slave = modbus_config.get("slave") or {}
-        ctr = slave.get("ctr") or {}
-        restriction = ctr.get("restriction") or {}
+        # Shown only: a part of the wrong shape is unknown, not a failed poll
+        # that takes every other web value down with it (audit FA0FB-06).
+        slave = _object_or_empty(modbus_config.get("slave"))
+        ctr = _object_or_empty(slave.get("ctr"))
+        restriction = _object_or_empty(ctr.get("restriction"))
         mode = slave.get("mode")
 
         self.data.modbus_mode = str(mode).upper() if mode is not None else None

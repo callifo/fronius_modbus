@@ -992,5 +992,12 @@
     "old": "        master = _config_object(\n            config.get(\"master\", MASTER_RTUIF[\"master\"]), MODBUS_PATH\n        )\n",
     "new": "        master = config.get(\"master\", MASTER_RTUIF[\"master\"])\n",
     "tests": "malformed_master_is_not_written_back"
+  },
+  {
+    "label": "web control: a malformed Modbus config part shows as unknown",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "    return value if isinstance(value, dict) else {}\n",
+    "new": "    return value or {}\n",
+    "tests": "malformed_modbus_config_leaves_the_other_web_values"
   }
 ]

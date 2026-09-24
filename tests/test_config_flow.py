@@ -219,21 +219,29 @@ async def test_a_token_whose_setup_fails_is_not_kept(hass, mock_modbus):
     assert await async_get_token_store(hass).async_load_token(HOST) is None
 
 
-async def test_a_token_for_a_host_already_set_up_is_not_kept(hass, mock_modbus):
-    """An entry set up while the password step was open; its new role token stayed behind."""
+async def test_a_token_for_a_host_already_set_up_is_not_kept(
+    hass, mock_modbus, monkeypatch
+):
+    """An entry set up while the inverter was checked; its new role token stayed behind."""
+    validate = config_flow._validate_input
+
+    async def validate_while_taken(hass, settings, **kwargs):
+        MockConfigEntry(
+            domain=DOMAIN,
+            data={"host": HOST, "api_username": "customer"},
+            unique_id=HOST,
+            version=1,
+            minor_version=12,
+        ).add_to_hass(hass)
+        return await validate(hass, settings, **kwargs)
+
+    monkeypatch.setattr(config_flow, "_validate_input", validate_while_taken)
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": "user"}
     )
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], USER_INPUT | {"api_username": "technician"}
     )
-    MockConfigEntry(
-        domain=DOMAIN,
-        data={"host": HOST, "api_username": "customer"},
-        unique_id=HOST,
-        version=1,
-        minor_version=12,
-    ).add_to_hass(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {"api_password": "secret"}
     )
@@ -249,8 +257,8 @@ async def test_a_duplicate_flow_leaves_the_existing_entrys_token_alone(
 ):
     """Reaudit RE26-04: the aborted flow had already replaced the entry's token.
 
-    The entry appears while the password step is open: a host already taken
-    is refused before the login (audit FA0FB-02).
+    The entry appears while the inverter is checked: a host taken before is
+    refused ahead of the login (audit FA0FB-02, RR770-01).
     """
     store = async_get_token_store(hass)
     await store.async_save_token(HOST, realm="r", token="old")
@@ -258,6 +266,7 @@ async def test_a_duplicate_flow_leaves_the_existing_entrys_token_alone(
     async def validate(hass, settings, *, api_token, apply_modbus_config):
         if api_token == {"realm": "r", "token": "old"}:
             raise config_flow._InvalidApiCredentials
+        make_entry(hass)
         return {"title": "Fronius"}
 
     monkeypatch.setattr(config_flow, "_validate_input", validate)
@@ -267,7 +276,6 @@ async def test_a_duplicate_flow_leaves_the_existing_entrys_token_alone(
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], USER_INPUT
     )
-    make_entry(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {"api_password": "secret"}
     )
@@ -388,8 +396,13 @@ def _other_entry(hass) -> MockConfigEntry:
 async def test_a_duplicate_setup_leaves_the_inverter_alone(
     hass, mock_modbus, monkeypatch
 ):
-    """Audit FA0FB-02: the duplicate was found only after Modbus was set up on it."""
+    """Audit FA0FB-02: the duplicate was found only after Modbus was set up on it.
+
+    With a stored token the settings step validates at once, without a
+    password step to recheck the host.
+    """
     make_entry(hass)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
     applied = _record_modbus_setup(monkeypatch)
 
     result = await hass.config_entries.flow.async_init(
@@ -398,10 +411,6 @@ async def test_a_duplicate_setup_leaves_the_inverter_alone(
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], USER_INPUT
     )
-    if result["type"] is FlowResultType.FORM:
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"], {"api_password": "secret"}
-        )
 
     assert result["reason"] == "already_configured"
     assert applied == []
@@ -412,6 +421,7 @@ async def test_moving_to_a_host_taken_leaves_the_inverter_alone(
 ):
     """Audit FA0FB-02: reconfigure and options moved Modbus settings before refusing."""
     make_entry(hass)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
     other = _other_entry(hass)
     applied = _record_modbus_setup(monkeypatch)
     moved = {

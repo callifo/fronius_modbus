@@ -954,9 +954,9 @@
   {
     "label": "repairs: the repair flow claims its host before the login",
     "path": "custom_components/fronius_modbus/repairs.py",
-    "old": "self._async_claim_entry_host(entry, settings),",
-    "new": "self._async_claim_entry_host(entry, {**settings, \"host\": entry.data[\"host\"]}),",
-    "tests": "refuses_a_taken_host_before_the_inverter"
+    "old": "            await self._async_claim_entry_host(entry, settings)\n",
+    "new": "            pass\n",
+    "tests": "refuses_a_taken_host_before_the_inverter or rechecks_a_host_taken_during_the_password_step"
   },
   {
     "label": "entities: a single 404 keeps registered component sensors",
@@ -1031,8 +1031,15 @@
   {
     "label": "repairs: the repair flow knows the entry it changes",
     "path": "custom_components/fronius_modbus/repairs.py",
-    "old": "        return self.hass.config_entries.async_get_entry(self._entry_id)\n\n    async def _async_finish_repair(",
-    "new": "        return None\n\n    async def _async_finish_repair(",
+    "old": "        return self.hass.config_entries.async_get_entry(self._entry_id)\n\n    async def _async_claim_repaired_host(",
+    "new": "        return None\n\n    async def _async_claim_repaired_host(",
     "tests": "repair_failing_late_keeps_the_fresh_token"
+  },
+  {
+    "label": "config flow: the password step rechecks the host",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "                await claim_host(state.settings)\n",
+    "new": "",
+    "tests": "during_the_password_step"
   }
 ]

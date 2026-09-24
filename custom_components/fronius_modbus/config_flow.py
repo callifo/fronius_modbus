@@ -572,6 +572,7 @@ class TokenFlowMixin:
         user_input: dict[str, Any] | None,
         step_id: str,
         restart_step: _FlowRestartCallback,
+        claim_host: _HostClaim,
         on_success: _FlowFinishCallback,
     ):
         errors: dict[str, str] = {}
@@ -581,6 +582,9 @@ class TokenFlowMixin:
 
         if user_input is not None:
             try:
+                # Again: another entry may have taken the host while this form
+                # was open (audit RR770-01).
+                await claim_host(state.settings)
                 password = str(user_input.get(CONF_API_PASSWORD, "")).strip()
                 username = state.settings[CONF_API_USERNAME]
                 minted = not (password == "" and state.existing_token is not None)
@@ -722,6 +726,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
             user_input=user_input,
             step_id="user_password",
             restart_step=self.async_step_user,
+            claim_host=self._async_claim_new_host,
             on_success=self._async_finish_user,
         )
 
@@ -745,6 +750,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
             user_input=user_input,
             step_id="reconfigure_password",
             restart_step=self.async_step_reconfigure,
+            claim_host=self._async_claim_reconfigured_host,
             on_success=self._async_finish_reconfigure,
         )
 
@@ -794,5 +800,6 @@ class FroniusModbusOptionsFlow(TokenFlowMixin, config_entries.OptionsFlow):
             user_input=user_input,
             step_id="password",
             restart_step=self.async_step_init,
+            claim_host=self._async_claim_host,
             on_success=self._async_finish_options,
         )

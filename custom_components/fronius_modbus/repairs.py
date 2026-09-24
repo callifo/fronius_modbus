@@ -32,6 +32,11 @@ class FroniusReconfigureRepairFlow(TokenFlowMixin, RepairsFlow):
     def _flow_entry(self) -> ConfigEntry | None:
         return self.hass.config_entries.async_get_entry(self._entry_id)
 
+    async def _async_claim_repaired_host(self, settings: dict[str, Any]) -> None:
+        entry = self._flow_entry()
+        if entry is not None:
+            await self._async_claim_entry_host(entry, settings)
+
     async def _async_finish_repair(
         self,
         settings,
@@ -73,7 +78,7 @@ class FroniusReconfigureRepairFlow(TokenFlowMixin, RepairsFlow):
             previous_host=defaults["host"],
             previous_settings=defaults,
             force_apply_modbus_config=True,
-            claim_host=lambda settings: self._async_claim_entry_host(entry, settings),
+            claim_host=self._async_claim_repaired_host,
             on_success=self._async_finish_repair,
         )
 
@@ -82,6 +87,7 @@ class FroniusReconfigureRepairFlow(TokenFlowMixin, RepairsFlow):
             user_input=user_input,
             step_id="password",
             restart_step=self.async_step_init,
+            claim_host=self._async_claim_repaired_host,
             on_success=self._async_finish_repair,
         )
 

@@ -751,3 +751,20 @@ async def test_a_reconfigure_reloads_the_entry_once(hass, mock_modbus, monkeypat
     await hass.async_block_till_done()
 
     assert reloads == [entry.entry_id]
+
+
+async def test_diagnostics_still_answer_while_the_inverter_is_offline(
+    hass, mock_modbus
+):
+    """Audit F24-08: the fresh register read raised, so no diagnostics at all.
+
+    An outage is when the last poll and its report are needed most.
+    """
+    entry = make_entry(hass)
+    await setup_entry(hass, entry)
+    mock_modbus.unit(INVERTER_UNIT_ID).fail_requests(ModbusConnectionError())
+
+    diagnostics = await async_get_config_entry_diagnostics(hass, entry)
+
+    assert diagnostics["registers"] == {"error": "ModbusConnectionError"}
+    assert diagnostics["identity"]["serial"] == "**REDACTED**"

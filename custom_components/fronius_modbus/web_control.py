@@ -84,14 +84,12 @@ SOC_LOWEST, SOC_HIGHEST, SOC_MAX_DEFAULT = 5, 100, 99
 class WebData:
     """The web API's contribution to the entities' state, refreshed on its own schedule."""
 
-    inverter_temperature: float | None = None
     modbus_mode: str | None = None
     modbus_control: str | None = None
     sunspec_mode: str | None = None
     modbus_restriction: str | None = None
     modbus_restriction_ip: str | None = None
     solar_api_enabled: bool | None = None
-    storage_temperature: float | None = None
     battery_mode_raw: int | None = None
     battery_mode_effective: int | None = None
     battery_mode: str | None = None
@@ -419,10 +417,8 @@ class FroniusWebControl:
     def _apply_storage_info(self, storage_info: Any) -> None:
         # An unread identity keeps the last one: the device entry would flicker.
         if not isinstance(storage_info, dict):
-            self.data.storage_temperature = None
             self.data.storage_readings = None
             return
-        self.data.storage_temperature = storage_info.get("cell_temperature")
         self.data.storage_manufacturer = storage_info.get("manufacturer")
         self.data.storage_model = storage_info.get("model")
         self.data.storage_serial = storage_info.get("serial")
@@ -467,7 +463,6 @@ class FroniusWebControl:
 
         inverter_info = await self._async_client_job("get_inverter_info")
         inverter = inverter_info if isinstance(inverter_info, dict) else {}
-        self.data.inverter_temperature = inverter.get("temperature")
         self.data.inverter_readings = inverter.get("readings")
 
         modbus_config = await self._async_client_job("get_modbus_config")

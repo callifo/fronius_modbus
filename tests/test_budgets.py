@@ -42,7 +42,8 @@ LINE_BUDGETS = {
     # 1909 + translated write errors (quality scale exception-translations)
     # 1842 - the icons, now in icons.json (quality scale icon-translations)
     # 1850 + the translated error for an unreachable web interface (R24-02)
-    "entities.py": 1910,  # + the component sensor builder; the table is component_readings.py
+    # 1910 + the component sensor builder; the table is component_readings.py
+    "entities.py": 1889,  # - the two web temperatures, now rows of that table
 }
 
 # SonarSource's own default. Above it, a function is one somebody has to

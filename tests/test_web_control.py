@@ -34,7 +34,7 @@ class FakeWebClient:
         self.calls = []
 
     def get_inverter_info(self):
-        return {"temperature": 41.5}
+        return {"readings": {"DEVICE_TEMPERATURE_AMBIENTMEAN_01_F32": 41.5}}
 
     def get_modbus_config(self):
         return {
@@ -53,7 +53,7 @@ class FakeWebClient:
             "manufacturer": "BYD",
             "model": "HVS",
             "serial": "S",
-            "cell_temperature": 22.0,
+            "readings": {"BAT_TEMPERATURE_CELL_F64": 22.0},
         }
 
     def get_battery_config(self):
@@ -172,7 +172,7 @@ async def test_a_battery_write_that_changed_nothing_opens_no_recovery_window(
 
 class FakeClientWithReadings(FakeWebClient):
     def get_inverter_info(self):
-        return {"temperature": 41.5, "readings": {"FANCONTROL_PERCENT_01_F32": 12.0}}
+        return {"readings": {"FANCONTROL_PERCENT_01_F32": 12.0}}
 
     def get_storage_info(self):
         return super().get_storage_info() | {"readings": {"sw_version": "3.26"}}
@@ -191,7 +191,7 @@ async def test_the_refresh_hands_on_the_component_readings(hass):
 
 async def test_refresh_fills_the_web_data(control):
     data = await control.async_refresh()
-    assert data.inverter_temperature == 41.5
+    assert data.inverter_readings == {"DEVICE_TEMPERATURE_AMBIENTMEAN_01_F32": 41.5}
     assert (data.modbus_mode, data.modbus_control, data.modbus_restriction) == (
         "TCP",
         "enabled",
@@ -199,7 +199,7 @@ async def test_refresh_fills_the_web_data(control):
     )
     assert data.battery_mode == "auto" and data.battery_mode_effective == 0
     assert data.export_soft_limit_w == 7000
-    assert data.storage_temperature == 22.0
+    assert data.storage_readings == {"BAT_TEMPERATURE_CELL_F64": 22.0}
 
 
 async def test_auto_mode_with_a_manual_soc_mode_still_reads_as_auto(hass):

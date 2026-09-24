@@ -22,6 +22,7 @@
 ### Changed
 - A control set to the value the inverter already holds writes nothing. Every write used to reach the inverter: a Modbus register, and for the AC limit and the power factor a second-long switch-off of the enable flag around it; a battery setting over the web API, and with it the Modbus recovery window and a delayed refresh. The comparison is made against a fresh read, not the last poll, so a value another controller changed in between is still written; when that read fails, the value is written as before.
 - A web write sends only the fields that differ, and a field the inverter names as refused in its answer is reported as an error.
+- The inverter temperature and the battery cell temperature are read like the new component sensors. A device that does not report the channel gets no such entity, instead of one that stays unknown.
 
 ## 1.2.0b1
 

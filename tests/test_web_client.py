@@ -339,8 +339,7 @@ def test_the_storage_identity_prefers_the_nameplate_over_the_attributes():
         "manufacturer": "BYD",
         "model": "HVS",
         "serial": "SN-1",
-        "cell_temperature": 22.5,
-        "readings": {},
+        "readings": {"BAT_TEMPERATURE_CELL_F64": 22.5},
     }
 
 
@@ -349,7 +348,6 @@ def test_a_storage_payload_without_data_falls_back_to_the_generic_identity():
         "manufacturer": None,
         "model": "Battery Storage",
         "serial": None,
-        "cell_temperature": None,
         "readings": None,
     }
 
@@ -371,14 +369,14 @@ def test_the_inverter_temperature_is_read_from_its_channel():
         }
     }
 
-    assert _parse_inverter_readable(payload)["temperature"] == 41.5
+    assert _parse_inverter_readable(payload)["readings"] == {
+        "DEVICE_TEMPERATURE_AMBIENTMEAN_01_F32": 41.5
+    }
 
 
 def test_an_inverter_payload_without_channels_has_no_temperature():
-    assert (
-        _parse_inverter_readable({"Body": {"Data": {"0": {}}}})["temperature"] is None
-    )
-    assert _parse_inverter_readable(None) == {"temperature": None, "readings": None}
+    assert _parse_inverter_readable({"Body": {"Data": {"0": {}}}}) == {"readings": {}}
+    assert _parse_inverter_readable(None) == {"readings": None}
 
 
 # -- the read endpoints ------------------------------------------------------------
@@ -420,7 +418,9 @@ def test_the_storage_and_inverter_identities_come_from_the_readable_endpoints(
     }
 
     assert client.get_storage_info()["model"] == "HVS"
-    assert client.get_inverter_info()["temperature"] == 40.0
+    assert client.get_inverter_info()["readings"] == {
+        "DEVICE_TEMPERATURE_AMBIENTMEAN_01_F32": 40.0
+    }
 
 
 def test_a_failing_readable_endpoint_falls_back_to_the_empty_identity(client, inverter):
@@ -428,7 +428,7 @@ def test_a_failing_readable_endpoint_falls_back_to_the_empty_identity(client, in
     inverter.statuses["/api/components/inverter/readable"] = 500
 
     assert client.get_storage_info()["model"] == "Battery Storage"
-    assert client.get_inverter_info()["temperature"] is None
+    assert client.get_inverter_info()["readings"] is None
 
 
 READABLE_PATHS = (

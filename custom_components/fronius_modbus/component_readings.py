@@ -78,6 +78,20 @@ def _nameplate(key: str, field: str, unit: str | None) -> ComponentReading:
 
 
 COMPONENT_READINGS: tuple[ComponentReading, ...] = (
+    ComponentReading(
+        "inverter_temperature",
+        "inverter",
+        ("DEVICE_TEMPERATURE_AMBIENTMEAN_01_F32",),
+        "°C",
+        "temperature",
+    ),
+    ComponentReading(
+        "storage_temperature",
+        "storage",
+        ("BAT_TEMPERATURE_CELL_F64",),
+        "°C",
+        "temperature",
+    ),
     *(_module_temperature(index) for index in (1, 2, 3, 4)),
     ComponentReading("fan_1", "inverter", ("FANCONTROL_PERCENT_01_F32",), "%"),
     ComponentReading("fan_2", "inverter", ("FANCONTROL_PERCENT_02_F32",), "%"),

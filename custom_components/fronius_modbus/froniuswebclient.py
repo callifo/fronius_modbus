@@ -144,58 +144,22 @@ def _component_device(payload: Any) -> dict[str, Any] | None:
 
 
 def _parse_storage_readable(payload: Any) -> dict[str, Any]:
-    info = _parse_storage_info(None)
-    info["cell_temperature"] = None
+    info: dict[str, Any] = dict(_parse_storage_info(None))
     device = _component_device(payload)
-    info["readings"] = None if device is None else take_readings(device, "storage")
-
-    nodes, _ = _body_data(payload, "Body", "Data")
-    if not isinstance(nodes, dict):
+    if device is None:
+        info["readings"] = None
         return info
-
-    device = next(iter(nodes.values()), {})
-    if not isinstance(device, dict):
-        return info
-
-    attributes = (
-        device.get("attributes") if isinstance(device.get("attributes"), dict) else None
+    attributes = device.get("attributes")
+    info.update(
+        _parse_storage_info(attributes if isinstance(attributes, dict) else None)
     )
-    channels = (
-        device.get("channels") if isinstance(device.get("channels"), dict) else None
-    )
-
-    info.update(_parse_storage_info(attributes))
-    if channels is not None:
-        value = channels.get("BAT_TEMPERATURE_CELL_F64")
-        if isinstance(value, (int, float)):
-            info["cell_temperature"] = float(value)
+    info["readings"] = take_readings(device, "storage")
     return info
 
 
 def _parse_inverter_readable(payload: Any) -> dict[str, Any]:
     device = _component_device(payload)
-    info: dict[str, Any] = {
-        "temperature": None,
-        "readings": None if device is None else take_readings(device, "inverter"),
-    }
-    nodes, _ = _body_data(payload, "Body", "Data")
-    if not isinstance(nodes, dict):
-        return info
-
-    device = next(iter(nodes.values()), {})
-    if not isinstance(device, dict):
-        return info
-
-    channels = (
-        device.get("channels") if isinstance(device.get("channels"), dict) else None
-    )
-    if channels is None:
-        return info
-
-    value = channels.get("DEVICE_TEMPERATURE_AMBIENTMEAN_01_F32")
-    if isinstance(value, (int, float)):
-        info["temperature"] = float(value)
-    return info
+    return {"readings": None if device is None else take_readings(device, "inverter")}
 
 
 def _without_descriptions(node: Any) -> Any:

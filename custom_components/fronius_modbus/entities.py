@@ -578,16 +578,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
     ),
     # -- web sensors ------------------------------------------------------------
     _sensor(
-        "inverter_temperature",
-        "inverter_temperature",
-        source="web",
-        value_fn=lambda r: _web_field(r, "inverter_temperature"),
-        exists_fn=_web_configured,
-        device_class=SensorDeviceClass.TEMPERATURE,
-        state_class=SensorStateClass.MEASUREMENT,
-        unit="°C",
-    ),
-    _sensor(
         "export_soft_limit",
         "export_soft_limit",
         source="web",
@@ -736,17 +726,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         ),
         exists_fn=_storage_present,
         entity_category=EntityCategory.DIAGNOSTIC,
-    ),
-    _sensor(
-        "storage_temperature",
-        "storage_temperature",
-        device="storage",
-        source="web",
-        value_fn=lambda r: _web_field(r, "storage_temperature"),
-        exists_fn=lambda r: _storage_present(r) and _web_configured(r),
-        device_class=SensorDeviceClass.TEMPERATURE,
-        state_class=SensorStateClass.MEASUREMENT,
-        unit="°C",
     ),
     _sensor(
         "control_mode",

@@ -24,6 +24,8 @@ def _everything_present():
     runtime.primary_meter_unit_id = 200
     runtime.web_control.configured = True
     runtime.web_control.technician_configured = True
+    # Unread component readings keep every component sensor in the table.
+    runtime.web_data = None
     return runtime
 
 

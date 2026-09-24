@@ -483,6 +483,137 @@
           "several": "Several reasons",
           "unknown": "Unknown"
         }
+      },
+      "module_temperature_1": {
+        "name": "Power module 1 temperature"
+      },
+      "module_temperature_2": {
+        "name": "Power module 2 temperature"
+      },
+      "module_temperature_3": {
+        "name": "Power module 3 temperature"
+      },
+      "module_temperature_4": {
+        "name": "Power module 4 temperature"
+      },
+      "fan_1": {
+        "name": "Fan 1"
+      },
+      "fan_2": {
+        "name": "Fan 2"
+      },
+      "inverter_power_l1": {
+        "name": "AC power L1"
+      },
+      "inverter_power_l2": {
+        "name": "AC power L2"
+      },
+      "inverter_power_l3": {
+        "name": "AC power L3"
+      },
+      "production_limit": {
+        "name": "Production limit"
+      },
+      "production_limit_reached": {
+        "name": "Production limit reached",
+        "state": {
+          "yes": "Yes",
+          "no": "No"
+        }
+      },
+      "battery_max_charge_power": {
+        "name": "Battery max charge power (DC-DC)"
+      },
+      "battery_max_discharge_power": {
+        "name": "Battery max discharge power (DC-DC)"
+      },
+      "dc_link_voltage": {
+        "name": "DC link voltage"
+      },
+      "grid_valid": {
+        "name": "Grid valid",
+        "state": {
+          "yes": "Yes",
+          "no": "No"
+        }
+      },
+      "feed_in_voltage_l1": {
+        "name": "Feed-in point voltage L1"
+      },
+      "feed_in_voltage_l2": {
+        "name": "Feed-in point voltage L2"
+      },
+      "feed_in_voltage_l3": {
+        "name": "Feed-in point voltage L3"
+      },
+      "feed_in_voltage_l1_l2": {
+        "name": "Feed-in point voltage L1-L2"
+      },
+      "feed_in_voltage_l2_l3": {
+        "name": "Feed-in point voltage L2-L3"
+      },
+      "feed_in_voltage_l3_l1": {
+        "name": "Feed-in point voltage L3-L1"
+      },
+      "feed_in_frequency": {
+        "name": "Feed-in point frequency"
+      },
+      "operating_time": {
+        "name": "Operating time"
+      },
+      "backup_time": {
+        "name": "Time in backup mode"
+      },
+      "power_stage_firmware_1": {
+        "name": "Power stage 1 firmware"
+      },
+      "power_stage_firmware_2": {
+        "name": "Power stage 2 firmware"
+      },
+      "power_stage_hardware": {
+        "name": "Power stage hardware"
+      },
+      "storage_state_of_health": {
+        "name": "State of health"
+      },
+      "storage_cell_temperature_min": {
+        "name": "Cell temperature min"
+      },
+      "storage_cell_temperature_max": {
+        "name": "Cell temperature max"
+      },
+      "storage_bms_temperature": {
+        "name": "BMS ambient temperature"
+      },
+      "storage_discharge_limit": {
+        "name": "Current discharge limit"
+      },
+      "storage_power_limit": {
+        "name": "Current power limit"
+      },
+      "storage_peak_charge_power": {
+        "name": "Peak charge power (10 s)"
+      },
+      "storage_peak_discharge_power": {
+        "name": "Peak discharge power (10 s)"
+      },
+      "storage_rated_soc_min": {
+        "name": "Manufacturer SoC min"
+      },
+      "storage_rated_soc_max": {
+        "name": "Manufacturer SoC max"
+      },
+      "storage_voltage_min": {
+        "name": "Voltage range min"
+      },
+      "storage_voltage_max": {
+        "name": "Voltage range max"
+      },
+      "storage_modules": {
+        "name": "Modules"
+      },
+      "storage_link": {
+        "name": "Connection"
       }
     },
     "switch": {

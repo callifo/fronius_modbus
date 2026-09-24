@@ -287,6 +287,7 @@ python_version = "3.14"
 # somebody writes down, not something that happens.
 files = [
   "custom_components/fronius_modbus/fronius_modbus_api/__init__.py",
+  "custom_components/fronius_modbus/component_readings.py",
   "custom_components/fronius_modbus/fronius_modbus_api/controls.py",
   "custom_components/fronius_modbus/fronius_modbus_api/writes.py",
   "custom_components/fronius_modbus/fronius_modbus_api/device.py",

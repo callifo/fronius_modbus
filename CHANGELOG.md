@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- Sensors from the inverter's component endpoints, which the web API poll already reads: power module temperatures, fans, per-phase AC power, the production limit and whether it is reached, the battery converter's charge and discharge limits, grid validity, and the power stage firmware on the inverter; the battery's state of health. Feed-in point voltages and frequency, the DC link voltage, the operating time, the time in backup mode, cell and BMS temperatures, the battery's current limits and its nameplate values come disabled. The battery's firmware and hardware version appear on its device page. Serial numbers and device ids from these endpoints are not taken.
+
 ### Security
 - Setup and reconfigure no longer lift a Modbus IP restriction set on the inverter. With the restriction checkbox unchecked, which is the default, the integration wrote the restriction off and opened a restricted Modbus server to every host on the network. The checkbox is now a choice between keeping the inverter's setting (the default), restricting Modbus to Home Assistant, and lifting the restriction. Existing entries migrate from checked to "restrict to Home Assistant" and from unchecked to "keep", never to "lift".
 - The stored web token is written readable by Home Assistant only. The Digest token alone authenticates to the inverter, and Home Assistant's default storage wrote it world-readable; an existing token file is rewritten on the next start.
@@ -19,6 +22,7 @@
 ### Changed
 - A control set to the value the inverter already holds writes nothing. Every write used to reach the inverter: a Modbus register, and for the AC limit and the power factor a second-long switch-off of the enable flag around it; a battery setting over the web API, and with it the Modbus recovery window and a delayed refresh. The comparison is made against a fresh read, not the last poll, so a value another controller changed in between is still written; when that read fails, the value is written as before.
 - A web write sends only the fields that differ, and a field the inverter names as refused in its answer is reported as an error.
+- The inverter temperature and the battery cell temperature are read like the new component sensors. A device that does not report the channel gets no such entity, instead of one that stays unknown.
 
 ## 1.2.0b1
 

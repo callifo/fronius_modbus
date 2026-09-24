@@ -237,3 +237,24 @@ async def test_a_token_for_a_host_already_set_up_is_not_kept(hass, mock_modbus):
     assert (
         await async_get_token_store(hass).async_load_token(HOST, "technician") is None
     )
+
+
+async def test_a_duplicate_flow_leaves_the_existing_entrys_token_alone(
+    hass, monkeypatch
+):
+    """Reaudit RE26-04: the aborted flow had already replaced the entry's token."""
+    make_entry(hass)
+    store = async_get_token_store(hass)
+    await store.async_save_token(HOST, realm="r", token="old")
+
+    async def validate(hass, settings, *, api_token, apply_modbus_config):
+        if api_token == {"realm": "r", "token": "old"}:
+            raise config_flow._InvalidApiCredentials
+        return {"title": "Fronius"}
+
+    monkeypatch.setattr(config_flow, "_validate_input", validate)
+
+    result = await run_flow(hass)
+
+    assert result["reason"] == "already_configured"
+    assert await store.async_load_token(HOST) == {"realm": "r", "token": "old"}

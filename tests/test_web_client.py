@@ -1273,3 +1273,14 @@ def test_an_unreadable_soc_window_is_not_written(client, inverter):
         client.set_soc_limits(soc_min=50)
 
     assert posts(inverter) == []
+
+
+@pytest.mark.parametrize("master", [[], "rtu", 0])
+def test_a_malformed_master_is_not_written_back(master):
+    """Audit FA0FB-05: `master` went into the Modbus setup POST unchecked."""
+    client = FroniusWebClient("192.0.2.10")
+    client.get_modbus_config = lambda: {"master": master, "slave": {"mode": "rtu"}}
+    client._post = lambda *_args, **_kwargs: pytest.fail("posted a malformed master")
+
+    with pytest.raises(FroniusWebResponseError, match="no object"):
+        client.ensure_modbus_enabled(502, 200, 1)

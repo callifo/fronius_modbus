@@ -1188,7 +1188,7 @@ def _component_reported(runtime: FroniusRuntimeData, reading: ComponentReading) 
     web_data = runtime.web_data
     if web_data is not None and _component_endpoint_missing(web_data, reading):
         return False
-    if reading.per_channel and reading.key in runtime.registered_keys:
+    if reading.per_channel and reading.key in runtime.reported_keys:
         return True
     return reported(reading, _component_readings(runtime, reading))
 

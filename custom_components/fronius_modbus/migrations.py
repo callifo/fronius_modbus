@@ -6,8 +6,8 @@ import re
 from pathlib import Path
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST, CONF_NAME
-from homeassistant.core import HomeAssistant
+from homeassistant.const import CONF_HOST, CONF_NAME, Platform
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
@@ -82,18 +82,45 @@ def _entry_value(entry: ConfigEntry, key: str, default=None):
     return entry.options.get(key, entry.data.get(key, default))
 
 
+REPORTED_OPTION = "reported"
+
+
 def _entity_entries_for_config_entry(registry, entry: ConfigEntry):
     return list(er.async_entries_for_config_entry(registry, entry.entry_id))
 
 
-def registered_keys(hass: HomeAssistant, entry: ConfigEntry) -> frozenset[str]:
-    """The description keys of the entities the registry holds for this entry."""
+def _marked_reported(entity_entry: er.RegistryEntry) -> bool:
+    return bool(entity_entry.options.get(DOMAIN, {}).get(REPORTED_OPTION))
+
+
+def reported_keys(hass: HomeAssistant, entry: ConfigEntry) -> frozenset[str]:
+    """The description keys of the entities marked as reported by the device."""
     prefix = f"{entity_prefix(entry.entry_id)}_"
     return frozenset(
         unique_id.removeprefix(prefix)
         for candidate in _entity_entries_for_config_entry(er.async_get(hass), entry)
         if (unique_id := candidate.unique_id or "").startswith(prefix)
+        and _marked_reported(candidate)
     )
+
+
+@callback
+def async_mark_reported(
+    hass: HomeAssistant, entry: ConfigEntry, keys: set[str]
+) -> None:
+    """Remember in the registry that the device reported these sensors."""
+    registry = er.async_get(hass)
+    prefix = entity_prefix(entry.entry_id)
+    for key in keys:
+        entity_id = registry.async_get_entity_id(
+            Platform.SENSOR, DOMAIN, f"{prefix}_{key}"
+        )
+        entity_entry = registry.async_get(entity_id) if entity_id else None
+        if entity_entry is None or _marked_reported(entity_entry):
+            continue
+        registry.async_update_entity_options(
+            entity_entry.entity_id, DOMAIN, {REPORTED_OPTION: True}
+        )
 
 
 def _migration_issue_id(entry: ConfigEntry) -> str:

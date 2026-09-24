@@ -798,11 +798,14 @@ async def test_diagnostics_still_answer_while_the_inverter_is_offline(
     assert diagnostics["identity"]["serial"] == "**REDACTED**"
 
 
-async def test_a_placeholder_power_module_is_not_kept(hass, mock_modbus, monkeypatch):
-    """Own reaudit R26-01: a module made while unread stayed as if reported."""
+@pytest.mark.parametrize("first_answer", [None, {"FANCONTROL_PERCENT_01_F32": 0.0}])
+async def test_a_placeholder_power_module_is_not_kept(
+    hass, mock_modbus, monkeypatch, first_answer
+):
+    """Own reaudit R26-01: a module made while unread or unnamed stayed as if reported."""
     mock_modbus.add_unit(201, like=METER_UNIT_ID)
     monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientAnsweringEmpty)
-    monkeypatch.setattr(_WebClientAnsweringEmpty, "readings", None)
+    monkeypatch.setattr(_WebClientAnsweringEmpty, "readings", first_answer)
     entry = make_entry(hass)
     await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
     await setup_entry(hass, entry)

@@ -889,16 +889,16 @@
     "tests": "a_stale_poll_would_refuse_reaches_the_inverter"
   },
   {
-    "label": "entities: a power module registered before stays",
+    "label": "entities: a power module reported before stays",
     "path": "custom_components/fronius_modbus/entities.py",
-    "old": "    if reading.per_channel and reading.key in runtime.registered_keys:\n        return True\n",
+    "old": "    if reading.per_channel and reading.key in runtime.reported_keys:\n        return True\n",
     "new": "",
     "tests": "power_module_missing_from_one_answer_keeps_its_entity"
   },
   {
-    "label": "setup: the runtime learns the registered keys",
+    "label": "setup: the runtime learns the reported keys",
     "path": "custom_components/fronius_modbus/__init__.py",
-    "old": "        registered_keys=migrations.registered_keys(hass, entry),\n",
+    "old": "        reported_keys=migrations.reported_keys(hass, entry),\n",
     "new": "",
     "tests": "power_module_missing_from_one_answer_keeps_its_entity"
   },
@@ -922,5 +922,26 @@
     "old": "            if previous is None:\n                await async_forget_unused_tokens(self.hass, host)\n",
     "new": "            if previous is None:\n                await store.async_delete_token(host, username)\n",
     "tests": "role_switch_failing_after_the_update_keeps_the_new_token"
+  },
+  {
+    "label": "migrations: only a sensor marked as reported is kept",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "        and _marked_reported(candidate)\n",
+    "new": "",
+    "tests": "a_placeholder_power_module_is_not_kept"
+  },
+  {
+    "label": "component readings: only a channel the answer names is seen",
+    "path": "custom_components/fronius_modbus/component_readings.py",
+    "old": "        and any(field in readings for field in row.fields)\n",
+    "new": "",
+    "tests": "a_placeholder_power_module_is_not_kept"
+  },
+  {
+    "label": "setup: modules reported at setup are marked at once",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "        _mark_reported_modules()\n",
+    "new": "",
+    "tests": "power_module_missing_from_one_answer_keeps_its_entity"
   }
 ]

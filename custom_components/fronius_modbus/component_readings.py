@@ -321,6 +321,23 @@ def reported(reading: ComponentReading, readings: dict[str, Any] | None) -> bool
     return any(field in readings for field in reading.fields)
 
 
+def named_channels(component: Component, readings: dict[str, Any] | None) -> set[str]:
+    """The channel-by-channel rows an answer names; only these count as seen.
+
+    A row made while unread or while no channel was named is a placeholder,
+    and keeping it would show a module the device lacks (own reaudit R26-01).
+    """
+    if readings is None:
+        return set()
+    return {
+        row.key
+        for row in COMPONENT_READINGS
+        if row.per_channel
+        and row.component == component
+        and any(field in readings for field in row.fields)
+    }
+
+
 def readable_fields(component: Component) -> frozenset[str]:
     """Every field the web client may take from a component; nothing else leaves it."""
     fields = {

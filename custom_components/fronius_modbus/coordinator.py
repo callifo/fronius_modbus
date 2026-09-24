@@ -125,9 +125,9 @@ class FroniusRuntimeData:
     # False while the meter topology could not be read: the meters beyond the
     # default one are then undecided, not gone (audit A04).
     topology_confirmed: bool = True
-    # Registered before this setup: a power module seen once stays, since one
+    # Reported at an earlier start: a power module seen once stays, since one
     # answer without it would otherwise retire it (reaudit RE26-03).
-    registered_keys: frozenset[str] = frozenset()
+    reported_keys: frozenset[str] = frozenset()
 
     @property
     def storage_control(self) -> StorageControl | None:

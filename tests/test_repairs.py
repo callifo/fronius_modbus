@@ -356,3 +356,28 @@ async def test_the_repair_rechecks_a_host_taken_during_the_password_step(
 
     assert flow["errors"]["base"] == "already_configured"
     assert applied == []
+
+
+async def test_a_repair_for_an_entry_removed_meanwhile_stops_before_the_login(
+    hass, mock_modbus, web_client, repairs_client, monkeypatch
+):
+    """Audit R730-02: the repair minted a token and set up Modbus for a deleted entry."""
+    entry = await make_entry(hass, mock_modbus, with_token=False)
+    applied = []
+    monkeypatch.setattr(
+        config_flow.FroniusWebClient,
+        "ensure_modbus_enabled",
+        lambda self, *args: applied.append(args) or True,
+    )
+    issue_id = f"{MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX}{entry.entry_id}"
+    flow = await start_fix_flow(repairs_client, issue_id)
+    flow = await advance_fix_flow(repairs_client, flow["flow_id"], SETTINGS_INPUT)
+    assert flow["step_id"] == "password"
+    await hass.config_entries.async_remove(entry.entry_id)
+
+    flow = await advance_fix_flow(repairs_client, flow["flow_id"], PASSWORD_INPUT)
+
+    assert flow["type"] == "abort"
+    assert flow["reason"] == "entry_not_found"
+    assert applied == []
+    assert await async_get_token_store(hass).async_load_token(HOST) is None

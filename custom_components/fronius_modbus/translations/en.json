@@ -38,12 +38,28 @@
         "data": {
           "api_password": "Password"
         }
+      },
+      "reauth_confirm": {
+        "title": "Log in to the Fronius Web API again",
+        "description": "The stored login of this entry is missing or was rejected, for example after the password was changed on the inverter. Choose the access role; the next step asks for its password. If you do not want to use the web API, choose Without the web API. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand. Switching an existing entry to it removes those entities; their history stays.",
+        "data": {
+          "api_username": "Web API access role"
+        }
+      },
+      "reauth_password": {
+        "title": "Web API password",
+        "description": "Enter the password of the selected Web API role for {entry_title} ({host}) to create or refresh the stored token. The password is not stored in the config entry.",
+        "data": {
+          "api_password": "Password"
+        }
       }
     },
     "abort": {
       "already_configured": "Device is already configured",
       "reconfigure_successful": "Configuration updated successfully.",
-      "not_ipv4_address": "Only an inverter announced with an IPv4 address can be added from discovery."
+      "not_ipv4_address": "Only an inverter announced with an IPv4 address can be added from discovery.",
+      "reauth_successful": "Logged in again.",
+      "entry_not_found": "The entry no longer exists."
     },
     "error": {
       "cannot_connect": "Failed to connect",
@@ -639,51 +655,6 @@
     }
   },
   "issues": {
-    "legacy_modbus_only_entry_reconfigure": {
-      "title": "Review Fronius web API access",
-      "fix_flow": {
-        "step": {
-          "init": {
-            "title": "Review Fronius System",
-            "description": "This entry needs a valid token for its Web API role: the stored one is missing or was rejected. Review the host, the access role, the update intervals and the Modbus IP restriction. The next step asks for the password only if needed. If you do not want to use the web API, choose Without the web API. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand. Switching an existing entry to it removes those entities; their history stays.",
-            "data": {
-              "host": "Host",
-              "scan_interval": "Update interval (seconds)",
-              "web_scan_interval": "Web API update interval (seconds)",
-              "modbus_restriction": "Modbus IP restriction",
-              "api_username": "Web API access role"
-            }
-          },
-          "password": {
-            "title": "Web API password",
-            "description": "Enter the password of the selected Web API role for {entry_title} ({host}) to create or refresh the stored token. The password is not stored in the config entry.",
-            "data": {
-              "api_password": "Password"
-            }
-          }
-        },
-        "error": {
-          "cannot_connect": "Failed to connect",
-          "cannot_connect_modbus": "Modbus did not answer. Without the web API, switch Modbus TCP on in the inverter first.",
-          "invalid_port": "Invalid port number",
-          "invalid_host": "Invalid host address",
-          "unsupported_hardware": "Unsupported hardware. See logs.",
-          "unknown": "Unknown error",
-          "scan_interval_too_short": "Minimum update interval is 5 seconds.",
-          "modbus_address_conflict": "Modbus IDs are not unique",
-          "missing_api_password": "A password is required for the selected Web API role.",
-          "invalid_api_credentials": "Login failed for the selected Web API role.",
-          "cannot_resolve_local_ip": "Could not determine the Home Assistant IP.",
-          "already_configured": "Another entry already uses this host."
-        },
-        "abort": {
-          "entry_not_found": "The Fronius entry no longer exists."
-        },
-        "create_entry": {
-          "default": "Configuration updated successfully."
-        }
-      }
-    },
     "solar_api_low_firmware": {
       "title": "Disable Fronius Solar API on older firmware",
       "fix_flow": {
@@ -719,6 +690,17 @@
         },
         "create_entry": {
           "default": "Solar API disabled successfully."
+        }
+      }
+    },
+    "legacy_modbus_only_entry_reconfigure": {
+      "title": "Old Fronius login notice",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Old Fronius login notice",
+            "description": "This notice is from an earlier version of the integration. Home Assistant now asks for a new login on the integration itself when one is needed. Confirm to remove the notice."
+          }
         }
       }
     }
@@ -810,7 +792,7 @@
       "message": "The Fronius Web API is not configured for this entry."
     },
     "web_api_auth_failed": {
-      "message": "The Fronius Web API rejected the login. Reconfigure the integration."
+      "message": "The Fronius Web API rejected the login. Log in again when Home Assistant asks for it on the integration."
     },
     "technician_not_configured": {
       "message": "This control needs the technician role. Choose it via Configure."

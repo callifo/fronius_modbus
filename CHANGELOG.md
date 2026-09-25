@@ -4,16 +4,17 @@
 
 ### Added
 - Discovery over mDNS: Home Assistant offers the inverter under Discovered and fills in its host. An inverter already set up is recognized by its serial number, and an entry set up with an IPv4 address follows the inverter to a new address, its Web API token included.
-- The web API is optional: choose *Without the web API* as the access role to set an entry up on Modbus alone, without a password or a stored token. The Modbus sensors and controls, the component sensors and the list of smart meters stay, since those endpoints answer without a login; the settings that live only in the inverter's web configuration are not there. Switching an existing entry to it deletes its token and removes the web entities. The Repairs item for a missing login offers the same choice.
+- The web API is optional: choose *Without the web API* as the access role to set an entry up on Modbus alone, without a password or a stored token. The Modbus sensors and controls, the component sensors and the list of smart meters stay, since those endpoints answer without a login; the settings that live only in the inverter's web configuration are not there. Switching an existing entry to it deletes its token and removes the web entities. The new login Home Assistant asks for offers the same choice.
 
 ### Changed
+- A missing or rejected Web API login is asked for through Home Assistant's own reauthentication on the integration, not a Repairs item. It asks for the role and its password, or offers to go on without the web API; an open Repairs item from an earlier version goes at the next start, or, on an entry that is disabled, when it is confirmed.
 - `Production limit`, `Production limit reached`, `Battery max charge power (DC-DC)` and `Battery max discharge power (DC-DC)` are created only once the inverter reports them, like the power modules. Older firmware lacks these fields and showed four sensors that stayed unknown. Existing entries keep the ones they have; entries migrate to minor version 14.
 - The component sensors are read without a login. They keep reading after the web login is lost while Home Assistant runs; the settings it guards go unavailable as before. A login the inverter refused is not sent again.
 
 ### Fixed
 - The export soft limit shows only for a switch the inverter reports as on. A value like "off" read as an active limit.
 - An export limit block or a battery value of an unexpected shape, such as an infinite number, leaves that value unknown instead of failing the whole web poll. An export limit that is no number shows as unknown; the power sensor could not take it.
-- A repair whose entry is removed while it runs is aborted and keeps no token; it reported success and left the new token behind.
+- A new login whose entry is removed while it runs keeps no token; the repair it replaces reported success and left the new token behind.
 
 ## 1.2.0b2
 

@@ -20,7 +20,6 @@ from .const import (
     API_SOC_MODE,
     DEFAULT_METER_UNIT_ID,
     DOMAIN,
-    MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX,
     SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX,
     TECHNICIAN_USERNAME,
 )
@@ -404,7 +403,7 @@ class FroniusWebControl:
             if raise_on_auth_failure:
                 raise ControlUnavailable(
                     "web_api_auth_failed",
-                    "Fronius Web API authentication failed. Reconfigure the integration.",
+                    "Fronius Web API authentication failed. Log in again when asked.",
                 ) from err
             return None
 
@@ -434,19 +433,7 @@ class FroniusWebControl:
         self._async_sync_solar_api_warning()
 
         if self._entry is not None:
-            ir.async_create_issue(
-                self._hass,
-                DOMAIN,
-                f"{MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX}{self._entry.entry_id}",
-                is_fixable=True,
-                is_persistent=True,
-                severity=ir.IssueSeverity.WARNING,
-                translation_key="legacy_modbus_only_entry_reconfigure",
-                translation_placeholders={
-                    "entry_title": self._entry.title or self._host
-                },
-                data={"entry_id": self._entry.entry_id},
-            )
+            self._entry.async_start_reauth(self._hass)
 
     # -- refresh -----------------------------------------------------------------
 

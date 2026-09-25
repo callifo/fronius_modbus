@@ -6,6 +6,8 @@ import pathlib
 from modbus_connection.mock import MockModbusConnection
 import pytest
 
+from homeassistant.config_entries import ConfigEntry
+
 from .durations import SLOW_TEST_SECONDS, over_budget
 
 pytest_plugins = ("pytest_homeassistant_custom_component",)
@@ -167,3 +169,19 @@ def mock_modbus(monkeypatch, symo_gen24):
     shared = SharedMockModbus(symo_gen24)
     monkeypatch.setattr(CORE_CONNECTION, shared)
     return shared
+
+
+@pytest.fixture
+def reauth_requests(monkeypatch) -> list[str]:
+    """The entries that asked Home Assistant for a new login, instead of a real flow.
+
+    A unit test's entry has no loaded integration, so a real reauth flow for
+    it would fail in the background after the test.
+    """
+    requests: list[str] = []
+    monkeypatch.setattr(
+        ConfigEntry,
+        "async_start_reauth",
+        lambda entry, hass, **_kwargs: requests.append(entry.entry_id),
+    )
+    return requests

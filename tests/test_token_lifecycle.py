@@ -138,3 +138,16 @@ async def test_the_role_a_migration_drops_takes_its_token_with_it(hass):
 
     assert entry.data["api_username"] == "technician"
     assert await stored_roles(hass) == {"technician"}
+
+
+async def test_a_stored_token_of_the_wrong_shape_is_no_token(hass):
+    store = token_store.async_get_token_store(hass)
+    await store.async_save_token(HOST, realm="r", token="t")
+    store._cache[f"{HOST}:customer"] = {"realm": 1, "token": "t"}
+
+    assert await store.async_load_token(HOST) is None
+
+
+def test_tokens_are_not_moved_before_the_store_is_loaded(hass):
+    with pytest.raises(RuntimeError):
+        token_store.FroniusTokenStore(hass).move_tokens(HOST, "192.0.2.20")

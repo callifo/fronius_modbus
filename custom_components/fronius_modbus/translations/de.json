@@ -38,12 +38,28 @@
         "data": {
           "api_password": "Passwort"
         }
+      },
+      "reauth_confirm": {
+        "title": "Erneut an der Fronius-Web-API anmelden",
+        "description": "Die gespeicherte Anmeldung dieses Eintrags fehlt oder wurde abgelehnt, zum Beispiel nach einer Passwortänderung am Wechselrichter. Wähle die Zugriffsrolle; im nächsten Schritt wird ihr Passwort abgefragt. Wer die Web-API nicht nutzen will, wählt Ohne Web-API. Ohne Web-API fehlen SoC-Modus, SoC-Maximum, Notstrom-Reserve, Netzlade-Erlaubnis, Solar API, Einspeisebegrenzung und Modbus-Reset, und Modbus TCP muss vorher im Wechselrichter eingeschaltet sein. Beim Umstellen eines bestehenden Eintrags werden diese Entitäten entfernt; ihre Historie bleibt.",
+        "data": {
+          "api_username": "Web-API-Zugriffsrolle"
+        }
+      },
+      "reauth_password": {
+        "title": "Web-API-Passwort",
+        "description": "Gib das Passwort der ausgewählten Web-API-Rolle für {entry_title} ({host}) ein, um den gespeicherten Token zu erstellen oder zu erneuern. Das Passwort wird nicht im Konfigurationseintrag gespeichert.",
+        "data": {
+          "api_password": "Passwort"
+        }
       }
     },
     "abort": {
       "already_configured": "Gerät ist bereits eingerichtet",
       "reconfigure_successful": "Konfiguration erfolgreich aktualisiert.",
-      "not_ipv4_address": "Aus der Erkennung lässt sich nur ein Wechselrichter mit IPv4-Adresse hinzufügen."
+      "not_ipv4_address": "Aus der Erkennung lässt sich nur ein Wechselrichter mit IPv4-Adresse hinzufügen.",
+      "reauth_successful": "Erneut angemeldet.",
+      "entry_not_found": "Der Eintrag existiert nicht mehr."
     },
     "error": {
       "cannot_connect": "Verbindung fehlgeschlagen",
@@ -639,51 +655,6 @@
     }
   },
   "issues": {
-    "legacy_modbus_only_entry_reconfigure": {
-      "title": "Fronius-Web-API-Zugriff prüfen",
-      "fix_flow": {
-        "step": {
-          "init": {
-            "title": "Fronius-System prüfen",
-            "description": "Dieser Eintrag braucht einen gültigen Token für seine Web-API-Rolle: der gespeicherte fehlt oder wurde abgelehnt. Prüfe Host, Zugriffsrolle, Aktualisierungsintervalle und Modbus-IP-Beschränkung. Im nächsten Schritt wird nur bei Bedarf nach dem Passwort gefragt. Wer die Web-API nicht nutzen will, wählt Ohne Web-API. Ohne Web-API fehlen SoC-Modus, SoC-Maximum, Notstrom-Reserve, Netzlade-Erlaubnis, Solar API, Einspeisebegrenzung und Modbus-Reset, und Modbus TCP muss vorher im Wechselrichter eingeschaltet sein. Beim Umstellen eines bestehenden Eintrags werden diese Entitäten entfernt; ihre Historie bleibt.",
-            "data": {
-              "host": "Host",
-              "scan_interval": "Aktualisierungsintervall (Sekunden)",
-              "web_scan_interval": "Web-API-Aktualisierungsintervall (Sekunden)",
-              "modbus_restriction": "Modbus-IP-Beschränkung",
-              "api_username": "Web-API-Zugriffsrolle"
-            }
-          },
-          "password": {
-            "title": "Web-API-Passwort",
-            "description": "Gib das Passwort der ausgewählten Web-API-Rolle für {entry_title} ({host}) ein, um den gespeicherten Token zu erstellen oder zu erneuern. Das Passwort wird nicht im Konfigurationseintrag gespeichert.",
-            "data": {
-              "api_password": "Passwort"
-            }
-          }
-        },
-        "error": {
-          "cannot_connect": "Verbindung fehlgeschlagen",
-          "cannot_connect_modbus": "Modbus antwortet nicht. Ohne Web-API muss Modbus TCP vorher im Wechselrichter eingeschaltet werden.",
-          "invalid_port": "Ungültige Portnummer",
-          "invalid_host": "Ungültige Host-Adresse",
-          "unsupported_hardware": "Nicht unterstützte Hardware. Siehe Protokoll.",
-          "unknown": "Unbekannter Fehler",
-          "scan_interval_too_short": "Das Mindestintervall für die Aktualisierung beträgt 5 Sekunden.",
-          "modbus_address_conflict": "Modbus-IDs sind nicht eindeutig",
-          "missing_api_password": "Für die ausgewählte Web-API-Rolle wird ein Passwort benötigt.",
-          "invalid_api_credentials": "Anmeldung für die ausgewählte Web-API-Rolle fehlgeschlagen.",
-          "cannot_resolve_local_ip": "Die Home-Assistant-IP konnte nicht ermittelt werden.",
-          "already_configured": "Ein anderer Eintrag verwendet diesen Host bereits."
-        },
-        "abort": {
-          "entry_not_found": "Der Fronius-Eintrag existiert nicht mehr."
-        },
-        "create_entry": {
-          "default": "Konfiguration erfolgreich aktualisiert."
-        }
-      }
-    },
     "solar_api_low_firmware": {
       "title": "Fronius Solar API bei älterer Firmware deaktivieren",
       "fix_flow": {
@@ -719,6 +690,17 @@
         },
         "create_entry": {
           "default": "Solar API erfolgreich deaktiviert."
+        }
+      }
+    },
+    "legacy_modbus_only_entry_reconfigure": {
+      "title": "Alter Fronius-Anmeldehinweis",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Alter Fronius-Anmeldehinweis",
+            "description": "Dieser Hinweis stammt aus einer früheren Version der Integration. Home Assistant fragt eine neue Anmeldung inzwischen direkt an der Integration ab, wenn sie nötig ist. Bestätigen entfernt den Hinweis."
+          }
         }
       }
     }
@@ -810,7 +792,7 @@
       "message": "Die Fronius-Web-API ist für diesen Eintrag nicht eingerichtet."
     },
     "web_api_auth_failed": {
-      "message": "Die Fronius-Web-API hat die Anmeldung abgelehnt. Bitte die Integration neu konfigurieren."
+      "message": "Die Fronius-Web-API hat die Anmeldung abgelehnt. Bitte erneut anmelden, sobald Home Assistant an der Integration danach fragt."
     },
     "technician_not_configured": {
       "message": "Diese Steuerung braucht die Techniker-Rolle. Sie lässt sich über Konfigurieren wählen."

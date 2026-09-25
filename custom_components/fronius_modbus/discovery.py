@@ -66,6 +66,8 @@ async def async_follow_host(hass: HomeAssistant, entry: ConfigEntry, host: str) 
     # From the ownership check to the entry update nothing may await: another
     # flow took the address in between (audit R3B-01, R3B-02).
     await token_store.async_ready()
+    if hass.config_entries.async_get_entry(entry.entry_id) is None:
+        return
     values = {**entry.data, **entry.options}
     old_host = str(values.get(CONF_HOST, ""))
     moved = canonical_host(old_host) != canonical_host(host)

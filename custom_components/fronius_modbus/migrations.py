@@ -359,33 +359,23 @@ async def async_prepare_entry_token(
     return token
 
 
-async def async_sync_reconfigure_issue(
+async def async_sync_login_request(
     hass: HomeAssistant,
     entry: ConfigEntry,
     *,
     has_token: bool,
 ) -> None:
-    issue_id = _migration_issue_id(entry)
-    needs_reconfigure = not web_api_disabled(entry) and (
+    """Ask for a new login where the entry's role has none.
+
+    Home Assistant's reauthentication asks, not a Repairs item (quality scale
+    Silver); the item older versions raised goes either way.
+    """
+    ir.async_delete_issue(hass, DOMAIN, _migration_issue_id(entry))
+    needs_login = not web_api_disabled(entry) and (
         bool(_entry_value(entry, CONF_RECONFIGURE_REQUIRED, False)) or not has_token
     )
-    if needs_reconfigure:
-        ir.async_create_issue(
-            hass,
-            DOMAIN,
-            issue_id,
-            is_fixable=True,
-            is_persistent=True,
-            severity=ir.IssueSeverity.WARNING,
-            translation_key="legacy_modbus_only_entry_reconfigure",
-            translation_placeholders={
-                "entry_title": entry.title or _entry_value(entry, CONF_NAME, "Fronius"),
-            },
-            data={"entry_id": entry.entry_id},
-        )
-        return
-
-    ir.async_delete_issue(hass, DOMAIN, issue_id)
+    if needs_login:
+        entry.async_start_reauth(hass)
 
 
 async def async_migrate_v019_mppt_statistics(

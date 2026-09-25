@@ -14,7 +14,7 @@ from custom_components.fronius_modbus import config_flow, discovery
 from custom_components.fronius_modbus.const import DOMAIN, instance_key
 from custom_components.fronius_modbus.froniuswebclient import FroniusWebResponseError
 from custom_components.fronius_modbus.token_store import async_get_token_store
-from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.data_entry_flow import FlowResultType, UnknownFlow
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
@@ -941,3 +941,178 @@ async def test_an_ipv6_only_announcement_is_not_offered(hass):
 
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "not_ipv4_address"
+
+
+@pytest.mark.parametrize(
+    ("error", "field", "message"),
+    [
+        (config_flow._CannotConnect, "base", "cannot_connect"),
+        (config_flow._CannotConnectModbus, "base", "cannot_connect_modbus"),
+        (config_flow._InvalidPort, "base", "invalid_port"),
+        (config_flow._InvalidHost, "host", "invalid_host"),
+        (config_flow._ScanIntervalTooShort, "base", "scan_interval_too_short"),
+        (config_flow._MissingApiPassword, "base", "missing_api_password"),
+        (config_flow._InvalidApiCredentials, "base", "invalid_api_credentials"),
+        (config_flow._CannotResolveLocalIp, "base", "cannot_resolve_local_ip"),
+        (config_flow._UnsupportedHardware, "base", "unsupported_hardware"),
+        (config_flow._AddressesNotUnique, "base", "modbus_address_conflict"),
+        (config_flow._AlreadyConfigured, "base", "already_configured"),
+        (RuntimeError, "base", "unknown"),
+    ],
+)
+def test_every_flow_error_shows_its_message(error, field, message):
+    errors: dict[str, str] = {}
+
+    config_flow._set_form_error(errors, error())
+
+    assert errors == {field: message}
+
+
+# -- reauthentication ----------------------------------------------------------------
+
+
+async def test_a_reauth_stores_the_new_token(hass, mock_modbus):
+    entry = make_entry(hass)
+
+    result = await entry.start_reauth_flow(hass)
+    assert result["step_id"] == "reauth_confirm"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_username": "customer"}
+    )
+    assert result["step_id"] == "reauth_password"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+    assert await async_get_token_store(hass).async_load_token(HOST) == {
+        "realm": "r",
+        "token": "t",
+    }
+
+
+async def test_a_reauth_can_leave_the_web_api_off(hass, mock_modbus):
+    entry = make_entry(hass)
+
+    result = await entry.start_reauth_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_username": "none"}
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+    assert config_flow.entry_defaults(entry)["api_username"] == "none"
+
+
+async def test_an_entry_deleted_during_the_reauth_keeps_no_token(
+    hass, mock_modbus, monkeypatch
+):
+    """Audit R6D-03, carried over from the repair: success was reported for a gone entry."""
+    entry = make_entry(hass)
+    validate = config_flow._validate_input
+
+    async def validate_then_delete(hass, *args, **kwargs):
+        info = await validate(hass, *args, **kwargs)
+        await hass.config_entries.async_remove(entry.entry_id)
+        return info
+
+    monkeypatch.setattr(config_flow, "_validate_input", validate_then_delete)
+    result = await entry.start_reauth_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_username": "customer"}
+    )
+    await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+
+    assert await async_get_token_store(hass).async_load_token(HOST) is None
+
+
+async def test_a_reauth_failing_late_keeps_the_fresh_token(
+    hass, mock_modbus, monkeypatch
+):
+    """Audit D8AE-02, carried over from the repair: the stale token came back."""
+    entry = make_entry(hass)
+    store = async_get_token_store(hass)
+    await store.async_save_token(HOST, realm="r", token="stale", user="technician")
+
+    async def validate(hass, settings, *, api_token, **_kwargs):
+        if api_token == {"realm": "r", "token": "stale"}:
+            raise config_flow._InvalidApiCredentials
+        return {"title": "Fronius"}
+
+    abort = config_flow.ConfigFlow.async_abort
+
+    def fail_on_success(self, *, reason, **kwargs):
+        if reason == "reauth_successful":
+            raise RuntimeError("after the update")
+        return abort(self, reason=reason, **kwargs)
+
+    monkeypatch.setattr(config_flow, "_validate_input", validate)
+    monkeypatch.setattr(config_flow.ConfigFlow, "async_abort", fail_on_success)
+    result = await entry.start_reauth_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_username": "technician"}
+    )
+    # The reload the update scheduled ends a reauth flow that is still running.
+    with pytest.raises(UnknownFlow):
+        await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"api_password": "secret"}
+        )
+
+    assert config_flow.entry_defaults(entry)["api_username"] == "technician"
+    assert await store.async_load_token(HOST, "technician") == {
+        "realm": "r",
+        "token": "t",
+    }
+
+
+@pytest.mark.parametrize(
+    ("change", "error"),
+    [
+        ({"host": "ab"}, config_flow._InvalidHost),
+        ({"port": 70000}, config_flow._InvalidPort),
+        ({"scan_interval": 4}, config_flow._ScanIntervalTooShort),
+        ({"inverter_modbus_unit_id": 200}, config_flow._AddressesNotUnique),
+    ],
+)
+def test_a_setting_out_of_bounds_is_refused_before_the_inverter(change, error):
+    settings = config_flow._expand_settings_input(USER_INPUT) | change
+
+    with pytest.raises(error):
+        config_flow._validate_static_input(settings)
+
+
+async def test_an_entry_removed_while_following_keeps_no_token(hass, monkeypatch):
+    """Reaudit RB99, baseline risk: the token moved to the new host of a gone entry."""
+    entry = make_entry(hass)
+    store = async_get_token_store(hass)
+    await store.async_save_token(HOST, realm="r", token="t")
+    ready = store.async_ready
+
+    async def ready_while_the_entry_goes():
+        await hass.config_entries.async_remove(entry.entry_id)
+        await ready()
+
+    monkeypatch.setattr(store, "async_ready", ready_while_the_entry_goes)
+
+    await discovery.async_follow_host(hass, entry, MOVED_HOST)
+
+    assert await store.async_load_token(MOVED_HOST) is None
+
+
+async def test_a_reauth_keeps_settings_changed_while_it_ran(hass, mock_modbus):
+    """Reaudit RB99, inherited risk: the finished login wrote back its older snapshot."""
+    entry = make_entry(hass)
+    result = await entry.start_reauth_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_username": "customer"}
+    )
+    hass.config_entries.async_update_entry(entry, options={"scan_interval": 30})
+
+    await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+
+    assert config_flow.entry_defaults(entry)["scan_interval"] == 30

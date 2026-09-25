@@ -43,6 +43,9 @@ SOC_MINIMUM_ADDRESS = 40350
 # The model-123 header; failing it fails the controls report.
 CONTROLS_HEADER_ADDRESS = 40227
 
+# A rejected login asks Home Assistant for a new one; here it is only recorded.
+pytestmark = pytest.mark.usefixtures("reauth_requests")
+
 
 @pytest.fixture
 def entry(hass):

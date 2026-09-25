@@ -14,14 +14,6 @@ from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTER
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
-from homeassistant.helpers.selector import (
-    SelectSelector,
-    SelectSelectorConfig,
-    SelectSelectorMode,
-    TextSelector,
-    TextSelectorConfig,
-    TextSelectorType,
-)
 
 from .const import (
     CONF_API_PASSWORD,
@@ -55,6 +47,7 @@ from .discovery import (
     discovered_serial,
     entry_for_serial,
 )
+from .flow_forms import password_schema, role_schema, settings_schema
 from .fronius_modbus_api.device import FroniusInverter
 from .froniuswebclient import (
     ClientIpResolutionError,
@@ -198,86 +191,26 @@ def entry_defaults(entry: config_entries.ConfigEntry) -> dict[str, Any]:
     return _expand_settings_input({}, defaults)
 
 
-def _build_settings_schema(defaults: dict[str, Any]) -> vol.Schema:
-    return vol.Schema(
-        {
-            vol.Required(CONF_HOST, default=defaults.get(CONF_HOST, "")): str,
-            vol.Required(
-                CONF_SCAN_INTERVAL,
-                default=defaults.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
-            ): vol.Coerce(int),
-            vol.Required(
-                CONF_WEB_SCAN_INTERVAL,
-                default=defaults.get(CONF_WEB_SCAN_INTERVAL, DEFAULT_WEB_SCAN_INTERVAL),
-            ): vol.All(vol.Coerce(int), vol.Range(min=MINIMUM_SCAN_INTERVAL, max=3600)),
-            vol.Required(
-                CONF_API_USERNAME,
-                default=defaults.get(CONF_API_USERNAME, API_USERNAME),
-            ): SelectSelector(
-                SelectSelectorConfig(
-                    options=[*API_USERNAMES, WEB_API_DISABLED],
-                    mode=SelectSelectorMode.LIST,
-                    translation_key="api_username",
-                )
-            ),
-            vol.Required(
-                CONF_MODBUS_RESTRICTION,
-                default=defaults.get(CONF_MODBUS_RESTRICTION, ModbusRestriction.KEEP),
-            ): SelectSelector(
-                SelectSelectorConfig(
-                    options=list(ModbusRestriction),
-                    mode=SelectSelectorMode.LIST,
-                    translation_key=CONF_MODBUS_RESTRICTION,
-                )
-            ),
-        }
-    )
-
-
-def _build_password_schema(*, keep_stored: bool = False) -> vol.Schema:
-    password_field = (
-        vol.Optional(CONF_API_PASSWORD, default="")
-        if keep_stored
-        else vol.Required(CONF_API_PASSWORD)
-    )
-    return vol.Schema(
-        {
-            password_field: TextSelector(
-                TextSelectorConfig(
-                    type=TextSelectorType.PASSWORD,
-                    autocomplete="current-password",
-                )
-            ),
-        }
-    )
+_FORM_ERRORS: dict[type[Exception], tuple[str, str]] = {
+    _CannotConnect: ("base", "cannot_connect"),
+    _CannotConnectModbus: ("base", "cannot_connect_modbus"),
+    _InvalidPort: ("base", "invalid_port"),
+    _InvalidHost: ("host", "invalid_host"),
+    _ScanIntervalTooShort: ("base", "scan_interval_too_short"),
+    _MissingApiPassword: ("base", "missing_api_password"),
+    _InvalidApiCredentials: ("base", "invalid_api_credentials"),
+    _CannotResolveLocalIp: ("base", "cannot_resolve_local_ip"),
+    _UnsupportedHardware: ("base", "unsupported_hardware"),
+    _AddressesNotUnique: ("base", "modbus_address_conflict"),
+    _AlreadyConfigured: ("base", "already_configured"),
+}
 
 
 def _set_form_error(errors: dict[str, str], err: Exception) -> None:
-    if isinstance(err, _CannotConnect):
-        errors["base"] = "cannot_connect"
-    elif isinstance(err, _CannotConnectModbus):
-        errors["base"] = "cannot_connect_modbus"
-    elif isinstance(err, _InvalidPort):
-        errors["base"] = "invalid_port"
-    elif isinstance(err, _InvalidHost):
-        errors["host"] = "invalid_host"
-    elif isinstance(err, _ScanIntervalTooShort):
-        errors["base"] = "scan_interval_too_short"
-    elif isinstance(err, _MissingApiPassword):
-        errors["base"] = "missing_api_password"
-    elif isinstance(err, _InvalidApiCredentials):
-        errors["base"] = "invalid_api_credentials"
-    elif isinstance(err, _CannotResolveLocalIp):
-        errors["base"] = "cannot_resolve_local_ip"
-    elif isinstance(err, _UnsupportedHardware):
-        errors["base"] = "unsupported_hardware"
-    elif isinstance(err, _AddressesNotUnique):
-        errors["base"] = "modbus_address_conflict"
-    elif isinstance(err, _AlreadyConfigured):
-        errors["base"] = "already_configured"
-    else:
+    field, message = _FORM_ERRORS.get(type(err), ("base", "unknown"))
+    if message == "unknown":
         _LOGGER.exception("Unexpected exception")
-        errors["base"] = "unknown"
+    errors[field] = message
 
 
 def _validate_static_input(data: dict[str, Any]) -> None:
@@ -527,7 +460,7 @@ class TokenFlowMixin:
             }
         return self.async_show_form(
             step_id=step_id,
-            data_schema=_build_password_schema(
+            data_schema=password_schema(
                 keep_stored=state is not None and state.existing_token is not None
             ),
             errors=errors or {},
@@ -547,6 +480,7 @@ class TokenFlowMixin:
         always_ask_password: bool = False,
         claim_host: _HostClaim,
         on_success: _FlowFinishCallback,
+        build_schema: Callable[[dict[str, Any]], vol.Schema] = settings_schema,
     ):
         errors: dict[str, str] = {}
 
@@ -605,7 +539,7 @@ class TokenFlowMixin:
 
         return self.async_show_form(
             step_id=step_id,
-            data_schema=_build_settings_schema(defaults),
+            data_schema=build_schema(defaults),
             errors=errors,
         )
 
@@ -728,9 +662,10 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
         return FroniusModbusOptionsFlow()
 
     def _flow_entry(self) -> config_entries.ConfigEntry | None:
-        if self.source != config_entries.SOURCE_RECONFIGURE:
+        sources = (config_entries.SOURCE_RECONFIGURE, config_entries.SOURCE_REAUTH)
+        if self.source not in sources:
             return None
-        return self._get_reconfigure_entry()
+        return self.hass.config_entries.async_get_entry(self.context["entry_id"])
 
     async def _async_claim_new_host(self, settings: dict[str, Any]) -> None:
         unique_id = entry_unique_id(settings)
@@ -829,6 +764,56 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
             restart_step=self.async_step_reconfigure,
             claim_host=self._async_claim_reconfigured_host,
             on_success=self._async_finish_reconfigure,
+        )
+
+    async def _async_claim_reauth_host(self, settings: dict[str, Any]) -> None:
+        entry = self._flow_entry()
+        if entry is None:
+            raise data_entry_flow.AbortFlow("entry_not_found")
+        await self._async_claim_entry_host(entry, settings)
+
+    async def _async_finish_reauth(self, settings, info, previous_host):
+        del info
+        entry = self._flow_entry()
+        if entry is None:
+            # An abort, not a success: the token minted for the gone entry is
+            # then taken back (audit R6D-03).
+            raise data_entry_flow.AbortFlow("entry_not_found")
+        # The form asked for the role alone: the rest is what the entry holds
+        # now, not what it held when the flow began.
+        current = entry_defaults(entry)
+        current[CONF_API_USERNAME] = settings[CONF_API_USERNAME]
+        await async_update_entry_from_input(
+            self.hass, entry, current, previous_host=previous_host
+        )
+        return self.async_abort(reason="reauth_successful")
+
+    async def async_step_reauth(self, entry_data):
+        del entry_data
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(self, user_input=None):
+        defaults = entry_defaults(self._get_reauth_entry())
+        return await self._async_handle_settings_step(
+            user_input=user_input,
+            step_id="reauth_confirm",
+            password_step_id="reauth_password",
+            defaults=defaults,
+            previous_host=defaults[CONF_HOST],
+            previous_settings=defaults,
+            force_apply_modbus_config=True,
+            claim_host=self._async_claim_reauth_host,
+            on_success=self._async_finish_reauth,
+            build_schema=role_schema,
+        )
+
+    async def async_step_reauth_password(self, user_input=None):
+        return await self._async_handle_password_step(
+            user_input=user_input,
+            step_id="reauth_password",
+            restart_step=self.async_step_reauth_confirm,
+            claim_host=self._async_claim_reauth_host,
+            on_success=self._async_finish_reauth,
         )
 
 

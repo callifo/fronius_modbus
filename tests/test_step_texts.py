@@ -25,7 +25,6 @@ SETTINGS_FORM_STEPS = (
     ("config", "user"),
     ("config", "reconfigure"),
     ("options", "init"),
-    ("issues", "legacy_modbus_only_entry_reconfigure", "init"),
 )
 
 

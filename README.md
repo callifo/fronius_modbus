@@ -99,7 +99,7 @@ Choose the `customer` or the `technician` local Web API role during setup and pr
 
 The role is the local `customer` or `technician` login used when you connect with a web browser directly to the inverter by its LAN IP address. Your installer should have provided it during installation. It is not the Solar Web login used for the cloud (e.g. https://www.solarweb.com/). The `technician` role covers everything the `customer` role does and additionally exposes the export limit control. An entry uses exactly one role; reconfigure it to switch.
 
-The integration stores a derived digest token in Home Assistant storage, readable by Home Assistant only, and does not keep the password in the config entry. The token is deleted when no entry uses its host and role any more: on removing the entry, or on moving it to another host or role. When discovery follows the inverter to a new address, the token moves with it. During setup, reconfigure, or Repairs, the password is only requested if no stored token exists for the selected host and role or the existing token must be refreshed. Configure always offers the password step, so a stored token can be replaced.
+The integration stores a derived digest token in Home Assistant storage, readable by Home Assistant only, and does not keep the password in the config entry. The token is deleted when no entry uses its host and role any more: on removing the entry, or on moving it to another host or role. When discovery follows the inverter to a new address, the token moves with it. During setup, reconfigure, or a new login, the password is only requested if no stored token exists for the selected host and role or the existing token must be refreshed. Configure always offers the password step, so a stored token can be replaced.
 
 ### What the Web API setup does
 
@@ -132,11 +132,11 @@ Needs the web API, so not there:
 
 `Charge from Grid` then stops at around 500 W unless grid charging is allowed in the inverter's own battery configuration; allow it once in the inverter web UI (see [Charging from the grid](#charging-from-the-grid)).
 
-Switching an existing entry to *Without the web API* deletes its stored token and removes the entities that need the web API; their recorded history stays in Home Assistant. The removal waits for a start at which the list of smart meters can be read, like every cleanup; if the inverter reports no meter at all, delete those entities yourself. Switching back to a role creates them again and, as long as the entry lets the integration set up Modbus (the default), writes the Modbus settings, the IP restriction choice included, since nothing wrote them without the login. An entry that keeps a role but lost its login is not the same: its web entities stay, unavailable, and a Repairs item asks for the password.
+Switching an existing entry to *Without the web API* deletes its stored token and removes the entities that need the web API; their recorded history stays in Home Assistant. The removal waits for a start at which the list of smart meters can be read, like every cleanup; if the inverter reports no meter at all, delete those entities yourself. Switching back to a role creates them again and, as long as the entry lets the integration set up Modbus (the default), writes the Modbus settings, the IP restriction choice included, since nothing wrote them without the login. An entry that keeps a role but lost its login is not the same: its web entities stay, unavailable, and Home Assistant asks for a new login.
 
 ### Migrating older entries
 
-Entries created with older Modbus-only versions are migrated with safe defaults and keep working temporarily. If an entry has no valid stored Web API token for the configured host and role, Home Assistant raises a Repairs item that lets you review the settings and enter that role's password to mint a new token, or choose *Without the web API*.
+Entries created with older Modbus-only versions are migrated with safe defaults and keep working temporarily. If an entry has no valid stored Web API token for the configured host and role, Home Assistant asks for a new login on the integration (**Reauthenticate**): choose the role and enter its password, or choose *Without the web API*. Host, intervals and the Modbus IP restriction stay as they are; change them with **Reconfigure**.
 
 ## Configuration
 
@@ -344,8 +344,8 @@ Grid charging also stops at around 500 W while the inverter's own battery config
 ## Troubleshooting
 
 - **Diagnostics:** Settings -> Devices & services -> Fronius Modbus -> device -> Download diagnostics. The download includes which sub-systems the last poll read and which failed, the Web API values, and the raw SunSpec register map; serial numbers and the Modbus restriction IP are redacted. It also works while the inverter is offline.
+- **New login:** Home Assistant shows *Reauthentication required* on the integration when an entry has no valid token for its host and role, for example after the password was changed on the inverter. Follow it to enter the role's password again, or choose *Without the web API* to run the entry on Modbus alone.
 - **Repairs:**
-  - *Review Fronius web API access* appears when an entry has no valid token for its host and role, for example after the password was changed on the inverter. Follow it to enter the role's password again, or choose *Without the web API* to run the entry on Modbus alone.
   - *Disable Fronius Solar API on older firmware* appears on firmware below 1.40.7-1 with the Solar API switched on. It offers to switch the Solar API off until the inverter is updated.
 - **Discovery:** no card appears for an inverter that is already set up, one in another subnet without an mDNS repeater between them, or one announced with an IPv6 address only (see [Discovery](#discovery)).
 - **Logs:** a sub-system that stops answering (inverter, a meter, the battery, the Web API) is logged once when it fails and once when it answers again. Web API errors name the error type, not the host.

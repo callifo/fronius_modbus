@@ -1066,3 +1066,19 @@ async def test_a_reauth_failing_late_keeps_the_fresh_token(
         "realm": "r",
         "token": "t",
     }
+
+
+@pytest.mark.parametrize(
+    ("change", "error"),
+    [
+        ({"host": "ab"}, config_flow._InvalidHost),
+        ({"port": 70000}, config_flow._InvalidPort),
+        ({"scan_interval": 4}, config_flow._ScanIntervalTooShort),
+        ({"inverter_modbus_unit_id": 200}, config_flow._AddressesNotUnique),
+    ],
+)
+def test_a_setting_out_of_bounds_is_refused_before_the_inverter(change, error):
+    settings = config_flow._expand_settings_input(USER_INPUT) | change
+
+    with pytest.raises(error):
+        config_flow._validate_static_input(settings)

@@ -45,6 +45,8 @@ from .const import (
     SUPPORTED_MODELS,
     WEB_API_DISABLED,
     ModbusRestriction,
+    entry_title,
+    entry_unique_id,
 )
 from .fronius_modbus_api.device import FroniusInverter
 from .froniuswebclient import (
@@ -176,16 +178,6 @@ def _entry_payload(
     payload.pop("meter_modbus_unit_ids", None)
     payload[CONF_RECONFIGURE_REQUIRED] = reconfigure_required
     return payload
-
-
-def _entry_title(data: dict[str, Any]) -> str:
-    host = str(data.get(CONF_HOST, "")).strip()
-    name = str(data.get(CONF_NAME, DEFAULT_NAME)).strip() or DEFAULT_NAME
-    return f"{name} {host}" if host else name
-
-
-def _entry_unique_id(data: dict[str, Any]) -> str:
-    return str(data.get(CONF_HOST, "")).strip().lower()
 
 
 def entry_defaults(entry: config_entries.ConfigEntry) -> dict[str, Any]:
@@ -449,7 +441,7 @@ async def _validate_input(
     if not any(identity.model.startswith(model) for model in SUPPORTED_MODELS):
         _LOGGER.warning("Untested model %s", identity.model)
 
-    return {"title": _entry_title(data)}
+    return {"title": entry_title(data)}
 
 
 def _claim_host(
@@ -461,7 +453,7 @@ def _claim_host(
     host has to move the id with it, or duplicate detection keeps guarding the
     old host and lets a second entry for the new one through (audit F12).
     """
-    unique_id = _entry_unique_id(settings)
+    unique_id = entry_unique_id(settings)
     holder = hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, unique_id)
     if holder is not None and holder.entry_id != entry.entry_id:
         raise _AlreadyConfigured
@@ -491,7 +483,7 @@ async def async_update_entry_from_input(
         entry,
         data=new_data,
         options=new_options,
-        title=_entry_title(validated_input),
+        title=entry_title(validated_input),
         unique_id=unique_id,
     )
     if previous_host:
@@ -523,7 +515,7 @@ class TokenFlowMixin:
         placeholders = None
         if state is not None:
             placeholders = {
-                "entry_title": _entry_title(state.settings),
+                "entry_title": entry_title(state.settings),
                 "host": str(state.settings.get(CONF_HOST, "")),
             }
         return self.async_show_form(
@@ -733,7 +725,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
         return self._get_reconfigure_entry()
 
     async def _async_claim_new_host(self, settings: dict[str, Any]) -> None:
-        await self.async_set_unique_id(_entry_unique_id(settings))
+        await self.async_set_unique_id(entry_unique_id(settings))
         self._abort_if_unique_id_configured()
 
     async def _async_claim_reconfigured_host(self, settings: dict[str, Any]) -> None:
@@ -741,7 +733,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
 
     async def _async_finish_user(self, settings, info, previous_host):
         del previous_host
-        await self.async_set_unique_id(_entry_unique_id(settings))
+        await self.async_set_unique_id(entry_unique_id(settings))
         self._abort_if_unique_id_configured()
         return self.async_create_entry(
             title=info["title"],
@@ -824,7 +816,7 @@ class FroniusModbusOptionsFlow(TokenFlowMixin, config_entries.OptionsFlow):
         self.hass.config_entries.async_update_entry(
             self.config_entry,
             unique_id=unique_id,
-            title=_entry_title(settings),
+            title=entry_title(settings),
             options=options,
         )
         await async_forget_unused_tokens(self.hass, previous_host)

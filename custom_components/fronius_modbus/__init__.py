@@ -15,7 +15,7 @@ from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL, Platfo
 from homeassistant.core import HomeAssistant, callback
 
 from . import migrations
-from .component_readings import named_channels
+from .component_readings import reported_rows
 from .const import (
     API_USERNAME,
     CONF_API_USERNAME,
@@ -213,15 +213,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
         web_poll = web
 
         @callback
-        def _mark_reported_modules() -> None:
-            # ponytail: the channel-by-channel rows are all inverter rows today.
+        def _mark_reported_rows() -> None:
+            # ponytail: the report-following rows are all inverter rows today.
             readings = web_poll.data.inverter_readings if web_poll.data else None
             migrations.async_mark_reported(
-                hass, entry, named_channels("inverter", readings)
+                hass, entry, reported_rows("inverter", readings)
             )
 
-        _mark_reported_modules()
-        entry.async_on_unload(web.async_add_listener(_mark_reported_modules))
+        _mark_reported_rows()
+        entry.async_on_unload(web.async_add_listener(_mark_reported_rows))
     return True
 
 

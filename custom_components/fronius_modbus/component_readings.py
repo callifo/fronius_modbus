@@ -47,8 +47,9 @@ class ComponentReading:
     enabled: bool = True
     transform: Transform = "as_is"
     suggested_unit: str | None = None
-    # Follows the device channel by channel; every other row exists with its component.
-    per_channel: bool = False
+    # Exists once the device reported it: a power module, or a field some firmware
+    # lacks. Every other row exists with its component.
+    once_reported: bool = False
 
 
 def _module_temperature(index: int) -> ComponentReading:
@@ -58,7 +59,7 @@ def _module_temperature(index: int) -> ComponentReading:
         (f"MODULE_TEMPERATURE_MEAN_0{index}_F32",),
         "°C",
         "temperature",
-        per_channel=True,
+        once_reported=True,
     )
 
 
@@ -120,6 +121,7 @@ COMPONENT_READINGS: tuple[ComponentReading, ...] = (
         ("ACBRIDGE_POWERACTIVE_PRODUCTION_LIMIT_F32",),
         "W",
         "power",
+        once_reported=True,
     ),
     ComponentReading(
         "production_limit_reached",
@@ -130,6 +132,7 @@ COMPONENT_READINGS: tuple[ComponentReading, ...] = (
         ),
         measurement=False,
         transform="yes_no",
+        once_reported=True,
     ),
     ComponentReading(
         "battery_max_charge_power",
@@ -137,6 +140,7 @@ COMPONENT_READINGS: tuple[ComponentReading, ...] = (
         ("DCDC_POWERACTIVE_BAT_MAX_F32",),
         "W",
         "power",
+        once_reported=True,
     ),
     ComponentReading(
         "battery_max_discharge_power",
@@ -145,6 +149,7 @@ COMPONENT_READINGS: tuple[ComponentReading, ...] = (
         "W",
         "power",
         transform="positive",
+        once_reported=True,
     ),
     ComponentReading(
         "dc_link_voltage",
@@ -309,15 +314,15 @@ def reported(reading: ComponentReading, readings: dict[str, Any] | None) -> bool
 
     Existence follows the component, not the field: an answer without a value
     retired the sensor and the owner's entity id (audit R25-01). Rows that
-    follow the device channel by channel exist when reported, and also when the
-    answer names none of their group, which is no answer about them.
+    follow the report exist when reported, and also when the answer names none
+    of their group, which is no answer about them.
     """
-    if not reading.per_channel or readings is None:
+    if not reading.once_reported or readings is None:
         return True
     group = {
         field
         for row in COMPONENT_READINGS
-        if row.per_channel and row.component == reading.component
+        if row.once_reported and row.component == reading.component
         for field in row.fields
     }
     if not group & readings.keys():
@@ -325,21 +330,24 @@ def reported(reading: ComponentReading, readings: dict[str, Any] | None) -> bool
     return any(field in readings for field in reading.fields)
 
 
-CHANNEL_KEYS = frozenset(row.key for row in COMPONENT_READINGS if row.per_channel)
+ONCE_REPORTED_KEYS = frozenset(
+    row.key for row in COMPONENT_READINGS if row.once_reported
+)
 
 
-def named_channels(component: Component, readings: dict[str, Any] | None) -> set[str]:
-    """The channel-by-channel rows an answer names; only these count as seen.
+def reported_rows(component: Component, readings: dict[str, Any] | None) -> set[str]:
+    """The report-following rows an answer names; only these count as seen.
 
-    A row made while unread or while no channel was named is a placeholder,
-    and keeping it would show a module the device lacks (own reaudit R26-01).
+    A row made while unread or while none of them was named is a placeholder,
+    and keeping it would show a module or a field the device lacks (own
+    reaudit R26-01).
     """
     if readings is None:
         return set()
     return {
         row.key
         for row in COMPONENT_READINGS
-        if row.per_channel
+        if row.once_reported
         and row.component == component
         and any(field in readings for field in row.fields)
     }

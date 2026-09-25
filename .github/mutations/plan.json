@@ -667,8 +667,8 @@
   {
     "label": "entities: unread component readings keep every sensor",
     "path": "custom_components/fronius_modbus/component_readings.py",
-    "old": "    if not reading.per_channel or readings is None:\n        return True\n",
-    "new": "    if not reading.per_channel:\n        return True\n",
+    "old": "    if not reading.once_reported or readings is None:\n        return True\n",
+    "new": "    if not reading.once_reported:\n        return True\n",
     "tests": "readings_not_yet_read_keep_every_sensor"
   },
   {
@@ -730,7 +730,7 @@
   {
     "label": "component readings: a row without a value keeps its sensor",
     "path": "custom_components/fronius_modbus/component_readings.py",
-    "old": "    if not reading.per_channel or readings is None:\n        return True\n",
+    "old": "    if not reading.once_reported or readings is None:\n        return True\n",
     "new": "    if readings is None:\n        return True\n",
     "tests": "an_answer_without_a_value_keeps_its_sensor"
   },
@@ -891,7 +891,7 @@
   {
     "label": "entities: a power module reported before stays",
     "path": "custom_components/fronius_modbus/entities.py",
-    "old": "    if reading.per_channel and reading.key in runtime.reported_keys:\n        return True\n",
+    "old": "    if reading.once_reported and reading.key in runtime.reported_keys:\n        return True\n",
     "new": "",
     "tests": "power_module_missing_from_one_answer_keeps_its_entity"
   },
@@ -940,7 +940,7 @@
   {
     "label": "setup: modules reported at setup are marked at once",
     "path": "custom_components/fronius_modbus/__init__.py",
-    "old": "        _mark_reported_modules()\n",
+    "old": "        _mark_reported_rows()\n",
     "new": "",
     "tests": "power_module_missing_from_one_answer_keeps_its_entity"
   },
@@ -1010,7 +1010,7 @@
   {
     "label": "migrations: minor 13 marks the modules registered before",
     "path": "custom_components/fronius_modbus/migrations.py",
-    "old": "        async_mark_reported(hass, entry, CHANNEL_KEYS)\n",
+    "old": "        async_mark_reported(hass, entry, ONCE_REPORTED_KEYS)\n",
     "new": "        pass\n",
     "tests": "module_registered_before_the_marker_survives_the_upgrade"
   },
@@ -1237,5 +1237,19 @@
     "old": "            self.data.export_soft_limit_w = _as_int(soft.get(\"powerLimit\"))\n",
     "new": "            self.data.export_soft_limit_w = soft.get(\"powerLimit\")\n",
     "tests": "export_limit_that_is_no_number_shows_no_limit"
+  },
+  {
+    "label": "component readings: the production limit follows the report",
+    "path": "custom_components/fronius_modbus/component_readings.py",
+    "old": "        \"power\",\n        once_reported=True,\n    ),\n    ComponentReading(\n        \"production_limit_reached\",",
+    "new": "        \"power\",\n    ),\n    ComponentReading(\n        \"production_limit_reached\",",
+    "tests": "firmware_without_the_limit_fields_gets_no_limit_sensors"
+  },
+  {
+    "label": "migrations: minor 14 keeps the registered limit sensors",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "        async_mark_reported(hass, entry, _REPORT_FOLLOWING_SINCE_14)\n",
+    "new": "        pass\n",
+    "tests": "limit_sensors_from_before_they_followed_the_report_stay"
   }
 ]

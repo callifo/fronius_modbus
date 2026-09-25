@@ -259,7 +259,7 @@ async def test_minor_version_9_entries_migrate_to_the_current_shape(hass, mock_m
     # for an entry with no stored token, masking what the migration itself did.
     assert await migrations.async_migrate_entry(hass, entry)
 
-    assert entry.minor_version == 13
+    assert entry.minor_version == 14
     # Minor 9 entries are already on the web-API shape: only the version bump
     # and the new role are expected, not the pre-web-API data migration.
     assert CONF_RECONFIGURE_REQUIRED not in entry.data
@@ -487,7 +487,7 @@ async def test_minor_version_11_entries_turn_the_checkbox_into_a_choice(
 
     assert await migrations.async_migrate_entry(hass, entry)
 
-    assert entry.minor_version == 13
+    assert entry.minor_version == 14
     for values in (entry.data, entry.options):
         assert values["modbus_restriction"] == choice
         assert "restrict_modbus_to_this_ip" not in values
@@ -502,7 +502,7 @@ async def test_minor_version_10_entries_take_the_role_of_their_stored_token(
         HOST, realm="r", token="t", user="technician"
     )
     assert await migrations.async_migrate_entry(hass, entry)
-    assert entry.minor_version == 13
+    assert entry.minor_version == 14
     assert entry.data["api_username"] == "technician"
     assert entry.options["api_username"] == "technician"
 
@@ -512,7 +512,7 @@ async def test_minor_version_10_entries_without_a_technician_token_stay_customer
 ):
     entry = make_entry(hass, minor_version=10)
     assert await migrations.async_migrate_entry(hass, entry)
-    assert entry.minor_version == 13
+    assert entry.minor_version == 14
     assert entry.data["api_username"] == "customer"
 
 
@@ -896,6 +896,38 @@ async def test_a_module_registered_before_the_marker_survives_the_upgrade(
     await hass.async_block_till_done()
 
     assert er.async_get(hass).async_get(module_2) is not None
+
+
+async def test_limit_sensors_from_before_they_followed_the_report_stay(
+    hass, mock_modbus, monkeypatch
+):
+    """Registered limit sensors are kept on upgrade: no automatic cleanup (owner's call)."""
+    limit_fields = {
+        "ACBRIDGE_POWERACTIVE_PRODUCTION_LIMIT_F32": 10000.0,
+        "DCDC_POWERACTIVE_BAT_MAX_F32": 5000.0,
+    }
+    module = {"MODULE_TEMPERATURE_MEAN_01_F32": 40.0}
+    mock_modbus.add_unit(201, like=METER_UNIT_ID)
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientAnsweringEmpty)
+    monkeypatch.setattr(_WebClientAnsweringEmpty, "readings", module | limit_fields)
+    entry = make_entry(hass)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+    await setup_entry(hass, entry)
+    limits = [
+        entity_id_for(hass, entry, "sensor", key)
+        for key in ("production_limit", "battery_max_charge_power")
+    ]
+    await hass.config_entries.async_unload(entry.entry_id)
+    # As 1.2.0b2 left them: those rows were not marked then.
+    for entity_id in limits:
+        er.async_get(hass).async_update_entity_options(entity_id, DOMAIN, None)
+    hass.config_entries.async_update_entry(entry, minor_version=13)
+
+    monkeypatch.setattr(_WebClientAnsweringEmpty, "readings", module)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert all(er.async_get(hass).async_get(entity_id) for entity_id in limits)
 
 
 def serve_the_public_endpoints(mock_modbus, monkeypatch) -> None:

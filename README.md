@@ -179,6 +179,7 @@ The inverter's component endpoints (`/api/components/inverter/readable` and `/ap
 
 - A value the inverter does not report shows as unknown.
 - A power module the inverter does not report creates no entity; one it has reported before keeps its entity, as unknown. A power module that appears later gets its entity at the next reload.
+- `Production limit`, `Production limit reached`, `Battery max charge power (DC-DC)` and `Battery max discharge power (DC-DC)` follow the same rule, since older firmware lacks these fields. Such sensors an entry already has from an earlier version stay; if they only ever show unknown, disable them.
 - Firmware without these endpoints (HTTP 404) gets none of these sensors; a sensor registered before stays, as unknown, since one 404 from an endpoint that answered before proves nothing.
 - No sensor takes their serial numbers, part serials or device ids; the battery's serial number shows on its device page, as before, and is redacted in diagnostics.
 

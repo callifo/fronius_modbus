@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 1.2.0b3
+
+Three additions on 1.2.0b2: the web API becomes optional, the inverter is discovered over
+mDNS and follows a new address, and a missing login is asked for through Home Assistant's
+own reauthentication. A pre-release because entries migrate to minor version 14 and the
+login handling changes; existing entities, unique ids and entity ids do not change.
+
+Running an entry without the web API needs Modbus TCP switched on in the inverter first.
+If discovery or the new login behaves unexpectedly on your setup, please open an issue.
 
 ### Added
 - Discovery over mDNS: Home Assistant offers the inverter under Discovered and fills in its host. An inverter already set up is recognized by its serial number, and an entry set up with an IPv4 address follows the inverter to a new address, its Web API token included.

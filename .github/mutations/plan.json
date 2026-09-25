@@ -1073,8 +1073,8 @@
   {
     "label": "repairs: a repair for a removed entry stops before the login",
     "path": "custom_components/fronius_modbus/repairs.py",
-    "old": "            raise data_entry_flow.AbortFlow(\"entry_not_found\")\n",
-    "new": "            return\n",
+    "old": "            # for it any more (audit R730-02).\n            self._resolve_issue()\n            raise data_entry_flow.AbortFlow(\"entry_not_found\")\n",
+    "new": "            # for it any more (audit R730-02).\n            self._resolve_issue()\n            return\n",
     "tests": "repair_for_an_entry_removed_meanwhile_stops_before_the_login"
   },
   {

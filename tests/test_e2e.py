@@ -1055,3 +1055,35 @@ async def test_switching_off_the_web_api_drops_its_token_and_entities(
     assert await async_get_token_store(hass).async_load_token(HOST) is None
     assert registry.async_get(web_entity) is None
     assert registry.async_get(modbus_entity) is not None
+
+
+async def test_a_reauth_of_a_running_entry_reports_its_success(
+    hass, mock_modbus, monkeypatch
+):
+    """A reload during the flow aborts it: the owner saw an error for a login that worked."""
+    serve_the_public_endpoints(mock_modbus, monkeypatch)
+    monkeypatch.setattr(config_flow.FroniusWebClient, "login", lambda self: True)
+    monkeypatch.setattr(
+        config_flow.FroniusWebClient, "ensure_modbus_enabled", lambda self, *a: True
+    )
+    monkeypatch.setattr(
+        config_flow,
+        "mint_token",
+        lambda host, user, password: {"realm": "r", "token": "t"},
+    )
+    entry = make_entry(hass, minor_version=14, api_username="customer")
+    await setup_entry(hass, entry)
+    (flow,) = _reauth_flows(hass, entry)
+
+    result = await hass.config_entries.flow.async_configure(
+        flow["flow_id"], {"api_username": "customer"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+    await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+    assert entry.state is ConfigEntryState.LOADED
+    assert entry.runtime_data.web_control.configured

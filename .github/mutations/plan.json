@@ -940,7 +940,7 @@
   {
     "label": "setup: modules reported at setup are marked at once",
     "path": "custom_components/fronius_modbus/__init__.py",
-    "old": "        _mark_reported_modules()\n",
+    "old": "        _mark_reported_rows()\n",
     "new": "",
     "tests": "power_module_missing_from_one_answer_keeps_its_entity"
   },

@@ -838,3 +838,15 @@ async def test_an_ipv6_discovery_does_not_replace_an_ipv4_host(hass):
     await discover(hass, discovered(host="2001:db8::10"))
 
     assert config_flow.entry_defaults(entry)["host"] == HOST
+
+
+async def test_a_manual_setup_is_not_blocked_by_an_open_card(hass, mock_modbus):
+    """Reaudit Z-01: the card held the host, and adding it by hand aborted as in progress."""
+    card = await discover(hass, discovered())
+
+    result = await run_flow(hass)
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert card["flow_id"] not in {
+        flow["flow_id"] for flow in hass.config_entries.flow.async_progress()
+    }

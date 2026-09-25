@@ -207,6 +207,17 @@ def test_firmware_without_the_limit_fields_gets_no_limit_sensors():
     assert "module_temperature_1" in sensors
 
 
+def test_an_answer_naming_the_limits_but_no_module_has_no_modules():
+    """Modules and limits count as one report: naming either is a full answer."""
+    readings = read_gen24()
+    readings.inverter_readings = {"ACBRIDGE_POWERACTIVE_PRODUCTION_LIMIT_F32": 10000.0}
+
+    sensors = component_sensors(runtime_with(readings))
+
+    assert "production_limit" in sensors
+    assert not {f"module_temperature_{index}" for index in (1, 2, 3, 4)} & set(sensors)
+
+
 def test_firmware_without_the_endpoints_gets_no_component_sensors():
     """Audit F24-06: a 404 made every component sensor, 19 of them enabled, stay unknown."""
     readings = WebData(inverter_endpoint_missing=True, storage_endpoint_missing=True)

@@ -252,32 +252,26 @@ def _build_password_schema(*, keep_stored: bool = False) -> vol.Schema:
     )
 
 
+_FORM_ERRORS: dict[type[Exception], tuple[str, str]] = {
+    _CannotConnect: ("base", "cannot_connect"),
+    _CannotConnectModbus: ("base", "cannot_connect_modbus"),
+    _InvalidPort: ("base", "invalid_port"),
+    _InvalidHost: ("host", "invalid_host"),
+    _ScanIntervalTooShort: ("base", "scan_interval_too_short"),
+    _MissingApiPassword: ("base", "missing_api_password"),
+    _InvalidApiCredentials: ("base", "invalid_api_credentials"),
+    _CannotResolveLocalIp: ("base", "cannot_resolve_local_ip"),
+    _UnsupportedHardware: ("base", "unsupported_hardware"),
+    _AddressesNotUnique: ("base", "modbus_address_conflict"),
+    _AlreadyConfigured: ("base", "already_configured"),
+}
+
+
 def _set_form_error(errors: dict[str, str], err: Exception) -> None:
-    if isinstance(err, _CannotConnect):
-        errors["base"] = "cannot_connect"
-    elif isinstance(err, _CannotConnectModbus):
-        errors["base"] = "cannot_connect_modbus"
-    elif isinstance(err, _InvalidPort):
-        errors["base"] = "invalid_port"
-    elif isinstance(err, _InvalidHost):
-        errors["host"] = "invalid_host"
-    elif isinstance(err, _ScanIntervalTooShort):
-        errors["base"] = "scan_interval_too_short"
-    elif isinstance(err, _MissingApiPassword):
-        errors["base"] = "missing_api_password"
-    elif isinstance(err, _InvalidApiCredentials):
-        errors["base"] = "invalid_api_credentials"
-    elif isinstance(err, _CannotResolveLocalIp):
-        errors["base"] = "cannot_resolve_local_ip"
-    elif isinstance(err, _UnsupportedHardware):
-        errors["base"] = "unsupported_hardware"
-    elif isinstance(err, _AddressesNotUnique):
-        errors["base"] = "modbus_address_conflict"
-    elif isinstance(err, _AlreadyConfigured):
-        errors["base"] = "already_configured"
-    else:
+    field, message = _FORM_ERRORS.get(type(err), ("base", "unknown"))
+    if message == "unknown":
         _LOGGER.exception("Unexpected exception")
-        errors["base"] = "unknown"
+    errors[field] = message
 
 
 def _validate_static_input(data: dict[str, Any]) -> None:

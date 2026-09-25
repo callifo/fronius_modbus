@@ -26,9 +26,9 @@ def _flow_messages() -> set[str]:
     """Every abort reason and error key the flow hands to the frontend.
 
     Read out of the source rather than listed here: a list beside the flow is
-    one more place to forget. The three shapes it uses are
-    `async_abort(reason=...)`, an assignment into the `errors` dict, and a
-    returned key (`namespace_error`).
+    one more place to forget. The shapes it uses are `async_abort(reason=...)`,
+    an assignment into the `errors` dict, a returned key (`namespace_error`),
+    and a `(field, message)` pair in the table of form errors.
     """
     messages = set()
     for node in ast.walk(ast.parse(FLOW.read_text(encoding="utf-8"))):
@@ -41,6 +41,10 @@ def _flow_messages() -> set[str]:
             or isinstance(node, ast.Return)
         ):
             messages.add(node.value)
+        if isinstance(node, ast.Tuple) and len(node.elts) == 2:
+            field, message = node.elts
+            if isinstance(field, ast.Constant) and field.value in ("base", "host"):
+                messages.add(message)
     return {
         node.value
         for node in messages

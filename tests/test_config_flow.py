@@ -617,3 +617,88 @@ async def test_a_host_taken_while_the_token_is_minted_leaves_the_inverter_alone(
 
     assert result["reason"] == "already_configured"
     assert applied == []
+
+
+NO_WEB_INPUT = {**USER_INPUT, "api_username": "none"}
+
+
+async def test_an_entry_without_the_web_api_needs_no_password(
+    hass, mock_modbus, monkeypatch
+):
+    """Setup without a web login: no password step, no token, no settings write."""
+    contacts: list[str] = []
+    monkeypatch.setattr(
+        config_flow.FroniusWebClient, "login", lambda self: contacts.append("login")
+    )
+    monkeypatch.setattr(
+        config_flow.FroniusWebClient,
+        "ensure_modbus_enabled",
+        lambda self, *a: contacts.append("modbus"),
+    )
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], NO_WEB_INPUT
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"]["api_username"] == "none"
+    assert contacts == []
+    assert await async_get_token_store(hass).async_load_token(HOST, "none") is None
+
+
+async def test_an_unreachable_modbus_without_the_web_api_says_so(hass, mock_modbus):
+    mock_modbus.fail_requests(INVERTER_UNIT_ID, ModbusConnectionError())
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], NO_WEB_INPUT
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "cannot_connect_modbus"}
+
+
+async def test_turning_the_web_api_on_applies_the_saved_restriction(
+    hass, mock_modbus, monkeypatch
+):
+    """Audit R6D-01: the restriction chosen without the web API was never written."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            **USER_INPUT,
+            "web_scan_interval": 60,
+            "api_username": "none",
+            "modbus_restriction": "home_assistant",
+        },
+        unique_id=HOST,
+        version=1,
+        minor_version=13,
+    )
+    entry.add_to_hass(hass)
+    written: list[tuple] = []
+    monkeypatch.setattr(
+        config_flow.FroniusWebClient,
+        "ensure_modbus_enabled",
+        lambda self, *args: written.append(args),
+    )
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "host": HOST,
+            "scan_interval": 10,
+            "web_scan_interval": 60,
+            "modbus_restriction": "home_assistant",
+            "api_username": "customer",
+        },
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert [args[-1] for args in written] == ["home_assistant"]

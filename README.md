@@ -2,7 +2,7 @@
 
 # fronius_modbus
 
-Home Assistant custom component for reading data from Fronius GEN24 and Verto inverters, connected smart meters, and battery storage. Modbus TCP (SunSpec) is the primary source; the authenticated Fronius Web API adds setup assistance and battery controls that are not available over Modbus.
+Home Assistant custom component for reading data from Fronius GEN24 and Verto inverters, connected smart meters, and battery storage. Modbus TCP (SunSpec) is the primary source; the authenticated Fronius Web API is optional and adds setup assistance and battery controls that are not available over Modbus.
 
 This is a fork of [callifo/fronius_modbus](https://github.com/callifo/fronius_modbus) (itself derived from redpomodoro/fronius_modbus), rewritten in 1.0 onto Home Assistant's shared Modbus connection and the `modbus-connection` library. Upstream issues fixed here are listed in the CHANGELOG.
 
@@ -17,6 +17,7 @@ This is a fork of [callifo/fronius_modbus](https://github.com/callifo/fronius_mo
 
 - Home Assistant 2026.9.0 or newer. The integration depends on the built-in `modbus` integration for its connection.
 - Modbus TCP enabled on the inverter. The setup can enable it for you when a Web API password is provided.
+- Optional: the password of a local Web API role. Without it the integration runs on Modbus alone; see [Without the web API](#without-the-web-api).
 
 ## Supported devices
 
@@ -50,6 +51,7 @@ What changes for users of [callifo/fronius_modbus](https://github.com/callifo/fr
 - The checkbox "Restrict Modbus to this IP" became the option **Modbus IP restriction** with three choices; the default keeps the inverter's setting. Upstream lifted the restriction whenever the box was unchecked, and a checked box replaced the allowed hosts with Home Assistant's address; allowing Home Assistant now adds its address to the hosts already allowed. Migrated entries keep their choice: checked becomes "restrict and allow this Home Assistant", unchecked becomes "keep".
 - Enabling Modbus TCP keeps the rest of the inverter's Modbus settings. Upstream writes a fixed block that moves both RS485 ports to master and turns the `TCP & RTU` mode into TCP.
 - The stored Web API token is readable by Home Assistant only, and it is deleted once no entry uses its host and role.
+- The Web API login is optional: an entry can run on Modbus alone. Upstream requires it since 0.2.9.
 
 **Battery**
 
@@ -81,7 +83,7 @@ Copy the contents of the `custom_components` folder to your Home Assistant `conf
 
 ### Web API role
 
-Choose either the `customer` or the `technician` local Web API role during setup and provide that role's password.
+Choose the `customer` or the `technician` local Web API role during setup and provide that role's password, or choose *Without the web API* to set the entry up on Modbus alone (see [Without the web API](#without-the-web-api)).
 
 ![solar_login](images/solar_login.jpg?raw=true "storage")
 
@@ -101,11 +103,30 @@ With the Web API login, the integration can:
 - expose Modbus service diagnostics from `/api/config/modbus`
 - expose the export limit control, with the `technician` role
 
-A host that another entry already serves is refused before the inverter is contacted. If another entry takes the host while the setup runs, it is refused before any Modbus setting is written.
+A host that another entry already serves is refused before the inverter is contacted. The check runs again right before the Modbus settings are written, so an entry that takes the host until then stops the setup there.
+
+### Without the web API
+
+Choose *Without the web API* as the access role to run the entry on Modbus alone. No password is asked for and no token is stored. Switch Modbus TCP on in the inverter's web UI first: without a login the setup cannot do it, and it reports *Modbus did not answer* until Modbus TCP is on.
+
+Stays:
+
+- all Modbus sensors and controls: storage control mode, charge and discharge limits, grid charge power, `Modbus storage reserve`, AC limit, power factor, inverter on/off
+- the component sensors and the list of smart meters, since those endpoints answer without a login
+
+Needs the web API, so not there:
+
+- `Web API SoC mode`, `SoC Maximum`, `SoC Minimum (Web API)`, the backup reserve, self-consumption optimisation and its target feed in
+- the `Charge from grid` and `Charge from AC` toggles, the Solar API switch, the export soft limit, `Reset Modbus Control`
+- the Modbus service diagnostics, and enabling Modbus TCP during setup
+
+`Charge from Grid` then stops at around 500 W unless grid charging is allowed in the inverter's own battery configuration; allow it once in the inverter web UI (see [Charging from the grid](#charging-from-the-grid)).
+
+Switching an existing entry to *Without the web API* deletes its stored token and removes the entities that need the web API; their recorded history stays in Home Assistant. The removal waits for a start at which the list of smart meters can be read, like every cleanup; if the inverter reports no meter at all, delete those entities yourself. Switching back to a role creates them again and writes the Modbus settings, the IP restriction choice included, since nothing wrote them without the login. An entry that keeps a role but lost its login is not the same: its web entities stay, unavailable, and a Repairs item asks for the password.
 
 ### Migrating older entries
 
-Entries created with older Modbus-only versions are migrated with safe defaults and keep working temporarily. If an entry has no valid stored Web API token for the configured host and role, Home Assistant raises a Repairs item that lets you review the settings and enter that role's password to mint a new token.
+Entries created with older Modbus-only versions are migrated with safe defaults and keep working temporarily. If an entry has no valid stored Web API token for the configured host and role, Home Assistant raises a Repairs item that lets you review the settings and enter that role's password to mint a new token, or choose *Without the web API*.
 
 ## Configuration
 
@@ -116,13 +137,13 @@ Set during setup; change them later with **Configure** or **Reconfigure** on the
 | Host                              |                             | The inverter's IP address or host name.                                                                                                                                                                                                                                              |
 | Update interval (seconds)         | 10                          | The Modbus poll. Minimum 5.                                                                                                                                                                                                                                                          |
 | Web API update interval (seconds) | 60                          | The Web API poll, separate from the Modbus poll. 5 to 3600.                                                                                                                                                                                                                          |
-| Web API access role               | `customer`                  | `customer` or `technician`; see [Web API role](#web-api-role).                                                                                                                                                                                                                       |
+| Web API access role               | `customer`                  | `customer`, `technician` or *Without the web API*; see [Web API role](#web-api-role).                                                                                                                                                                                                |
 | Modbus IP restriction             | Keep the inverter's setting | What the integration does with the inverter's Modbus IP restriction whenever it writes the Modbus settings: keep it, restrict Modbus and allow this Home Assistant (its address is added to the hosts already allowed), or lift it. A lifted restriction stays lifted until you choose otherwise. |
 
 ## Data updates
 
 - The Modbus poll reads the inverter, its meters and the battery every update interval. The Web API is polled on its own interval; a slow or unreachable Web API does not hold up the Modbus entities.
-- The component sensors come with the Web API poll that already runs; no extra request is made.
+- The component sensors come with the Web API poll that already runs; no extra request is made. They are read without a login, so they also run without the web API.
 - A value that could not be read shows as unavailable or unknown; a failed sub-system is logged once when it fails and once when it answers again.
 - A control set to the value the inverter already holds writes nothing. The comparison is made against a fresh read, so a value another controller changed in between is still written.
 
@@ -208,7 +229,7 @@ A new value for an active AC limit or power factor is applied by switching the c
 
 ## Battery control
 
-If Web API credentials are configured, the integration exposes both Modbus battery controls and authenticated battery API controls together.
+If Web API credentials are configured, the integration exposes both Modbus battery controls and authenticated battery API controls together. Without the web API only the Modbus controls are there.
 
 ### Storage control modes
 
@@ -312,7 +333,7 @@ Grid charging also stops at around 500 W while the inverter's own battery config
 
 - **Diagnostics:** Settings -> Devices & services -> Fronius Modbus -> device -> Download diagnostics. The download includes which sub-systems the last poll read and which failed, the Web API values, and the raw SunSpec register map; serial numbers and the Modbus restriction IP are redacted. It also works while the inverter is offline.
 - **Repairs:**
-  - *Review Fronius web API access* appears when an entry has no valid token for its host and role, for example after the password was changed on the inverter. Follow it to enter the role's password again.
+  - *Review Fronius web API access* appears when an entry has no valid token for its host and role, for example after the password was changed on the inverter. Follow it to enter the role's password again, or choose *Without the web API* to run the entry on Modbus alone.
   - *Disable Fronius Solar API on older firmware* appears on firmware below 1.40.7-1 with the Solar API switched on. It offers to switch the Solar API off until the inverter is updated.
 - **Logs:** a sub-system that stops answering (inverter, a meter, the battery, the Web API) is logged once when it fails and once when it answers again. Web API errors name the error type, not the host.
 

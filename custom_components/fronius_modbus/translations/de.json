@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Fronius-System einrichten",
-        "description": "Gib den Host ein, wähle die lokale Web-API-Zugriffsrolle und setze die Aktualisierungsintervalle sowie die Modbus-IP-Beschränkung. Mindestintervall: 5 Sekunden. Die Technikerrolle schaltet zusätzlich die Einspeisebegrenzung frei.",
+        "description": "Gib den Host ein, wähle die lokale Web-API-Zugriffsrolle und setze die Aktualisierungsintervalle sowie die Modbus-IP-Beschränkung. Mindestintervall: 5 Sekunden. Die Technikerrolle schaltet zusätzlich die Einspeisebegrenzung frei. Ohne Web-API fehlen SoC-Modus, SoC-Maximum, Notstrom-Reserve, Netzlade-Erlaubnis, Solar API, Einspeisebegrenzung und Modbus-Reset, und Modbus TCP muss vorher im Wechselrichter eingeschaltet sein. Beim Umstellen eines bestehenden Eintrags werden diese Entitäten entfernt; ihre Historie bleibt.",
         "data": {
           "host": "Host",
           "scan_interval": "Aktualisierungsintervall (Sekunden)",
@@ -22,7 +22,7 @@
       },
       "reconfigure": {
         "title": "Fronius-System prüfen",
-        "description": "Prüfe Host, lokale Web-API-Zugriffsrolle, Aktualisierungsintervalle und Modbus-IP-Beschränkung. Mindestintervall: 5 Sekunden. Die Technikerrolle schaltet zusätzlich die Einspeisebegrenzung frei.",
+        "description": "Prüfe Host, lokale Web-API-Zugriffsrolle, Aktualisierungsintervalle und Modbus-IP-Beschränkung. Mindestintervall: 5 Sekunden. Die Technikerrolle schaltet zusätzlich die Einspeisebegrenzung frei. Ohne Web-API fehlen SoC-Modus, SoC-Maximum, Notstrom-Reserve, Netzlade-Erlaubnis, Solar API, Einspeisebegrenzung und Modbus-Reset, und Modbus TCP muss vorher im Wechselrichter eingeschaltet sein. Beim Umstellen eines bestehenden Eintrags werden diese Entitäten entfernt; ihre Historie bleibt.",
         "data": {
           "host": "Host",
           "scan_interval": "Aktualisierungsintervall (Sekunden)",
@@ -44,6 +44,7 @@
     },
     "error": {
       "cannot_connect": "Verbindung fehlgeschlagen",
+      "cannot_connect_modbus": "Modbus antwortet nicht. Ohne Web-API muss Modbus TCP vorher im Wechselrichter eingeschaltet werden.",
       "invalid_port": "Ungültige Portnummer",
       "invalid_host": "Ungültige Host-Adresse",
       "unsupported_hardware": "Nicht unterstützte Hardware. Siehe Protokoll.",
@@ -641,7 +642,7 @@
         "step": {
           "init": {
             "title": "Fronius-System prüfen",
-            "description": "Dieser Eintrag braucht einen gültigen Token für seine Web-API-Rolle: der gespeicherte fehlt oder wurde abgelehnt. Prüfe Host, Zugriffsrolle, Aktualisierungsintervalle und Modbus-IP-Beschränkung. Im nächsten Schritt wird nur bei Bedarf nach dem Passwort gefragt.",
+            "description": "Dieser Eintrag braucht einen gültigen Token für seine Web-API-Rolle: der gespeicherte fehlt oder wurde abgelehnt. Prüfe Host, Zugriffsrolle, Aktualisierungsintervalle und Modbus-IP-Beschränkung. Im nächsten Schritt wird nur bei Bedarf nach dem Passwort gefragt. Wer die Web-API nicht nutzen will, wählt Ohne Web-API. Ohne Web-API fehlen SoC-Modus, SoC-Maximum, Notstrom-Reserve, Netzlade-Erlaubnis, Solar API, Einspeisebegrenzung und Modbus-Reset, und Modbus TCP muss vorher im Wechselrichter eingeschaltet sein. Beim Umstellen eines bestehenden Eintrags werden diese Entitäten entfernt; ihre Historie bleibt.",
             "data": {
               "host": "Host",
               "scan_interval": "Aktualisierungsintervall (Sekunden)",
@@ -660,6 +661,7 @@
         },
         "error": {
           "cannot_connect": "Verbindung fehlgeschlagen",
+          "cannot_connect_modbus": "Modbus antwortet nicht. Ohne Web-API muss Modbus TCP vorher im Wechselrichter eingeschaltet werden.",
           "invalid_port": "Ungültige Portnummer",
           "invalid_host": "Ungültige Host-Adresse",
           "unsupported_hardware": "Nicht unterstützte Hardware. Siehe Protokoll.",
@@ -722,7 +724,7 @@
     "step": {
       "init": {
         "title": "Fronius-System einrichten",
-        "description": "Prüfe Host, lokale Web-API-Zugriffsrolle, Aktualisierungsintervalle und Modbus-IP-Beschränkung. Mindestintervall: 5 Sekunden. Die Technikerrolle schaltet zusätzlich die Einspeisebegrenzung frei.",
+        "description": "Prüfe Host, lokale Web-API-Zugriffsrolle, Aktualisierungsintervalle und Modbus-IP-Beschränkung. Mindestintervall: 5 Sekunden. Die Technikerrolle schaltet zusätzlich die Einspeisebegrenzung frei. Ohne Web-API fehlen SoC-Modus, SoC-Maximum, Notstrom-Reserve, Netzlade-Erlaubnis, Solar API, Einspeisebegrenzung und Modbus-Reset, und Modbus TCP muss vorher im Wechselrichter eingeschaltet sein. Beim Umstellen eines bestehenden Eintrags werden diese Entitäten entfernt; ihre Historie bleibt.",
         "data": {
           "host": "Host",
           "scan_interval": "Aktualisierungsintervall (Sekunden)",
@@ -741,6 +743,7 @@
     },
     "error": {
       "cannot_connect": "Verbindung fehlgeschlagen",
+      "cannot_connect_modbus": "Modbus antwortet nicht. Ohne Web-API muss Modbus TCP vorher im Wechselrichter eingeschaltet werden.",
       "invalid_port": "Ungültige Portnummer",
       "invalid_host": "Ungültige Host-Adresse",
       "unsupported_hardware": "Nicht unterstützte Hardware. Siehe Protokoll.",
@@ -757,7 +760,8 @@
     "api_username": {
       "options": {
         "customer": "Kunde",
-        "technician": "Techniker (schaltet die Einspeisebegrenzung frei)"
+        "technician": "Techniker (schaltet die Einspeisebegrenzung frei)",
+        "none": "Ohne Web-API (nur Modbus)"
       }
     },
     "modbus_restriction": {

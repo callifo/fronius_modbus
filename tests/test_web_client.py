@@ -43,6 +43,8 @@ class FakeInverter:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str, dict | None]] = []
         self.authorized_calls: list[str] = []
+        # Every request that carried a login, answered or refused.
+        self.login_attempts: list[str] = []
         self.hashing_version = 2
         self.nonce = "nonce-1"
         self.opaque = "op"
@@ -68,6 +70,8 @@ class FakeInverter:
         public = path == "/api/components/PowerMeter/readable"
 
         authorization = headers.get("Authorization")
+        if authorization is not None:
+            self.login_attempts.append(path)
         if not public and (authorization is None or self.always_401):
             if self.no_challenge:
                 return 401, {}, {}
@@ -161,6 +165,28 @@ def test_a_401_without_a_challenge_is_reported_as_an_auth_failure(client, invert
 
     with pytest.raises(FroniusWebAuthError):
         client.get_modbus_config()
+
+
+def test_a_client_without_credentials_never_answers_a_challenge(inverter):
+    """Audit E2-01: a no-login entry sent an empty-password login on every poll."""
+    client = FroniusWebClient(host=HOST, password="")
+
+    with pytest.raises(FroniusWebAuthError):
+        client.get_inverter_info()
+
+    assert inverter.login_attempts == []
+
+
+def test_a_rejected_login_is_not_tried_again(inverter):
+    """Audit E2-02: after a lost login the client kept retrying the rejected token."""
+    inverter.always_401 = True
+    client = FroniusWebClient(host=HOST, token={"realm": REALM, "token": "stale"})
+
+    for _ in range(2):
+        with pytest.raises(FroniusWebAuthError):
+            client.get_inverter_info()
+
+    assert inverter.login_attempts == ["/api/components/inverter/readable"]
 
 
 def test_the_hash_mode_follows_the_version_the_inverter_reports(inverter):
@@ -1350,3 +1376,8 @@ def test_an_export_limit_switched_on_in_no_known_form_is_written(client, inverte
     }
 
     assert client.set_export_soft_limit(7000) is True
+
+
+def test_an_infinite_modbus_setting_reads_as_its_fallback():
+    """Audit R6D-06, the client's own converter: int(inf) raised OverflowError."""
+    assert froniuswebclient._as_int(float("inf"), 502) == 502

@@ -51,8 +51,10 @@ class FroniusReconfigureRepairFlow(TokenFlowMixin, RepairsFlow):
         del info
         entry = self.hass.config_entries.async_get_entry(self._entry_id)
         if entry is None:
+            # An abort, not a success: the token minted for the gone entry is
+            # then taken back (audit R6D-03).
             self._resolve_issue()
-            return self.async_create_entry(title="", data={})
+            raise data_entry_flow.AbortFlow("entry_not_found")
 
         await async_update_entry_from_input(
             self.hass,

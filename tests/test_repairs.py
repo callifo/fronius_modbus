@@ -167,6 +167,49 @@ async def test_the_reconfigure_repair_closes_the_issue_of_a_deleted_entry(
     assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
 
 
+async def test_the_reconfigure_repair_can_leave_the_web_api_off(
+    hass, mock_modbus, web_client, repairs_client
+):
+    """The way out for an owner who does not want the web API: no password asked."""
+    entry = await make_entry(hass, mock_modbus, with_token=False)
+    issue_id = f"{MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX}{entry.entry_id}"
+
+    flow = await start_fix_flow(repairs_client, issue_id)
+    flow = await advance_fix_flow(
+        repairs_client, flow["flow_id"], SETTINGS_INPUT | {"api_username": "none"}
+    )
+    await hass.async_block_till_done()
+
+    assert flow["type"] == "create_entry"
+    entry = hass.config_entries.async_get_entry(entry.entry_id)
+    assert entry.options["api_username"] == "none"
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_an_entry_deleted_during_the_repair_keeps_no_token(
+    hass, mock_modbus, web_client, repairs_client, monkeypatch
+):
+    """Audit R6D-03: the repair reported success and kept a token for no entry."""
+    entry = await make_entry(hass, mock_modbus, with_token=False)
+    issue_id = f"{MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX}{entry.entry_id}"
+    validate = config_flow._validate_input
+
+    async def validate_then_delete(hass, *args, **kwargs):
+        info = await validate(hass, *args, **kwargs)
+        await hass.config_entries.async_remove(entry.entry_id)
+        return info
+
+    monkeypatch.setattr(config_flow, "_validate_input", validate_then_delete)
+    flow = await start_fix_flow(repairs_client, issue_id)
+    flow = await advance_fix_flow(repairs_client, flow["flow_id"], SETTINGS_INPUT)
+    flow = await advance_fix_flow(repairs_client, flow["flow_id"], PASSWORD_INPUT)
+    await hass.async_block_till_done()
+
+    assert flow["type"] == "abort"
+    assert flow["reason"] == "entry_not_found"
+    assert await async_get_token_store(hass).async_load_token(HOST, "customer") is None
+
+
 # -- the Solar API repair ----------------------------------------------------------
 
 

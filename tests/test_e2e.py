@@ -17,6 +17,7 @@ from custom_components.fronius_modbus import config_flow, migrations
 from custom_components.fronius_modbus.const import (
     CONF_RECONFIGURE_REQUIRED,
     DOMAIN,
+    MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX,
     entity_prefix,
     instance_key,
 )
@@ -30,8 +31,13 @@ from custom_components.fronius_modbus.froniuswebclient import (
 from custom_components.fronius_modbus.token_store import async_get_token_store
 from custom_components.fronius_modbus.web_control import WebData
 from homeassistant.config_entries import ConfigEntryState
+from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.exceptions import ServiceValidationError
-from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers import (
+    device_registry as dr,
+    entity_registry as er,
+    issue_registry as ir,
+)
 from homeassistant.helpers.entity_platform import async_get_platforms
 
 from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID
@@ -55,12 +61,12 @@ def _custom_integration(enable_custom_integrations):
     return enable_custom_integrations
 
 
-def make_entry(hass, *, minor_version: int = 10) -> MockConfigEntry:
+def make_entry(hass, *, minor_version: int = 10, **data) -> MockConfigEntry:
     """A Modbus-only entry (no web token) added to hass."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         title="Fronius 192.0.2.10",
-        data=ENTRY_DATA,
+        data={**ENTRY_DATA, **data},
         unique_id=HOST,
         version=1,
         minor_version=minor_version,
@@ -890,3 +896,100 @@ async def test_a_module_registered_before_the_marker_survives_the_upgrade(
     await hass.async_block_till_done()
 
     assert er.async_get(hass).async_get(module_2) is not None
+
+
+def serve_the_public_endpoints(mock_modbus, monkeypatch) -> None:
+    """A fake web client for the endpoints that answer without a login.
+
+    An entry without the web API polls them; the real client would reach for
+    the network, which the test fixture refuses.
+    """
+    mock_modbus.add_unit(201, like=METER_UNIT_ID)
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _FakeWebClientWithTopology)
+
+
+def _reconfigure_issue(hass, entry: MockConfigEntry):
+    return ir.async_get(hass).async_get_issue(
+        DOMAIN, f"{MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX}{entry.entry_id}"
+    )
+
+
+async def test_an_entry_without_the_web_api_is_not_asked_to_reconfigure(
+    hass, mock_modbus, monkeypatch
+):
+    serve_the_public_endpoints(mock_modbus, monkeypatch)
+    entry = make_entry(hass, minor_version=13, api_username="none")
+    await setup_entry(hass, entry)
+
+    assert entry.state is ConfigEntryState.LOADED
+    assert _reconfigure_issue(hass, entry) is None
+    assert entry.data[CONF_RECONFIGURE_REQUIRED] is False
+
+
+async def test_a_role_entry_without_token_still_asks_to_reconfigure(hass, mock_modbus):
+    entry = make_entry(hass, minor_version=13, api_username="customer")
+    await setup_entry(hass, entry)
+
+    assert _reconfigure_issue(hass, entry) is not None
+
+
+async def test_an_entry_without_the_web_api_cleans_up_stale_entities(
+    hass, mock_modbus, monkeypatch
+):
+    serve_the_public_endpoints(mock_modbus, monkeypatch)
+    entry = make_entry(hass, minor_version=13, api_username="none")
+    registry = er.async_get(hass)
+    unique_id = f"{entity_prefix(entry.entry_id)}_api_modbus_mode"
+    registry.async_get_or_create("sensor", DOMAIN, unique_id, config_entry=entry)
+
+    await setup_entry(hass, entry)
+
+    assert registry.async_get_entity_id("sensor", DOMAIN, unique_id) is None
+
+
+async def test_an_entry_without_the_web_api_reads_the_public_endpoints(
+    hass, mock_modbus, monkeypatch
+):
+    """Stage B: component sensors and a second meter without any login."""
+    mock_modbus.add_unit(201, like=METER_UNIT_ID)
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientAnsweringEmpty)
+    monkeypatch.setattr(
+        _WebClientAnsweringEmpty,
+        "readings",
+        {"DEVICE_TEMPERATURE_AMBIENTMEAN_01_F32": 41.5},
+    )
+    entry = make_entry(hass, minor_version=13, api_username="none")
+    await setup_entry(hass, entry)
+
+    assert state_of(hass, entry, "inverter_temperature") == "41.5"
+    assert state_of(hass, entry, "meter_201_power") != "unavailable"
+    assert entry.runtime_data.web_control.configured is False
+
+
+async def test_switching_off_the_web_api_drops_its_token_and_entities(
+    hass, mock_modbus, monkeypatch
+):
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    entry = make_entry(hass, minor_version=13, api_username="customer")
+    await setup_entry(hass, entry)
+    web_entity = entity_id_for(hass, entry, "sensor", "api_modbus_mode")
+    modbus_entity = entity_id_for(hass, entry, "sensor", "acpower")
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "host": HOST,
+            "scan_interval": 10,
+            "web_scan_interval": 60,
+            "modbus_restriction": "keep",
+            "api_username": "none",
+        },
+    )
+    await hass.async_block_till_done()
+
+    registry = er.async_get(hass)
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert await async_get_token_store(hass).async_load_token(HOST) is None
+    assert registry.async_get(web_entity) is None
+    assert registry.async_get(modbus_entity) is not None

@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Set up Fronius System",
-        "description": "Enter the host, choose the local Web API access role, and set the update intervals and Modbus IP restriction. Minimum interval: 5 seconds. The technician role additionally enables the export limit control.",
+        "description": "Enter the host, choose the local Web API access role, and set the update intervals and Modbus IP restriction. Minimum interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand. Switching an existing entry to it removes those entities; their history stays.",
         "data": {
           "host": "Host",
           "scan_interval": "Update interval (seconds)",
@@ -22,7 +22,7 @@
       },
       "reconfigure": {
         "title": "Review Fronius System",
-        "description": "Review the host, the local Web API access role, the update intervals and the Modbus IP restriction. Minimum interval: 5 seconds. The technician role additionally enables the export limit control.",
+        "description": "Review the host, the local Web API access role, the update intervals and the Modbus IP restriction. Minimum interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand. Switching an existing entry to it removes those entities; their history stays.",
         "data": {
           "host": "Host",
           "scan_interval": "Update interval (seconds)",
@@ -642,7 +642,7 @@
         "step": {
           "init": {
             "title": "Review Fronius System",
-            "description": "This entry needs a valid token for its Web API role: the stored one is missing or was rejected. Review the host, the access role, the update intervals and the Modbus IP restriction. The next step asks for the password only if needed.",
+            "description": "This entry needs a valid token for its Web API role: the stored one is missing or was rejected. Review the host, the access role, the update intervals and the Modbus IP restriction. The next step asks for the password only if needed. If you do not want to use the web API, choose Without the web API. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand. Switching an existing entry to it removes those entities; their history stays.",
             "data": {
               "host": "Host",
               "scan_interval": "Update interval (seconds)",
@@ -724,7 +724,7 @@
     "step": {
       "init": {
         "title": "Set up Fronius System",
-        "description": "Review the host, the local Web API access role, the update intervals and the Modbus IP restriction. Minimum interval: 5 seconds. The technician role additionally enables the export limit control.",
+        "description": "Review the host, the local Web API access role, the update intervals and the Modbus IP restriction. Minimum interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand. Switching an existing entry to it removes those entities; their history stays.",
         "data": {
           "host": "Host",
           "scan_interval": "Update interval (seconds)",

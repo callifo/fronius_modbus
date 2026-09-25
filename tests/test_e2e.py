@@ -31,6 +31,7 @@ from custom_components.fronius_modbus.froniuswebclient import (
 from custom_components.fronius_modbus.token_store import async_get_token_store
 from custom_components.fronius_modbus.web_control import WebData
 from homeassistant.config_entries import ConfigEntryState
+from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import (
     device_registry as dr,
@@ -963,3 +964,32 @@ async def test_an_entry_without_the_web_api_reads_the_public_endpoints(
     assert state_of(hass, entry, "inverter_temperature") == "41.5"
     assert state_of(hass, entry, "meter_201_power") != "unavailable"
     assert entry.runtime_data.web_control.configured is False
+
+
+async def test_switching_off_the_web_api_drops_its_token_and_entities(
+    hass, mock_modbus, monkeypatch
+):
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    entry = make_entry(hass, minor_version=13, api_username="customer")
+    await setup_entry(hass, entry)
+    web_entity = entity_id_for(hass, entry, "sensor", "api_modbus_mode")
+    modbus_entity = entity_id_for(hass, entry, "sensor", "acpower")
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "host": HOST,
+            "scan_interval": 10,
+            "web_scan_interval": 60,
+            "modbus_restriction": "keep",
+            "api_username": "none",
+        },
+    )
+    await hass.async_block_till_done()
+
+    registry = er.async_get(hass)
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert await async_get_token_store(hass).async_load_token(HOST) is None
+    assert registry.async_get(web_entity) is None
+    assert registry.async_get(modbus_entity) is not None

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- The web API is optional: choose *Without the web API* as the access role to set an entry up on Modbus alone, without a password or a stored token. The Modbus sensors and controls, the component sensors and the list of smart meters stay, since those endpoints answer without a login; the settings that live only in the inverter's web configuration are not there. Switching an existing entry to it deletes its token and removes the web entities. The Repairs item for a missing login offers the same choice.
+
+### Changed
+- The component sensors are read without a login. They keep reading after the web login is lost while Home Assistant runs; the settings it guards go unavailable as before.
+
 ## 1.2.0b2
 
 An audit round on 1.2.0b1, a write policy, and new sensors. The integration writes only what

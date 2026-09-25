@@ -781,7 +781,7 @@
       "message": "The Fronius Web API is not configured for this entry."
     },
     "web_api_auth_failed": {
-      "message": "The Fronius Web API rejected the login. Reconfigure the integration."
+      "message": "The Fronius Web API rejected the login. Log in again when Home Assistant asks for it on the integration."
     },
     "technician_not_configured": {
       "message": "This control needs the technician role. Choose it via Configure."

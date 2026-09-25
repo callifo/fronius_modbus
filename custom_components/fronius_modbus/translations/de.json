@@ -781,7 +781,7 @@
       "message": "Die Fronius-Web-API ist für diesen Eintrag nicht eingerichtet."
     },
     "web_api_auth_failed": {
-      "message": "Die Fronius-Web-API hat die Anmeldung abgelehnt. Bitte die Integration neu konfigurieren."
+      "message": "Die Fronius-Web-API hat die Anmeldung abgelehnt. Bitte erneut anmelden, sobald Home Assistant an der Integration danach fragt."
     },
     "technician_not_configured": {
       "message": "Diese Steuerung braucht die Techniker-Rolle. Sie lässt sich über Konfigurieren wählen."

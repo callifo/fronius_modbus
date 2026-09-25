@@ -403,7 +403,7 @@ class FroniusWebControl:
             if raise_on_auth_failure:
                 raise ControlUnavailable(
                     "web_api_auth_failed",
-                    "Fronius Web API authentication failed. Reconfigure the integration.",
+                    "Fronius Web API authentication failed. Log in again when asked.",
                 ) from err
             return None
 

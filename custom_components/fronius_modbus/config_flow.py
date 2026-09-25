@@ -301,6 +301,10 @@ def _should_apply_modbus_config(
 ) -> bool:
     if previous_settings is None:
         return True
+    # Without a login nothing was written, so the saved choices were never
+    # applied to the inverter (audit R6D-01).
+    if previous_settings.get(CONF_API_USERNAME) == WEB_API_DISABLED:
+        return True
 
     return (
         settings[CONF_HOST] != previous_settings.get(CONF_HOST, "")

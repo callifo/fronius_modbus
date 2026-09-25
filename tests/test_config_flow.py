@@ -1,5 +1,6 @@
 """The config flow, with the web client stubbed and Modbus served by the mock connection."""
 
+import asyncio
 from ipaddress import ip_address
 import json
 from unittest.mock import AsyncMock
@@ -9,7 +10,7 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components import fronius_modbus
-from custom_components.fronius_modbus import config_flow
+from custom_components.fronius_modbus import config_flow, discovery
 from custom_components.fronius_modbus.const import DOMAIN, instance_key
 from custom_components.fronius_modbus.froniuswebclient import FroniusWebResponseError
 from custom_components.fronius_modbus.token_store import async_get_token_store
@@ -878,3 +879,57 @@ async def test_a_discovered_inverter_is_set_up_from_its_card(hass, mock_modbus):
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["result"].source == "zeroconf"
     assert result["result"].unique_id == HOST
+
+
+async def test_an_address_taken_while_the_token_moves_is_not_shared(hass, monkeypatch):
+    """Audit R3B-01: another flow took the address during the token save; both held it."""
+    entry = make_entry(hass)
+    store = async_get_token_store(hass)
+    await store.async_save_token(HOST, realm="r", token="t")
+    other = MockConfigEntry(
+        domain=DOMAIN, data={"host": "192.0.2.99"}, unique_id="192.0.2.99"
+    )
+    other.add_to_hass(hass)
+    save = store._store.async_save
+
+    async def take_the_address(data):
+        hass.config_entries.async_update_entry(
+            other, data={"host": MOVED_HOST}, unique_id=MOVED_HOST
+        )
+        await save(data)
+
+    monkeypatch.setattr(store._store, "async_save", take_the_address)
+
+    await discovery.async_follow_host(hass, entry, MOVED_HOST)
+
+    holders = [
+        e
+        for e in hass.config_entries.async_entries(DOMAIN)
+        if e.unique_id == MOVED_HOST
+    ]
+    assert len(holders) == 1
+
+
+async def test_two_announcements_leave_the_token_under_one_address(hass, monkeypatch):
+    """Audit R3B-02: overlapping follows left a password-equivalent token at an unused host."""
+    entry = make_entry(hass)
+    store = async_get_token_store(hass)
+    await store.async_save_token(HOST, realm="r", token="t")
+    third = "192.0.2.30"
+    save = store._store.async_save
+
+    async def save_like_a_disk(data):
+        await asyncio.sleep(0)
+        await save(data)
+
+    monkeypatch.setattr(store._store, "async_save", save_like_a_disk)
+
+    await asyncio.gather(
+        discovery.async_follow_host(hass, entry, MOVED_HOST),
+        discovery.async_follow_host(hass, entry, third),
+    )
+
+    stored = [
+        host for host in (HOST, MOVED_HOST, third) if await store.async_load_token(host)
+    ]
+    assert stored == [config_flow.entry_defaults(entry)["host"]]

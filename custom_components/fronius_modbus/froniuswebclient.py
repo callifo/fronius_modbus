@@ -422,7 +422,13 @@ class XHeaderDigestAuth(AuthBase):
         retried = response.connection.send(prepared, **kwargs)
         retried.history.append(response)
         retried.request = prepared
-        if retried.status_code != 401 and self.password:
+        if retried.status_code == 401:
+            # Refused: the client lives on for the public reads, and would send
+            # the same refused login on every poll (audit E2-02).
+            self.password = ""
+            self.token = None
+            return retried
+        if self.password:
             self.saved_token = {
                 "realm": challenge["realm"],
                 "token": self._secret(challenge["realm"]),

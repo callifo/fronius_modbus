@@ -930,3 +930,21 @@ async def test_an_infinite_battery_value_fails_no_refresh(hass):
 
     assert data.soc_max is None
     assert data.soc_min == 5
+
+
+@pytest.mark.parametrize("limit", ["7 kW", float("inf")])
+async def test_an_export_limit_that_is_no_number_shows_no_limit(hass, limit):
+    """A power sensor cannot take text or infinity; the value stays unknown."""
+
+    class LimitClient(FakeWebClient):
+        def get_export_limit_config(self):
+            soft = {"enabled": True, "powerLimit": limit}
+            return {"exportLimits": {"activePower": {"softLimit": soft}}}
+
+    control = make_control(hass, client=LimitClient())
+    try:
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert data.export_soft_limit_w is None

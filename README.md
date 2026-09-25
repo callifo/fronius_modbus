@@ -81,6 +81,14 @@ Copy the contents of the `custom_components` folder to your Home Assistant `conf
 
 ## Setup
 
+### Discovery
+
+The inverter announces itself over mDNS (`_Fronius-SE-Inverter._tcp.local.`), and Home Assistant offers it under **Discovered** with its model name. Adding it opens the setup with the host filled in; the role and password are asked for as usual.
+
+- mDNS stays within one network segment. An inverter in another subnet is found only if the router repeats mDNS between them (an mDNS repeater or reflector); otherwise add it by hand.
+- An inverter already set up is not offered again, also when its entry uses a host name: the serial number it announces is matched against the one it reports over Modbus.
+- An entry set up with an IPv4 address follows the inverter to a new address it announces: the host, the entry's title and the stored Web API token move with it. An entry set up with a host name is left as it is, since the name finds the new address itself. Anyone able to send mDNS in your network could announce another address for the same serial number; if that is a concern, set the entry up with a host name.
+
 ### Web API role
 
 Choose the `customer` or the `technician` local Web API role during setup and provide that role's password, or choose *Without the web API* to set the entry up on Modbus alone (see [Without the web API](#without-the-web-api)).

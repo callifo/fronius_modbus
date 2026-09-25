@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- Discovery over mDNS: Home Assistant offers the inverter under Discovered and fills in its host. An inverter already set up is recognized by its serial number, and an entry set up with an IPv4 address follows the inverter to a new address, its Web API token included.
 - The web API is optional: choose *Without the web API* as the access role to set an entry up on Modbus alone, without a password or a stored token. The Modbus sensors and controls, the component sensors and the list of smart meters stay, since those endpoints answer without a login; the settings that live only in the inverter's web configuration are not there. Switching an existing entry to it deletes its token and removes the web entities. The Repairs item for a missing login offers the same choice.
 
 ### Changed

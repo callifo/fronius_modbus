@@ -779,8 +779,12 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
             # An abort, not a success: the token minted for the gone entry is
             # then taken back (audit R6D-03).
             raise data_entry_flow.AbortFlow("entry_not_found")
+        # The form asked for the role alone: the rest is what the entry holds
+        # now, not what it held when the flow began.
+        current = entry_defaults(entry)
+        current[CONF_API_USERNAME] = settings[CONF_API_USERNAME]
         await async_update_entry_from_input(
-            self.hass, entry, settings, previous_host=previous_host
+            self.hass, entry, current, previous_host=previous_host
         )
         return self.async_abort(reason="reauth_successful")
 

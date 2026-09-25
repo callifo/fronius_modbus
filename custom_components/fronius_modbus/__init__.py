@@ -214,7 +214,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
 
         @callback
         def _mark_reported_modules() -> None:
-            # ponytail: the channel-by-channel rows are all inverter rows today.
+            # ponytail: the report-following rows are all inverter rows today.
             readings = web_poll.data.inverter_readings if web_poll.data else None
             migrations.async_mark_reported(
                 hass, entry, reported_rows("inverter", readings)

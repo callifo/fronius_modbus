@@ -1100,3 +1100,19 @@ async def test_an_entry_removed_while_following_keeps_no_token(hass, monkeypatch
     await discovery.async_follow_host(hass, entry, MOVED_HOST)
 
     assert await store.async_load_token(MOVED_HOST) is None
+
+
+async def test_a_reauth_keeps_settings_changed_while_it_ran(hass, mock_modbus):
+    """Reaudit RB99, inherited risk: the finished login wrote back its older snapshot."""
+    entry = make_entry(hass)
+    result = await entry.start_reauth_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_username": "customer"}
+    )
+    hass.config_entries.async_update_entry(entry, options={"scan_interval": 30})
+
+    await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+
+    assert config_flow.entry_defaults(entry)["scan_interval"] == 30

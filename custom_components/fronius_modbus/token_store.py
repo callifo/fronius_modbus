@@ -96,6 +96,19 @@ async def async_forget_unused_tokens(hass: HomeAssistant, host: str) -> None:
         await token_store.async_delete_token(host, role)
 
 
+async def async_move_tokens(hass: HomeAssistant, old_host: str, new_host: str) -> None:
+    """Carry the tokens of a host that moved to its new address."""
+    token_store = async_get_token_store(hass)
+    for role in API_USERNAMES:
+        token = await token_store.async_load_token(old_host, role)
+        if token is None:
+            continue
+        await token_store.async_save_token(
+            new_host, realm=token["realm"], token=token["token"], user=role
+        )
+        await token_store.async_delete_token(old_host, role)
+
+
 def async_get_token_store(hass: HomeAssistant) -> FroniusTokenStore:
     domain_data = hass.data.setdefault(DOMAIN, {})
     token_store = domain_data.get(_TOKEN_STORE_DATA_KEY)

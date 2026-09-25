@@ -13,6 +13,7 @@ from homeassistant.components.modbus import async_get_temporary_unit
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from homeassistant.helpers.selector import (
     SelectSelector,
     SelectSelectorConfig,
@@ -47,6 +48,12 @@ from .const import (
     ModbusRestriction,
     entry_title,
     entry_unique_id,
+)
+from .discovery import (
+    async_follow_host,
+    discovered_model,
+    discovered_serial,
+    entry_for_serial,
 )
 from .fronius_modbus_api.device import FroniusInverter
 from .froniuswebclient import (
@@ -713,6 +720,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         self._pending_flow_state = None
+        self._discovered_host = ""
 
     @staticmethod
     @callback
@@ -751,12 +759,28 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
         )
         return self.async_abort(reason="reconfigure_successful")
 
+    async def async_step_zeroconf(self, discovery_info: ZeroconfServiceInfo):
+        host = str(discovery_info.ip_address)
+        entry = entry_for_serial(
+            self.hass, discovered_serial(discovery_info.properties)
+        )
+        if entry is not None:
+            await async_follow_host(self.hass, entry, host)
+            return self.async_abort(reason="already_configured")
+        await self.async_set_unique_id(entry_unique_id({CONF_HOST: host}))
+        self._abort_if_unique_id_configured()
+        self._discovered_host = host
+        self.context["title_placeholders"] = {
+            "name": discovered_model(discovery_info.name)
+        }
+        return await self.async_step_user()
+
     async def async_step_user(self, user_input=None):
         return await self._async_handle_settings_step(
             user_input=user_input,
             step_id="user",
             password_step_id="user_password",
-            defaults=_default_payload(),
+            defaults={**_default_payload(), CONF_HOST: self._discovered_host},
             previous_host=None,
             previous_settings=None,
             force_apply_modbus_config=True,

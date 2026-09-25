@@ -1118,5 +1118,61 @@
     "old": "            self.data.solar_api_enabled = flag_value(enabled)\n",
     "new": "            self.data.solar_api_enabled = is_enabled(enabled)\n",
     "tests": "web_switch_in_no_known_form_shows_as_unknown"
+  },
+  {
+    "label": "migrations: an entry set up without the web API is recognised",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "    return _entry_value(entry, CONF_API_USERNAME, API_USERNAME) == WEB_API_DISABLED\n",
+    "new": "    return _entry_value(entry, CONF_API_USERNAME, API_USERNAME) != WEB_API_DISABLED\n",
+    "tests": "entry_without_the_web_api_is_not_asked_to_reconfigure"
+  },
+  {
+    "label": "migrations: an entry without the web API has no login to miss",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "    elif not web_api_disabled(entry) and (\n",
+    "new": "    elif (\n",
+    "tests": "entry_without_the_web_api_cleans_up_stale_entities"
+  },
+  {
+    "label": "config flow: without the web API an unreachable Modbus says so",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "            raise _CannotConnectModbus from err\n",
+    "new": "            raise _CannotConnect from err\n",
+    "tests": "unreachable_modbus_without_the_web_api_says_so"
+  },
+  {
+    "label": "config flow: without the web API no password is asked for",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "                if settings[CONF_API_USERNAME] == WEB_API_DISABLED:\n",
+    "new": "                if False:\n",
+    "tests": "entry_without_the_web_api_needs_no_password"
+  },
+  {
+    "label": "web control: the public reads use the public client",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        client = self._public_client if public else self._client\n",
+    "new": "        client = self._client\n",
+    "tests": "public_mode_reads_only_public_endpoints"
+  },
+  {
+    "label": "web control: the public reads survive a lost login",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        self._public_client = public_client or client\n",
+    "new": "        self._public_client = public_client\n",
+    "tests": "lost_login_keeps_the_public_reads"
+  },
+  {
+    "label": "setup: an entry without the web API gets the public client",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "    if migrations.web_api_disabled(entry):\n",
+    "new": "    if False:\n",
+    "tests": "entry_without_the_web_api_reads_the_public_endpoints"
+  },
+  {
+    "label": "entities: the component sensors need no login",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "        web_client=\"public\",\n",
+    "new": "",
+    "tests": "entry_without_the_web_api_reads_the_public_endpoints"
   }
 ]

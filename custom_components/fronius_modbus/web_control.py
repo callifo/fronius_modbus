@@ -172,7 +172,7 @@ def _export_limit_summary(config: dict[str, Any] | None) -> dict[str, Any]:
 def _as_int(value: Any) -> int | None:
     try:
         return int(value) if value is not None else None
-    except TypeError, ValueError:
+    except TypeError, ValueError, OverflowError:
         return None
 
 

@@ -82,7 +82,7 @@ def _http(method: str, url: str, **options: Any) -> requests.Response:
 def _as_int(value: Any, fallback: int) -> int:
     try:
         return int(value)
-    except TypeError, ValueError:
+    except TypeError, ValueError, OverflowError:
         return fallback
 
 

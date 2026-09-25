@@ -558,7 +558,7 @@ class FroniusWebControl:
                 .get("activePower", {})
                 .get("softLimit", {})
             )
-            if isinstance(soft, dict) and soft.get("enabled"):
+            if isinstance(soft, dict) and flag_value(soft.get("enabled")) is True:
                 self.data.export_soft_limit_w = soft.get("powerLimit")
 
         self._async_sync_solar_api_warning()

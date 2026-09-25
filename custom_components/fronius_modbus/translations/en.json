@@ -42,7 +42,8 @@
     },
     "abort": {
       "already_configured": "Device is already configured",
-      "reconfigure_successful": "Configuration updated successfully."
+      "reconfigure_successful": "Configuration updated successfully.",
+      "not_ipv4_address": "Only an inverter announced with an IPv4 address can be added from discovery."
     },
     "error": {
       "cannot_connect": "Failed to connect",

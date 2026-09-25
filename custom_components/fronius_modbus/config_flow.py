@@ -773,6 +773,10 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
         if entry is not None:
             await async_follow_host(self.hass, entry, host)
             return self.async_abort(reason="already_configured")
+        # The web client builds its URLs from the bare host, which an IPv6
+        # address cannot be (audit R3B-03).
+        if discovery_info.ip_address.version != 4:
+            return self.async_abort(reason="not_ipv4_address")
         await self.async_set_unique_id(entry_unique_id({CONF_HOST: host}))
         self._abort_if_unique_id_configured()
         self._discovered_host = host

@@ -952,13 +952,6 @@
     "tests": "duplicate_setup_leaves_the_inverter_alone or moving_to_a_host_taken_leaves_the_inverter_alone"
   },
   {
-    "label": "repairs: the repair flow claims its host before the login",
-    "path": "custom_components/fronius_modbus/repairs.py",
-    "old": "        await self._async_claim_entry_host(entry, settings)\n",
-    "new": "        pass\n",
-    "tests": "refuses_a_taken_host_before_the_inverter or rechecks_a_host_taken_during_the_password_step"
-  },
-  {
     "label": "entities: a single 404 keeps registered component sensors",
     "path": "custom_components/fronius_modbus/entities.py",
     "old": "        return reading.key in runtime.registered_keys\n",
@@ -1024,16 +1017,9 @@
   {
     "label": "config flow: reconfigure knows the entry it changes",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "            return None\n        return self._get_reconfigure_entry()\n",
+    "old": "            return None\n        return self.hass.config_entries.async_get_entry(self.context[\"entry_id\"])\n",
     "new": "            return None\n        return None\n",
     "tests": "reconfigure_failing_late_keeps_the_fresh_token"
-  },
-  {
-    "label": "repairs: the repair flow knows the entry it changes",
-    "path": "custom_components/fronius_modbus/repairs.py",
-    "old": "        return self.hass.config_entries.async_get_entry(self._entry_id)\n\n    async def _async_claim_repaired_host(",
-    "new": "        return None\n\n    async def _async_claim_repaired_host(",
-    "tests": "repair_failing_late_keeps_the_fresh_token"
   },
   {
     "label": "config flow: the password step rechecks the host",
@@ -1069,13 +1055,6 @@
     "old": "    if claim_host is not None:\n        await claim_host()\n",
     "new": "",
     "tests": "host_taken_while_the_token_is_minted_leaves_the_inverter_alone"
-  },
-  {
-    "label": "repairs: a repair for a removed entry stops before the login",
-    "path": "custom_components/fronius_modbus/repairs.py",
-    "old": "            # for it any more (audit R730-02).\n            self._resolve_issue()\n            raise data_entry_flow.AbortFlow(\"entry_not_found\")\n",
-    "new": "            # for it any more (audit R730-02).\n            self._resolve_issue()\n            return\n",
-    "tests": "repair_for_an_entry_removed_meanwhile_stops_before_the_login"
   },
   {
     "label": "web control: a flag value that means nothing is unknown",
@@ -1197,13 +1176,6 @@
     "tests": "turning_the_web_api_on_applies_the_saved_restriction"
   },
   {
-    "label": "repairs: a repair whose entry is gone aborts",
-    "path": "custom_components/fronius_modbus/repairs.py",
-    "old": "            self._resolve_issue()\n            raise data_entry_flow.AbortFlow(\"entry_not_found\")\n\n        await async_update_entry_from_input(",
-    "new": "            self._resolve_issue()\n            return self.async_create_entry(title=\"\", data={})\n\n        await async_update_entry_from_input(",
-    "tests": "entry_deleted_during_the_repair_keeps_no_token"
-  },
-  {
     "label": "web control: the export limit flag is read in its known forms",
     "path": "custom_components/fronius_modbus/web_control.py",
     "old": "flag_value(soft.get(\"enabled\")) is True",
@@ -1321,5 +1293,33 @@
     "old": "        if discovery_info.ip_address.version != 4:\n",
     "new": "        if False:\n",
     "tests": "ipv6_only_announcement_is_not_offered"
+  },
+  {
+    "label": "reauth: the reauth flow knows the entry it changes",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "        sources = (config_entries.SOURCE_RECONFIGURE, config_entries.SOURCE_REAUTH)\n",
+    "new": "        sources = (config_entries.SOURCE_RECONFIGURE,)\n",
+    "tests": "reauth_failing_late_keeps_the_fresh_token"
+  },
+  {
+    "label": "reauth: a reauth whose entry is gone aborts",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "            # then taken back (audit R6D-03).\n            raise data_entry_flow.AbortFlow(\"entry_not_found\")\n        await async_update_entry_from_input(",
+    "new": "            # then taken back (audit R6D-03).\n            return self.async_abort(reason=\"reauth_successful\")\n        await async_update_entry_from_input(",
+    "tests": "entry_deleted_during_the_reauth_keeps_no_token"
+  },
+  {
+    "label": "reauth: a missing login asks Home Assistant for a new one",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "        entry.async_start_reauth(hass)\n",
+    "new": "        pass\n",
+    "tests": "role_entry_without_token_asks_to_log_in_again"
+  },
+  {
+    "label": "reauth: a rejected login asks Home Assistant for a new one",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "            self._entry.async_start_reauth(self._hass)\n",
+    "new": "            pass\n",
+    "tests": "auth_failure_disables_the_web_api_and_asks_to_log_in_again"
   }
 ]

@@ -1314,5 +1314,12 @@
     "old": "    if title == entry_title(values):\n",
     "new": "    if True:\n",
     "tests": "moved_inverter_keeps_the_title_its_owner_gave"
+  },
+  {
+    "label": "discovery: an IPv6-only announcement is not offered",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "        if discovery_info.ip_address.version != 4:\n",
+    "new": "        if False:\n",
+    "tests": "ipv6_only_announcement_is_not_offered"
   }
 ]

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
 from modbus_connection import ModbusError, ModbusTcpParams
+import voluptuous as vol
 
 from homeassistant import config_entries, data_entry_flow, exceptions
 from homeassistant.components.modbus import async_get_temporary_unit
@@ -46,7 +47,7 @@ from .discovery import (
     discovered_serial,
     entry_for_serial,
 )
-from .flow_forms import password_schema, settings_schema
+from .flow_forms import password_schema, role_schema, settings_schema
 from .fronius_modbus_api.device import FroniusInverter
 from .froniuswebclient import (
     ClientIpResolutionError,
@@ -479,6 +480,7 @@ class TokenFlowMixin:
         always_ask_password: bool = False,
         claim_host: _HostClaim,
         on_success: _FlowFinishCallback,
+        build_schema: Callable[[dict[str, Any]], vol.Schema] = settings_schema,
     ):
         errors: dict[str, str] = {}
 
@@ -537,7 +539,7 @@ class TokenFlowMixin:
 
         return self.async_show_form(
             step_id=step_id,
-            data_schema=settings_schema(defaults),
+            data_schema=build_schema(defaults),
             errors=errors,
         )
 
@@ -660,9 +662,10 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
         return FroniusModbusOptionsFlow()
 
     def _flow_entry(self) -> config_entries.ConfigEntry | None:
-        if self.source != config_entries.SOURCE_RECONFIGURE:
+        sources = (config_entries.SOURCE_RECONFIGURE, config_entries.SOURCE_REAUTH)
+        if self.source not in sources:
             return None
-        return self._get_reconfigure_entry()
+        return self.hass.config_entries.async_get_entry(self.context["entry_id"])
 
     async def _async_claim_new_host(self, settings: dict[str, Any]) -> None:
         unique_id = entry_unique_id(settings)
@@ -761,6 +764,52 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
             restart_step=self.async_step_reconfigure,
             claim_host=self._async_claim_reconfigured_host,
             on_success=self._async_finish_reconfigure,
+        )
+
+    async def _async_claim_reauth_host(self, settings: dict[str, Any]) -> None:
+        entry = self._flow_entry()
+        if entry is None:
+            raise data_entry_flow.AbortFlow("entry_not_found")
+        await self._async_claim_entry_host(entry, settings)
+
+    async def _async_finish_reauth(self, settings, info, previous_host):
+        del info
+        entry = self._flow_entry()
+        if entry is None:
+            # An abort, not a success: the token minted for the gone entry is
+            # then taken back (audit R6D-03).
+            raise data_entry_flow.AbortFlow("entry_not_found")
+        await async_update_entry_from_input(
+            self.hass, entry, settings, previous_host=previous_host
+        )
+        return self.async_abort(reason="reauth_successful")
+
+    async def async_step_reauth(self, entry_data):
+        del entry_data
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(self, user_input=None):
+        defaults = entry_defaults(self._get_reauth_entry())
+        return await self._async_handle_settings_step(
+            user_input=user_input,
+            step_id="reauth_confirm",
+            password_step_id="reauth_password",
+            defaults=defaults,
+            previous_host=defaults[CONF_HOST],
+            previous_settings=defaults,
+            force_apply_modbus_config=True,
+            claim_host=self._async_claim_reauth_host,
+            on_success=self._async_finish_reauth,
+            build_schema=role_schema,
+        )
+
+    async def async_step_reauth_password(self, user_input=None):
+        return await self._async_handle_password_step(
+            user_input=user_input,
+            step_id="reauth_password",
+            restart_step=self.async_step_reauth_confirm,
+            claim_host=self._async_claim_reauth_host,
+            on_success=self._async_finish_reauth,
         )
 
 

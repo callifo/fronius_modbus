@@ -123,7 +123,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
 
     api_username = str(_entry_value(entry, CONF_API_USERNAME, API_USERNAME))
     api_token = await migrations.async_prepare_entry_token(hass, entry, host)
-    await migrations.async_sync_reconfigure_issue(
+    await migrations.async_sync_login_request(
         hass, entry, has_token=api_token is not None
     )
     client = (
@@ -203,7 +203,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
     await migrations.async_migrate_name_based_unique_ids(hass, entry)
     await migrations.async_remove_unexpected_entities(hass, entry)
     await migrations.async_remove_legacy_devices(hass, entry)
-    await migrations.async_sync_reconfigure_issue(
+    await migrations.async_sync_login_request(
         hass, entry, has_token=web_control is not None and web_control.configured
     )
 

@@ -31,6 +31,26 @@ from .const import (
 )
 
 
+def _role_field(defaults: dict[str, Any]) -> dict[vol.Required, SelectSelector]:
+    return {
+        vol.Required(
+            CONF_API_USERNAME,
+            default=defaults.get(CONF_API_USERNAME, API_USERNAME),
+        ): SelectSelector(
+            SelectSelectorConfig(
+                options=[*API_USERNAMES, WEB_API_DISABLED],
+                mode=SelectSelectorMode.LIST,
+                translation_key="api_username",
+            )
+        )
+    }
+
+
+def role_schema(defaults: dict[str, Any]) -> vol.Schema:
+    """The role alone: a new login changes nothing else; Reconfigure does."""
+    return vol.Schema(_role_field(defaults))
+
+
 def settings_schema(defaults: dict[str, Any]) -> vol.Schema:
     """Host, intervals, role and Modbus restriction, filled in with ``defaults``."""
     return vol.Schema(
@@ -44,16 +64,7 @@ def settings_schema(defaults: dict[str, Any]) -> vol.Schema:
                 CONF_WEB_SCAN_INTERVAL,
                 default=defaults.get(CONF_WEB_SCAN_INTERVAL, DEFAULT_WEB_SCAN_INTERVAL),
             ): vol.All(vol.Coerce(int), vol.Range(min=MINIMUM_SCAN_INTERVAL, max=3600)),
-            vol.Required(
-                CONF_API_USERNAME,
-                default=defaults.get(CONF_API_USERNAME, API_USERNAME),
-            ): SelectSelector(
-                SelectSelectorConfig(
-                    options=[*API_USERNAMES, WEB_API_DISABLED],
-                    mode=SelectSelectorMode.LIST,
-                    translation_key="api_username",
-                )
-            ),
+            **_role_field(defaults),
             vol.Required(
                 CONF_MODBUS_RESTRICTION,
                 default=defaults.get(CONF_MODBUS_RESTRICTION, ModbusRestriction.KEEP),

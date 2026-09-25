@@ -20,8 +20,10 @@ from custom_components.fronius_modbus.froniuswebclient import (
 )
 from custom_components.fronius_modbus.token_store import async_get_token_store
 from custom_components.fronius_modbus.web_control import FroniusWebControl
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers import issue_registry as ir
+
+# A rejected login asks Home Assistant for a new one; here it is only recorded.
+pytestmark = pytest.mark.usefixtures("reauth_requests")
 
 
 class FakeWebClient:
@@ -356,7 +358,7 @@ async def test_the_export_limit_needs_the_technician_client(control):
 
 
 async def test_an_auth_failure_disables_the_web_api_and_asks_to_log_in_again(
-    hass, monkeypatch
+    hass, reauth_requests
 ):
     """A rejected token must not be retried forever; Home Assistant asks for a new login."""
 
@@ -364,12 +366,6 @@ async def test_an_auth_failure_disables_the_web_api_and_asks_to_log_in_again(
         def get_modbus_config(self):
             raise FroniusWebAuthError("token rejected")
 
-    reauths: list[str] = []
-    monkeypatch.setattr(
-        ConfigEntry,
-        "async_start_reauth",
-        lambda entry, hass, **_kwargs: reauths.append(entry.entry_id),
-    )
     await async_get_token_store(hass).async_save_token(
         "192.0.2.1", API_USERNAME, "stale-token"
     )
@@ -384,7 +380,7 @@ async def test_an_auth_failure_disables_the_web_api_and_asks_to_log_in_again(
         await async_get_token_store(hass).async_load_token("192.0.2.1", API_USERNAME)
         is None
     )
-    assert reauths == [control._entry.entry_id]
+    assert reauth_requests == [control._entry.entry_id]
     assert not ir.async_get(hass).issues
 
 

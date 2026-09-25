@@ -28,7 +28,8 @@ def _flow_messages() -> set[str]:
     Read out of the source rather than listed here: a list beside the flow is
     one more place to forget. The shapes it uses are `async_abort(reason=...)`,
     an assignment into the `errors` dict, a returned key (`namespace_error`),
-    and a `(field, message)` pair in the table of form errors.
+    a `(field, message)` pair in the table of form errors, and
+    `AbortFlow("...")` raised from a step.
     """
     messages = set()
     for node in ast.walk(ast.parse(FLOW.read_text(encoding="utf-8"))):
@@ -41,6 +42,13 @@ def _flow_messages() -> set[str]:
             or isinstance(node, ast.Return)
         ):
             messages.add(node.value)
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "AbortFlow"
+            and node.args
+        ):
+            messages.add(node.args[0])
         if isinstance(node, ast.Tuple) and len(node.elts) == 2:
             field, message = node.elts
             if isinstance(field, ast.Constant) and field.value in ("base", "host"):

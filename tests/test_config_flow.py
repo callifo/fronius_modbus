@@ -14,7 +14,7 @@ from custom_components.fronius_modbus import config_flow, discovery
 from custom_components.fronius_modbus.const import DOMAIN, instance_key
 from custom_components.fronius_modbus.froniuswebclient import FroniusWebResponseError
 from custom_components.fronius_modbus.token_store import async_get_token_store
-from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.data_entry_flow import FlowResultType, UnknownFlow
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
@@ -1055,11 +1055,12 @@ async def test_a_reauth_failing_late_keeps_the_fresh_token(
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {"api_username": "technician"}
     )
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {"api_password": "secret"}
-    )
+    # The reload the update scheduled ends a reauth flow that is still running.
+    with pytest.raises(UnknownFlow):
+        await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"api_password": "secret"}
+        )
 
-    assert result["errors"]["base"] == "unknown"
     assert config_flow.entry_defaults(entry)["api_username"] == "technician"
     assert await store.async_load_token(HOST, "technician") == {
         "realm": "r",

@@ -1174,5 +1174,61 @@
     "old": "        web_client=\"public\",\n",
     "new": "",
     "tests": "entry_without_the_web_api_reads_the_public_endpoints"
+  },
+  {
+    "label": "web client: no login challenge is answered without credentials",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "        if not self.password and self.token is None:\n            return response\n",
+    "new": "",
+    "tests": "client_without_credentials_never_answers_a_challenge"
+  },
+  {
+    "label": "web client: refused credentials are forgotten",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "            self.password = \"\"\n            self.token = None\n",
+    "new": "",
+    "tests": "rejected_login_is_not_tried_again"
+  },
+  {
+    "label": "config flow: turning the web API on writes the saved Modbus settings",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "    if previous_settings.get(CONF_API_USERNAME) == WEB_API_DISABLED:\n        return True\n",
+    "new": "",
+    "tests": "turning_the_web_api_on_applies_the_saved_restriction"
+  },
+  {
+    "label": "repairs: a repair whose entry is gone aborts",
+    "path": "custom_components/fronius_modbus/repairs.py",
+    "old": "            self._resolve_issue()\n            raise data_entry_flow.AbortFlow(\"entry_not_found\")\n\n        await async_update_entry_from_input(",
+    "new": "            self._resolve_issue()\n            return self.async_create_entry(title=\"\", data={})\n\n        await async_update_entry_from_input(",
+    "tests": "entry_deleted_during_the_repair_keeps_no_token"
+  },
+  {
+    "label": "web control: the export limit flag is read in its known forms",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "flag_value(soft.get(\"enabled\")) is True",
+    "new": "soft.get(\"enabled\")",
+    "tests": "export_limit_flag_in_no_on_form_shows_no_limit"
+  },
+  {
+    "label": "web control: the export limit block is read part by part",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        limits = _config_part(config, \"exportLimits\")\n",
+    "new": "        limits = (config or {}).get(\"exportLimits\", {})\n",
+    "tests": "export_limit_block_of_the_wrong_shape_fails_no_refresh"
+  },
+  {
+    "label": "web control: an infinite number is unknown",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        return int(value) if value is not None else None\n    except TypeError, ValueError, OverflowError:\n",
+    "new": "        return int(value) if value is not None else None\n    except TypeError, ValueError:\n",
+    "tests": "infinite_battery_value_fails_no_refresh"
+  },
+  {
+    "label": "web client: an infinite number reads as the fallback",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "        return int(value)\n    except TypeError, ValueError, OverflowError:\n",
+    "new": "        return int(value)\n    except TypeError, ValueError:\n",
+    "tests": "infinite_modbus_setting_reads_as_its_fallback"
   }
 ]

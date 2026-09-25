@@ -667,8 +667,8 @@
   {
     "label": "entities: unread component readings keep every sensor",
     "path": "custom_components/fronius_modbus/component_readings.py",
-    "old": "    if not reading.per_channel or readings is None:\n        return True\n",
-    "new": "    if not reading.per_channel:\n        return True\n",
+    "old": "    if not reading.once_reported or readings is None:\n        return True\n",
+    "new": "    if not reading.once_reported:\n        return True\n",
     "tests": "readings_not_yet_read_keep_every_sensor"
   },
   {
@@ -730,7 +730,7 @@
   {
     "label": "component readings: a row without a value keeps its sensor",
     "path": "custom_components/fronius_modbus/component_readings.py",
-    "old": "    if not reading.per_channel or readings is None:\n        return True\n",
+    "old": "    if not reading.once_reported or readings is None:\n        return True\n",
     "new": "    if readings is None:\n        return True\n",
     "tests": "an_answer_without_a_value_keeps_its_sensor"
   },
@@ -891,7 +891,7 @@
   {
     "label": "entities: a power module reported before stays",
     "path": "custom_components/fronius_modbus/entities.py",
-    "old": "    if reading.per_channel and reading.key in runtime.reported_keys:\n        return True\n",
+    "old": "    if reading.once_reported and reading.key in runtime.reported_keys:\n        return True\n",
     "new": "",
     "tests": "power_module_missing_from_one_answer_keeps_its_entity"
   },
@@ -1010,7 +1010,7 @@
   {
     "label": "migrations: minor 13 marks the modules registered before",
     "path": "custom_components/fronius_modbus/migrations.py",
-    "old": "        async_mark_reported(hass, entry, CHANNEL_KEYS)\n",
+    "old": "        async_mark_reported(hass, entry, ONCE_REPORTED_KEYS)\n",
     "new": "        pass\n",
     "tests": "module_registered_before_the_marker_survives_the_upgrade"
   },

@@ -29,7 +29,7 @@ from .const import (
     instance_key,
     ModbusRestriction,
 )
-from .component_readings import CHANNEL_KEYS
+from .component_readings import ONCE_REPORTED_KEYS
 from .entities import expected_device_identifiers, expected_unique_ids
 from .token_store import async_forget_unused_tokens, async_get_token_store
 
@@ -300,7 +300,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         new_options[CONF_MODBUS_RESTRICTION] = choice
 
     if entry.minor_version < _REPORTED_MARK_MINOR_VERSION:
-        async_mark_reported(hass, entry, CHANNEL_KEYS)
+        async_mark_reported(hass, entry, ONCE_REPORTED_KEYS)
 
     drops_a_role = entry.minor_version < _SINGLE_ROLE_MINOR_VERSION
     hass.config_entries.async_update_entry(

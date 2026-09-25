@@ -48,7 +48,7 @@ class ComponentReading:
     transform: Transform = "as_is"
     suggested_unit: str | None = None
     # Follows the device channel by channel; every other row exists with its component.
-    per_channel: bool = False
+    once_reported: bool = False
 
 
 def _module_temperature(index: int) -> ComponentReading:
@@ -58,7 +58,7 @@ def _module_temperature(index: int) -> ComponentReading:
         (f"MODULE_TEMPERATURE_MEAN_0{index}_F32",),
         "°C",
         "temperature",
-        per_channel=True,
+        once_reported=True,
     )
 
 
@@ -312,12 +312,12 @@ def reported(reading: ComponentReading, readings: dict[str, Any] | None) -> bool
     follow the device channel by channel exist when reported, and also when the
     answer names none of their group, which is no answer about them.
     """
-    if not reading.per_channel or readings is None:
+    if not reading.once_reported or readings is None:
         return True
     group = {
         field
         for row in COMPONENT_READINGS
-        if row.per_channel and row.component == reading.component
+        if row.once_reported and row.component == reading.component
         for field in row.fields
     }
     if not group & readings.keys():
@@ -325,10 +325,12 @@ def reported(reading: ComponentReading, readings: dict[str, Any] | None) -> bool
     return any(field in readings for field in reading.fields)
 
 
-CHANNEL_KEYS = frozenset(row.key for row in COMPONENT_READINGS if row.per_channel)
+ONCE_REPORTED_KEYS = frozenset(
+    row.key for row in COMPONENT_READINGS if row.once_reported
+)
 
 
-def named_channels(component: Component, readings: dict[str, Any] | None) -> set[str]:
+def reported_rows(component: Component, readings: dict[str, Any] | None) -> set[str]:
     """The channel-by-channel rows an answer names; only these count as seen.
 
     A row made while unread or while no channel was named is a placeholder,
@@ -339,7 +341,7 @@ def named_channels(component: Component, readings: dict[str, Any] | None) -> set
     return {
         row.key
         for row in COMPONENT_READINGS
-        if row.per_channel
+        if row.once_reported
         and row.component == component
         and any(field in readings for field in row.fields)
     }

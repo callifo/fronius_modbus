@@ -933,3 +933,11 @@ async def test_two_announcements_leave_the_token_under_one_address(hass, monkeyp
         host for host in (HOST, MOVED_HOST, third) if await store.async_load_token(host)
     ]
     assert stored == [config_flow.entry_defaults(entry)["host"]]
+
+
+async def test_an_ipv6_only_announcement_is_not_offered(hass):
+    """Audit R3B-03: the web client cannot reach an unbracketed IPv6 host."""
+    result = await discover(hass, discovered(host="2001:db8::10"))
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "not_ipv4_address"

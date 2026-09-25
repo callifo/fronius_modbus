@@ -167,6 +167,25 @@ async def test_the_reconfigure_repair_closes_the_issue_of_a_deleted_entry(
     assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
 
 
+async def test_the_reconfigure_repair_can_leave_the_web_api_off(
+    hass, mock_modbus, web_client, repairs_client
+):
+    """The way out for an owner who does not want the web API: no password asked."""
+    entry = await make_entry(hass, mock_modbus, with_token=False)
+    issue_id = f"{MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX}{entry.entry_id}"
+
+    flow = await start_fix_flow(repairs_client, issue_id)
+    flow = await advance_fix_flow(
+        repairs_client, flow["flow_id"], SETTINGS_INPUT | {"api_username": "none"}
+    )
+    await hass.async_block_till_done()
+
+    assert flow["type"] == "create_entry"
+    entry = hass.config_entries.async_get_entry(entry.entry_id)
+    assert entry.options["api_username"] == "none"
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
+
+
 # -- the Solar API repair ----------------------------------------------------------
 
 

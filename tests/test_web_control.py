@@ -916,3 +916,17 @@ async def test_an_export_limit_block_of_the_wrong_shape_fails_no_refresh(hass):
 
     assert data.export_soft_limit_w is None
     assert data.inverter_readings == {"DEVICE_TEMPERATURE_AMBIENTMEAN_01_F32": 41.5}
+
+
+async def test_an_infinite_battery_value_fails_no_refresh(hass):
+    """Audit R6D-06: int(inf) raised OverflowError and took the web poll down."""
+    client = FakeWebClient()
+    client.battery["BAT_M0_SOC_MAX"] = float("inf")
+    control = make_control(hass, client=client)
+    try:
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert data.soc_max is None
+    assert data.soc_min == 5

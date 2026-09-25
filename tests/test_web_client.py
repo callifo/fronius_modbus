@@ -1376,3 +1376,8 @@ def test_an_export_limit_switched_on_in_no_known_form_is_written(client, inverte
     }
 
     assert client.set_export_soft_limit(7000) is True
+
+
+def test_an_infinite_modbus_setting_reads_as_its_fallback():
+    """Audit R6D-06, the client's own converter: int(inf) raised OverflowError."""
+    assert froniuswebclient._as_int(float("inf"), 502) == 502

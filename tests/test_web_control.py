@@ -881,3 +881,21 @@ async def test_a_lost_login_keeps_the_public_reads(hass):
 
     assert control.configured is False
     assert data.inverter_readings == {"DEVICE_TEMPERATURE_AMBIENTMEAN_01_F32": 41.5}
+
+
+@pytest.mark.parametrize("enabled", ["off", [1]])
+async def test_an_export_limit_flag_in_no_on_form_shows_no_limit(hass, enabled):
+    """Audit R6D-05: "off" and a list read as an active export limit."""
+
+    class FlagClient(FakeWebClient):
+        def get_export_limit_config(self):
+            soft = {"enabled": enabled, "powerLimit": 7000}
+            return {"exportLimits": {"activePower": {"softLimit": soft}}}
+
+    control = make_control(hass, client=FlagClient())
+    try:
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert data.export_soft_limit_w is None

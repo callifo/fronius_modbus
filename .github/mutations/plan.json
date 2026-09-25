@@ -1300,5 +1300,19 @@
     "old": "    if CONF_HOST in options:\n        options[CONF_HOST] = host\n",
     "new": "",
     "tests": "moved_inverter_is_followed_to_its_new_address"
+  },
+  {
+    "label": "discovery: a manual setup closes an open card",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "            if card[\"context\"][\"source\"] == config_entries.SOURCE_ZEROCONF:\n",
+    "new": "            if False:\n",
+    "tests": "manual_setup_is_not_blocked_by_an_open_card"
+  },
+  {
+    "label": "discovery: a title the owner gave stays",
+    "path": "custom_components/fronius_modbus/discovery.py",
+    "old": "    if title == entry_title(values):\n",
+    "new": "    if True:\n",
+    "tests": "moved_inverter_keeps_the_title_its_owner_gave"
   }
 ]

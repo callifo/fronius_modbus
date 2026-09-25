@@ -181,6 +181,31 @@ def test_an_answer_without_any_power_module_keeps_all_four():
     assert {f"module_temperature_{index}" for index in (1, 2, 3, 4)} <= set(sensors)
 
 
+FIRMWARE_DEPENDENT = {
+    "production_limit",
+    "production_limit_reached",
+    "battery_max_charge_power",
+    "battery_max_discharge_power",
+}
+
+
+def test_firmware_without_the_limit_fields_gets_no_limit_sensors():
+    """Older GEN24 firmware (PS 1.6.1) lacks these fields; the sensors stayed unknown."""
+    readings = read_gen24()
+    readings.inverter_readings = {
+        field: value
+        for field, value in readings.inverter_readings.items()
+        if not field.startswith(
+            ("ACBRIDGE_POWERACTIVE_PRODUCTION", "ACBRIDGE_VALUE", "DCDC_")
+        )
+    }
+
+    sensors = component_sensors(runtime_with(readings))
+
+    assert not FIRMWARE_DEPENDENT & set(sensors)
+    assert "module_temperature_1" in sensors
+
+
 def test_firmware_without_the_endpoints_gets_no_component_sensors():
     """Audit F24-06: a 404 made every component sensor, 19 of them enabled, stay unknown."""
     readings = WebData(inverter_endpoint_missing=True, storage_endpoint_missing=True)

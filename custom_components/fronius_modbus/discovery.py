@@ -14,7 +14,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 
 from .const import DOMAIN, entry_title, entry_unique_id, instance_key
-from .token_store import async_move_tokens, canonical_host
+from .token_store import async_get_token_store, canonical_host
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -62,6 +62,10 @@ async def async_follow_host(hass: HomeAssistant, entry: ConfigEntry, host: str) 
     An entry set up by name keeps it: the name resolves the new address. The
     unique id is the host, so it moves too, and the stored token with it.
     """
+    token_store = async_get_token_store(hass)
+    # From the ownership check to the entry update nothing may await: another
+    # flow took the address in between (audit R3B-01, R3B-02).
+    await token_store.async_ready()
     values = {**entry.data, **entry.options}
     old_host = str(values.get(CONF_HOST, ""))
     moved = canonical_host(old_host) != canonical_host(host)
@@ -76,7 +80,7 @@ async def async_follow_host(hass: HomeAssistant, entry: ConfigEntry, host: str) 
             entry.entry_id,
         )
         return
-    await async_move_tokens(hass, old_host, host)
+    token_store.move_tokens(old_host, host)
     data = {**entry.data, CONF_HOST: host}
     options = dict(entry.options)
     if CONF_HOST in options:

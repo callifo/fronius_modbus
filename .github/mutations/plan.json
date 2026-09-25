@@ -1290,7 +1290,7 @@
   {
     "label": "discovery: the token moves with the host",
     "path": "custom_components/fronius_modbus/discovery.py",
-    "old": "    await async_move_tokens(hass, old_host, host)\n",
+    "old": "    token_store.move_tokens(old_host, host)\n",
     "new": "",
     "tests": "moved_inverter_is_followed_to_its_new_address"
   },

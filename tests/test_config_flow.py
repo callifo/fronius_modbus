@@ -1082,3 +1082,21 @@ def test_a_setting_out_of_bounds_is_refused_before_the_inverter(change, error):
 
     with pytest.raises(error):
         config_flow._validate_static_input(settings)
+
+
+async def test_an_entry_removed_while_following_keeps_no_token(hass, monkeypatch):
+    """Reaudit RB99, baseline risk: the token moved to the new host of a gone entry."""
+    entry = make_entry(hass)
+    store = async_get_token_store(hass)
+    await store.async_save_token(HOST, realm="r", token="t")
+    ready = store.async_ready
+
+    async def ready_while_the_entry_goes():
+        await hass.config_entries.async_remove(entry.entry_id)
+        await ready()
+
+    monkeypatch.setattr(store, "async_ready", ready_while_the_entry_goes)
+
+    await discovery.async_follow_host(hass, entry, MOVED_HOST)
+
+    assert await store.async_load_token(MOVED_HOST) is None

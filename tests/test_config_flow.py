@@ -802,7 +802,9 @@ async def test_unreadable_discovery_data_still_offers_the_setup(hass):
 async def test_a_moved_inverter_is_followed_to_its_new_address(hass):
     entry = make_entry(hass)
     # A settings change leaves the host in the options too, and those win.
-    hass.config_entries.async_update_entry(entry, options={"host": HOST})
+    hass.config_entries.async_update_entry(
+        entry, options={"host": HOST}, title=f"Fronius {HOST}"
+    )
     with_inverter_device(hass, entry)
     store = async_get_token_store(hass)
     await store.async_save_token(HOST, realm="r", token="t")
@@ -816,6 +818,18 @@ async def test_a_moved_inverter_is_followed_to_its_new_address(hass):
     assert entry.title == f"Fronius {MOVED_HOST}"
     assert await store.async_load_token(MOVED_HOST) == {"realm": "r", "token": "t"}
     assert await store.async_load_token(HOST) is None
+
+
+async def test_a_moved_inverter_keeps_the_title_its_owner_gave(hass):
+    """Reaudit Z-02: following the address silently replaced a renamed entry's title."""
+    entry = make_entry(hass)
+    hass.config_entries.async_update_entry(entry, title="Garage inverter")
+    with_inverter_device(hass, entry)
+
+    await discover(hass, discovered(host=MOVED_HOST))
+
+    assert config_flow.entry_defaults(entry)["host"] == MOVED_HOST
+    assert entry.title == "Garage inverter"
 
 
 async def test_a_moved_inverter_is_not_followed_to_a_taken_address(hass):

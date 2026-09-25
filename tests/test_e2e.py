@@ -958,11 +958,41 @@ async def test_an_entry_without_the_web_api_is_not_asked_to_reconfigure(
     assert entry.data[CONF_RECONFIGURE_REQUIRED] is False
 
 
-async def test_a_role_entry_without_token_still_asks_to_reconfigure(hass, mock_modbus):
+def _reauth_flows(hass, entry: MockConfigEntry) -> list:
+    return [
+        flow
+        for flow in hass.config_entries.flow.async_progress_by_handler(DOMAIN)
+        if flow["context"].get("source") == "reauth"
+        and flow["context"].get("entry_id") == entry.entry_id
+    ]
+
+
+async def test_a_role_entry_without_token_asks_to_log_in_again(hass, mock_modbus):
+    """Home Assistant's own reauthentication, not a Repairs item (quality scale Silver)."""
     entry = make_entry(hass, minor_version=13, api_username="customer")
     await setup_entry(hass, entry)
 
-    assert _reconfigure_issue(hass, entry) is not None
+    assert _reconfigure_issue(hass, entry) is None
+    assert len(_reauth_flows(hass, entry)) == 1
+
+
+async def test_a_repairs_item_from_before_is_cleared(hass, mock_modbus, monkeypatch):
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    entry = make_entry(hass, minor_version=13, api_username="customer")
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        f"{MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX}{entry.entry_id}",
+        is_fixable=True,
+        is_persistent=True,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key="legacy_modbus_only_entry_reconfigure",
+    )
+
+    await setup_entry(hass, entry)
+
+    assert _reconfigure_issue(hass, entry) is None
+    assert _reauth_flows(hass, entry) == []
 
 
 async def test_an_entry_without_the_web_api_cleans_up_stale_entities(

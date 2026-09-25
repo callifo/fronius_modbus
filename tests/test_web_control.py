@@ -20,6 +20,7 @@ from custom_components.fronius_modbus.froniuswebclient import (
 )
 from custom_components.fronius_modbus.token_store import async_get_token_store
 from custom_components.fronius_modbus.web_control import FroniusWebControl
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers import issue_registry as ir
 
 
@@ -354,13 +355,21 @@ async def test_the_export_limit_needs_the_technician_client(control):
         await control.set_export_soft_limit_w(4200)
 
 
-async def test_an_auth_failure_disables_the_web_api_and_deletes_the_token(hass):
-    """A rejected token must not be retried forever; the user has to reconfigure."""
+async def test_an_auth_failure_disables_the_web_api_and_asks_to_log_in_again(
+    hass, monkeypatch
+):
+    """A rejected token must not be retried forever; Home Assistant asks for a new login."""
 
     class FakeAuthFailingClient(FakeWebClient):
-        def get_inverter_info(self):
+        def get_modbus_config(self):
             raise FroniusWebAuthError("token rejected")
 
+    reauths: list[str] = []
+    monkeypatch.setattr(
+        ConfigEntry,
+        "async_start_reauth",
+        lambda entry, hass, **_kwargs: reauths.append(entry.entry_id),
+    )
     await async_get_token_store(hass).async_save_token(
         "192.0.2.1", API_USERNAME, "stale-token"
     )
@@ -375,10 +384,8 @@ async def test_an_auth_failure_disables_the_web_api_and_deletes_the_token(hass):
         await async_get_token_store(hass).async_load_token("192.0.2.1", API_USERNAME)
         is None
     )
-    assert any(
-        issue.domain == DOMAIN and issue.issue_id.endswith(control._entry.entry_id)
-        for issue in ir.async_get(hass).issues.values()
-    )
+    assert reauths == [control._entry.entry_id]
+    assert not ir.async_get(hass).issues
 
 
 async def test_a_firmware_update_clears_the_solar_api_warning_on_the_next_refresh(hass):

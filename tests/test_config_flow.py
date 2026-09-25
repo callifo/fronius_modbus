@@ -966,3 +966,102 @@ def test_every_flow_error_shows_its_message(error, field, message):
     config_flow._set_form_error(errors, error())
 
     assert errors == {field: message}
+
+
+# -- reauthentication ----------------------------------------------------------------
+
+
+async def test_a_reauth_stores_the_new_token(hass, mock_modbus):
+    entry = make_entry(hass)
+
+    result = await entry.start_reauth_flow(hass)
+    assert result["step_id"] == "reauth_confirm"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_username": "customer"}
+    )
+    assert result["step_id"] == "reauth_password"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+    assert await async_get_token_store(hass).async_load_token(HOST) == {
+        "realm": "r",
+        "token": "t",
+    }
+
+
+async def test_a_reauth_can_leave_the_web_api_off(hass, mock_modbus):
+    entry = make_entry(hass)
+
+    result = await entry.start_reauth_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_username": "none"}
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+    assert config_flow.entry_defaults(entry)["api_username"] == "none"
+
+
+async def test_an_entry_deleted_during_the_reauth_keeps_no_token(
+    hass, mock_modbus, monkeypatch
+):
+    """Audit R6D-03, carried over from the repair: success was reported for a gone entry."""
+    entry = make_entry(hass)
+    validate = config_flow._validate_input
+
+    async def validate_then_delete(hass, *args, **kwargs):
+        info = await validate(hass, *args, **kwargs)
+        await hass.config_entries.async_remove(entry.entry_id)
+        return info
+
+    monkeypatch.setattr(config_flow, "_validate_input", validate_then_delete)
+    result = await entry.start_reauth_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_username": "customer"}
+    )
+    await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+
+    assert await async_get_token_store(hass).async_load_token(HOST) is None
+
+
+async def test_a_reauth_failing_late_keeps_the_fresh_token(
+    hass, mock_modbus, monkeypatch
+):
+    """Audit D8AE-02, carried over from the repair: the stale token came back."""
+    entry = make_entry(hass)
+    store = async_get_token_store(hass)
+    await store.async_save_token(HOST, realm="r", token="stale", user="technician")
+
+    async def validate(hass, settings, *, api_token, **_kwargs):
+        if api_token == {"realm": "r", "token": "stale"}:
+            raise config_flow._InvalidApiCredentials
+        return {"title": "Fronius"}
+
+    abort = config_flow.ConfigFlow.async_abort
+
+    def fail_on_success(self, *, reason, **kwargs):
+        if reason == "reauth_successful":
+            raise RuntimeError("after the update")
+        return abort(self, reason=reason, **kwargs)
+
+    monkeypatch.setattr(config_flow, "_validate_input", validate)
+    monkeypatch.setattr(config_flow.ConfigFlow, "async_abort", fail_on_success)
+    result = await entry.start_reauth_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_username": "technician"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+
+    assert result["errors"]["base"] == "unknown"
+    assert config_flow.entry_defaults(entry)["api_username"] == "technician"
+    assert await store.async_load_token(HOST, "technician") == {
+        "realm": "r",
+        "token": "t",
+    }

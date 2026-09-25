@@ -177,6 +177,18 @@ def test_a_client_without_credentials_never_answers_a_challenge(inverter):
     assert inverter.login_attempts == []
 
 
+def test_a_rejected_login_is_not_tried_again(inverter):
+    """Audit E2-02: after a lost login the client kept retrying the rejected token."""
+    inverter.always_401 = True
+    client = FroniusWebClient(host=HOST, token={"realm": REALM, "token": "stale"})
+
+    for _ in range(2):
+        with pytest.raises(FroniusWebAuthError):
+            client.get_inverter_info()
+
+    assert inverter.login_attempts == ["/api/components/inverter/readable"]
+
+
 def test_the_hash_mode_follows_the_version_the_inverter_reports(inverter):
     inverter.hashing_version = 1
     assert froniuswebclient._hash_mode(f"http://{HOST}", "customer", 4.0) == "md5"

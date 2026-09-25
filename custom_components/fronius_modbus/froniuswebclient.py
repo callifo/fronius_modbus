@@ -398,6 +398,10 @@ class XHeaderDigestAuth(AuthBase):
     ) -> requests.Response:
         if response.status_code != 401 or "Authorization" in response.request.headers:
             return response
+        # Without a password or token the answer would be an empty-password
+        # login on every poll of a no-login entry (audit E2-01).
+        if not self.password and self.token is None:
+            return response
 
         challenge = _digest_challenge(
             response.headers.get("X-WWW-Authenticate")

@@ -864,3 +864,17 @@ async def test_a_manual_setup_is_not_blocked_by_an_open_card(hass, mock_modbus):
     assert card["flow_id"] not in {
         flow["flow_id"] for flow in hass.config_entries.flow.async_progress()
     }
+
+
+async def test_a_discovered_inverter_is_set_up_from_its_card(hass, mock_modbus):
+    card = await discover(hass, discovered())
+
+    result = await hass.config_entries.flow.async_configure(card["flow_id"], USER_INPUT)
+    assert result["step_id"] == "user_password"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["result"].source == "zeroconf"
+    assert result["result"].unique_id == HOST

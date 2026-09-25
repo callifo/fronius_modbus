@@ -1,5 +1,7 @@
 """The config flow, with the web client stubbed and Modbus served by the mock connection."""
 
+from ipaddress import ip_address
+import json
 from unittest.mock import AsyncMock
 
 from modbus_connection import ModbusConnectionError
@@ -8,10 +10,12 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components import fronius_modbus
 from custom_components.fronius_modbus import config_flow
-from custom_components.fronius_modbus.const import DOMAIN
+from custom_components.fronius_modbus.const import DOMAIN, instance_key
 from custom_components.fronius_modbus.froniuswebclient import FroniusWebResponseError
 from custom_components.fronius_modbus.token_store import async_get_token_store
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
 from .conftest import INVERTER_UNIT_ID
 
@@ -702,3 +706,123 @@ async def test_turning_the_web_api_on_applies_the_saved_restriction(
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert [args[-1] for args in written] == ["home_assistant"]
+
+
+# -- discovery ---------------------------------------------------------------------
+
+ZEROCONF_TYPE = "_Fronius-SE-Inverter._tcp.local."
+SERIAL = "12345678"
+MOVED_HOST = "192.0.2.20"
+
+
+def discovered(host: str = HOST, serial: str = SERIAL, txt: dict | None = None):
+    """What the inverter announces over mDNS; its JSON is split over numbered keys."""
+    meta = json.dumps(
+        {"DeviceMeta": {"Device-Information": {"DeviceSerialNumber": serial}}}
+    )
+    properties = {"FSEI-DID": "V 1|P JSON|PFC 2", "00": meta[:30], "01": meta[30:]}
+    return ZeroconfServiceInfo(
+        ip_address=ip_address(host),
+        ip_addresses=[ip_address(host)],
+        port=80,
+        hostname="inverter.local.",
+        type=ZEROCONF_TYPE,
+        name=f"Fronius Symo GEN24 10.0-{serial}.{ZEROCONF_TYPE}",
+        properties=properties if txt is None else txt,
+    )
+
+
+def with_inverter_device(hass, entry: MockConfigEntry) -> None:
+    """The inverter device a set-up entry has, with the serial Modbus reports."""
+    dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, f"{instance_key(entry.entry_id)}_inverter")},
+        serial_number=SERIAL,
+    )
+
+
+async def discover(hass, info) -> dict:
+    return await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "zeroconf"}, data=info
+    )
+
+
+async def test_a_discovered_inverter_opens_the_setup_with_its_host(hass):
+    result = await discover(hass, discovered())
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "user"
+    assert result["data_schema"]({})["host"] == HOST
+    flow = hass.config_entries.flow.async_get(result["flow_id"])
+    assert flow["context"]["title_placeholders"] == {"name": "Fronius Symo GEN24 10.0"}
+
+
+async def test_a_discovered_host_already_set_up_is_not_offered(hass):
+    make_entry(hass)
+
+    result = await discover(hass, discovered())
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+
+
+async def test_an_inverter_set_up_by_name_is_not_offered_again(hass):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={"host": "inverter.example", "api_username": "none"},
+        unique_id="inverter.example",
+    )
+    entry.add_to_hass(hass)
+    with_inverter_device(hass, entry)
+
+    result = await discover(hass, discovered())
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+    assert entry.data["host"] == "inverter.example"
+
+
+async def test_unreadable_discovery_data_still_offers_the_setup(hass):
+    result = await discover(hass, discovered(txt={"00": "{not json"}))
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "user"
+
+
+async def test_a_moved_inverter_is_followed_to_its_new_address(hass):
+    entry = make_entry(hass)
+    with_inverter_device(hass, entry)
+    store = async_get_token_store(hass)
+    await store.async_save_token(HOST, realm="r", token="t")
+
+    result = await discover(hass, discovered(host=MOVED_HOST))
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+    assert config_flow.entry_defaults(entry)["host"] == MOVED_HOST
+    assert entry.unique_id == MOVED_HOST
+    assert entry.title == f"Fronius {MOVED_HOST}"
+    assert await store.async_load_token(MOVED_HOST) == {"realm": "r", "token": "t"}
+    assert await store.async_load_token(HOST) is None
+
+
+async def test_a_moved_inverter_is_not_followed_to_a_taken_address(hass):
+    entry = make_entry(hass)
+    with_inverter_device(hass, entry)
+    MockConfigEntry(
+        domain=DOMAIN, data={"host": MOVED_HOST}, unique_id=MOVED_HOST
+    ).add_to_hass(hass)
+
+    await discover(hass, discovered(host=MOVED_HOST))
+
+    assert config_flow.entry_defaults(entry)["host"] == HOST
+    assert entry.unique_id == HOST
+
+
+async def test_an_ipv6_discovery_does_not_replace_an_ipv4_host(hass):
+    entry = make_entry(hass)
+    with_inverter_device(hass, entry)
+
+    await discover(hass, discovered(host="2001:db8::10"))
+
+    assert config_flow.entry_defaults(entry)["host"] == HOST

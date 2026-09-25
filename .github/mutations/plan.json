@@ -198,8 +198,8 @@
   {
     "label": "migrations: a missing web login blocks the cleanup",
     "path": "custom_components/fronius_modbus/migrations.py",
-    "old": "    elif runtime.web_control is None or not runtime.web_control.configured:",
-    "new": "    elif False:",
+    "old": "    elif not web_api_disabled(entry) and (",
+    "new": "    elif False and (",
     "tests": "a_lost_web_login_retires_no_web_entity"
   },
   {

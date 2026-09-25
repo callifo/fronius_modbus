@@ -24,6 +24,7 @@ from .const import (
     ENTITY_PREFIX,
     MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX,
     TECHNICIAN_USERNAME,
+    WEB_API_DISABLED,
     entity_prefix,
     instance_key,
     ModbusRestriction,
@@ -333,11 +334,19 @@ async def _async_stored_role(hass: HomeAssistant, entry: ConfigEntry) -> str:
     return TECHNICIAN_USERNAME if token else API_USERNAME
 
 
+def web_api_disabled(entry: ConfigEntry) -> bool:
+    """Whether the owner set the entry up without a web login."""
+    return _entry_value(entry, CONF_API_USERNAME, API_USERNAME) == WEB_API_DISABLED
+
+
 async def async_prepare_entry_token(
     hass: HomeAssistant,
     entry: ConfigEntry,
     host: str,
 ) -> dict[str, str] | None:
+    if web_api_disabled(entry):
+        await _async_set_reconfigure_required(hass, entry, False)
+        return None
     api_username = str(_entry_value(entry, CONF_API_USERNAME, API_USERNAME))
     token = await async_get_token_store(hass).async_load_token(host, api_username)
     await _async_set_reconfigure_required(hass, entry, not bool(token))
@@ -351,7 +360,7 @@ async def async_sync_reconfigure_issue(
     has_token: bool,
 ) -> None:
     issue_id = _migration_issue_id(entry)
-    needs_reconfigure = (
+    needs_reconfigure = not web_api_disabled(entry) and (
         bool(_entry_value(entry, CONF_RECONFIGURE_REQUIRED, False)) or not has_token
     )
     if needs_reconfigure:
@@ -502,7 +511,7 @@ def _retirement_blocked(entry: ConfigEntry, what: str) -> bool:
     web refresh, a missing web login or an unread meter topology all mean
     "not seen", never "gone"
     (audit A03/A04). Without it a single outage takes entities and their
-    history with it.
+    history with it. An entry set up without the web API has no login to miss.
     """
     runtime = entry.runtime_data
     reason = None
@@ -510,9 +519,11 @@ def _retirement_blocked(entry: ConfigEntry, what: str) -> bool:
         reason = "a poll did not succeed everywhere"
     elif runtime.web is not None and not runtime.web.last_update_success:
         reason = "the web API refresh failed"
-    elif runtime.web_control is None or not runtime.web_control.configured:
-        # Every entry has a login; without one the web entities are unread, not
-        # gone (audit A24-01: an auth failure at setup retired them).
+    elif not web_api_disabled(entry) and (
+        runtime.web_control is None or not runtime.web_control.configured
+    ):
+        # A lost login leaves the web entities unread, not gone (audit A24-01:
+        # an auth failure at setup retired them).
         reason = "the web API login is missing"
     elif not runtime.topology_confirmed:
         reason = "the meter topology could not be read"

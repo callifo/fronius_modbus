@@ -692,6 +692,17 @@
           "default": "Solar API erfolgreich deaktiviert."
         }
       }
+    },
+    "legacy_modbus_only_entry_reconfigure": {
+      "title": "Alter Fronius-Anmeldehinweis",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Alter Fronius-Anmeldehinweis",
+            "description": "Dieser Hinweis stammt aus einer früheren Version der Integration. Home Assistant fragt eine neue Anmeldung inzwischen direkt an der Integration ab, wenn sie nötig ist. Bestätigen entfernt den Hinweis."
+          }
+        }
+      }
     }
   },
   "options": {

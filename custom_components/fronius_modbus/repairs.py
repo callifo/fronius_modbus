@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.components.repairs import RepairsFlow
+from homeassistant.components.repairs import ConfirmRepairFlow, RepairsFlow
 import voluptuous as vol
 from homeassistant.helpers import issue_registry as ir
 
 from .const import (
     DOMAIN,
+    MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX,
     SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX,
 )
 
@@ -105,5 +106,10 @@ async def async_create_fix_flow(
             or issue_id.removeprefix(SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX)
         )
         return FroniusDisableSolarApiRepairFlow(entry_id)
+
+    if issue_id.startswith(MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX):
+        # Left by an earlier version on an entry not set up since, such as a
+        # disabled one: the reauthentication replaced it (audit RB99-01).
+        return ConfirmRepairFlow()
 
     raise ValueError(f"Unknown issue: {issue_id}")

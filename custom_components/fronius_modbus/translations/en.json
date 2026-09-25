@@ -692,6 +692,17 @@
           "default": "Solar API disabled successfully."
         }
       }
+    },
+    "legacy_modbus_only_entry_reconfigure": {
+      "title": "Old Fronius login notice",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Old Fronius login notice",
+            "description": "This notice is from an earlier version of the integration. Home Assistant now asks for a new login on the integration itself when one is needed. Confirm to remove the notice."
+          }
+        }
+      }
     }
   },
   "options": {

@@ -44,6 +44,7 @@
     },
     "error": {
       "cannot_connect": "Verbindung fehlgeschlagen",
+      "cannot_connect_modbus": "Modbus antwortet nicht. Ohne Web-API muss Modbus TCP vorher im Wechselrichter eingeschaltet werden.",
       "invalid_port": "Ungültige Portnummer",
       "invalid_host": "Ungültige Host-Adresse",
       "unsupported_hardware": "Nicht unterstützte Hardware. Siehe Protokoll.",
@@ -660,6 +661,7 @@
         },
         "error": {
           "cannot_connect": "Verbindung fehlgeschlagen",
+          "cannot_connect_modbus": "Modbus antwortet nicht. Ohne Web-API muss Modbus TCP vorher im Wechselrichter eingeschaltet werden.",
           "invalid_port": "Ungültige Portnummer",
           "invalid_host": "Ungültige Host-Adresse",
           "unsupported_hardware": "Nicht unterstützte Hardware. Siehe Protokoll.",
@@ -741,6 +743,7 @@
     },
     "error": {
       "cannot_connect": "Verbindung fehlgeschlagen",
+      "cannot_connect_modbus": "Modbus antwortet nicht. Ohne Web-API muss Modbus TCP vorher im Wechselrichter eingeschaltet werden.",
       "invalid_port": "Ungültige Portnummer",
       "invalid_host": "Ungültige Host-Adresse",
       "unsupported_hardware": "Nicht unterstützte Hardware. Siehe Protokoll.",
@@ -757,7 +760,8 @@
     "api_username": {
       "options": {
         "customer": "Kunde",
-        "technician": "Techniker (schaltet die Einspeisebegrenzung frei)"
+        "technician": "Techniker (schaltet die Einspeisebegrenzung frei)",
+        "none": "Ohne Web-API (nur Modbus)"
       }
     },
     "modbus_restriction": {

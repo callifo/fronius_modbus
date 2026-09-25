@@ -18,6 +18,8 @@ API_USERNAME = "customer"
 TECHNICIAN_USERNAME = "technician"
 # The local web logins an entry can use; exactly one is active per entry.
 API_USERNAMES = (API_USERNAME, TECHNICIAN_USERNAME)
+# The role choice that sets an entry up without a web login.
+WEB_API_DISABLED = "none"
 CONF_RECONFIGURE_REQUIRED = "_reconfigure_required"
 MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX = "legacy_modbus_only_reconfigure_"
 SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX = "solar_api_low_firmware_"

@@ -43,6 +43,7 @@ from .const import (
     API_USERNAMES,
     SUPPORTED_MANUFACTURERS,
     SUPPORTED_MODELS,
+    WEB_API_DISABLED,
     ModbusRestriction,
 )
 from .fronius_modbus_api.device import FroniusInverter
@@ -80,6 +81,10 @@ class _PendingFlowState:
 
 class _CannotConnect(exceptions.HomeAssistantError):
     """Error to indicate we cannot connect."""
+
+
+class _CannotConnectModbus(exceptions.HomeAssistantError):
+    """Modbus did not answer, and without the web API nothing switched it on."""
 
 
 class _InvalidHost(exceptions.HomeAssistantError):
@@ -154,7 +159,8 @@ def _expand_settings_input(
         .strip()
         .lower()
     )
-    payload[CONF_API_USERNAME] = username if username in API_USERNAMES else API_USERNAME
+    choices = (*API_USERNAMES, WEB_API_DISABLED)
+    payload[CONF_API_USERNAME] = username if username in choices else API_USERNAME
     payload.pop(CONF_API_PASSWORD, None)
     payload.pop("meter_modbus_unit_id", None)
     payload.pop("meter_modbus_unit_ids", None)
@@ -210,7 +216,7 @@ def _build_settings_schema(defaults: dict[str, Any]) -> vol.Schema:
                 default=defaults.get(CONF_API_USERNAME, API_USERNAME),
             ): SelectSelector(
                 SelectSelectorConfig(
-                    options=list(API_USERNAMES),
+                    options=[*API_USERNAMES, WEB_API_DISABLED],
                     mode=SelectSelectorMode.LIST,
                     translation_key="api_username",
                 )
@@ -250,6 +256,8 @@ def _build_password_schema(*, keep_stored: bool = False) -> vol.Schema:
 def _set_form_error(errors: dict[str, str], err: Exception) -> None:
     if isinstance(err, _CannotConnect):
         errors["base"] = "cannot_connect"
+    elif isinstance(err, _CannotConnectModbus):
+        errors["base"] = "cannot_connect_modbus"
     elif isinstance(err, _InvalidPort):
         errors["base"] = "invalid_port"
     elif isinstance(err, _InvalidHost):
@@ -349,6 +357,45 @@ async def _async_mint_token(
     return token
 
 
+async def _async_prepare_web_api(
+    hass: HomeAssistant,
+    data: dict[str, Any],
+    api_password: str,
+    api_token: dict[str, str] | None,
+    apply_modbus_config: bool,
+    claim_host: Callable[[], Awaitable[None]] | None,
+) -> None:
+    """Log in, and switch Modbus on where the flow asks for it.
+
+    ``claim_host`` runs right before the Modbus settings are written: another
+    entry can take the host while the token is minted or the login runs, and
+    the settings would then change on an inverter this flow does not own
+    (audit R730-01).
+    """
+    client = FroniusWebClient(
+        host=data[CONF_HOST],
+        username=data[CONF_API_USERNAME],
+        password=api_password or "",
+        token=api_token,
+    )
+    if not await hass.async_add_executor_job(client.login):
+        raise _InvalidApiCredentials
+    enable_modbus = data.get(CONF_AUTO_ENABLE_MODBUS, DEFAULT_AUTO_ENABLE_MODBUS)
+    if not (apply_modbus_config and enable_modbus):
+        return
+    if claim_host is not None:
+        await claim_host()
+    await hass.async_add_executor_job(
+        client.ensure_modbus_enabled,
+        data[CONF_PORT],
+        DEFAULT_METER_UNIT_ID,
+        data[CONF_INVERTER_UNIT_ID],
+        data[CONF_MODBUS_RESTRICTION],
+    )
+    # The inverter restarts its Modbus server after the settings write.
+    await asyncio.sleep(1.0)
+
+
 async def _validate_input(
     hass: HomeAssistant,
     data: dict[str, Any],
@@ -358,41 +405,18 @@ async def _validate_input(
     apply_modbus_config: bool = False,
     claim_host: Callable[[], Awaitable[None]] | None = None,
 ) -> dict[str, Any]:
-    """Validate the user input allows us to connect.
-
-    ``claim_host`` runs right before the Modbus settings are written: another
-    entry can take the host while the token is minted or the login runs, and
-    the settings would then change on an inverter this flow does not own
-    (audit R730-01).
-    """
+    """Validate the user input allows us to connect."""
     _validate_static_input(data)
 
-    if not api_password and api_token is None:
+    web_api = data[CONF_API_USERNAME] != WEB_API_DISABLED
+    if web_api and not api_password and api_token is None:
         raise _MissingApiPassword
 
-    client = FroniusWebClient(
-        host=data[CONF_HOST],
-        username=data[CONF_API_USERNAME],
-        password=api_password or "",
-        token=api_token,
-    )
     try:
-        if not await hass.async_add_executor_job(client.login):
-            raise _InvalidApiCredentials
-        if apply_modbus_config and data.get(
-            CONF_AUTO_ENABLE_MODBUS, DEFAULT_AUTO_ENABLE_MODBUS
-        ):
-            if claim_host is not None:
-                await claim_host()
-            await hass.async_add_executor_job(
-                client.ensure_modbus_enabled,
-                data[CONF_PORT],
-                DEFAULT_METER_UNIT_ID,
-                data[CONF_INVERTER_UNIT_ID],
-                data[CONF_MODBUS_RESTRICTION],
+        if web_api:
+            await _async_prepare_web_api(
+                hass, data, api_password, api_token, apply_modbus_config, claim_host
             )
-            # The inverter restarts its Modbus server after the settings write.
-            await asyncio.sleep(1.0)
         async with async_get_temporary_unit(
             hass,
             ModbusTcpParams(host=data[CONF_HOST], port=data[CONF_PORT]),
@@ -411,6 +435,8 @@ async def _validate_input(
         TimeoutError,
     ) as err:
         _LOGGER.error("Cannot reach inverter: %s", err)
+        if not web_api:
+            raise _CannotConnectModbus from err
         raise _CannotConnect from err
 
     if identity.manufacturer not in SUPPORTED_MANUFACTURERS:
@@ -535,6 +561,10 @@ class TokenFlowMixin:
                         previous_settings,
                     )
                 )
+                if settings[CONF_API_USERNAME] == WEB_API_DISABLED:
+                    info = await _validate_input(self.hass, settings)
+                    self._pending_flow_state = None
+                    return await on_success(settings, info, previous_host)
                 token = await _async_load_token(
                     self.hass, settings[CONF_HOST], settings[CONF_API_USERNAME]
                 )

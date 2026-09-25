@@ -44,6 +44,7 @@
     },
     "error": {
       "cannot_connect": "Failed to connect",
+      "cannot_connect_modbus": "Modbus did not answer. Without the web API, switch Modbus TCP on in the inverter first.",
       "invalid_port": "Invalid port number",
       "invalid_host": "Invalid host address",
       "unsupported_hardware": "Unsupported hardware. See logs.",
@@ -660,6 +661,7 @@
         },
         "error": {
           "cannot_connect": "Failed to connect",
+          "cannot_connect_modbus": "Modbus did not answer. Without the web API, switch Modbus TCP on in the inverter first.",
           "invalid_port": "Invalid port number",
           "invalid_host": "Invalid host address",
           "unsupported_hardware": "Unsupported hardware. See logs.",
@@ -741,6 +743,7 @@
     },
     "error": {
       "cannot_connect": "Failed to connect",
+      "cannot_connect_modbus": "Modbus did not answer. Without the web API, switch Modbus TCP on in the inverter first.",
       "invalid_port": "Invalid port number",
       "invalid_host": "Invalid host address",
       "unsupported_hardware": "Unsupported hardware. See logs.",
@@ -757,7 +760,8 @@
     "api_username": {
       "options": {
         "customer": "Customer",
-        "technician": "Technician (adds the export limit control)"
+        "technician": "Technician (adds the export limit control)",
+        "none": "Without the web API (Modbus only)"
       }
     },
     "modbus_restriction": {

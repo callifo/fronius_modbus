@@ -558,7 +558,7 @@ class FroniusWebControl:
         limits = _config_part(config, "exportLimits")
         soft = _config_part(_config_part(limits, "activePower"), "softLimit")
         if soft is not None and flag_value(soft.get("enabled")) is True:
-            self.data.export_soft_limit_w = soft.get("powerLimit")
+            self.data.export_soft_limit_w = _as_int(soft.get("powerLimit"))
 
         self._async_sync_solar_api_warning()
         return replace(self.data)

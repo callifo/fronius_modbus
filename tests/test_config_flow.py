@@ -782,6 +782,16 @@ async def test_an_inverter_set_up_by_name_is_not_offered_again(hass):
     assert entry.data["host"] == "inverter.example"
 
 
+async def test_a_second_inverter_is_offered(hass):
+    entry = make_entry(hass)
+    with_inverter_device(hass, entry)
+
+    result = await discover(hass, discovered(host=MOVED_HOST, serial="87654321"))
+
+    assert result["type"] is FlowResultType.FORM
+    assert config_flow.entry_defaults(entry)["host"] == HOST
+
+
 async def test_unreadable_discovery_data_still_offers_the_setup(hass):
     result = await discover(hass, discovered(txt={"00": "{not json"}))
 
@@ -791,6 +801,8 @@ async def test_unreadable_discovery_data_still_offers_the_setup(hass):
 
 async def test_a_moved_inverter_is_followed_to_its_new_address(hass):
     entry = make_entry(hass)
+    # A settings change leaves the host in the options too, and those win.
+    hass.config_entries.async_update_entry(entry, options={"host": HOST})
     with_inverter_device(hass, entry)
     store = async_get_token_store(hass)
     await store.async_save_token(HOST, realm="r", token="t")

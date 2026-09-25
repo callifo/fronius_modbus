@@ -1237,5 +1237,19 @@
     "old": "            self.data.export_soft_limit_w = _as_int(soft.get(\"powerLimit\"))\n",
     "new": "            self.data.export_soft_limit_w = soft.get(\"powerLimit\")\n",
     "tests": "export_limit_that_is_no_number_shows_no_limit"
+  },
+  {
+    "label": "component readings: the production limit follows the report",
+    "path": "custom_components/fronius_modbus/component_readings.py",
+    "old": "        \"power\",\n        once_reported=True,\n    ),\n    ComponentReading(\n        \"production_limit_reached\",",
+    "new": "        \"power\",\n    ),\n    ComponentReading(\n        \"production_limit_reached\",",
+    "tests": "firmware_without_the_limit_fields_gets_no_limit_sensors"
+  },
+  {
+    "label": "migrations: minor 14 keeps the registered limit sensors",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "        async_mark_reported(hass, entry, _REPORT_FOLLOWING_SINCE_14)\n",
+    "new": "        pass\n",
+    "tests": "limit_sensors_from_before_they_followed_the_report_stay"
   }
 ]

@@ -4,7 +4,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from homeassistant.const import CONF_HOST
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.storage import Store
 
 from .const import API_USERNAME, API_USERNAMES, CONF_API_USERNAME, DOMAIN
@@ -46,6 +46,30 @@ class FroniusTokenStore:
                 # version stays world-readable until then.
                 await self._store.async_save(self._cache)
         return self._cache
+
+    async def async_ready(self) -> None:
+        """Load the tokens, so that moving them afterwards needs no await."""
+        await self._async_load_all()
+
+    @callback
+    def move_tokens(self, old_host: str, new_host: str) -> None:
+        """Carry every role's token of a moved host over, in one step.
+
+        No await: the caller checks and updates the entry around this, and an
+        await in between let another flow take the address, or a second move
+        leave a token under a host no entry uses (audit R3B-01, R3B-02).
+        """
+        data = self._cache
+        if data is None:
+            raise RuntimeError("The token store is moved before it was loaded")
+        moved = False
+        for role in API_USERNAMES:
+            token = data.pop(_token_key(old_host, role), None)
+            if token is not None:
+                data[_token_key(new_host, role)] = token
+                moved = True
+        if moved:
+            self._store.async_delay_save(lambda: data)
 
     async def async_load_token(
         self, host: str, user: str = API_USERNAME

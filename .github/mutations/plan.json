@@ -1251,5 +1251,75 @@
     "old": "        async_mark_reported(hass, entry, _REPORT_FOLLOWING_SINCE_14)\n",
     "new": "        pass\n",
     "tests": "limit_sensors_from_before_they_followed_the_report_stay"
+  },
+  {
+    "label": "discovery: the setup opens with the announced host",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "            defaults={**_default_payload(), CONF_HOST: self._discovered_host},\n",
+    "new": "            defaults=_default_payload(),\n",
+    "tests": "discovered_inverter_opens_the_setup_with_its_host"
+  },
+  {
+    "label": "discovery: an inverter is matched by its serial number",
+    "path": "custom_components/fronius_modbus/discovery.py",
+    "old": "        if inverter is not None and inverter.serial_number == serial:\n",
+    "new": "        if inverter is not None:\n",
+    "tests": "second_inverter_is_offered"
+  },
+  {
+    "label": "discovery: only an IPv4 address replaces an IPv4 host",
+    "path": "custom_components/fronius_modbus/discovery.py",
+    "old": "    if not (moved and _is_ipv4(old_host) and _is_ipv4(host)):\n",
+    "new": "    if not (moved and _is_ipv4(old_host)):\n",
+    "tests": "ipv6_discovery_does_not_replace_an_ipv4_host"
+  },
+  {
+    "label": "discovery: an entry set up by name keeps its host",
+    "path": "custom_components/fronius_modbus/discovery.py",
+    "old": "    if not (moved and _is_ipv4(old_host) and _is_ipv4(host)):\n",
+    "new": "    if not (moved and _is_ipv4(host)):\n",
+    "tests": "inverter_set_up_by_name_is_not_offered_again"
+  },
+  {
+    "label": "discovery: a taken address is not followed",
+    "path": "custom_components/fronius_modbus/discovery.py",
+    "old": "    if holder is not None and holder.entry_id != entry.entry_id:\n",
+    "new": "    if False:\n",
+    "tests": "moved_inverter_is_not_followed_to_a_taken_address"
+  },
+  {
+    "label": "discovery: the token moves with the host",
+    "path": "custom_components/fronius_modbus/discovery.py",
+    "old": "    token_store.move_tokens(old_host, host)\n",
+    "new": "",
+    "tests": "moved_inverter_is_followed_to_its_new_address"
+  },
+  {
+    "label": "discovery: the host moves in the options too",
+    "path": "custom_components/fronius_modbus/discovery.py",
+    "old": "    if CONF_HOST in options:\n        options[CONF_HOST] = host\n",
+    "new": "",
+    "tests": "moved_inverter_is_followed_to_its_new_address"
+  },
+  {
+    "label": "discovery: a manual setup closes an open card",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "            if card[\"context\"][\"source\"] == config_entries.SOURCE_ZEROCONF:\n",
+    "new": "            if False:\n",
+    "tests": "manual_setup_is_not_blocked_by_an_open_card"
+  },
+  {
+    "label": "discovery: a title the owner gave stays",
+    "path": "custom_components/fronius_modbus/discovery.py",
+    "old": "    if title == entry_title(values):\n",
+    "new": "    if True:\n",
+    "tests": "moved_inverter_keeps_the_title_its_owner_gave"
+  },
+  {
+    "label": "discovery: an IPv6-only announcement is not offered",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "        if discovery_info.ip_address.version != 4:\n",
+    "new": "        if False:\n",
+    "tests": "ipv6_only_announcement_is_not_offered"
   }
 ]

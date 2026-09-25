@@ -26,6 +26,7 @@ from .const import (
     TECHNICIAN_USERNAME,
     WEB_API_DISABLED,
     entity_prefix,
+    entry_title,
     instance_key,
     ModbusRestriction,
 )
@@ -186,12 +187,6 @@ def _entry_instance_key(entry: ConfigEntry) -> str:
     return instance_key(entry.entry_id)
 
 
-def _updated_entry_title(entry: ConfigEntry) -> str:
-    name = str(_entry_value(entry, CONF_NAME, "Fronius")).strip() or "Fronius"
-    host = str(_entry_value(entry, CONF_HOST, "")).strip()
-    return f"{name} {host}" if host else name
-
-
 def _read_translation_data(path: Path) -> dict:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -290,7 +285,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         new_options.pop(CONF_METER_UNIT_IDS, None)
         new_data[CONF_RECONFIGURE_REQUIRED] = True
         new_options[CONF_RECONFIGURE_REQUIRED] = True
-        title = _updated_entry_title(entry)
+        title = entry_title({**entry.data, **entry.options})
 
     if entry.minor_version < _SINGLE_ROLE_MINOR_VERSION:
         api_username = await _async_stored_role(hass, entry)

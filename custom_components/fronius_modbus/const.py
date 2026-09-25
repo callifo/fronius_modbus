@@ -3,6 +3,9 @@
 from collections.abc import Mapping
 from enum import StrEnum
 import re
+from typing import Any
+
+from homeassistant.const import CONF_HOST, CONF_NAME
 
 DOMAIN = "fronius_modbus"
 DEFAULT_NAME = "Fronius"
@@ -225,6 +228,18 @@ _NOT_A_KEY_CHARACTER = re.compile(r"[^a-z0-9]+")
 def instance_key(entry_id: str) -> str:
     """The per-entry key every unique id and device identifier is built on since 0.2."""
     return _NOT_A_KEY_CHARACTER.sub("_", entry_id.lower()).strip("_") or "fronius"
+
+
+def entry_title(data: Mapping[str, Any]) -> str:
+    """The entry's title: its name and the host it serves."""
+    host = str(data.get(CONF_HOST, "")).strip()
+    name = str(data.get(CONF_NAME, DEFAULT_NAME)).strip() or DEFAULT_NAME
+    return f"{name} {host}" if host else name
+
+
+def entry_unique_id(data: Mapping[str, Any]) -> str:
+    """The entry's unique id: its host, spelled one way."""
+    return str(data.get(CONF_HOST, "")).strip().lower()
 
 
 def entity_prefix(entry_id: str) -> str:

@@ -1,6 +1,7 @@
 {
   "title": "Fronius Modbus",
   "config": {
+    "flow_title": "{name}",
     "step": {
       "user": {
         "title": "Fronius-System einrichten",
@@ -40,7 +41,9 @@
       }
     },
     "abort": {
-      "reconfigure_successful": "Konfiguration erfolgreich aktualisiert."
+      "already_configured": "Gerät ist bereits eingerichtet",
+      "reconfigure_successful": "Konfiguration erfolgreich aktualisiert.",
+      "not_ipv4_address": "Aus der Erkennung lässt sich nur ein Wechselrichter mit IPv4-Adresse hinzufügen."
     },
     "error": {
       "cannot_connect": "Verbindung fehlgeschlagen",

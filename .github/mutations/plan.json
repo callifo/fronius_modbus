@@ -1066,7 +1066,7 @@
   {
     "label": "config flow: the host is claimed again right before the Modbus setup",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "            if claim_host is not None:\n                await claim_host()\n",
+    "old": "    if claim_host is not None:\n        await claim_host()\n",
     "new": "",
     "tests": "host_taken_while_the_token_is_minted_leaves_the_inverter_alone"
   },

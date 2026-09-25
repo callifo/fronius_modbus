@@ -552,14 +552,13 @@ class FroniusWebControl:
             _export_limit_summary(export_limit_config),
         )
         self.data.export_soft_limit_w = None
-        if isinstance(export_limit_config, dict) and export_limit_config:
-            soft = (
-                export_limit_config.get("exportLimits", {})
-                .get("activePower", {})
-                .get("softLimit", {})
-            )
-            if isinstance(soft, dict) and flag_value(soft.get("enabled")) is True:
-                self.data.export_soft_limit_w = soft.get("powerLimit")
+        # Shown only, like the Modbus block: a part of the wrong shape is no
+        # limit, not a failed poll.
+        config = export_limit_config if isinstance(export_limit_config, dict) else None
+        limits = _config_part(config, "exportLimits")
+        soft = _config_part(_config_part(limits, "activePower"), "softLimit")
+        if soft is not None and flag_value(soft.get("enabled")) is True:
+            self.data.export_soft_limit_w = soft.get("powerLimit")
 
         self._async_sync_solar_api_warning()
         return replace(self.data)

@@ -815,3 +815,69 @@ async def test_a_web_switch_in_no_known_form_shows_as_unknown(hass):
         None,
         None,
     )
+
+
+class RecordingPublicClient(FakeWebClient):
+    """Records every read, write and login it is asked for."""
+
+    PUBLIC = {"get_inverter_info", "get_storage_info", "get_power_meter_info"}
+
+    def __getattribute__(self, name):
+        attribute = super().__getattribute__(name)
+        if name.startswith(("get_", "set_")) or name == "login":
+            super().__getattribute__("calls").append(name)
+        return attribute
+
+    def get_power_meter_info(self, *_args):
+        return None
+
+
+async def test_the_public_mode_reads_only_public_endpoints(hass):
+    public = RecordingPublicClient()
+    control = make_control(hass, client=None, public_client=public)
+    try:
+        data = await control.async_refresh()
+        await control.async_meter_topology()
+    finally:
+        control.shutdown()
+
+    assert public.calls
+    assert set(public.calls) <= RecordingPublicClient.PUBLIC
+    assert data.inverter_readings == {"DEVICE_TEMPERATURE_AMBIENTMEAN_01_F32": 41.5}
+    assert data.storage_readings == {"BAT_TEMPERATURE_CELL_F64": 22.0}
+    assert control.configured is False
+
+
+async def test_a_refused_public_read_deletes_nothing(hass):
+    class RefusingPublicClient(FakeWebClient):
+        def get_inverter_info(self):
+            raise FroniusWebAuthError("401")
+
+    await async_get_token_store(hass).async_save_token(
+        "192.0.2.1", API_USERNAME, "kept"
+    )
+    control = make_control(hass, client=None, public_client=RefusingPublicClient())
+    try:
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert data.inverter_readings is None
+    assert await async_get_token_store(hass).async_load_token("192.0.2.1") is not None
+    assert not ir.async_get(hass).issues
+
+
+async def test_a_lost_login_keeps_the_public_reads(hass):
+    class LosingLoginClient(FakeWebClient):
+        def get_modbus_config(self):
+            raise FroniusWebAuthError("token rejected")
+
+    control = make_control(hass, client=LosingLoginClient())
+    try:
+        await control.async_refresh()
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert control.configured is False
+    assert data.inverter_readings == {"DEVICE_TEMPERATURE_AMBIENTMEAN_01_F32": 41.5}

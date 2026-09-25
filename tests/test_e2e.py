@@ -944,3 +944,22 @@ async def test_an_entry_without_the_web_api_cleans_up_stale_entities(
     await setup_entry(hass, entry)
 
     assert registry.async_get_entity_id("sensor", DOMAIN, unique_id) is None
+
+
+async def test_an_entry_without_the_web_api_reads_the_public_endpoints(
+    hass, mock_modbus, monkeypatch
+):
+    """Stage B: component sensors and a second meter without any login."""
+    mock_modbus.add_unit(201, like=METER_UNIT_ID)
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientAnsweringEmpty)
+    monkeypatch.setattr(
+        _WebClientAnsweringEmpty,
+        "readings",
+        {"DEVICE_TEMPERATURE_AMBIENTMEAN_01_F32": 41.5},
+    )
+    entry = make_entry(hass, minor_version=13, api_username="none")
+    await setup_entry(hass, entry)
+
+    assert state_of(hass, entry, "inverter_temperature") == "41.5"
+    assert state_of(hass, entry, "meter_201_power") != "unavailable"
+    assert entry.runtime_data.web_control.configured is False

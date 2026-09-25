@@ -11,9 +11,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from custom_components.fronius_modbus import entities
+from custom_components.fronius_modbus import entities, migrations
 from custom_components.fronius_modbus.component_readings import (
     COMPONENT_READINGS,
+    ONCE_REPORTED_KEYS,
     component_value,
 )
 from custom_components.fronius_modbus.froniuswebclient import (
@@ -289,3 +290,9 @@ def test_a_value_that_is_no_finite_number_shows_nothing(value):
 
     assert component_value(temperature, {temperature.fields[0]: value}) is None
     assert component_value(grid_valid, {grid_valid.fields[0]: value}) == "no"
+
+
+def test_the_rows_kept_on_upgrade_are_rows_that_follow_the_report():
+    """A misspelt key in the minor-14 migration would keep nothing."""
+    assert set(migrations._REPORT_FOLLOWING_SINCE_14) == FIRMWARE_DEPENDENT
+    assert FIRMWARE_DEPENDENT <= ONCE_REPORTED_KEYS

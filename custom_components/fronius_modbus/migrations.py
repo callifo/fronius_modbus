@@ -38,7 +38,7 @@ _TRANSLATIONS_DIR = Path(__file__).resolve().parent / "translations"
 _TRANSLATION_CACHE: dict[str, dict] = {}
 
 _TARGET_VERSION = 1
-_TARGET_MINOR_VERSION = 13
+_TARGET_MINOR_VERSION = 14
 # Entries below this minor version predate the web API integration and still
 # carry the dropped meter-unit config, so only they need the data migration.
 _WEB_API_MINOR_VERSION = 9
@@ -49,6 +49,15 @@ _RESTRICTION_CHOICE_MINOR_VERSION = 12
 # Minor 13 marks the power modules the device reported; one registered before
 # cannot be told from a placeholder and is kept (audit D8AE-01).
 _REPORTED_MARK_MINOR_VERSION = 13
+# Minor 14 makes these rows follow the report too. The owner chose to keep the
+# ones already registered rather than have them cleaned up automatically.
+_REPORT_FOLLOWING_SINCE_14 = (
+    "production_limit",
+    "production_limit_reached",
+    "battery_max_charge_power",
+    "battery_max_discharge_power",
+)
+_LIMIT_MARK_MINOR_VERSION = 14
 _LEGACY_RESTRICT_TO_THIS_IP = "restrict_modbus_to_this_ip"
 
 _LEGACY_METER_DEVICE_RE = re.compile(r".*_meter_?\d+")
@@ -301,6 +310,8 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if entry.minor_version < _REPORTED_MARK_MINOR_VERSION:
         async_mark_reported(hass, entry, ONCE_REPORTED_KEYS)
+    elif entry.minor_version < _LIMIT_MARK_MINOR_VERSION:
+        async_mark_reported(hass, entry, _REPORT_FOLLOWING_SINCE_14)
 
     drops_a_role = entry.minor_version < _SINGLE_ROLE_MINOR_VERSION
     hass.config_entries.async_update_entry(

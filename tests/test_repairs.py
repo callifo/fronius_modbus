@@ -7,9 +7,11 @@ from custom_components import fronius_modbus
 from custom_components.fronius_modbus import config_flow, repairs
 from custom_components.fronius_modbus.const import (
     DOMAIN,
+    MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX,
     SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX,
 )
 from custom_components.fronius_modbus.token_store import async_get_token_store
+from homeassistant.config_entries import ConfigEntryDisabler
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.setup import async_setup_component
 
@@ -119,6 +121,38 @@ async def make_entry(hass, mock_modbus, *, with_token: bool) -> MockConfigEntry:
 
 
 # -- the reconfigure repair --------------------------------------------------------
+
+
+async def test_a_leftover_login_repair_on_a_disabled_entry_can_be_dismissed(
+    hass, repairs_client
+):
+    """Audit RB99-01: a disabled entry is never set up, so its old item stayed and failed."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data=ENTRY_DATA,
+        unique_id=HOST,
+        disabled_by=ConfigEntryDisabler.USER,
+    )
+    entry.add_to_hass(hass)
+    issue_id = f"{MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX}{entry.entry_id}"
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        issue_id,
+        is_fixable=True,
+        is_persistent=True,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key="legacy_modbus_only_entry_reconfigure",
+        data={"entry_id": entry.entry_id},
+    )
+    # Loaded, as it is with any other entry running: its own fix flows answer.
+    assert await async_setup_component(hass, DOMAIN, {})
+
+    flow = await start_fix_flow(repairs_client, issue_id)
+    flow = await advance_fix_flow(repairs_client, flow["flow_id"])
+
+    assert flow["type"] == "create_entry"
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
 
 
 # -- the Solar API repair ----------------------------------------------------------

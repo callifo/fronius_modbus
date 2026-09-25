@@ -1304,8 +1304,8 @@
   {
     "label": "reauth: a reauth whose entry is gone aborts",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "            # then taken back (audit R6D-03).\n            raise data_entry_flow.AbortFlow(\"entry_not_found\")\n        await async_update_entry_from_input(",
-    "new": "            # then taken back (audit R6D-03).\n            return self.async_abort(reason=\"reauth_successful\")\n        await async_update_entry_from_input(",
+    "old": "            # then taken back (audit R6D-03).\n            raise data_entry_flow.AbortFlow(\"entry_not_found\")\n        # The form asked",
+    "new": "            # then taken back (audit R6D-03).\n            return self.async_abort(reason=\"reauth_successful\")\n        # The form asked",
     "tests": "entry_deleted_during_the_reauth_keeps_no_token"
   },
   {
@@ -1321,5 +1321,26 @@
     "old": "            self._entry.async_start_reauth(self._hass)\n",
     "new": "            pass\n",
     "tests": "auth_failure_disables_the_web_api_and_asks_to_log_in_again"
+  },
+  {
+    "label": "repairs: a leftover login repair can be dismissed",
+    "path": "custom_components/fronius_modbus/repairs.py",
+    "old": "        return ConfirmRepairFlow()\n",
+    "new": "        raise ValueError(issue_id)\n",
+    "tests": "leftover_login_repair_on_a_disabled_entry_can_be_dismissed"
+  },
+  {
+    "label": "discovery: an entry removed meanwhile is not followed",
+    "path": "custom_components/fronius_modbus/discovery.py",
+    "old": "    if hass.config_entries.async_get_entry(entry.entry_id) is None:\n        return\n",
+    "new": "",
+    "tests": "entry_removed_while_following_keeps_no_token"
+  },
+  {
+    "label": "reauth: settings changed while it ran stay",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "        current = entry_defaults(entry)\n",
+    "new": "        current = dict(settings)\n",
+    "tests": "reauth_keeps_settings_changed_while_it_ran"
   }
 ]

@@ -899,3 +899,20 @@ async def test_an_export_limit_flag_in_no_on_form_shows_no_limit(hass, enabled):
         control.shutdown()
 
     assert data.export_soft_limit_w is None
+
+
+async def test_an_export_limit_block_of_the_wrong_shape_fails_no_refresh(hass):
+    """A list where the limits object belongs took the whole web poll down."""
+
+    class ShapeClient(FakeWebClient):
+        def get_export_limit_config(self):
+            return {"exportLimits": []}
+
+    control = make_control(hass, client=ShapeClient())
+    try:
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert data.export_soft_limit_w is None
+    assert data.inverter_readings == {"DEVICE_TEMPERATURE_AMBIENTMEAN_01_F32": 41.5}

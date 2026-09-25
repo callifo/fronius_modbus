@@ -103,7 +103,7 @@ With the Web API login, the integration can:
 - expose Modbus service diagnostics from `/api/config/modbus`
 - expose the export limit control, with the `technician` role
 
-A host that another entry already serves is refused before the inverter is contacted. If another entry takes the host while the setup runs, it is refused before any Modbus setting is written.
+A host that another entry already serves is refused before the inverter is contacted. The check runs again right before the Modbus settings are written, so an entry that takes the host while the setup runs stops it there.
 
 ### Without the web API
 
@@ -122,7 +122,7 @@ Needs the web API, so not there:
 
 `Charge from Grid` then stops at around 500 W unless grid charging is allowed in the inverter's own battery configuration; allow it once in the inverter web UI (see [Charging from the grid](#charging-from-the-grid)).
 
-Switching an existing entry to *Without the web API* deletes its stored token and removes the entities that need the web API; their recorded history stays in Home Assistant. Switching back creates them again. An entry that keeps a role but lost its login is not the same: its web entities stay, unavailable, and a Repairs item asks for the password.
+Switching an existing entry to *Without the web API* deletes its stored token and removes the entities that need the web API; their recorded history stays in Home Assistant. The removal waits for a start at which the list of smart meters can be read, like every cleanup; if the inverter reports no meter at all, delete those entities yourself. Switching back to a role creates them again and writes the Modbus settings, the IP restriction choice included, since nothing wrote them without the login. An entry that keeps a role but lost its login is not the same: its web entities stay, unavailable, and a Repairs item asks for the password.
 
 ### Migrating older entries
 

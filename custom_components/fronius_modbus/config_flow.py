@@ -733,7 +733,13 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
         return self._get_reconfigure_entry()
 
     async def _async_claim_new_host(self, settings: dict[str, Any]) -> None:
-        await self.async_set_unique_id(entry_unique_id(settings))
+        unique_id = entry_unique_id(settings)
+        # A card for this host gives way to the owner adding it by hand; two
+        # flows adding it by hand still stop each other (reaudit Z-01).
+        for card in self._async_in_progress(match_context={"unique_id": unique_id}):
+            if card["context"]["source"] == config_entries.SOURCE_ZEROCONF:
+                self.hass.config_entries.flow.async_abort(card["flow_id"])
+        await self.async_set_unique_id(unique_id)
         self._abort_if_unique_id_configured()
 
     async def _async_claim_reconfigured_host(self, settings: dict[str, Any]) -> None:

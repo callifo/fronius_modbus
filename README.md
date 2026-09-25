@@ -52,6 +52,7 @@ What changes for users of [callifo/fronius_modbus](https://github.com/callifo/fr
 - Enabling Modbus TCP keeps the rest of the inverter's Modbus settings. Upstream writes a fixed block that moves both RS485 ports to master and turns the `TCP & RTU` mode into TCP.
 - The stored Web API token is readable by Home Assistant only, and it is deleted once no entry uses its host and role.
 - The Web API login is optional: an entry can run on Modbus alone. Upstream requires it since 0.2.9.
+- The inverter is discovered over mDNS and offered under Discovered, and an entry set up by IPv4 address follows it to a new address (see [Discovery](#discovery)). Upstream has no discovery.
 
 **Battery**
 
@@ -98,7 +99,7 @@ Choose the `customer` or the `technician` local Web API role during setup and pr
 
 The role is the local `customer` or `technician` login used when you connect with a web browser directly to the inverter by its LAN IP address. Your installer should have provided it during installation. It is not the Solar Web login used for the cloud (e.g. https://www.solarweb.com/). The `technician` role covers everything the `customer` role does and additionally exposes the export limit control. An entry uses exactly one role; reconfigure it to switch.
 
-The integration stores a derived digest token in Home Assistant storage, readable by Home Assistant only, and does not keep the password in the config entry. The token is deleted when no entry uses its host and role any more: on removing the entry, or on moving it to another host or role. During setup, reconfigure, or Repairs, the password is only requested if no stored token exists for the selected host and role or the existing token must be refreshed. Configure always offers the password step, so a stored token can be replaced.
+The integration stores a derived digest token in Home Assistant storage, readable by Home Assistant only, and does not keep the password in the config entry. The token is deleted when no entry uses its host and role any more: on removing the entry, or on moving it to another host or role. When discovery follows the inverter to a new address, the token moves with it. During setup, reconfigure, or Repairs, the password is only requested if no stored token exists for the selected host and role or the existing token must be refreshed. Configure always offers the password step, so a stored token can be replaced.
 
 ### What the Web API setup does
 
@@ -333,7 +334,8 @@ Grid charging also stops at around 500 W while the inverter's own battery config
 ## Known limitations
 
 - Models other than the verified setup (see [Supported devices](#supported-devices)) are untested.
-- A power module that appears later gets its entity at the next reload of the entry.
+- A power module or a limit sensor that appears later, for example after a firmware update, gets its entity at the next reload of the entry.
+- The Web API cannot be reached through an IPv6 address; set the entry up with an IPv4 address or a host name.
 - A power module entity that stays unknown for good, because the module is gone or because a development build created it as a placeholder, can be disabled in Home Assistant. It cannot be deleted: the integration keeps every module the inverter once reported, so one incomplete answer cannot take a real module with its history.
 - When the last smart meter is removed, its entities stay unavailable; delete them in Home Assistant, where they show as no longer provided. An empty meter list from the inverter is not taken as proof that no meter exists, so one short answer cannot delete meter entities and their history.
 - While the SoC mode is `Manual`, the `Modbus storage reserve` cannot be changed while the Web API does not answer (see [Two minimum SoC values](#two-minimum-soc-values)).
@@ -345,6 +347,7 @@ Grid charging also stops at around 500 W while the inverter's own battery config
 - **Repairs:**
   - *Review Fronius web API access* appears when an entry has no valid token for its host and role, for example after the password was changed on the inverter. Follow it to enter the role's password again, or choose *Without the web API* to run the entry on Modbus alone.
   - *Disable Fronius Solar API on older firmware* appears on firmware below 1.40.7-1 with the Solar API switched on. It offers to switch the Solar API off until the inverter is updated.
+- **Discovery:** no card appears for an inverter that is already set up, one in another subnet without an mDNS repeater between them, or one announced with an IPv6 address only (see [Discovery](#discovery)).
 - **Logs:** a sub-system that stops answering (inverter, a meter, the battery, the Web API) is logged once when it fails and once when it answers again. Web API errors name the error type, not the host.
 
 ## Removal

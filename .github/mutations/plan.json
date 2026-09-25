@@ -1230,5 +1230,12 @@
     "old": "        return int(value)\n    except TypeError, ValueError, OverflowError:\n",
     "new": "        return int(value)\n    except TypeError, ValueError:\n",
     "tests": "infinite_modbus_setting_reads_as_its_fallback"
+  },
+  {
+    "label": "web control: the export limit shows only a number",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "            self.data.export_soft_limit_w = _as_int(soft.get(\"powerLimit\"))\n",
+    "new": "            self.data.export_soft_limit_w = soft.get(\"powerLimit\")\n",
+    "tests": "export_limit_that_is_no_number_shows_no_limit"
   }
 ]

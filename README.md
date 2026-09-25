@@ -103,7 +103,7 @@ With the Web API login, the integration can:
 - expose Modbus service diagnostics from `/api/config/modbus`
 - expose the export limit control, with the `technician` role
 
-A host that another entry already serves is refused before the inverter is contacted. The check runs again right before the Modbus settings are written, so an entry that takes the host while the setup runs stops it there.
+A host that another entry already serves is refused before the inverter is contacted. The check runs again right before the Modbus settings are written, so an entry that takes the host until then stops the setup there.
 
 ### Without the web API
 

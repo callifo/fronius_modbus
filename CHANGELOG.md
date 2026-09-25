@@ -10,7 +10,7 @@
 
 ### Fixed
 - The export soft limit shows only for a switch the inverter reports as on. A value like "off" read as an active limit.
-- An export limit block or a battery value of an unexpected shape, such as an infinite number, leaves that value unknown instead of failing the whole web poll.
+- An export limit block or a battery value of an unexpected shape, such as an infinite number, leaves that value unknown instead of failing the whole web poll. An export limit that is no number shows as unknown; the power sensor could not take it.
 - A repair whose entry is removed while it runs is aborted and keeps no token; it reported success and left the new token behind.
 
 ## 1.2.0b2

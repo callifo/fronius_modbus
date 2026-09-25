@@ -62,7 +62,8 @@ async def async_follow_host(hass: HomeAssistant, entry: ConfigEntry, host: str) 
     An entry set up by name keeps it: the name resolves the new address. The
     unique id is the host, so it moves too, and the stored token with it.
     """
-    old_host = str({**entry.data, **entry.options}.get(CONF_HOST, ""))
+    values = {**entry.data, **entry.options}
+    old_host = str(values.get(CONF_HOST, ""))
     moved = canonical_host(old_host) != canonical_host(host)
     if not (moved and _is_ipv4(old_host) and _is_ipv4(host)):
         return
@@ -80,10 +81,11 @@ async def async_follow_host(hass: HomeAssistant, entry: ConfigEntry, host: str) 
     options = dict(entry.options)
     if CONF_HOST in options:
         options[CONF_HOST] = host
+    # A title the owner gave is theirs; only the one made from the address moves
+    # with it (reaudit Z-02).
+    title = entry.title
+    if title == entry_title(values):
+        title = entry_title({**data, **options})
     hass.config_entries.async_update_entry(
-        entry,
-        data=data,
-        options=options,
-        unique_id=unique_id,
-        title=entry_title({**data, **options}),
+        entry, data=data, options=options, unique_id=unique_id, title=title
     )

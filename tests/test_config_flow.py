@@ -941,3 +941,28 @@ async def test_an_ipv6_only_announcement_is_not_offered(hass):
 
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "not_ipv4_address"
+
+
+@pytest.mark.parametrize(
+    ("error", "field", "message"),
+    [
+        (config_flow._CannotConnect, "base", "cannot_connect"),
+        (config_flow._CannotConnectModbus, "base", "cannot_connect_modbus"),
+        (config_flow._InvalidPort, "base", "invalid_port"),
+        (config_flow._InvalidHost, "host", "invalid_host"),
+        (config_flow._ScanIntervalTooShort, "base", "scan_interval_too_short"),
+        (config_flow._MissingApiPassword, "base", "missing_api_password"),
+        (config_flow._InvalidApiCredentials, "base", "invalid_api_credentials"),
+        (config_flow._CannotResolveLocalIp, "base", "cannot_resolve_local_ip"),
+        (config_flow._UnsupportedHardware, "base", "unsupported_hardware"),
+        (config_flow._AddressesNotUnique, "base", "modbus_address_conflict"),
+        (config_flow._AlreadyConfigured, "base", "already_configured"),
+        (RuntimeError, "base", "unknown"),
+    ],
+)
+def test_every_flow_error_shows_its_message(error, field, message):
+    errors: dict[str, str] = {}
+
+    config_flow._set_form_error(errors, error())
+
+    assert errors == {field: message}

@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
 from modbus_connection import ModbusError, ModbusTcpParams
-import voluptuous as vol
 
 from homeassistant import config_entries, data_entry_flow, exceptions
 from homeassistant.components.modbus import async_get_temporary_unit
@@ -14,14 +13,6 @@ from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTER
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
-from homeassistant.helpers.selector import (
-    SelectSelector,
-    SelectSelectorConfig,
-    SelectSelectorMode,
-    TextSelector,
-    TextSelectorConfig,
-    TextSelectorType,
-)
 
 from .const import (
     CONF_API_PASSWORD,
@@ -55,6 +46,7 @@ from .discovery import (
     discovered_serial,
     entry_for_serial,
 )
+from .flow_forms import password_schema, settings_schema
 from .fronius_modbus_api.device import FroniusInverter
 from .froniuswebclient import (
     ClientIpResolutionError,
@@ -196,60 +188,6 @@ def entry_defaults(entry: config_entries.ConfigEntry) -> dict[str, Any]:
     except TypeError, ValueError:
         defaults[CONF_SCAN_INTERVAL] = DEFAULT_SCAN_INTERVAL
     return _expand_settings_input({}, defaults)
-
-
-def _build_settings_schema(defaults: dict[str, Any]) -> vol.Schema:
-    return vol.Schema(
-        {
-            vol.Required(CONF_HOST, default=defaults.get(CONF_HOST, "")): str,
-            vol.Required(
-                CONF_SCAN_INTERVAL,
-                default=defaults.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
-            ): vol.Coerce(int),
-            vol.Required(
-                CONF_WEB_SCAN_INTERVAL,
-                default=defaults.get(CONF_WEB_SCAN_INTERVAL, DEFAULT_WEB_SCAN_INTERVAL),
-            ): vol.All(vol.Coerce(int), vol.Range(min=MINIMUM_SCAN_INTERVAL, max=3600)),
-            vol.Required(
-                CONF_API_USERNAME,
-                default=defaults.get(CONF_API_USERNAME, API_USERNAME),
-            ): SelectSelector(
-                SelectSelectorConfig(
-                    options=[*API_USERNAMES, WEB_API_DISABLED],
-                    mode=SelectSelectorMode.LIST,
-                    translation_key="api_username",
-                )
-            ),
-            vol.Required(
-                CONF_MODBUS_RESTRICTION,
-                default=defaults.get(CONF_MODBUS_RESTRICTION, ModbusRestriction.KEEP),
-            ): SelectSelector(
-                SelectSelectorConfig(
-                    options=list(ModbusRestriction),
-                    mode=SelectSelectorMode.LIST,
-                    translation_key=CONF_MODBUS_RESTRICTION,
-                )
-            ),
-        }
-    )
-
-
-def _build_password_schema(*, keep_stored: bool = False) -> vol.Schema:
-    password_field = (
-        vol.Optional(CONF_API_PASSWORD, default="")
-        if keep_stored
-        else vol.Required(CONF_API_PASSWORD)
-    )
-    return vol.Schema(
-        {
-            password_field: TextSelector(
-                TextSelectorConfig(
-                    type=TextSelectorType.PASSWORD,
-                    autocomplete="current-password",
-                )
-            ),
-        }
-    )
 
 
 _FORM_ERRORS: dict[type[Exception], tuple[str, str]] = {
@@ -521,7 +459,7 @@ class TokenFlowMixin:
             }
         return self.async_show_form(
             step_id=step_id,
-            data_schema=_build_password_schema(
+            data_schema=password_schema(
                 keep_stored=state is not None and state.existing_token is not None
             ),
             errors=errors or {},
@@ -599,7 +537,7 @@ class TokenFlowMixin:
 
         return self.async_show_form(
             step_id=step_id,
-            data_schema=_build_settings_schema(defaults),
+            data_schema=settings_schema(defaults),
             errors=errors,
         )
 

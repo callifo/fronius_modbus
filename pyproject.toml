@@ -299,6 +299,7 @@ files = [
   "custom_components/fronius_modbus/derived.py",
   "custom_components/fronius_modbus/discovery.py",
   "custom_components/fronius_modbus/entities.py",
+  "custom_components/fronius_modbus/flow_forms.py",
 ]
 
 # Path tracking rules

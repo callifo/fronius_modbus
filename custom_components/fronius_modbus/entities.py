@@ -96,7 +96,7 @@ from .web_control import WebData
 _LOGGER = logging.getLogger(__name__)
 
 type Source = Literal["modbus", "web"]
-type WebClientKind = Literal["customer", "technician"]
+type WebClientKind = Literal["public", "customer", "technician"]
 type DeviceKind = Literal["inverter", "storage", "meter"]
 
 # A new poll below the last value, or a jump above it, is a bad reading, not a reset.
@@ -115,7 +115,7 @@ class FroniusDescriptionMixin:
     key: str
     device: DeviceKind
     source: Source = "modbus"
-    # Which web login a web-sourced entity needs; it goes unavailable without it.
+    # The web login a web-sourced entity needs ("public": none); unavailable without it.
     web_client: WebClientKind = "customer"
     report_name: str | None = None
     meter_unit_id: int | None = None
@@ -176,10 +176,6 @@ type FroniusDescription = (
 # -- value helpers -----------------------------------------------------------------
 
 
-def _enum_sensor_options(translation_key: str) -> list[str] | None:
-    return SENSOR_STATE_OPTIONS.get(translation_key)
-
-
 def _control_status(value: bool | None) -> str | None:
     """CONTROL_STATUS as the inverter-controls booleans report it: None stays None."""
     if value is None:
@@ -212,8 +208,8 @@ def _web_field(runtime: FroniusRuntimeData, field_name: str) -> Any:
 
 def _web_client_present(runtime: FroniusRuntimeData, kind: WebClientKind) -> bool:
     control = runtime.web_control
-    if control is None:
-        return False
+    if control is None or kind == "public":
+        return control is not None
     return control.technician_configured if kind == "technician" else control.configured
 
 
@@ -258,7 +254,7 @@ def _sensor(
     unit: str | None = None,
     entity_category: EntityCategory | None = None,
 ) -> FroniusSensorDescription:
-    options = _enum_sensor_options(translation_key)
+    options = SENSOR_STATE_OPTIONS.get(translation_key)
     return FroniusSensorDescription(
         key=key,
         translation_key=translation_key,
@@ -1162,7 +1158,7 @@ def sensor_descriptions(runtime: FroniusRuntimeData) -> list[FroniusSensorDescri
         descriptions += _meter_sensor_descriptions(unit_id, info.phases)
     for index in runtime.device.mppt_channels.pv:
         descriptions += _mppt_sensor_descriptions(index, runtime)
-    if _web_configured(runtime):
+    if runtime.web is not None:
         descriptions += [
             _component_sensor(reading)
             for reading in COMPONENT_READINGS
@@ -1211,6 +1207,7 @@ def _component_sensor(reading: ComponentReading) -> FroniusSensorDescription:
         translation_key=reading.key,
         device=reading.component,
         source="web",
+        web_client="public",
         value_fn=lambda runtime: component_value(
             reading, _component_readings(runtime, reading)
         ),

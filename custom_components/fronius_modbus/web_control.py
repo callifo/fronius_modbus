@@ -270,12 +270,16 @@ class FroniusWebControl:
         storage_present: bool,
         inverter_firmware: Callable[[], str | None],
         on_battery_write: Callable[[], None],
+        public_client: FroniusWebClient | None = None,
     ) -> None:
         """Bind to the web clients; on_battery_write opens the Modbus recovery window."""
         self._hass = hass
         self._entry = entry
         self._host = host
         self._client = client
+        # The component and meter endpoints answer without a login: they stay
+        # readable when there is none, or once it is lost.
+        self._public_client = public_client or client
         self._api_username = api_username
         self._storage_present = storage_present
         self._inverter_firmware = inverter_firmware
@@ -295,7 +299,9 @@ class FroniusWebControl:
     async def async_meter_topology(self) -> MeterTopology:
         """Ask the web API which meters exist; unconfirmed when it could not be read."""
         return parse_meter_topology(
-            await self._async_client_job("get_power_meter_info", DEFAULT_METER_UNIT_ID)
+            await self._async_client_job(
+                "get_power_meter_info", DEFAULT_METER_UNIT_ID, public=True
+            )
         )
 
     @property
@@ -402,12 +408,18 @@ class FroniusWebControl:
                 ) from err
             return None
 
-    async def _async_client_job(self, method_name: str, *args):
+    async def _async_client_job(self, method_name: str, *args, public: bool = False):
         """Run one refresh step, re-reading the client: an auth failure clears it mid-refresh."""
-        client = self._client
+        client = self._public_client if public else self._client
         if client is None:
             return None
-        return await self._async_web_job(getattr(client, method_name), *args)
+        try:
+            return await self._hass.async_add_executor_job(
+                getattr(client, method_name), *args
+            )
+        except FroniusWebAuthError as err:
+            await self._async_handle_web_api_auth_failure(err)
+            return None
 
     async def _async_handle_web_api_auth_failure(self, err: Exception) -> None:
         if not self._client:
@@ -506,10 +518,10 @@ class FroniusWebControl:
             return await self._async_refresh_locked()
 
     async def _async_refresh_locked(self) -> WebData:
-        if not self._client:
+        if not self._public_client:
             return replace(self.data)
 
-        inverter_info = await self._async_client_job("get_inverter_info")
+        inverter_info = await self._async_client_job("get_inverter_info", public=True)
         inverter = inverter_info if isinstance(inverter_info, dict) else {}
         self.data.inverter_readings = inverter.get("readings")
         self.data.inverter_endpoint_missing = bool(inverter.get("missing"))
@@ -526,7 +538,9 @@ class FroniusWebControl:
             self.data.solar_api_enabled = None
 
         if self._storage_present:
-            self._apply_storage_info(await self._async_client_job("get_storage_info"))
+            self._apply_storage_info(
+                await self._async_client_job("get_storage_info", public=True)
+            )
 
             battery_config = await self._async_client_job("get_battery_config")
             if isinstance(battery_config, dict):

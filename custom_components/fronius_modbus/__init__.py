@@ -71,21 +71,22 @@ async def _async_meter_topology(
     hass: HomeAssistant,
     entry: FroniusConfigEntry,
     client: FroniusWebClient | None,
+    public_client: FroniusWebClient | None,
 ) -> tuple[FroniusWebClient | None, MeterTopology]:
     """Ask the web API which meters exist; fall back to the single default meter.
 
     An authentication failure drops the client for good: the stored token is
-    deleted, so the entry runs Modbus-only until the user reconfigures it.
+    deleted, so the entry runs without its login until the user reconfigures it.
     """
     unconfirmed = parse_meter_topology(None)
-    if client is None:
-        # Without the web API the entry only ever serves the default meter, so
+    if public_client is None:
+        # Without a web client the entry only ever serves the default meter, so
         # that is the configuration, not an unread answer.
         return None, replace(unconfirmed, confirmed=True)
 
     try:
         info = await hass.async_add_executor_job(
-            client.get_power_meter_info, DEFAULT_METER_UNIT_ID
+            public_client.get_power_meter_info, DEFAULT_METER_UNIT_ID
         )
     except FroniusWebAuthError as err:
         _LOGGER.warning(
@@ -130,8 +131,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
         if api_token
         else None
     )
+    public_client = client
+    if migrations.web_api_disabled(entry):
+        public_client = FroniusWebClient(host=host, username=API_USERNAME, password="")
 
-    client, topology = await _async_meter_topology(hass, entry, client)
+    client, topology = await _async_meter_topology(hass, entry, client, public_client)
     meter_unit_ids, primary = topology.unit_ids, topology.primary_unit_id
     locations = topology.locations
 
@@ -154,12 +158,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
 
     web_control = None
     web = None
-    if client is not None:
+    if public_client is not None:
         web_control = FroniusWebControl(
             hass,
             entry,
             host=host,
             client=client,
+            public_client=public_client,
             api_username=api_username,
             storage_present=device.storage is not None,
             inverter_firmware=lambda: (

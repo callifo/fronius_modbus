@@ -22,6 +22,9 @@ CONNECTION = "connection"
 # The battery's own firmware and hardware go to its device entry, not to a sensor.
 STORAGE_DEVICE_FIELDS = ("sw_version", "hw_version")
 YES, NO = "yes", "no"
+# The endpoints send raw float32 values (a fan at 37.254902 %); what a unit is
+# worth showing. Durations are left to the unit they are shown in.
+DISPLAY_PRECISION = {"%": 0, "W": 0, "°C": 1, "V": 1, "Hz": 2}
 # How the inverter spells a flag, in its configs and its component attributes.
 FLAG_WORDS = {
     **dict.fromkeys(("1", "true", "on", "yes", "enabled"), True),

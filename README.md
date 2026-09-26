@@ -91,7 +91,7 @@ The inverter announces itself over mDNS (`_Fronius-SE-Inverter._tcp.local.`), an
 - mDNS stays within one network segment. An inverter in another subnet is found only if the router repeats mDNS between them (an mDNS repeater or reflector); otherwise add it by hand.
 - An inverter announced with an IPv6 address only is not offered; add it by hand with its IPv4 address.
 - An inverter already set up is not offered again, also when its entry uses a host name: the serial number it announces is matched against the one it reports over Modbus.
-- An entry set up with an IPv4 address follows the inverter to a new address it announces: the host, the entry's title and the stored Web API token move with it. An entry set up with a host name is left as it is, since the name finds the new address itself. Anyone able to send mDNS in your network could announce another address for the same serial number; if that is a concern, set the entry up with a host name.
+- An entry set up with an IPv4 address follows the inverter to a new address it announces: the host, the entry's title and the stored Web API token move with it. The serial number in an announcement is no secret, so the integration first reads the serial number over Modbus at both addresses: it moves the entry only when the old address no longer reports the inverter's serial number and the announced one does. An announced address that does not answer yet is read again for a few minutes. An entry set up with a host name is left as it is, since the name finds the new address itself. Whenever the serial number cannot be read at the entry's address, even for a single failed read, a device in your network that sends mDNS and answers Modbus with the inverter's serial number could take the entry; if that is a concern, set the entry up with a host name.
 
 ### Web API role
 
@@ -416,9 +416,20 @@ automation:
           value: 0
   - alias: "Inverter: on again"
     triggers:
-      - trigger: numeric_state
-        entity_id: sensor.electricity_price
-        above: 0
+      # numeric_state's "above" is strict and would miss a price that stops at 0;
+      # an unavailable price counts as 0 here. A template trigger fires only when
+      # the price turns non-negative, so the price is checked again at a restart
+      # and once the inverter's entities are back after a reload.
+      - trigger: template
+        value_template: "{{ states('sensor.electricity_price') | float(0) >= 0 }}"
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id: select.fronius_ac_limit_enable
+        from: unavailable
+    conditions:
+      - condition: template
+        value_template: "{{ states('sensor.electricity_price') | float(0) >= 0 }}"
     actions:
       - action: select.select_option
         target:

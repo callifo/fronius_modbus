@@ -702,11 +702,10 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_zeroconf(self, discovery_info: ZeroconfServiceInfo):
         host = str(discovery_info.ip_address)
-        entry = entry_for_serial(
-            self.hass, discovered_serial(discovery_info.properties)
-        )
-        if entry is not None:
-            await async_follow_host(self.hass, entry, host)
+        serial = discovered_serial(discovery_info.properties)
+        entry = entry_for_serial(self.hass, serial)
+        if entry is not None and serial is not None:
+            await async_follow_host(self.hass, entry, host, serial)
             return self.async_abort(reason="already_configured")
         # The web client builds its URLs from the bare host, which an IPv6
         # address cannot be (audit R3B-03).

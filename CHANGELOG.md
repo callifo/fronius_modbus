@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Security
+- Discovery follows an announced new address only while the inverter no longer answers at the address the entry has. The serial number an announcement carries is no secret, so anyone able to send mDNS could turn an entry, and its Web API login, to another host; a working entry now keeps its address, and two announcers can no longer move it back and forth.
+
 ## 1.2.0b4
 
 A small update on 1.2.0b3: it removes a deprecation warning Home Assistant logged for the discovery, adds the smart meter's per-phase energy for meters that count it, and counts the Tauro among the known models. No migration; existing entities, unique ids and entity ids do not change.

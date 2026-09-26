@@ -1349,5 +1349,40 @@
     "old": "        inverter = devices.async_get_device_by_identifier(\n            (DOMAIN, f\"{instance_key(entry.entry_id)}_inverter\"), entry.entry_id\n        )\n",
     "new": "        inverter = devices.async_get_device(\n            identifiers={(DOMAIN, f\"{instance_key(entry.entry_id)}_inverter\")}\n        )\n",
     "tests": "second_inverter_is_offered"
+  },
+  {
+    "label": "meter: the per-phase energy sensors come disabled",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "                enabled=False,\n",
+    "new": "",
+    "tests": "meter_counting_per_phase_gets_disabled_phase_energy_sensors"
+  },
+  {
+    "label": "meter: a counted phase energy creates its sensor",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "        counted = bool(getter(info.meter)) or key in runtime.registered_keys\n",
+    "new": "        counted = key in runtime.registered_keys\n",
+    "tests": "meter_counting_per_phase_gets_disabled_phase_energy_sensors"
+  },
+  {
+    "label": "meter: a registered phase energy sensor stays",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "        counted = bool(getter(info.meter)) or key in runtime.registered_keys\n",
+    "new": "        counted = bool(getter(info.meter))\n",
+    "tests": "phase_energy_sensor_already_registered_stays_on_a_zero"
+  },
+  {
+    "label": "meter: a single-phase meter gets L1 only",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "        if suffix[-1] not in phases or not counted:\n",
+    "new": "        if not counted:\n",
+    "tests": "single_phase_meter_gets_phase_energy_for_l1_only"
+  },
+  {
+    "label": "meter: the per-phase export counter sits at offset 40",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/sunspec_models.py",
+    "old": "    tot_wh_exp_ph_a = acc32(40, scale_register=54, unit=\"Wh\")\n",
+    "new": "    tot_wh_exp_ph_a = acc32(42, scale_register=54, unit=\"Wh\")\n",
+    "tests": "meter_counting_per_phase_gets_disabled_phase_energy_sensors"
   }
 ]

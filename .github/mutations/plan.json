@@ -1384,5 +1384,12 @@
     "old": "    tot_wh_exp_ph_a = acc32(40, scale_register=54, unit=\"Wh\")\n",
     "new": "    tot_wh_exp_ph_a = acc32(42, scale_register=54, unit=\"Wh\")\n",
     "tests": "meter_counting_per_phase_gets_disabled_phase_energy_sensors"
+  },
+  {
+    "label": "const: the Tauro counts as a known model",
+    "path": "custom_components/fronius_modbus/const.py",
+    "old": "SUPPORTED_MODELS = [\"Primo GEN24\", \"Symo GEN24\", \"Verto\", \"Tauro\"]\n",
+    "new": "SUPPORTED_MODELS = [\"Primo GEN24\", \"Symo GEN24\", \"Verto\"]\n",
+    "tests": "tauro_is_no_untested_model"
   }
 ]

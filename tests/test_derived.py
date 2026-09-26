@@ -217,12 +217,24 @@ def test_the_limit_reason_is_named_after_the_ac_limit_it_reads():
         assert reason == texts["number"]["ac_limit_rate"]["name"].removesuffix(" rate")
 
 
-def test_the_production_limit_pair_speaks_of_one_limit_in_german():
-    """ "Aktuelle Produktionsgrenze" and "Leistungsgrenze erreicht" read as two limits."""
+def test_the_production_limit_pair_is_a_power_limit_apart_from_the_battery_s():
+    """ "Aktuelle Produktionsgrenze" and "Leistungsgrenze erreicht" read as two
+    limits; "Aktuelle Leistungsgrenze" is the battery's own sensor."""
     root = pathlib.Path(__file__).parent.parent / "custom_components/fronius_modbus"
-    sensors = json.loads(
-        (root / "translations" / "de.json").read_text(encoding="utf-8")
-    )["entity"]["sensor"]
-
-    assert sensors["production_limit"]["name"] == "Aktuelle Leistungsgrenze"
-    assert sensors["production_limit_reached"]["name"] == "Leistungsgrenze erreicht"
+    expected = {
+        "en": ("Production power limit", "Production power limit reached"),
+        "de": (
+            "Aktuelle Erzeugungs-Leistungsgrenze",
+            "Erzeugungs-Leistungsgrenze erreicht",
+        ),
+    }
+    for language, names in expected.items():
+        sensors = json.loads(
+            (root / "translations" / f"{language}.json").read_text(encoding="utf-8")
+        )["entity"]["sensor"]
+        pair = (
+            sensors["production_limit"]["name"],
+            sensors["production_limit_reached"]["name"],
+        )
+        assert pair == names
+        assert sensors["storage_power_limit"]["name"] not in pair

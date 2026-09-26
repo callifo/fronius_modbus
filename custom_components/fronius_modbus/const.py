@@ -137,6 +137,8 @@ THROTTLE_REASONS = (
     "none",
     "inverter_state",
     "active_power_control",
+    # The AC limit (model 123 WMaxLim); the key keeps its first name for the
+    # automations built on it. A grid export limit sets none of these signals.
     "export_limit",
     "several",
 )

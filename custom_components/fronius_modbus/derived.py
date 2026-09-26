@@ -40,7 +40,7 @@ def throttle_reason(
     Three independent signals say it, and a device rarely sets all of them: the
     operating state, an active power setpoint, and a limit that is switched on
     *and* below full power. The last condition is the one that matters in
-    practice - an installation may leave the export limit switched on at 100
+    practice - an installation may leave the AC limit switched on at 100
     percent for years, and that is not a throttled inverter.
     """
     limited = _limited(limit_enabled, limit_percent)

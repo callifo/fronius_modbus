@@ -499,7 +499,7 @@
           "none": "Not throttled",
           "inverter_state": "Inverter reports throttling",
           "active_power_control": "Active power control",
-          "export_limit": "Export limit",
+          "export_limit": "AC limit",
           "several": "Several reasons",
           "unknown": "Unknown"
         }

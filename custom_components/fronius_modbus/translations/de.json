@@ -499,7 +499,7 @@
           "none": "Keine Drosselung",
           "inverter_state": "Wechselrichter meldet Drosselung",
           "active_power_control": "Wirkleistungsvorgabe",
-          "export_limit": "Einspeisebegrenzung",
+          "export_limit": "AC-Leistungsbegrenzung",
           "several": "Mehrere Gründe",
           "unknown": "Unbekannt"
         }

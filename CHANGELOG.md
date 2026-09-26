@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- The sensors from the inverter's component endpoints show as many digits as their unit is worth (fans and power without decimals, temperatures and voltages with one, frequency with two) instead of the raw float32 value. Only the display changes: the stored state keeps its value, and the precision can be changed per entity.
+
 ## 1.2.0b4
 
 A small update on 1.2.0b3: it removes a deprecation warning Home Assistant logged for the discovery, adds the smart meter's per-phase energy for meters that count it, and counts the Tauro among the known models. No migration; existing entities, unique ids and entity ids do not change.

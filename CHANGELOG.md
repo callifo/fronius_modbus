@@ -3,7 +3,7 @@
 ## Unreleased
 
 ### Security
-- Discovery follows an announced new address only while the inverter no longer answers at the address the entry has. The serial number an announcement carries is no secret, so anyone able to send mDNS could turn an entry, and its Web API login, to another host; a working entry now keeps its address, and two announcers can no longer move it back and forth.
+- Discovery follows an announced new address only when a Modbus read finds the inverter's serial number there and no longer at the entry's address. The serial number an announcement carries is no secret, so anyone able to send mDNS could turn an entry, and its Web API login, to another host.
 
 ## 1.2.0b4
 

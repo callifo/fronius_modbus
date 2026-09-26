@@ -5,6 +5,9 @@
 ### Changed
 - The `Throttle reason` state `export_limit` reads "AC limit" ("AC-Leistungsbegrenzung"): it is the inverter's AC limit (`AC limit enable`, `AC limit rate`), not the export limit set in the web interface, which the inverter does not report in these signals. The state key stays, so automations keep working.
 - `Production limit` and `Production limit reached` are now `Production power limit` and `Production power limit reached`, in German "Aktuelle Erzeugungs-Leistungsgrenze" and "Erzeugungs-Leistungsgrenze erreicht": the two name one limit, and it no longer shares its German name with the battery's "Aktuelle Leistungsgrenze". Entity ids do not change.
+- `Max charging power` reads `Charge/discharge reference power` ("Lade-/Entlade-Referenzleistung"): model 124 `WChaMax` is the reference the charge and discharge rates scale, not a power the inverter delivers.
+- German names use one term per thing: "Wirkleistung" for active power next to "Blindleistung", "Eingespeist"/"Bezogen" for the meter's energy, "Speicher" for the battery, "Gesundheitszustand (SoH)", and the measured value before "Einspeisepunkt". Entity ids do not change.
+- `Throttle control` is disabled by default for new entries: it reads the same flag as `AC limit enabled`. Entries that have it keep it.
 
 ## 1.2.0b4
 

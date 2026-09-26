@@ -82,6 +82,7 @@ from .fronius_modbus_api.device import (
     REPORT_SETTINGS,
     REPORT_STATUS,
     REPORT_STORAGE,
+    MeterInfo,
     meter_report_name,
 )
 from .fronius_modbus_api.exceptions import ControlRefused, ControlUnavailable
@@ -977,7 +978,7 @@ def _mppt_module_value(
 
 
 def _meter_phase_energy_descriptions(
-    runtime: FroniusRuntimeData, unit_id: int, info: Any
+    runtime: FroniusRuntimeData, unit_id: int, info: MeterInfo
 ) -> list[FroniusSensorDescription]:
     """A meter's per-phase counters it counts, or that an entity already shows."""
     phases = "ABC"[: info.phases]

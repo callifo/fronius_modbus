@@ -41,8 +41,8 @@ def entry_for_serial(hass: HomeAssistant, serial: str | None) -> ConfigEntry | N
         return None
     devices = dr.async_get(hass)
     for entry in hass.config_entries.async_entries(DOMAIN):
-        inverter = devices.async_get_device(
-            identifiers={(DOMAIN, f"{instance_key(entry.entry_id)}_inverter")}
+        inverter = devices.async_get_device_by_identifier(
+            (DOMAIN, f"{instance_key(entry.entry_id)}_inverter"), entry.entry_id
         )
         if inverter is not None and inverter.serial_number == serial:
             return entry

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- Discovery no longer uses `device_registry.async_get_device`, which Home Assistant 2026.9 deprecated and logged a warning for; it would stop working in 2027.8. A test now fails on any deprecated call Home Assistant reports for the integration.
+
 ## 1.2.0b3
 
 Three additions on 1.2.0b2: the web API becomes optional, the inverter is discovered over

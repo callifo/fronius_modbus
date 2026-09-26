@@ -1262,6 +1262,25 @@ async def test_a_new_address_answering_late_is_followed(hass, monkeypatch):
     assert config_flow.entry_defaults(entry)["host"] == MOVED_HOST
 
 
+async def test_an_inverter_back_at_its_address_while_waiting_is_not_moved(
+    hass, monkeypatch
+):
+    """Every attempt reads the old address again: the inverter may have come back."""
+    entry = make_entry(hass)
+    with_inverter_device(hass, entry)
+    old_answers = iter([None, SERIAL])
+    new_answers = iter([None, SERIAL])
+
+    async def serial_at(_hass, host, _port, _unit_id):
+        return next(old_answers) if host == HOST else next(new_answers)
+
+    monkeypatch.setattr(discovery, "async_serial_at", serial_at)
+
+    await discover(hass, discovered(host=MOVED_HOST))
+
+    assert config_flow.entry_defaults(entry)["host"] == HOST
+
+
 async def test_a_new_address_that_never_answers_is_not_followed(hass, inverters):
     entry = make_entry(hass)
     with_inverter_device(hass, entry)

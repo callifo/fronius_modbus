@@ -1440,5 +1440,12 @@
     "old": "            return announced == serial\n    return False\n",
     "new": "            return announced == serial\n    return True\n",
     "tests": "new_address_that_never_answers_is_not_followed"
+  },
+  {
+    "label": "discovery: every attempt reads the old address again",
+    "path": "custom_components/fronius_modbus/discovery.py",
+    "old": "        if await async_serial_at(hass, old_host, port, unit_id) == serial:\n",
+    "new": "        if not attempt and await async_serial_at(hass, old_host, port, unit_id) == serial:\n",
+    "tests": "back_at_its_address_while_waiting_is_not_moved"
   }
 ]

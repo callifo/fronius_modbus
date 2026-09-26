@@ -1342,5 +1342,12 @@
     "old": "        current = entry_defaults(entry)\n",
     "new": "        current = dict(settings)\n",
     "tests": "reauth_keeps_settings_changed_while_it_ran"
+  },
+  {
+    "label": "discovery: the device lookup uses no deprecated call",
+    "path": "custom_components/fronius_modbus/discovery.py",
+    "old": "        inverter = devices.async_get_device_by_identifier(\n            (DOMAIN, f\"{instance_key(entry.entry_id)}_inverter\"), entry.entry_id\n        )\n",
+    "new": "        inverter = devices.async_get_device(\n            identifiers={(DOMAIN, f\"{instance_key(entry.entry_id)}_inverter\")}\n        )\n",
+    "tests": "second_inverter_is_offered"
   }
 ]

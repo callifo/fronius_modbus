@@ -27,6 +27,8 @@ Verified against a Symo GEN24 10.0 with a BYD Battery-Box Premium HV and a Froni
 - battery storage entities appear if and only if model 124 is present
 - a smart meter's phase count is derived from its model id
 
+Older Fronius inverters with a Datamanager (the SnapINverter family: Symo, Primo, Eco, Galvo without GEN24) are untested. Their Web API has other logins and paths, so they can only be set up *Without the web API*, and only with the Datamanager's Modbus set to the `int+SF` SunSpec model type; with `float` the inverter model is not found and the setup stops, reporting that Modbus did not answer.
+
 ## Coming from upstream
 
 What changes for users of [callifo/fronius_modbus](https://github.com/callifo/fronius_modbus) (checked against its 0.3.3). Breaking changes are listed in the CHANGELOG.

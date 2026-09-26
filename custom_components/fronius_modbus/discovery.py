@@ -8,7 +8,7 @@ import json
 import logging
 from typing import Any
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
@@ -49,6 +49,17 @@ def entry_for_serial(hass: HomeAssistant, serial: str | None) -> ConfigEntry | N
     return None
 
 
+def _answers_at_its_address(entry: ConfigEntry) -> bool:
+    """Whether the entry's inverter answered its last poll at the address it has.
+
+    That answer proves the address; an announcement, whose serial anyone can
+    copy, must not move such an entry. It moves an entry whose inverter is gone.
+    """
+    if entry.state is not ConfigEntryState.LOADED:
+        return False
+    return bool(entry.runtime_data.modbus.last_update_success)
+
+
 def _is_ipv4(host: str) -> bool:
     try:
         return isinstance(ipaddress.ip_address(host), ipaddress.IPv4Address)
@@ -67,6 +78,8 @@ async def async_follow_host(hass: HomeAssistant, entry: ConfigEntry, host: str) 
     # flow took the address in between (audit R3B-01, R3B-02).
     await token_store.async_ready()
     if hass.config_entries.async_get_entry(entry.entry_id) is None:
+        return
+    if _answers_at_its_address(entry):
         return
     values = {**entry.data, **entry.options}
     old_host = str(values.get(CONF_HOST, ""))

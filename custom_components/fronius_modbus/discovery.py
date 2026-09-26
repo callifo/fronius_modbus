@@ -32,9 +32,9 @@ from .token_store import async_get_token_store, canonical_host
 
 _LOGGER = logging.getLogger(__name__)
 
-# The announcement comes once: a new address that does not answer yet, or
-# answers a read with a timeout, is read again for a few minutes before the
-# move is given up (reaudit 1cd9c57 P2-01).
+# An announcement comes once: a new address whose read fails, because its
+# Modbus server is not up yet or the read timed out, is read again for a few
+# minutes before the move is given up (reaudit 1cd9c57 P2-01).
 MOVE_READ_ATTEMPTS = 6
 MOVE_READ_RETRY_SECONDS = 30
 

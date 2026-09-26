@@ -4,6 +4,7 @@
 
 ### Changed
 - The `Throttle reason` state `export_limit` reads "AC limit" ("AC-Leistungsbegrenzung"): it is the inverter's AC limit (`AC limit enable`, `AC limit rate`), not the export limit set in the web interface, which the inverter does not report in these signals. The state key stays, so automations keep working.
+- In German, `Production limit` reads "Aktuelle Leistungsgrenze", so it and "Leistungsgrenze erreicht" name the same limit. Entity ids do not change.
 
 ## 1.2.0b4
 

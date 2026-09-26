@@ -532,7 +532,7 @@
         "name": "AC-Wirkleistung L3"
       },
       "production_limit": {
-        "name": "Aktuelle Produktionsgrenze"
+        "name": "Aktuelle Leistungsgrenze"
       },
       "production_limit_reached": {
         "name": "Leistungsgrenze erreicht",

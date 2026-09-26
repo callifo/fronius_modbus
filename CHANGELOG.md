@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- The `Throttle reason` state `export_limit` reads "AC limit" ("AC-Leistungsbegrenzung"): it is the inverter's AC limit (`AC limit enable`, `AC limit rate`), not the export limit set in the web interface, which the inverter does not report in these signals. The state key stays, so automations keep working.
+
 ## 1.2.0b4
 
 A small update on 1.2.0b3: it removes a deprecation warning Home Assistant logged for the discovery, adds the smart meter's per-phase energy for meters that count it, and counts the Tauro among the known models. No migration; existing entities, unique ids and entity ids do not change.

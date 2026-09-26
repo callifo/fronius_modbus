@@ -751,6 +751,18 @@ async def discover(hass, info) -> dict:
     )
 
 
+@pytest.fixture(autouse=True)
+def inverters(monkeypatch) -> dict[str, str]:
+    """The serial each address answers with over Modbus; the moved inverter's by default."""
+    serials = {MOVED_HOST: SERIAL, "192.0.2.30": SERIAL}
+
+    async def serial_at(_hass, host, _port, _unit_id):
+        return serials.get(host)
+
+    monkeypatch.setattr(discovery, "async_serial_at", serial_at)
+    return serials
+
+
 async def test_a_discovered_inverter_opens_the_setup_with_its_host(hass):
     result = await discover(hass, discovered())
 
@@ -1145,15 +1157,7 @@ async def test_a_tauro_is_no_untested_model(
     assert "Untested model" not in caplog.text
 
 
-def answering(hass, entry, answers: bool) -> None:
-    """A loaded entry whose last Modbus poll did or did not reach the inverter."""
-    entry.mock_state(hass, ConfigEntryState.LOADED)
-    entry.runtime_data = SimpleNamespace(
-        modbus=SimpleNamespace(last_update_success=answers)
-    )
-
-
-async def test_an_inverter_answering_at_its_address_is_not_moved(hass):
+async def test_an_inverter_answering_at_its_address_is_not_moved(hass, inverters):
     """An announcement for its serial cannot move an entry that the inverter answers.
 
     The serial number goes out in every announcement: anyone in the network could
@@ -1161,17 +1165,49 @@ async def test_an_inverter_answering_at_its_address_is_not_moved(hass):
     """
     entry = make_entry(hass)
     with_inverter_device(hass, entry)
-    answering(hass, entry, answers=True)
+    inverters[HOST] = SERIAL
 
     await discover(hass, discovered(host=MOVED_HOST))
 
     assert config_flow.entry_defaults(entry)["host"] == HOST
 
 
-async def test_an_inverter_gone_from_its_address_is_followed(hass):
+async def test_an_announced_address_without_the_inverter_is_not_followed(
+    hass, inverters
+):
+    """An announcement alone proves nothing: the new address has to answer as the inverter."""
     entry = make_entry(hass)
     with_inverter_device(hass, entry)
-    answering(hass, entry, answers=False)
+    inverters[MOVED_HOST] = "87654321"
+
+    await discover(hass, discovered(host=MOVED_HOST))
+
+    assert config_flow.entry_defaults(entry)["host"] == HOST
+
+
+async def test_an_inverter_whose_address_another_took_is_followed(hass, inverters):
+    """Reaudit P2-01: another inverter answering at the old address blocked the move."""
+    entry = make_entry(hass)
+    with_inverter_device(hass, entry)
+    entry.mock_state(hass, ConfigEntryState.LOADED)
+    entry.runtime_data = SimpleNamespace(
+        modbus=SimpleNamespace(last_update_success=True)
+    )
+    inverters[HOST] = "87654321"
+
+    await discover(hass, discovered(host=MOVED_HOST))
+
+    assert config_flow.entry_defaults(entry)["host"] == MOVED_HOST
+
+
+async def test_an_announcement_before_the_failed_poll_is_followed(hass):
+    """Reaudit P2-02: the last poll still succeeded, so the only announcement was lost."""
+    entry = make_entry(hass)
+    with_inverter_device(hass, entry)
+    entry.mock_state(hass, ConfigEntryState.LOADED)
+    entry.runtime_data = SimpleNamespace(
+        modbus=SimpleNamespace(last_update_success=True)
+    )
 
     await discover(hass, discovered(host=MOVED_HOST))
 

@@ -119,7 +119,7 @@ A host that another entry already serves is refused before the inverter is conta
 
 ### Without the web API
 
-Choose *Without the web API* as the access role to run the entry on Modbus alone. No password is asked for and no token is stored. Switch Modbus TCP on in the inverter's web UI first: without a login the setup cannot do it, and it reports *Modbus did not answer* until Modbus TCP is on.
+Choose *Without the web API* as the access role to run the entry on Modbus alone. No password is asked for and no token is stored. Switch Modbus TCP on in the inverter's web UI first, with the SunSpec model type set to `int + SF`: without a login the setup cannot do either, and it reports *Modbus did not answer* until both are set.
 
 Stays:
 

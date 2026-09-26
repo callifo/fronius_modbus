@@ -1391,5 +1391,12 @@
     "old": "SUPPORTED_MODELS = [\"Primo GEN24\", \"Symo GEN24\", \"Verto\", \"Tauro\"]\n",
     "new": "SUPPORTED_MODELS = [\"Primo GEN24\", \"Symo GEN24\", \"Verto\"]\n",
     "tests": "tauro_is_no_untested_model"
+  },
+  {
+    "label": "discovery: an answering inverter is not moved",
+    "path": "custom_components/fronius_modbus/discovery.py",
+    "old": "    if _answers_at_its_address(entry):\n        return\n",
+    "new": "",
+    "tests": "inverter_answering_at_its_address_is_not_moved"
   }
 ]

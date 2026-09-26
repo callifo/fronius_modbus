@@ -215,3 +215,14 @@ def test_the_limit_reason_is_named_after_the_ac_limit_it_reads():
         )["entity"]
         reason = texts["sensor"]["throttle_reason"]["state"]["export_limit"]
         assert reason == texts["number"]["ac_limit_rate"]["name"].removesuffix(" rate")
+
+
+def test_the_production_limit_pair_speaks_of_one_limit_in_german():
+    """ "Aktuelle Produktionsgrenze" and "Leistungsgrenze erreicht" read as two limits."""
+    root = pathlib.Path(__file__).parent.parent / "custom_components/fronius_modbus"
+    sensors = json.loads(
+        (root / "translations" / "de.json").read_text(encoding="utf-8")
+    )["entity"]["sensor"]
+
+    assert sensors["production_limit"]["name"] == "Aktuelle Leistungsgrenze"
+    assert sensors["production_limit_reached"]["name"] == "Leistungsgrenze erreicht"

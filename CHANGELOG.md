@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Added
+- The Tauro and Tauro ECO count as known models: Fronius publishes the GEN24's SunSpec register maps for them. Setting one up no longer logs an untested model.
+- The README describes use cases and gives automation examples.
 - Per-phase import and export energy of the smart meter, for a meter that counts them per phase (some report 0, SunSpec's "not implemented"). The six sensors come disabled.
 
 ### Fixed

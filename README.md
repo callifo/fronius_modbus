@@ -418,11 +418,15 @@ automation:
     triggers:
       # numeric_state's "above" is strict and would miss a price that stops at 0;
       # an unavailable price counts as 0 here. A template trigger fires only when
-      # the price turns non-negative, so a restart checks the price once as well.
+      # the price turns non-negative, so the price is checked again at a restart
+      # and once the inverter's entities are back after a reload.
       - trigger: template
         value_template: "{{ states('sensor.electricity_price') | float(0) >= 0 }}"
       - trigger: homeassistant
         event: start
+      - trigger: state
+        entity_id: select.fronius_ac_limit_enable
+        from: unavailable
     conditions:
       - condition: template
         value_template: "{{ states('sensor.electricity_price') | float(0) >= 0 }}"

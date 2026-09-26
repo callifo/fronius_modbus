@@ -634,6 +634,24 @@
       },
       "storage_link": {
         "name": "Anbindung"
+      },
+      "exported_l1": {
+        "name": "Exportiert L1"
+      },
+      "imported_l1": {
+        "name": "Importiert L1"
+      },
+      "exported_l2": {
+        "name": "Exportiert L2"
+      },
+      "imported_l2": {
+        "name": "Importiert L2"
+      },
+      "exported_l3": {
+        "name": "Exportiert L3"
+      },
+      "imported_l3": {
+        "name": "Importiert L3"
       }
     },
     "switch": {

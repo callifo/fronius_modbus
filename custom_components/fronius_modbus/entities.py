@@ -254,6 +254,7 @@ def _sensor(
     state_class: SensorStateClass | None = None,
     unit: str | None = None,
     entity_category: EntityCategory | None = None,
+    enabled: bool = True,
 ) -> FroniusSensorDescription:
     options = SENSOR_STATE_OPTIONS.get(translation_key)
     return FroniusSensorDescription(
@@ -272,6 +273,7 @@ def _sensor(
         native_unit_of_measurement=unit,
         entity_category=entity_category,
         options=options,
+        entity_registry_enabled_default=enabled,
     )
 
 
@@ -885,6 +887,11 @@ _TRANSLATION_KEYS: dict[str, str] = {
     "WphA": "power_l1",
     "WphB": "power_l2",
     "WphC": "power_l3",
+    **{
+        f"TotWh{direction}Ph{phase}": f"{word}_l{number}"
+        for direction, word in (("Exp", "exported"), ("Imp", "imported"))
+        for number, phase in enumerate("ABC", start=1)
+    },
     "WHRtg": "energy_rating",
     "MaxChaRte": "max_charge_rate",
     "MaxDisChaRte": "max_discharge_rate",
@@ -940,6 +947,19 @@ _METER_SENSOR_SPECS: tuple[tuple, ...] = (
     *_phase_specs("PhVph", "ph_vph", _VOLTAGE, "V"),
     _meter_spec("PPV", "ppv", _VOLTAGE, _MEASUREMENT, "V"),
 )
+# Per-phase counters some meters or firmware leave at 0, SunSpec's "not
+# implemented" for a counter: they exist once counted, disabled at first.
+_METER_PHASE_ENERGY_SPECS: tuple[tuple, ...] = tuple(
+    _meter_spec(
+        f"TotWh{direction}Ph{phase}",
+        f"tot_wh_{direction.lower()}_ph_{phase.lower()}",
+        _ENERGY,
+        SensorStateClass.TOTAL_INCREASING,
+        "Wh",
+    )
+    for direction in ("Exp", "Imp")
+    for phase in "ABC"
+)
 
 
 def _meter_value(
@@ -954,6 +974,34 @@ def _mppt_module_value(
 ) -> Callable[[FroniusRuntimeData], Any]:
     """A value_fn reading one field off an MPPT module, bound to that module."""
     return lambda runtime: getattr(runtime.device.mppt_module(index), attribute)
+
+
+def _meter_phase_energy_descriptions(
+    runtime: FroniusRuntimeData, unit_id: int, info: Any
+) -> list[FroniusSensorDescription]:
+    """A meter's per-phase counters it counts, or that an entity already shows."""
+    phases = "ABC"[: info.phases]
+    descriptions = []
+    for suffix, getter, device_class, state_class, unit in _METER_PHASE_ENERGY_SPECS:
+        key = f"meter_{unit_id}_{suffix}"
+        counted = bool(getter(info.meter)) or key in runtime.registered_keys
+        if suffix[-1] not in phases or not counted:
+            continue
+        descriptions.append(
+            _sensor(
+                key,
+                _TRANSLATION_KEYS[suffix],
+                device="meter",
+                report_name=meter_report_name(unit_id),
+                meter_unit_id=unit_id,
+                value_fn=_meter_value(unit_id, getter),
+                device_class=device_class,
+                state_class=state_class,
+                unit=unit,
+                enabled=False,
+            )
+        )
+    return descriptions
 
 
 def _meter_sensor_descriptions(
@@ -1099,6 +1147,7 @@ def sensor_descriptions(runtime: FroniusRuntimeData) -> list[FroniusSensorDescri
     descriptions += _throttle_descriptions(runtime)
     for unit_id, info in runtime.device.meters.items():
         descriptions += _meter_sensor_descriptions(unit_id, info.phases)
+        descriptions += _meter_phase_energy_descriptions(runtime, unit_id, info)
     for index in runtime.device.mppt_channels.pv:
         descriptions += _mppt_sensor_descriptions(index, runtime)
     if runtime.web is not None:

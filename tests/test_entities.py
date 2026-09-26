@@ -629,8 +629,9 @@ async def test_a_meter_counting_per_phase_gets_disabled_phase_energy_sensors(
 
     assert set(descriptions) == {f"meter_200_{key}" for key in _PHASE_ENERGY_OFFSETS}
     assert not any(d.entity_registry_enabled_default for d in descriptions.values())
-    assert descriptions["meter_200_TotWhExpPhA"].value_fn(runtime) == 1000
-    assert descriptions["meter_200_TotWhImpPhC"].value_fn(runtime) == 6000
+    # The capture's TotWh_SF is -2: raw 1000 is 10 Wh.
+    assert descriptions["meter_200_TotWhExpPhA"].value_fn(runtime) == 10.0
+    assert descriptions["meter_200_TotWhImpPhC"].value_fn(runtime) == 60.0
 
 
 async def test_a_meter_reporting_no_phase_energy_gets_no_such_sensor(runtime):
@@ -656,3 +657,16 @@ async def test_a_single_phase_meter_gets_phase_energy_for_l1_only(
     }
 
     assert keys == {"meter_200_TotWhExpPhA", "meter_200_TotWhImpPhA"}
+
+
+async def test_a_phase_energy_sensor_already_registered_stays_on_a_zero(runtime):
+    """One answer of 0 is no proof the meter stopped counting; the entity stays."""
+    runtime = replace(runtime, registered_keys=frozenset({"meter_200_TotWhImpPhB"}))
+
+    keys = {
+        d.key
+        for d in entities.sensor_descriptions(runtime)
+        if d.key.startswith("meter_200_TotWh")
+    }
+
+    assert keys == {"meter_200_TotWhImpPhB"}

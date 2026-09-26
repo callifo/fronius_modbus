@@ -2,6 +2,7 @@
 
 import asyncio
 from datetime import timedelta
+import logging
 import time
 from unittest.mock import MagicMock
 
@@ -15,6 +16,7 @@ from modbus_connection.model.sunspec import SunSpecMapShiftError
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.fronius_modbus import coordinator as coordinator_module
 from custom_components.fronius_modbus.const import DOMAIN
 from custom_components.fronius_modbus.coordinator import (
     DEFAULT_MAX_RATE_W,
@@ -81,6 +83,20 @@ async def test_failures_are_tolerated_inside_the_write_window(
     # The same reading is served on for display, marked as not newly read.
     assert (tolerated.report, tolerated.load_w) == (first.report, first.load_w)
     assert tolerated.retained
+
+
+async def test_a_tolerated_outage_is_no_warning(coordinator, inverter_unit, caplog):
+    """The inverter restarts its Modbus server after a web write; that is expected."""
+    coordinator.data = await coordinator._async_update_data()
+    coordinator.tolerate_failures_until(10**9)
+    inverter_unit.fail_requests(ModbusConnectionError())
+
+    with caplog.at_level(logging.DEBUG, logger=coordinator_module.__name__):
+        await coordinator._async_update_data()
+        await coordinator._async_update_data()
+
+    levels = [r.levelno for r in caplog.records if "tolerated" in r.getMessage()]
+    assert levels == [logging.DEBUG, logging.DEBUG]
 
 
 async def test_three_timeouts_recycle_the_link(coordinator, inverter_unit, connection):

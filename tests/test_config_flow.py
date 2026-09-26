@@ -3,6 +3,7 @@
 import asyncio
 from ipaddress import ip_address
 import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from modbus_connection import ModbusConnectionError
@@ -15,6 +16,7 @@ from custom_components.fronius_modbus.const import DOMAIN, instance_key
 from custom_components.fronius_modbus.fronius_modbus_api.device import DeviceIdentity
 from custom_components.fronius_modbus.froniuswebclient import FroniusWebResponseError
 from custom_components.fronius_modbus.token_store import async_get_token_store
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.data_entry_flow import FlowResultType, UnknownFlow
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
@@ -1141,3 +1143,36 @@ async def test_a_tauro_is_no_untested_model(
     )
 
     assert "Untested model" not in caplog.text
+
+
+def answering(hass, entry, answers: bool) -> None:
+    """A loaded entry whose last Modbus poll did or did not reach the inverter."""
+    entry.mock_state(hass, ConfigEntryState.LOADED)
+    entry.runtime_data = SimpleNamespace(
+        modbus=SimpleNamespace(last_update_success=answers)
+    )
+
+
+async def test_an_inverter_answering_at_its_address_is_not_moved(hass):
+    """An announcement for its serial cannot move an entry that the inverter answers.
+
+    The serial number goes out in every announcement: anyone in the network could
+    otherwise turn the entry, and its login, to another address.
+    """
+    entry = make_entry(hass)
+    with_inverter_device(hass, entry)
+    answering(hass, entry, answers=True)
+
+    await discover(hass, discovered(host=MOVED_HOST))
+
+    assert config_flow.entry_defaults(entry)["host"] == HOST
+
+
+async def test_an_inverter_gone_from_its_address_is_followed(hass):
+    entry = make_entry(hass)
+    with_inverter_device(hass, entry)
+    answering(hass, entry, answers=False)
+
+    await discover(hass, discovered(host=MOVED_HOST))
+
+    assert config_flow.entry_defaults(entry)["host"] == MOVED_HOST

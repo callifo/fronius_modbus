@@ -1391,5 +1391,19 @@
     "old": "SUPPORTED_MODELS = [\"Primo GEN24\", \"Symo GEN24\", \"Verto\", \"Tauro\"]\n",
     "new": "SUPPORTED_MODELS = [\"Primo GEN24\", \"Symo GEN24\", \"Verto\"]\n",
     "tests": "tauro_is_no_untested_model"
+  },
+  {
+    "label": "entities: component floats get a display precision",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "        suggested_display_precision=DISPLAY_PRECISION.get(reading.unit or \"\"),\n",
+    "new": "",
+    "tests": "float_reading_shows_the_digits_it_has"
+  },
+  {
+    "label": "component readings: a percentage shows no decimals",
+    "path": "custom_components/fronius_modbus/component_readings.py",
+    "old": "DISPLAY_PRECISION = {\"%\": 0,",
+    "new": "DISPLAY_PRECISION = {\"%\": 2,",
+    "tests": "float_reading_shows_the_digits_it_has"
   }
 ]

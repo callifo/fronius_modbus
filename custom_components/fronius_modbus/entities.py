@@ -36,6 +36,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .component_readings import (
     COMPONENT_READINGS,
+    DISPLAY_PRECISION,
     NO,
     YES,
     ComponentReading,
@@ -1209,6 +1210,7 @@ def _component_sensor(reading: ComponentReading) -> FroniusSensorDescription:
         state_class=SensorStateClass.MEASUREMENT if reading.measurement else None,
         native_unit_of_measurement=reading.unit,
         suggested_unit_of_measurement=reading.suggested_unit,
+        suggested_display_precision=DISPLAY_PRECISION.get(reading.unit or ""),
         entity_category=EntityCategory.DIAGNOSTIC if reading.diagnostic else None,
         entity_registry_enabled_default=reading.enabled,
     )

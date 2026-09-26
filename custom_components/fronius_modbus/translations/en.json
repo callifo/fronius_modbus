@@ -634,6 +634,24 @@
       },
       "storage_link": {
         "name": "Connection"
+      },
+      "exported_l1": {
+        "name": "Exported L1"
+      },
+      "imported_l1": {
+        "name": "Imported L1"
+      },
+      "exported_l2": {
+        "name": "Exported L2"
+      },
+      "imported_l2": {
+        "name": "Imported L2"
+      },
+      "exported_l3": {
+        "name": "Exported L3"
+      },
+      "imported_l3": {
+        "name": "Imported L3"
       }
     },
     "switch": {

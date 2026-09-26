@@ -21,11 +21,13 @@ This is a fork of [callifo/fronius_modbus](https://github.com/callifo/fronius_mo
 
 ## Supported devices
 
-Verified against a Symo GEN24 10.0 with a BYD Battery-Box Premium HV and a Fronius Smart Meter TS 65A-3. Other GEN24 and Verto models, batteries and meters should work through SunSpec discovery, but are untested here:
+Verified against a Symo GEN24 10.0 with a BYD Battery-Box Premium HV and a Fronius Smart Meter TS 65A-3. Other GEN24, Verto and Tauro models (Tauro ECO included), batteries and meters should work through SunSpec discovery, but are untested here; Fronius publishes the same SunSpec register maps for them, the Tauro without the storage model:
 
 - the register map is discovered at runtime by walking the SunSpec model chain: models 1, 101/103, 120, 121, 122, 123, 124, 160 and 201-204
 - battery storage entities appear if and only if model 124 is present
 - a smart meter's phase count is derived from its model id
+
+Older Fronius inverters with a Datamanager (the SnapINverter family: Symo, Primo, Eco, Galvo without GEN24) are untested. Their Web API has other logins and paths, so they can only be set up *Without the web API*, and only with the Datamanager's Modbus set to the `int+SF` SunSpec model type; with `float` the inverter model is not found and the setup stops, reporting that Modbus did not answer.
 
 ## Coming from upstream
 
@@ -117,7 +119,7 @@ A host that another entry already serves is refused before the inverter is conta
 
 ### Without the web API
 
-Choose *Without the web API* as the access role to run the entry on Modbus alone. No password is asked for and no token is stored. Switch Modbus TCP on in the inverter's web UI first: without a login the setup cannot do it, and it reports *Modbus did not answer* until Modbus TCP is on.
+Choose *Without the web API* as the access role to run the entry on Modbus alone. No password is asked for and no token is stored. Switch Modbus TCP on in the inverter's web UI first, with the SunSpec model type set to `int + SF`: without a login the setup cannot do either, and it reports *Modbus did not answer* until both are set.
 
 Stays:
 
@@ -174,6 +176,7 @@ Set during setup; change them later with **Configure** or **Reconfigure** on the
 | AC Current / L1 / L2 / L3 | Total and per-phase smart meter AC current.                                                                           |
 | Power                     | Net grid power measured by the smart meter.                                                                           |
 | Power L1 / L2 / L3        | Per-phase smart meter real power from SunSpec `WphA`, `WphB`, and `WphC`. The sign matches the meter power direction. |
+| Exported / Imported L1 / L2 / L3 | Per-phase energy counters (`TotWhExpPhA`-`C`, `TotWhImpPhA`-`C`). Created only for a meter that counts them, since some meters report 0, SunSpec's "not implemented"; a counter that starts counting later gets its entity at the next restart. Disabled by default. |
 
 ### Battery storage sensors
 
@@ -330,6 +333,99 @@ Turn off scheduled (dis)charging in the inverter's web UI to avoid unexpected be
 Set `Grid Charge Power` to a multiple of 10 W. Other values do not work and lead to odd behavior such as charging at about 500 W; if you need to press "increment" to get the battery to charge, this is the likely cause. You do not need to touch the `Modbus storage reserve`.
 
 Grid charging also stops at around 500 W while the inverter's own battery configuration does not allow charging from the grid, whatever charge power is written over Modbus. PV charging reaches full power in the same state, which makes this look like a Modbus fault. Selecting `Charge from Grid` therefore enables the `Charge from grid` and `Charge from AC` toggles over the Web API, so a configured Web API clears this on its own; without one, enable both in the inverter web UI. If the Web API refuses the toggles, Home Assistant reports an error: the storage mode is then set, but grid charging is not.
+
+## Use cases
+
+- **Dynamic electricity prices:** charge the battery from the grid in the cheap hours (`Charge from Grid` with `Grid charge power`) and keep it from discharging while the price is low (`Block Discharging`).
+- **Negative prices or an export cap:** limit the inverter's output with `AC limit enable` and `AC limit rate`, or, with the `technician` role, only the feed-in with the export soft limit.
+- **Keeping energy for later:** hold the battery for the evening or for backup power with `Block Discharging`, the `Modbus storage reserve` (it applies in a Modbus storage mode, not in `Auto`), or the `Backup reserve` of the inverter's own battery management.
+- **Monitoring:** household load, grid power per phase, battery state of charge and state of health, power module temperatures and fans, and why the inverter throttles (`Throttle reason`), all without a cloud connection.
+- **Modbus only:** read the inverter and steer the battery over Modbus without handing Home Assistant a web password (see [Without the web API](#without-the-web-api)).
+
+## Examples
+
+The entity ids below are examples; take yours from Settings -> Devices & services -> Entities. The storage mode is set first, then the value it uses: a mode change resets its rate (see [Storage control modes](#storage-control-modes)).
+
+Charge the battery from the grid at night, and hand it back to the inverter in the morning:
+
+```yaml
+automation:
+  - alias: "Battery: charge from the grid at night"
+    triggers:
+      - trigger: time
+        at: "02:00:00"
+    actions:
+      - action: select.select_option
+        target:
+          entity_id: select.fronius_storage_control_mode
+        data:
+          option: charge_from_grid
+      - action: number.set_value
+        target:
+          entity_id: number.fronius_grid_charge_power
+        data:
+          value: 3000
+  - alias: "Battery: back to automatic"
+    triggers:
+      - trigger: time
+        at: "05:00:00"
+    actions:
+      - action: select.select_option
+        target:
+          entity_id: select.fronius_storage_control_mode
+        data:
+          option: auto
+```
+
+Keep the battery from discharging into the car while it charges:
+
+```yaml
+automation:
+  - alias: "Battery: hold while the car charges"
+    triggers:
+      - trigger: state
+        entity_id: binary_sensor.car_charging
+        to: ["on", "off"]
+    actions:
+      - action: select.select_option
+        target:
+          entity_id: select.fronius_storage_control_mode
+        data:
+          option: "{{ 'block_discharging' if trigger.to_state.state == 'on' else 'auto' }}"
+```
+
+Switch the inverter's output off while the price is negative. `AC limit rate` limits everything the inverter puts out, not only the feed-in, so the house then draws from the grid, which a negative price pays for:
+
+```yaml
+automation:
+  - alias: "Inverter: off at negative prices"
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.electricity_price
+        below: 0
+    actions:
+      - action: select.select_option
+        target:
+          entity_id: select.fronius_ac_limit_enable
+        data:
+          option: enabled
+      - action: number.set_value
+        target:
+          entity_id: number.fronius_ac_limit_rate
+        data:
+          value: 0
+  - alias: "Inverter: on again"
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.electricity_price
+        above: 0
+    actions:
+      - action: select.select_option
+        target:
+          entity_id: select.fronius_ac_limit_enable
+        data:
+          option: disabled
+```
 
 ## Known limitations
 

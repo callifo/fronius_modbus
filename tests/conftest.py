@@ -185,3 +185,21 @@ def reauth_requests(monkeypatch) -> list[str]:
         lambda entry, hass, **_kwargs: requests.append(entry.entry_id),
     )
     return requests
+
+
+@pytest.fixture(autouse=True)
+def _no_deprecated_home_assistant_calls(caplog):
+    """Fail a test in which Home Assistant reports a deprecated call by this integration.
+
+    Home Assistant only logs such a call, so a green test hid one that will stop
+    working in a later release (device_registry.async_get_device, 2026.9).
+    """
+    yield
+    reports = [
+        record.getMessage()
+        for phase in ("setup", "call")
+        for record in caplog.get_records(phase)
+        if record.name == "homeassistant.helpers.frame"
+        and "fronius_modbus" in record.getMessage()
+    ]
+    assert not reports, reports

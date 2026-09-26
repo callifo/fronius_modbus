@@ -135,3 +135,59 @@ def test_every_state_translation_key_is_one_hassfest_accepts():
                     if not pattern.match(state)
                 )
     assert offenders == []
+
+
+_METER_ROWS = {
+    "A": ("ac_current", "current", "A", "a"),
+    "AphA": ("ac_current_l1", "current", "A", "aph_a"),
+    "AphB": ("ac_current_l2", "current", "A", "aph_b"),
+    "AphC": ("ac_current_l3", "current", "A", "aph_c"),
+    "power": ("power", "power", "W", "w"),
+    "WphA": ("power_l1", "power", "W", "wph_a"),
+    "WphB": ("power_l2", "power", "W", "wph_b"),
+    "WphC": ("power_l3", "power", "W", "wph_c"),
+    "exported": ("exported", "energy", "Wh", "tot_wh_exp"),
+    "imported": ("imported", "energy", "Wh", "tot_wh_imp"),
+    "line_frequency": ("line_frequency", "frequency", "Hz", "hz"),
+    "PhVphA": ("ac_voltage_l1_n", "voltage", "V", "ph_vph_a"),
+    "PhVphB": ("ac_voltage_l2_n", "voltage", "V", "ph_vph_b"),
+    "PhVphC": ("ac_voltage_l3_n", "voltage", "V", "ph_vph_c"),
+    "PPV": ("ac_voltage_line_line", "voltage", "V", "ppv"),
+}
+_SINGLE_PHASE_ROWS = (
+    "A",
+    "AphA",
+    "power",
+    "WphA",
+    "exported",
+    "imported",
+    "line_frequency",
+    "PhVphA",
+)
+
+
+def _meter_rows(phases: int) -> dict:
+    """What each meter sensor is called, measures and reads, keyed by its suffix."""
+    meter = MagicMock()
+    runtime = MagicMock()
+    runtime.device.meters = {200: MagicMock(meter=meter)}
+    rows = {}
+    for description in entities._meter_sensor_descriptions(200, phases):
+        suffix = description.key.removeprefix("meter_200_")
+        if suffix == "unit_id":
+            continue
+        read = description.value_fn(runtime)
+        attribute = next(name for name in dir(meter) if getattr(meter, name) is read)
+        rows[suffix] = (
+            description.translation_key,
+            str(description.device_class),
+            description.native_unit_of_measurement,
+            attribute,
+        )
+    return rows
+
+
+def test_every_meter_sensor_keeps_its_name_measure_and_register():
+    """The meter table as it stood; a rewrite of it must not move one entity."""
+    assert _meter_rows(3) == _METER_ROWS
+    assert _meter_rows(1) == {key: _METER_ROWS[key] for key in _SINGLE_PHASE_ROWS}

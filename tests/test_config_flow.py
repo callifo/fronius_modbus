@@ -12,6 +12,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components import fronius_modbus
 from custom_components.fronius_modbus import config_flow, discovery
 from custom_components.fronius_modbus.const import DOMAIN, instance_key
+from custom_components.fronius_modbus.fronius_modbus_api.device import DeviceIdentity
 from custom_components.fronius_modbus.froniuswebclient import FroniusWebResponseError
 from custom_components.fronius_modbus.token_store import async_get_token_store
 from homeassistant.data_entry_flow import FlowResultType, UnknownFlow
@@ -1116,3 +1117,27 @@ async def test_a_reauth_keeps_settings_changed_while_it_ran(hass, mock_modbus):
     )
 
     assert config_flow.entry_defaults(entry)["scan_interval"] == 30
+
+
+@pytest.mark.parametrize("model", ["Tauro 50-3-D", "Tauro ECO 100-3-P"])
+async def test_a_tauro_is_no_untested_model(
+    hass, mock_modbus, monkeypatch, caplog, model
+):
+    """Fronius' register maps give the Tauro the GEN24's SunSpec models."""
+    identity = DeviceIdentity(
+        manufacturer="Fronius",
+        model=model,
+        serial="1",
+        version="1.0",
+        options="",
+        address=1.0,
+    )
+    monkeypatch.setattr(
+        config_flow.FroniusInverter, "async_probe", AsyncMock(return_value=identity)
+    )
+
+    await config_flow._validate_input(
+        hass, config_flow._expand_settings_input(NO_WEB_INPUT)
+    )
+
+    assert "Untested model" not in caplog.text

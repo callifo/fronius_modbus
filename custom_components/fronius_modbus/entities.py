@@ -13,6 +13,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 import logging
+from operator import attrgetter
 from typing import Any, Literal, cast
 
 from modbus_connection import ModbusError
@@ -81,6 +82,7 @@ from .fronius_modbus_api.device import (
     REPORT_SETTINGS,
     REPORT_STATUS,
     REPORT_STORAGE,
+    MeterInfo,
     meter_report_name,
 )
 from .fronius_modbus_api.exceptions import ControlRefused, ControlUnavailable
@@ -253,6 +255,7 @@ def _sensor(
     state_class: SensorStateClass | None = None,
     unit: str | None = None,
     entity_category: EntityCategory | None = None,
+    enabled: bool = True,
 ) -> FroniusSensorDescription:
     options = SENSOR_STATE_OPTIONS.get(translation_key)
     return FroniusSensorDescription(
@@ -271,6 +274,7 @@ def _sensor(
         native_unit_of_measurement=unit,
         entity_category=entity_category,
         options=options,
+        entity_registry_enabled_default=enabled,
     )
 
 
@@ -884,118 +888,78 @@ _TRANSLATION_KEYS: dict[str, str] = {
     "WphA": "power_l1",
     "WphB": "power_l2",
     "WphC": "power_l3",
+    **{
+        f"TotWh{direction}Ph{phase}": f"{word}_l{number}"
+        for direction, word in (("Exp", "exported"), ("Imp", "imported"))
+        for number, phase in enumerate("ABC", start=1)
+    },
     "WHRtg": "energy_rating",
     "MaxChaRte": "max_charge_rate",
     "MaxDisChaRte": "max_discharge_rate",
 }
 
 
+def _meter_spec(
+    suffix: str,
+    attribute: str,
+    device_class: SensorDeviceClass,
+    state_class: SensorStateClass,
+    unit: str,
+) -> tuple:
+    return (suffix, attrgetter(attribute), device_class, state_class, unit)
+
+
+def _phase_specs(
+    suffix: str, attribute: str, device_class: SensorDeviceClass, unit: str
+) -> tuple[tuple, ...]:
+    """One spec per phase: `AphA`/`aph_a` for L1, and so on."""
+    return tuple(
+        _meter_spec(
+            f"{suffix}{phase}",
+            f"{attribute}_{phase.lower()}",
+            device_class,
+            SensorStateClass.MEASUREMENT,
+            unit,
+        )
+        for phase in "ABC"
+    )
+
+
+_CURRENT, _POWER, _VOLTAGE = (
+    SensorDeviceClass.CURRENT,
+    SensorDeviceClass.POWER,
+    SensorDeviceClass.VOLTAGE,
+)
+_MEASUREMENT, _ENERGY = SensorStateClass.MEASUREMENT, SensorDeviceClass.ENERGY
 _METER_SENSOR_SPECS: tuple[tuple, ...] = (
-    (
-        "A",
-        lambda meter: meter.a,
-        SensorDeviceClass.CURRENT,
-        SensorStateClass.MEASUREMENT,
-        "A",
+    _meter_spec("A", "a", _CURRENT, _MEASUREMENT, "A"),
+    *_phase_specs("Aph", "aph", _CURRENT, "A"),
+    _meter_spec("power", "w", _POWER, _MEASUREMENT, "W"),
+    *_phase_specs("Wph", "wph", _POWER, "W"),
+    _meter_spec(
+        "exported", "tot_wh_exp", _ENERGY, SensorStateClass.TOTAL_INCREASING, "Wh"
     ),
-    (
-        "AphA",
-        lambda meter: meter.aph_a,
-        SensorDeviceClass.CURRENT,
-        SensorStateClass.MEASUREMENT,
-        "A",
+    _meter_spec(
+        "imported", "tot_wh_imp", _ENERGY, SensorStateClass.TOTAL_INCREASING, "Wh"
     ),
-    (
-        "AphB",
-        lambda meter: meter.aph_b,
-        SensorDeviceClass.CURRENT,
-        SensorStateClass.MEASUREMENT,
-        "A",
+    _meter_spec(
+        "line_frequency", "hz", SensorDeviceClass.FREQUENCY, _MEASUREMENT, "Hz"
     ),
-    (
-        "AphC",
-        lambda meter: meter.aph_c,
-        SensorDeviceClass.CURRENT,
-        SensorStateClass.MEASUREMENT,
-        "A",
-    ),
-    (
-        "power",
-        lambda meter: meter.w,
-        SensorDeviceClass.POWER,
-        SensorStateClass.MEASUREMENT,
-        "W",
-    ),
-    (
-        "WphA",
-        lambda meter: meter.wph_a,
-        SensorDeviceClass.POWER,
-        SensorStateClass.MEASUREMENT,
-        "W",
-    ),
-    (
-        "WphB",
-        lambda meter: meter.wph_b,
-        SensorDeviceClass.POWER,
-        SensorStateClass.MEASUREMENT,
-        "W",
-    ),
-    (
-        "WphC",
-        lambda meter: meter.wph_c,
-        SensorDeviceClass.POWER,
-        SensorStateClass.MEASUREMENT,
-        "W",
-    ),
-    (
-        "exported",
-        lambda meter: meter.tot_wh_exp,
-        SensorDeviceClass.ENERGY,
+    *_phase_specs("PhVph", "ph_vph", _VOLTAGE, "V"),
+    _meter_spec("PPV", "ppv", _VOLTAGE, _MEASUREMENT, "V"),
+)
+# Per-phase counters some meters or firmware leave at 0, SunSpec's "not
+# implemented" for a counter: they exist once counted, disabled at first.
+_METER_PHASE_ENERGY_SPECS: tuple[tuple, ...] = tuple(
+    _meter_spec(
+        f"TotWh{direction}Ph{phase}",
+        f"tot_wh_{direction.lower()}_ph_{phase.lower()}",
+        _ENERGY,
         SensorStateClass.TOTAL_INCREASING,
         "Wh",
-    ),
-    (
-        "imported",
-        lambda meter: meter.tot_wh_imp,
-        SensorDeviceClass.ENERGY,
-        SensorStateClass.TOTAL_INCREASING,
-        "Wh",
-    ),
-    (
-        "line_frequency",
-        lambda meter: meter.hz,
-        SensorDeviceClass.FREQUENCY,
-        SensorStateClass.MEASUREMENT,
-        "Hz",
-    ),
-    (
-        "PhVphA",
-        lambda meter: meter.ph_vph_a,
-        SensorDeviceClass.VOLTAGE,
-        SensorStateClass.MEASUREMENT,
-        "V",
-    ),
-    (
-        "PhVphB",
-        lambda meter: meter.ph_vph_b,
-        SensorDeviceClass.VOLTAGE,
-        SensorStateClass.MEASUREMENT,
-        "V",
-    ),
-    (
-        "PhVphC",
-        lambda meter: meter.ph_vph_c,
-        SensorDeviceClass.VOLTAGE,
-        SensorStateClass.MEASUREMENT,
-        "V",
-    ),
-    (
-        "PPV",
-        lambda meter: meter.ppv,
-        SensorDeviceClass.VOLTAGE,
-        SensorStateClass.MEASUREMENT,
-        "V",
-    ),
+    )
+    for direction in ("Exp", "Imp")
+    for phase in "ABC"
 )
 
 
@@ -1011,6 +975,34 @@ def _mppt_module_value(
 ) -> Callable[[FroniusRuntimeData], Any]:
     """A value_fn reading one field off an MPPT module, bound to that module."""
     return lambda runtime: getattr(runtime.device.mppt_module(index), attribute)
+
+
+def _meter_phase_energy_descriptions(
+    runtime: FroniusRuntimeData, unit_id: int, info: MeterInfo
+) -> list[FroniusSensorDescription]:
+    """A meter's per-phase counters it counts, or that an entity already shows."""
+    phases = "ABC"[: info.phases]
+    descriptions = []
+    for suffix, getter, device_class, state_class, unit in _METER_PHASE_ENERGY_SPECS:
+        key = f"meter_{unit_id}_{suffix}"
+        counted = bool(getter(info.meter)) or key in runtime.registered_keys
+        if suffix[-1] not in phases or not counted:
+            continue
+        descriptions.append(
+            _sensor(
+                key,
+                _TRANSLATION_KEYS[suffix],
+                device="meter",
+                report_name=meter_report_name(unit_id),
+                meter_unit_id=unit_id,
+                value_fn=_meter_value(unit_id, getter),
+                device_class=device_class,
+                state_class=state_class,
+                unit=unit,
+                enabled=False,
+            )
+        )
+    return descriptions
 
 
 def _meter_sensor_descriptions(
@@ -1156,6 +1148,7 @@ def sensor_descriptions(runtime: FroniusRuntimeData) -> list[FroniusSensorDescri
     descriptions += _throttle_descriptions(runtime)
     for unit_id, info in runtime.device.meters.items():
         descriptions += _meter_sensor_descriptions(unit_id, info.phases)
+        descriptions += _meter_phase_energy_descriptions(runtime, unit_id, info)
     for index in runtime.device.mppt_channels.pv:
         descriptions += _mppt_sensor_descriptions(index, runtime)
     if runtime.web is not None:

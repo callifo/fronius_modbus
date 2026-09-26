@@ -592,3 +592,81 @@ async def test_grid_charging_that_the_web_api_refuses_is_an_error(
 
     assert raised.value.key == "grid_charge_sources_failed"
     assert runtime.storage_control.extended_mode is ExtendedMode.CHARGE_FROM_GRID
+
+
+# The meter's per-phase energy counters: model 203 starts at 40069 on this
+# capture, TotWhExpPhA-C at offsets 40/42/44 and TotWhImpPhA-C at 48/50/52.
+_METER_MODEL_ADDRESS = 40069
+_PHASE_ENERGY_OFFSETS = {
+    "TotWhExpPhA": 40,
+    "TotWhExpPhB": 42,
+    "TotWhExpPhC": 44,
+    "TotWhImpPhA": 48,
+    "TotWhImpPhB": 50,
+    "TotWhImpPhC": 52,
+}
+
+
+def counting_per_phase(connection) -> None:
+    """Give the captured meter per-phase counters; the capture's meter reports 0."""
+    holding = connection.for_unit(METER_UNIT_ID)
+    for index, offset in enumerate(_PHASE_ENERGY_OFFSETS.values(), start=1):
+        address = _METER_MODEL_ADDRESS + offset
+        holding.load_raw({"holding": {address: 0, address + 1: 1000 * index}})
+
+
+async def test_a_meter_counting_per_phase_gets_disabled_phase_energy_sensors(
+    hass, entry, connection
+):
+    counting_per_phase(connection)
+    runtime = await make_runtime(hass, entry, connection)
+
+    descriptions = {
+        d.key: d
+        for d in entities.sensor_descriptions(runtime)
+        if d.key.startswith("meter_200_TotWh")
+    }
+
+    assert set(descriptions) == {f"meter_200_{key}" for key in _PHASE_ENERGY_OFFSETS}
+    assert not any(d.entity_registry_enabled_default for d in descriptions.values())
+    # The capture's TotWh_SF is -2: raw 1000 is 10 Wh.
+    assert descriptions["meter_200_TotWhExpPhA"].value_fn(runtime) == 10.0
+    assert descriptions["meter_200_TotWhImpPhC"].value_fn(runtime) == 60.0
+
+
+async def test_a_meter_reporting_no_phase_energy_gets_no_such_sensor(runtime):
+    """This capture's meter reports 0, SunSpec's "not implemented" for a counter."""
+    keys = {d.key for d in entities.sensor_descriptions(runtime)}
+
+    assert not any(key.startswith("meter_200_TotWh") for key in keys)
+
+
+async def test_a_single_phase_meter_gets_phase_energy_for_l1_only(
+    hass, entry, connection
+):
+    counting_per_phase(connection)
+    runtime = await make_runtime(hass, entry, connection)
+    runtime.device.meters[METER_UNIT_ID] = replace(
+        runtime.device.meters[METER_UNIT_ID], phases=1
+    )
+
+    keys = {
+        d.key
+        for d in entities.sensor_descriptions(runtime)
+        if d.key.startswith("meter_200_TotWh")
+    }
+
+    assert keys == {"meter_200_TotWhExpPhA", "meter_200_TotWhImpPhA"}
+
+
+async def test_a_phase_energy_sensor_already_registered_stays_on_a_zero(runtime):
+    """One answer of 0 is no proof the meter stopped counting; the entity stays."""
+    runtime = replace(runtime, registered_keys=frozenset({"meter_200_TotWhImpPhB"}))
+
+    keys = {
+        d.key
+        for d in entities.sensor_descriptions(runtime)
+        if d.key.startswith("meter_200_TotWh")
+    }
+
+    assert keys == {"meter_200_TotWhImpPhB"}

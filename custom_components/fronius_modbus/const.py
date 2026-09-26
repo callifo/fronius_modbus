@@ -49,7 +49,9 @@ class ModbusRestriction(StrEnum):
 
 
 SUPPORTED_MANUFACTURERS = ["Fronius"]
-SUPPORTED_MODELS = ["Primo GEN24", "Symo GEN24", "Verto"]
+# The models Fronius publishes the GEN24 SunSpec register maps for; the Tauro
+# and Tauro ECO share them without the storage model.
+SUPPORTED_MODELS = ["Primo GEN24", "Symo GEN24", "Verto", "Tauro"]
 # Every enum state is a translation key (hassfest: [a-z0-9-_]+); an unmapped
 # SunSpec code shows as this key instead of a value the option list lacks.
 UNKNOWN_STATE = "unknown"

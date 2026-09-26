@@ -416,9 +416,10 @@ automation:
           value: 0
   - alias: "Inverter: on again"
     triggers:
-      - trigger: numeric_state
-        entity_id: sensor.electricity_price
-        above: 0
+      # numeric_state's "above" is strict and would miss a price that stops at 0;
+      # an unavailable price counts as 0 here, so the output does not stay off.
+      - trigger: template
+        value_template: "{{ states('sensor.electricity_price') | float(0) >= 0 }}"
     actions:
       - action: select.select_option
         target:

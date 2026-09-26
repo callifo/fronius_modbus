@@ -782,7 +782,8 @@ async def test_a_discovered_host_already_set_up_is_not_offered(hass):
     assert result["reason"] == "already_configured"
 
 
-async def test_an_inverter_set_up_by_name_is_not_offered_again(hass):
+async def test_an_inverter_set_up_by_name_is_not_offered_again(hass, inverters):
+    inverters[HOST] = SERIAL
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={"host": "inverter.example", "api_username": "none"},
@@ -861,7 +862,8 @@ async def test_a_moved_inverter_is_not_followed_to_a_taken_address(hass):
     assert entry.unique_id == HOST
 
 
-async def test_an_ipv6_discovery_does_not_replace_an_ipv4_host(hass):
+async def test_an_ipv6_discovery_does_not_replace_an_ipv4_host(hass, inverters):
+    inverters["2001:db8::10"] = SERIAL
     entry = make_entry(hass)
     with_inverter_device(hass, entry)
 
@@ -915,7 +917,7 @@ async def test_an_address_taken_while_the_token_moves_is_not_shared(hass, monkey
 
     monkeypatch.setattr(store._store, "async_save", take_the_address)
 
-    await discovery.async_follow_host(hass, entry, MOVED_HOST)
+    await discovery.async_follow_host(hass, entry, MOVED_HOST, SERIAL)
 
     holders = [
         e
@@ -940,8 +942,32 @@ async def test_two_announcements_leave_the_token_under_one_address(hass, monkeyp
     monkeypatch.setattr(store._store, "async_save", save_like_a_disk)
 
     await asyncio.gather(
-        discovery.async_follow_host(hass, entry, MOVED_HOST),
-        discovery.async_follow_host(hass, entry, third),
+        discovery.async_follow_host(hass, entry, MOVED_HOST, SERIAL),
+        discovery.async_follow_host(hass, entry, third, SERIAL),
+    )
+
+    stored = [
+        host for host in (HOST, MOVED_HOST, third) if await store.async_load_token(host)
+    ]
+    assert stored == [config_flow.entry_defaults(entry)["host"]]
+
+
+async def test_two_announcements_read_at_once_leave_one_address(hass, monkeypatch):
+    """Both read the old address before either moved the entry; the later one kept going."""
+    entry = make_entry(hass)
+    store = async_get_token_store(hass)
+    await store.async_save_token(HOST, realm="r", token="t")
+    third = "192.0.2.30"
+
+    async def serial_at(_hass, host, _port, _unit_id):
+        await asyncio.sleep(0)
+        return SERIAL if host != HOST else None
+
+    monkeypatch.setattr(discovery, "async_serial_at", serial_at)
+
+    await asyncio.gather(
+        discovery.async_follow_host(hass, entry, MOVED_HOST, SERIAL),
+        discovery.async_follow_host(hass, entry, third, SERIAL),
     )
 
     stored = [
@@ -1112,7 +1138,7 @@ async def test_an_entry_removed_while_following_keeps_no_token(hass, monkeypatch
 
     monkeypatch.setattr(store, "async_ready", ready_while_the_entry_goes)
 
-    await discovery.async_follow_host(hass, entry, MOVED_HOST)
+    await discovery.async_follow_host(hass, entry, MOVED_HOST, SERIAL)
 
     assert await store.async_load_token(MOVED_HOST) is None
 
@@ -1170,6 +1196,25 @@ async def test_an_inverter_answering_at_its_address_is_not_moved(hass, inverters
     await discover(hass, discovered(host=MOVED_HOST))
 
     assert config_flow.entry_defaults(entry)["host"] == HOST
+
+
+async def test_both_addresses_are_read_on_the_entry_s_port_and_unit(hass, monkeypatch):
+    entry = make_entry(hass)
+    hass.config_entries.async_update_entry(
+        entry, options={"port": 1502, "inverter_modbus_unit_id": 7}
+    )
+    with_inverter_device(hass, entry)
+    reads = []
+
+    async def serial_at(_hass, host, port, unit_id):
+        reads.append((host, port, unit_id))
+        return SERIAL if host == MOVED_HOST else None
+
+    monkeypatch.setattr(discovery, "async_serial_at", serial_at)
+
+    await discover(hass, discovered(host=MOVED_HOST))
+
+    assert reads == [(HOST, 1502, 7), (MOVED_HOST, 1502, 7)]
 
 
 async def test_an_announced_address_without_the_inverter_is_not_followed(

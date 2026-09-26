@@ -12,13 +12,15 @@ PORT = 1502
 OTHER_UNIT_ID = 7
 
 
-async def test_the_serial_is_read_from_the_entry_s_unit(hass, mock_modbus):
+async def test_the_serial_is_read_from_the_entry_s_unit(
+    hass, mock_modbus, inverter_unit
+):
     mock_modbus.add_unit(OTHER_UNIT_ID, like=INVERTER_UNIT_ID)
     mock_modbus.fail_requests(INVERTER_UNIT_ID, ModbusConnectionError("refused"))
 
     serial = await discovery.async_serial_at(hass, HOST, PORT, OTHER_UNIT_ID)
 
-    identity = await FroniusInverter.async_probe(mock_modbus.unit(OTHER_UNIT_ID))
+    identity = await FroniusInverter.async_probe(inverter_unit)
     assert serial == identity.serial != ""
     params = mock_modbus.params_seen[-1]
     assert (params.host, params.port) == (HOST, PORT)

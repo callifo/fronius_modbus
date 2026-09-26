@@ -8,12 +8,25 @@ import json
 import logging
 from typing import Any
 
-from homeassistant.config_entries import ConfigEntry, ConfigEntryState
-from homeassistant.const import CONF_HOST
+from modbus_connection import ModbusError, ModbusTcpParams
+
+from homeassistant.components.modbus import async_get_temporary_unit
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 
-from .const import DOMAIN, entry_title, entry_unique_id, instance_key
+from .const import (
+    CONF_INVERTER_UNIT_ID,
+    DEFAULT_INVERTER_UNIT_ID,
+    DEFAULT_PORT,
+    DOMAIN,
+    entry_title,
+    entry_unique_id,
+    instance_key,
+)
+from .fronius_modbus_api.device import FroniusInverter
 from .token_store import async_get_token_store, canonical_host
 
 _LOGGER = logging.getLogger(__name__)
@@ -49,15 +62,19 @@ def entry_for_serial(hass: HomeAssistant, serial: str | None) -> ConfigEntry | N
     return None
 
 
-def _answers_at_its_address(entry: ConfigEntry) -> bool:
-    """Whether the entry's inverter answered its last poll at the address it has.
-
-    That answer proves the address; an announcement, whose serial anyone can
-    copy, must not move such an entry. It moves an entry whose inverter is gone.
-    """
-    if entry.state is not ConfigEntryState.LOADED:
-        return False
-    return bool(entry.runtime_data.modbus.last_update_success)
+async def async_serial_at(
+    hass: HomeAssistant, host: str, port: int, unit_id: int
+) -> str | None:
+    """The serial number the inverter at ``host`` reports now; None if none answers."""
+    try:
+        async with async_get_temporary_unit(
+            hass, ModbusTcpParams(host=host, port=port), unit_id
+        ) as unit:
+            identity = await FroniusInverter.async_probe(unit)
+    except (ModbusError, HomeAssistantError, OSError, TimeoutError) as err:
+        _LOGGER.debug("No inverter read for an announced move: %s", err)
+        return None
+    return identity.serial
 
 
 def _is_ipv4(host: str) -> bool:
@@ -67,24 +84,47 @@ def _is_ipv4(host: str) -> bool:
         return False
 
 
-async def async_follow_host(hass: HomeAssistant, entry: ConfigEntry, host: str) -> None:
+async def _async_inverter_moved(
+    hass: HomeAssistant, values: dict[str, Any], host: str, serial: str
+) -> bool:
+    """Whether the inverter answers at ``host`` now and no longer at its old address.
+
+    The serial number goes out in every announcement, so the announcement alone
+    proves nothing. Read now, not taken from the last poll: that one may predate
+    the move, or come from another inverter given the old address (reaudit
+    P2-01, P2-02).
+    """
+    port = int(values.get(CONF_PORT, DEFAULT_PORT))
+    unit_id = int(values.get(CONF_INVERTER_UNIT_ID, DEFAULT_INVERTER_UNIT_ID))
+    old_host = str(values[CONF_HOST])
+    if await async_serial_at(hass, old_host, port, unit_id) == serial:
+        return False
+    return await async_serial_at(hass, host, port, unit_id) == serial
+
+
+async def async_follow_host(
+    hass: HomeAssistant, entry: ConfigEntry, host: str, serial: str
+) -> None:
     """Move an entry set up by IPv4 address to the address its inverter announces now.
 
     An entry set up by name keeps it: the name resolves the new address. The
     unique id is the host, so it moves too, and the stored token with it.
     """
+    values = {**entry.data, **entry.options}
+    old_host = str(values.get(CONF_HOST, ""))
+    moved = canonical_host(old_host) != canonical_host(host)
+    if not (moved and _is_ipv4(old_host) and _is_ipv4(host)):
+        return
+    if not await _async_inverter_moved(hass, values, host, serial):
+        return
     token_store = async_get_token_store(hass)
     # From the ownership check to the entry update nothing may await: another
     # flow took the address in between (audit R3B-01, R3B-02).
     await token_store.async_ready()
     if hass.config_entries.async_get_entry(entry.entry_id) is None:
         return
-    if _answers_at_its_address(entry):
-        return
     values = {**entry.data, **entry.options}
-    old_host = str(values.get(CONF_HOST, ""))
-    moved = canonical_host(old_host) != canonical_host(host)
-    if not (moved and _is_ipv4(old_host) and _is_ipv4(host)):
+    if str(values.get(CONF_HOST, "")) != old_host:
         return
     unique_id = entry_unique_id({CONF_HOST: host})
     holder = hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, unique_id)

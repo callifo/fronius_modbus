@@ -1,10 +1,12 @@
 # Changelog
 
-## Unreleased
+## 1.2.0b4
+
+A small update on 1.2.0b3: it removes a deprecation warning Home Assistant logged for the discovery, adds the smart meter's per-phase energy for meters that count it, and counts the Tauro among the known models. No migration; existing entities, unique ids and entity ids do not change.
 
 ### Added
 - The Tauro and Tauro ECO count as known models: Fronius publishes the GEN24's SunSpec register maps for them. Setting one up no longer logs an untested model.
-- The README describes use cases and gives automation examples.
+- The README describes use cases, gives automation examples, and says what an entry without the web API and an older Datamanager inverter need.
 - Per-phase import and export energy of the smart meter, for a meter that counts them per phase (some report 0, SunSpec's "not implemented"). The six sensors come disabled.
 
 ### Fixed

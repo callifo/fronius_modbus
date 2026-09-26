@@ -123,6 +123,7 @@ async def async_follow_host(
     await token_store.async_ready()
     if hass.config_entries.async_get_entry(entry.entry_id) is None:
         return
+    # The reads awaited: a concurrent announcement may have moved the entry.
     values = {**entry.data, **entry.options}
     if str(values.get(CONF_HOST, "")) != old_host:
         return

@@ -1393,10 +1393,38 @@
     "tests": "tauro_is_no_untested_model"
   },
   {
-    "label": "discovery: an answering inverter is not moved",
+    "label": "discovery: an inverter answering at its old address is not moved",
     "path": "custom_components/fronius_modbus/discovery.py",
-    "old": "    if _answers_at_its_address(entry):\n        return\n",
+    "old": "    if await async_serial_at(hass, old_host, port, unit_id) == serial:\n        return False\n",
     "new": "",
     "tests": "inverter_answering_at_its_address_is_not_moved"
+  },
+  {
+    "label": "discovery: the announced address has to answer as the inverter",
+    "path": "custom_components/fronius_modbus/discovery.py",
+    "old": "    return await async_serial_at(hass, host, port, unit_id) == serial\n",
+    "new": "    return True\n",
+    "tests": "announced_address_without_the_inverter_is_not_followed"
+  },
+  {
+    "label": "discovery: a host changed during the reads is kept",
+    "path": "custom_components/fronius_modbus/discovery.py",
+    "old": "    if str(values.get(CONF_HOST, \"\")) != old_host:\n        return\n",
+    "new": "",
+    "tests": "two_announcements_read_at_once_leave_one_address"
+  },
+  {
+    "label": "discovery: the reads use the entry's unit",
+    "path": "custom_components/fronius_modbus/discovery.py",
+    "old": "    unit_id = int(values.get(CONF_INVERTER_UNIT_ID, DEFAULT_INVERTER_UNIT_ID))\n",
+    "new": "    unit_id = DEFAULT_INVERTER_UNIT_ID\n",
+    "tests": "read_on_the_entry_s_port_and_unit"
+  },
+  {
+    "label": "discovery: the serial is read from the given unit",
+    "path": "custom_components/fronius_modbus/discovery.py",
+    "old": "            hass, ModbusTcpParams(host=host, port=port), unit_id\n",
+    "new": "            hass, ModbusTcpParams(host=host, port=port), 1\n",
+    "tests": "serial_is_read_from_the_entry_s_unit"
   }
 ]

@@ -1876,8 +1876,11 @@ class FroniusTotalSensor(FroniusEntity, RestoreSensor):
         # failed polls (audit A02). Only a refreshed source is an observation.
         reading = description.value_fn(self._runtime) if self._source_sampled else None
         verdict = self._guard.observe(reading)
-        if verdict is not None:
-            _LOGGER.warning("%s: %s", self.entity_id, verdict)
+        if verdict is None:
+            return
+        # An ignored reading changes nothing; an adopted jump moves the statistics.
+        level = logging.WARNING if verdict.adopted else logging.DEBUG
+        _LOGGER.log(level, "%s: %s", self.entity_id, verdict.message)
 
     @property
     def available(self) -> bool:

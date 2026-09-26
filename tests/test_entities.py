@@ -267,6 +267,22 @@ async def test_a_total_sensor_follows_a_genuine_counter_reset(hass, entry, runti
     assert sensor.native_value == 120.0
 
 
+async def test_an_ignored_counter_glitch_is_no_warning(hass, entry, runtime, caplog):
+    """A meter briefly reporting less is handled; only an adopted jump is worth a warning."""
+    sensor = _total_sensor(runtime, entry, hass)
+
+    with caplog.at_level(logging.DEBUG, logger=entities.__name__):
+        for _ in range(entities.TOTAL_INCREASING_RESET_POLLS - 1):
+            _report(sensor, 120.0)
+        ignored = [r.levelno for r in caplog.records if r.name == entities.__name__]
+        caplog.clear()
+        _report(sensor, 120.0)
+        adopted = [r.levelno for r in caplog.records if r.name == entities.__name__]
+
+    assert ignored == [logging.DEBUG] * (entities.TOTAL_INCREASING_RESET_POLLS - 1)
+    assert adopted == [logging.WARNING]
+
+
 async def test_a_total_sensor_reset_needs_consecutive_lower_polls(hass, entry, runtime):
     """A missing poll between lower readings must not count toward a counter reset."""
     sensor = _total_sensor(runtime, entry, hass)

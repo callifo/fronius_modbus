@@ -264,8 +264,9 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
 
     async def _failed_poll(self, err: ModbusError) -> ModbusPoll:
         if self.data is not None and time.monotonic() < self._tolerate_until:
-            log = _LOGGER.warning if self._tolerated_failures == 0 else _LOGGER.debug
-            log("Modbus outage tolerated after a web write: %s", err)
+            # Expected: the inverter restarts its Modbus server after a web write.
+            # An outage outliving the window fails the update below instead.
+            _LOGGER.debug("Modbus outage tolerated after a web write: %s", err)
             self._tolerated_failures += 1
             return replace(self.data, retained=True)
         if self._tolerated_failures:

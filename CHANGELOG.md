@@ -5,6 +5,9 @@
 ### Security
 - Discovery follows an announced new address only when a Modbus read finds the inverter's serial number there and no longer at the entry's address; an announced address that does not answer yet is read again for a few minutes. The serial number an announcement carries is no secret, so anyone able to send mDNS could turn an entry, and its Web API login, to another host.
 
+### Changed
+- A counter reading the total guard ignores and a Modbus outage the integration bridges after a web write are logged at debug level, not as warnings: both are handled and change nothing. A counter jump the guard adopts is still a warning.
+
 ## 1.2.0b4
 
 A small update on 1.2.0b3: it removes a deprecation warning Home Assistant logged for the discovery, adds the smart meter's per-phase energy for meters that count it, and counts the Tauro among the known models. No migration; existing entities, unique ids and entity ids do not change.

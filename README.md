@@ -192,7 +192,7 @@ The inverter's component endpoints (`/api/components/inverter/readable` and `/ap
 
 - A value the inverter does not report shows as unknown.
 - A power module the inverter does not report creates no entity; one it has reported before keeps its entity, as unknown. A power module that appears later gets its entity at the next reload.
-- `Production limit`, `Production limit reached`, `Battery max charge power (DC-DC)` and `Battery max discharge power (DC-DC)` follow the same rule, since older firmware lacks these fields. Such sensors an entry already has from an earlier version stay; if they only ever show unknown, disable them.
+- `Production power limit`, `Production power limit reached`, `Battery max charge power (DC-DC)` and `Battery max discharge power (DC-DC)` follow the same rule, since older firmware lacks these fields. Such sensors an entry already has from an earlier version stay; if they only ever show unknown, disable them.
 - Firmware without these endpoints (HTTP 404) gets none of these sensors; a sensor registered before stays, as unknown, since one 404 from an endpoint that answered before proves nothing.
 - No sensor takes their serial numbers, part serials or device ids; the battery's serial number shows on its device page, as before, and is redacted in diagnostics.
 
@@ -201,7 +201,7 @@ The inverter's component endpoints (`/api/components/inverter/readable` and `/ap
 | Power module 1–4 temperature                                                                            | Inverter | enabled  | Temperatures of the power modules the inverter reports.                                  |
 | Fan 1 / 2                                                                                               | Inverter | enabled  | Fan speed in percent.                                                                    |
 | AC power L1 / L2 / L3                                                                                   | Inverter | enabled  | Per-phase active power of the inverter.                                                  |
-| Production limit / Production limit reached                                                             | Inverter | enabled  | The active power limit in effect, and whether the inverter is running at it.             |
+| Production power limit / Production power limit reached                                                 | Inverter | enabled  | The active power limit in effect, and whether the inverter is running at it.             |
 | Battery max charge / discharge power (DC-DC)                                                            | Inverter | enabled  | What the battery converter can take or give right now.                                   |
 | Grid valid                                                                                              | Inverter | enabled  | The inverter's own verdict on the grid at its feed-in point.                             |
 | Power stage 1 / 2 firmware                                                                              | Inverter | enabled  | Diagnostic.                                                                              |

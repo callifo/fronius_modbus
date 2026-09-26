@@ -1,5 +1,8 @@
 """Tests for household load and grid status derivation."""
 
+import json
+import pathlib
+
 import pytest
 
 from custom_components.fronius_modbus.derived import (
@@ -200,3 +203,15 @@ def test_an_unread_limit_does_not_hide_a_reason_that_is_known():
         _reason(operating_state=5, limit_enabled=True, limit_percent=None)
         == "inverter_state"
     )
+
+
+def test_the_limit_reason_is_named_after_the_ac_limit_it_reads():
+    """Discussion #6: "Export limit" read as the grid feed-in limit, which the
+    inverter reports in none of these signals; the reason is the AC limit."""
+    root = pathlib.Path(__file__).parent.parent / "custom_components/fronius_modbus"
+    for language in ("en", "de"):
+        texts = json.loads(
+            (root / "translations" / f"{language}.json").read_text(encoding="utf-8")
+        )["entity"]
+        reason = texts["sensor"]["throttle_reason"]["state"]["export_limit"]
+        assert reason == texts["number"]["ac_limit_rate"]["name"].removesuffix(" rate")

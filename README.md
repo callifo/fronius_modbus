@@ -417,8 +417,14 @@ automation:
   - alias: "Inverter: on again"
     triggers:
       # numeric_state's "above" is strict and would miss a price that stops at 0;
-      # an unavailable price counts as 0 here, so the output does not stay off.
+      # an unavailable price counts as 0 here. A template trigger fires only when
+      # the price turns non-negative, so a restart checks the price once as well.
       - trigger: template
+        value_template: "{{ states('sensor.electricity_price') | float(0) >= 0 }}"
+      - trigger: homeassistant
+        event: start
+    conditions:
+      - condition: template
         value_template: "{{ states('sensor.electricity_price') | float(0) >= 0 }}"
     actions:
       - action: select.select_option

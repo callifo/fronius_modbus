@@ -338,7 +338,7 @@ Grid charging also stops at around 500 W while the inverter's own battery config
 
 - **Dynamic electricity prices:** charge the battery from the grid in the cheap hours (`Charge from Grid` with `Grid charge power`) and keep it from discharging while the price is low (`Block Discharging`).
 - **Negative prices or an export cap:** limit the inverter's output with `AC limit enable` and `AC limit rate`, or, with the `technician` role, only the feed-in with the export soft limit.
-- **Keeping energy for later:** hold the battery for the evening or for backup power with `Block Discharging`, the `Modbus storage reserve`, or the `Backup reserve` of the inverter's own battery management.
+- **Keeping energy for later:** hold the battery for the evening or for backup power with `Block Discharging`, the `Modbus storage reserve` (it applies in a Modbus storage mode, not in `Auto`), or the `Backup reserve` of the inverter's own battery management.
 - **Monitoring:** household load, grid power per phase, battery state of charge and state of health, power module temperatures and fans, and why the inverter throttles (`Throttle reason`), all without a cloud connection.
 - **Modbus only:** read the inverter and steer the battery over Modbus without handing Home Assistant a web password (see [Without the web API](#without-the-web-api)).
 

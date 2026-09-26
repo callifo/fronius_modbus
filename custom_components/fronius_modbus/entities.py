@@ -443,6 +443,8 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         ),
         exists_fn=_controls_present,
         entity_category=EntityCategory.DIAGNOSTIC,
+        # The flag "AC limit enabled" shows; an entry keeps it where it has it.
+        enabled=False,
     ),
     _sensor(
         "OutPFSet_Ena",

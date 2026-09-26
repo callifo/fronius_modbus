@@ -307,3 +307,38 @@ def test_the_rows_kept_on_upgrade_are_rows_that_follow_the_report():
     """A misspelt key in the minor-14 migration would keep nothing."""
     assert set(migrations._REPORT_FOLLOWING_SINCE_14) == FIRMWARE_DEPENDENT
     assert FIRMWARE_DEPENDENT <= ONCE_REPORTED_KEYS
+
+
+@pytest.mark.parametrize(
+    ("key", "precision"),
+    [
+        ("fan_1", 0),
+        ("inverter_temperature", 1),
+        ("inverter_power_l1", 0),
+        ("feed_in_voltage_l1", 1),
+        ("feed_in_frequency", 2),
+    ],
+)
+def test_a_float_reading_shows_the_digits_it_has(key, precision):
+    """Discussion #6: a fan showed 37.254902 %; the endpoints send raw float32 values."""
+    reading = next(r for r in COMPONENT_READINGS if r.key == key)
+
+    description = entities._component_sensor(reading)
+
+    assert description.suggested_display_precision == precision
+
+
+def test_every_measured_reading_has_a_display_precision():
+    measured = [
+        r
+        for r in COMPONENT_READINGS
+        if r.unit is not None and r.device_class != "duration"
+    ]
+
+    missing = [
+        r.key
+        for r in measured
+        if entities._component_sensor(r).suggested_display_precision is None
+    ]
+
+    assert missing == []

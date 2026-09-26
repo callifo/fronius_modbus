@@ -1245,6 +1245,43 @@ async def test_an_inverter_whose_address_another_took_is_followed(hass, inverter
     assert config_flow.entry_defaults(entry)["host"] == MOVED_HOST
 
 
+async def test_a_new_address_answering_late_is_followed(hass, monkeypatch):
+    """Reaudit 1cd9c57 P2-01: one failed read at the new address lost the only announcement."""
+    monkeypatch.setattr(discovery, "MOVE_READ_RETRY_SECONDS", 0)
+    entry = make_entry(hass)
+    with_inverter_device(hass, entry)
+    answers = iter([None, SERIAL])
+
+    async def serial_at(_hass, host, _port, _unit_id):
+        return next(answers) if host == MOVED_HOST else None
+
+    monkeypatch.setattr(discovery, "async_serial_at", serial_at)
+
+    await discover(hass, discovered(host=MOVED_HOST))
+
+    assert config_flow.entry_defaults(entry)["host"] == MOVED_HOST
+
+
+async def test_an_endpoint_changed_during_the_reads_is_not_moved(hass, monkeypatch):
+    """Reaudit 1cd9c57 P2-02: the reads checked a port and unit the entry no longer had."""
+    entry = make_entry(hass)
+    with_inverter_device(hass, entry)
+
+    async def serial_at(_hass, host, _port, _unit_id):
+        if host != MOVED_HOST:
+            return None
+        hass.config_entries.async_update_entry(
+            entry, options={"port": 1502, "inverter_modbus_unit_id": 7}
+        )
+        return SERIAL
+
+    monkeypatch.setattr(discovery, "async_serial_at", serial_at)
+
+    await discover(hass, discovered(host=MOVED_HOST))
+
+    assert config_flow.entry_defaults(entry)["host"] == HOST
+
+
 async def test_an_announcement_before_the_failed_poll_is_followed(hass):
     """Reaudit P2-02: the last poll still succeeded, so the only announcement was lost."""
     entry = make_entry(hass)

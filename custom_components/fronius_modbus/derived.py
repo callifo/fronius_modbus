@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import NamedTuple
+
 from .const import GRID_STATUS, THROTTLE_REASONS
 
 GRID_FREQUENCY_HZ = 50.0
@@ -173,6 +175,13 @@ class LoadEstimator:
         return self._good(max(candidate, 0.0), inverter_power_w)
 
 
+class TotalVerdict(NamedTuple):
+    """Why a reading was rejected, or accepted late; adopted says which."""
+
+    message: str
+    adopted: bool
+
+
 class TotalGuard:
     """Accepts readings of a monotonically increasing counter, one verdict per poll.
 
@@ -199,7 +208,7 @@ class TotalGuard:
         self._suspect_polls = 0
         self._last_suspect = None
 
-    def observe(self, reading: float | None) -> str | None:
+    def observe(self, reading: float | None) -> TotalVerdict | None:
         """Record one poll; returns why a reading was rejected or accepted late, else None."""
         if reading is None:
             self._suspect_polls = 0
@@ -219,7 +228,9 @@ class TotalGuard:
         self._last_suspect = reading
         kind = "lower than" if reading < self.value else "far above"
         if self._suspect_polls < self._confirmations:
-            return f"ignoring {reading}: {kind} the last value {self.value}"
+            return TotalVerdict(
+                f"ignoring {reading}: {kind} the last value {self.value}", adopted=False
+            )
         message = (
             f"accepting {reading}: {kind} the last value {self.value} for "
             f"{self._confirmations} polls, so the counter really moved"
@@ -227,7 +238,7 @@ class TotalGuard:
         self.value = reading
         self._suspect_polls = 0
         self._last_suspect = None
-        return message
+        return TotalVerdict(message, adopted=True)
 
     def _plausible_after(self, earlier: float, reading: float) -> bool:
         return 0 <= reading - earlier <= self._max_step

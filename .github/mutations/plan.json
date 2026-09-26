@@ -1391,5 +1391,26 @@
     "old": "SUPPORTED_MODELS = [\"Primo GEN24\", \"Symo GEN24\", \"Verto\", \"Tauro\"]\n",
     "new": "SUPPORTED_MODELS = [\"Primo GEN24\", \"Symo GEN24\", \"Verto\"]\n",
     "tests": "tauro_is_no_untested_model"
+  },
+  {
+    "label": "entities: an ignored counter glitch is no warning",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "        level = logging.WARNING if verdict.adopted else logging.DEBUG\n",
+    "new": "        level = logging.WARNING\n",
+    "tests": "ignored_counter_glitch_is_no_warning"
+  },
+  {
+    "label": "entities: an adopted counter jump is a warning",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "        level = logging.WARNING if verdict.adopted else logging.DEBUG\n",
+    "new": "        level = logging.DEBUG\n",
+    "tests": "ignored_counter_glitch_is_no_warning"
+  },
+  {
+    "label": "coordinator: a tolerated outage is no warning",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "            _LOGGER.debug(\"Modbus outage tolerated after a web write: %s\", err)\n",
+    "new": "            _LOGGER.warning(\"Modbus outage tolerated after a web write: %s\", err)\n",
+    "tests": "tolerated_outage_is_no_warning"
   }
 ]

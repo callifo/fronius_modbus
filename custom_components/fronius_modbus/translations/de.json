@@ -142,7 +142,7 @@
         }
       },
       "ac_limit_enable": {
-        "name": "AC-Begrenzung aktivieren",
+        "name": "AC-Leistungsbegrenzung aktivieren",
         "state": {
           "disabled": "Deaktiviert",
           "enabled": "Aktiviert"
@@ -184,7 +184,7 @@
         "name": "AC-Strom L3"
       },
       "acpower": {
-        "name": "AC-Leistung"
+        "name": "AC-Wirkleistung"
       },
       "var": {
         "name": "Blindleistung"
@@ -199,7 +199,7 @@
         "name": "Hauslast"
       },
       "power": {
-        "name": "Leistung"
+        "name": "Wirkleistung"
       },
       "pv_connection": {
         "name": "PV-Verbindung",
@@ -325,13 +325,13 @@
         "name": "AC-Spannung L3-L1"
       },
       "power_l1": {
-        "name": "Leistung L1"
+        "name": "Wirkleistung L1"
       },
       "power_l2": {
-        "name": "Leistung L2"
+        "name": "Wirkleistung L2"
       },
       "power_l3": {
-        "name": "Leistung L3"
+        "name": "Wirkleistung L3"
       },
       "unit_id": {
         "name": "Modbus-ID"
@@ -409,7 +409,7 @@
         }
       },
       "max_charge": {
-        "name": "Lade-Referenzwert"
+        "name": "Lade-/Entlade-Referenzleistung"
       },
       "storage_charge_current": {
         "name": "Speicher-Ladestrom"
@@ -448,10 +448,10 @@
         "name": "Zelltemperatur"
       },
       "exported": {
-        "name": "Exportiert"
+        "name": "Eingespeist"
       },
       "imported": {
-        "name": "Importiert"
+        "name": "Bezogen"
       },
       "grid_charging": {
         "name": "Netzladen",
@@ -542,10 +542,10 @@
         }
       },
       "battery_max_charge_power": {
-        "name": "Batterie max. Ladeleistung (DC-Wandler)"
+        "name": "Speicher max. Ladeleistung (DC-Wandler)"
       },
       "battery_max_discharge_power": {
-        "name": "Batterie max. Entladeleistung (DC-Wandler)"
+        "name": "Speicher max. Entladeleistung (DC-Wandler)"
       },
       "dc_link_voltage": {
         "name": "Zwischenkreisspannung"
@@ -558,25 +558,25 @@
         }
       },
       "feed_in_voltage_l1": {
-        "name": "Einspeisepunkt Spannung L1"
+        "name": "Spannung Einspeisepunkt L1"
       },
       "feed_in_voltage_l2": {
-        "name": "Einspeisepunkt Spannung L2"
+        "name": "Spannung Einspeisepunkt L2"
       },
       "feed_in_voltage_l3": {
-        "name": "Einspeisepunkt Spannung L3"
+        "name": "Spannung Einspeisepunkt L3"
       },
       "feed_in_voltage_l1_l2": {
-        "name": "Einspeisepunkt Spannung L1-L2"
+        "name": "Spannung Einspeisepunkt L1-L2"
       },
       "feed_in_voltage_l2_l3": {
-        "name": "Einspeisepunkt Spannung L2-L3"
+        "name": "Spannung Einspeisepunkt L2-L3"
       },
       "feed_in_voltage_l3_l1": {
-        "name": "Einspeisepunkt Spannung L3-L1"
+        "name": "Spannung Einspeisepunkt L3-L1"
       },
       "feed_in_frequency": {
-        "name": "Einspeisepunkt Frequenz"
+        "name": "Frequenz Einspeisepunkt"
       },
       "operating_time": {
         "name": "Betriebsdauer"
@@ -594,7 +594,7 @@
         "name": "Hardware Leistungsteil"
       },
       "storage_state_of_health": {
-        "name": "Gesundheit (SoH)"
+        "name": "Gesundheitszustand (SoH)"
       },
       "storage_cell_temperature_min": {
         "name": "Zelltemperatur min"
@@ -636,22 +636,22 @@
         "name": "Anbindung"
       },
       "exported_l1": {
-        "name": "Exportiert L1"
+        "name": "Eingespeist L1"
       },
       "imported_l1": {
-        "name": "Importiert L1"
+        "name": "Bezogen L1"
       },
       "exported_l2": {
-        "name": "Exportiert L2"
+        "name": "Eingespeist L2"
       },
       "imported_l2": {
-        "name": "Importiert L2"
+        "name": "Bezogen L2"
       },
       "exported_l3": {
-        "name": "Exportiert L3"
+        "name": "Eingespeist L3"
       },
       "imported_l3": {
-        "name": "Importiert L3"
+        "name": "Bezogen L3"
       }
     },
     "switch": {

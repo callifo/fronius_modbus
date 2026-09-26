@@ -409,7 +409,7 @@
         }
       },
       "max_charge": {
-        "name": "Max charging power"
+        "name": "Charge/discharge reference power"
       },
       "storage_charge_current": {
         "name": "Storage charging current"

@@ -176,6 +176,7 @@ Set during setup; change them later with **Configure** or **Reconfigure** on the
 | AC Current / L1 / L2 / L3 | Total and per-phase smart meter AC current.                                                                           |
 | Power                     | Net grid power measured by the smart meter.                                                                           |
 | Power L1 / L2 / L3        | Per-phase smart meter real power from SunSpec `WphA`, `WphB`, and `WphC`. The sign matches the meter power direction. |
+| Exported / Imported L1 / L2 / L3 | Per-phase energy counters (`TotWhExpPhA`-`C`, `TotWhImpPhA`-`C`). Created only for a meter that counts them, since some meters report 0, SunSpec's "not implemented"; disabled by default. |
 
 ### Battery storage sensors
 

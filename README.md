@@ -238,13 +238,13 @@ The sensor names the limit the output is held at right now. A limit that is only
 | `inverter_state`       | Inverter reports throttling | Wechselrichter meldet Drosselung | The inverter reports the SunSpec operating state throttled (model 103 `St`).                                          |
 | `several`              | Several reasons             | Mehrere Gründe                   | More than one of the above at once.                                                                                   |
 | `active_power_control` | Active power control        | Wirkleistungsvorgabe             | No longer reported; kept so older history keeps its label.                                                            |
-| `export_limit`         | AC limit                    | AC-Leistungsbegrenzung           | No longer reported: before 1.2.0b5 it meant an AC limit that was switched on. Kept so older history keeps its label.   |
+| `export_limit`         | AC limit                    | AC-Leistungsbegrenzung           | No longer reported: up to 1.2.0b4 it meant an AC limit that was switched on. Kept so older history keeps its label.    |
 | unknown                |                             |                                  | No reason is found while a source is missing: the component endpoint or model 103 could not be read, the last web poll failed, the firmware does not report the flags, or the entry waits for a new web login. A reason one source names is shown even while the other is missing. |
 
 Where the states come from, measured on a GEN24 and a Verto:
 
 - `ac_limit` and `feed_in_limit` come from the inverter's public component endpoint (`/api/components/inverter/readable`): `ACBRIDGE_VALUE_POWERACTIVE_RELATIVE_PRODUCTION_LIMIT_REACHED_U8` is set while a percentage limit holds the output, `ACBRIDGE_VALUE_POWERACTIVE_PRODUCTION_LIMIT_REACHED_U8` while a limit in watts does. They need no web login, so an entry without the web API has them too.
-- The Modbus signals only say a limit is switched on: `StActCtl` bit 0 (model 122) is set as soon as the AC limit is enabled, even at 100 %, and Fronius leaves `St` at normal while it throttles. They are no longer used for the reason.
+- The Modbus signals only say a limit is switched on: `StActCtl` bit 0 (model 122) is set as soon as the AC limit is enabled, even at 100 %, and a GEN24 left `St` at normal while it throttled. They are no longer used for the reason.
 - The flags come with the web poll, which updates the sensor on its own, so the reason can trail a change by up to the web scan interval (default 60 s). While Modbus is down the sensor stays available as long as the web poll answers.
 
 ### Inverter controls
@@ -415,15 +415,17 @@ automation:
           option: "{{ 'block_discharging' if trigger.to_state.state == 'on' else 'auto' }}"
 ```
 
-Switch the inverter's output off while the price is negative. `AC limit rate` limits everything the inverter puts out, not only the feed-in, so the house then draws from the grid, which a negative price pays for. One automation compares the price whenever it changes and again after a restart, a reload of the automations or of the integration, so it never waits for the next crossing of zero; an unavailable price restores the output:
+Switch the inverter's output off while the price is negative. `AC limit rate` limits everything the inverter puts out, not only the feed-in, so the house then draws from the grid, which a negative price pays for. One automation compares the price whenever it changes and again after a restart, a reload of the automations or of the integration, so it never waits for the next crossing of zero; an unavailable price restores the output. It owns the AC limit: whenever the price is not negative it switches off an AC limit set by other means:
 
 ```yaml
 automation:
   - alias: "Inverter: off at negative prices"
     mode: restart
     triggers:
+      # "to: null" leaves out changes of the price's attributes only.
       - trigger: state
         entity_id: sensor.electricity_price
+        to: null
       - trigger: homeassistant
         event: start
       - trigger: event

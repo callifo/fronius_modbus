@@ -1,20 +1,53 @@
 # Changelog
 
-## Unreleased
+## 1.2.0b5
+
+A beta on 1.2.0b4 that makes the throttle reason report a limit that actually holds the output, renames several sensors after what they measure, and makes discovery confirm a moved inverter before following it. No migration; unique ids and entity ids do not change. Automations that wait for the throttle states `export_limit` or `active_power_control` need the new states (see below).
+
+### Throttle reason
+
+The sensor used the Modbus signals, which only say a limit is switched on: an AC limit left at 100 % read as throttling, and an export limit holding the output read as "not throttled" (#26). It now follows the inverter's component endpoint, which reports whether a limit holds the output, and it follows the web poll too.
+
+| Raw state | 1.2.0b4 (EN) | 1.2.0b4 (DE) | 1.2.0b5 (EN) | 1.2.0b5 (DE) | Reported when … |
+|---|---|---|---|---|---|
+| `none` | Not throttled | Keine Drosselung | Not throttled | Keine Drosselung | no limit holds the output |
+| `inverter_state` | Inverter reports throttling | Wechselrichter meldet Drosselung | Inverter reports throttling | Wechselrichter meldet Drosselung | the inverter reports throttled itself (a GEN24 did not) |
+| `ac_limit` | – | – | **AC limit** | **AC-Leistungsbegrenzung** | a percentage limit is reached, e.g. the AC limit |
+| `feed_in_limit` | – | – | **Export limit** | **Einspeisebegrenzung** | a limit in watts is reached, measured with the export limit |
+| `several` | Several reasons | Mehrere Gründe | Several reasons | Mehrere Gründe | more than one reason at once |
+| `export_limit` | Export limit | Einspeisebegrenzung | AC limit | AC-Leistungsbegrenzung | **never** – kept for older history only |
+| `active_power_control` | Active power control | Wirkleistungsvorgabe | Active power control | Wirkleistungsvorgabe | **never** – kept for older history only |
+| unknown | – | – | – | – | no reason found while a source is missing |
+
+In 1.2.0b4, `export_limit` was labelled "Export limit" / "Einspeisebegrenzung" although it meant the AC limit. Older history entries with `export_limit` now carry the correct label "AC limit".
+
+### Renamed sensors
+
+| Sensor | 1.2.0b4 (EN) | 1.2.0b5 (EN) | 1.2.0b4 (DE) | 1.2.0b5 (DE) |
+|---|---|---|---|---|
+| Production limit | Production limit | **Output power limit** | Aktuelle Produktionsgrenze | **Zulässige Ausgangsleistung** |
+| Production limit reached | Production limit reached | **Output limited** | Leistungsgrenze erreicht | **Ausgangsleistung begrenzt** |
+| Max charging power | Max charging power | **Charge/discharge reference power** | Lade-Referenzwert | **Lade-/Entlade-Referenzleistung** |
+| AC power | AC power | – | AC-Leistung | **AC-Wirkleistung** |
+| Power / L1–L3 (smart meter) | Power | – | Leistung | **Wirkleistung** |
+| Exported / Imported, total and L1–L3 (smart meter) | Exported / Imported | – | Exportiert / Importiert | **Eingespeist / Bezogen** |
+| State of health | State of health | – | Gesundheit (SoH) | **Gesundheitszustand (SoH)** |
+| Battery max charge / discharge power (DC-DC) | unchanged | – | Batterie max. Lade-/Entladeleistung | **Speicher max. Lade-/Entladeleistung** |
+| Feed-in point frequency / voltage | unchanged | – | Einspeisepunkt Frequenz / Spannung | **Frequenz / Spannung Einspeisepunkt** |
+| AC limit enable (select) | AC limit enable | – | AC-Begrenzung aktivieren | **AC-Leistungsbegrenzung aktivieren** |
+
+Only the displayed names change; entity ids, history and automations stay. A name you gave an entity yourself stays too.
 
 ### Security
 - Discovery follows an announced new address only when a Modbus read finds the inverter's serial number there and no longer at the entry's address; an announced address that does not answer yet is read again for a few minutes. The serial number an announcement carries is no secret, so anyone able to send mDNS could turn an entry, and its Web API login, to another host.
 
 ### Changed
-- A counter reading the total guard ignores and a Modbus outage the integration bridges after a web write are logged at debug level, not as warnings: both are handled and change nothing. A counter jump the guard adopts is still a warning.
-- `Production limit` is now `Output power limit` ("Zulässige Ausgangsleistung"): the output the inverter may deliver now, its nameplate power or the AC limit, no longer sharing its German name with the battery's "Aktuelle Leistungsgrenze" or reading like the fixed `Maximum power`. `Production limit reached` is now `Output limited` ("Ausgangsleistung begrenzt"): it says a limit set on the inverter holds the output, which "reached" read as the inverter at its own maximum. Entity ids do not change.
-- `Max charging power` reads `Charge/discharge reference power` ("Lade-/Entlade-Referenzleistung"): model 124 `WChaMax` is the reference the charge and discharge rates scale, not a power the inverter delivers.
-- German names use one term per thing: "Wirkleistung" for active power next to "Blindleistung", "Eingespeist"/"Bezogen" for the meter's energy, "Speicher" for the battery, "Gesundheitszustand (SoH)", and the measured value before "Einspeisepunkt". Entity ids do not change.
 - `Throttle control` is disabled by default for new entries: it reads the same flag as `AC limit enabled`. Entries that have it keep it.
+- A counter reading the total guard ignores and a Modbus outage the integration bridges after a web write are logged at debug level, not as warnings. A counter jump the guard adopts is still a warning.
+- The price automation example in the README compares the price on every change, at start, and after a reload of the automations or the integration.
 
 ### Fixed
-- `Throttle reason` reports a limit the output has reached, from the inverter's component endpoint, instead of a limit that is switched on (#26). A reached percentage limit such as the AC limit reads `ac_limit` ("AC limit"), a reached limit in watts, in practice the export limit, reads `feed_in_limit` ("Export limit", "Einspeisebegrenzung"). An AC limit left on at 100 % or above the output no longer reads as throttling. The states `export_limit` and `active_power_control` are no longer reported; automations that wait for them need the new states. In history they keep a label, `export_limit` the correct "AC limit" instead of "Export limit", which it never meant. Without the component flags the reason is unknown unless the operating state names one. The sensor follows the web poll too and stays available while Modbus is down.
-- The sensors from the inverter's component endpoints show as many digits as their unit is worth (fans and power without decimals, temperatures and voltages with one, frequency with two) instead of the raw float32 value. Only the display changes: the stored state keeps its value, and the precision can be changed per entity.
+- The sensors from the inverter's component endpoints show as many digits as their unit is worth (fans and power without decimals, temperatures and voltages with one, frequency with two) instead of the raw float32 value (#27). Only the display changes; the stored state keeps its value.
 
 ## 1.2.0b4
 

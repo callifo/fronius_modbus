@@ -63,7 +63,7 @@ What changes for users of [callifo/fronius_modbus](https://github.com/callifo/fr
 
 **New entities and tools**
 
-- Component sensors from the inverter's Web API: power module temperatures, fans, per-phase AC power, production limit, grid validity, battery state of health and more (see [Component sensors](#component-sensors-web-api)).
+- Component sensors from the inverter's Web API: power module temperatures, fans, per-phase AC power, output power limit, grid validity, battery state of health and more (see [Component sensors](#component-sensors-web-api)).
 - `Throttle reason`, `Web API SoC mode`, `SoC Minimum (Web API)`.
 - Diagnostics download (Settings -> Devices -> device -> Download diagnostics), with the raw SunSpec register map; serial numbers are redacted.
 
@@ -234,12 +234,12 @@ The sensor names the limit the output is held at right now. A limit that is only
 | ---------------------- | --------------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | `none`                 | Not throttled               | Keine Drosselung                 | No limit holds the output.                                                                                            |
 | `ac_limit`             | AC limit                    | AC-Leistungsbegrenzung           | A percentage limit is reached, such as the AC limit (`AC limit enable`, `AC limit rate`).                             |
-| `feed_in_limit`        | Export limit                | Einspeisebegrenzung              | A limit in watts is reached. In practice the export limit set in the inverter's web interface; the inverter reports any limit in watts this way. |
+| `feed_in_limit`        | Export limit                | Einspeisebegrenzung              | A limit in watts is reached. Measured with the export limit set in the inverter's web interface; other limits in watts may report the same way. |
 | `inverter_state`       | Inverter reports throttling | Wechselrichter meldet Drosselung | The inverter reports the SunSpec operating state throttled (model 103 `St`).                                          |
 | `several`              | Several reasons             | Mehrere Gründe                   | More than one of the above at once.                                                                                   |
 | `active_power_control` | Active power control        | Wirkleistungsvorgabe             | No longer reported; kept so older history keeps its label.                                                            |
 | `export_limit`         | AC limit                    | AC-Leistungsbegrenzung           | No longer reported: before 1.2.0b5 it meant an AC limit that was switched on. Kept so older history keeps its label.   |
-| unknown                |                             |                                  | The component endpoint or model 103 could not be read, or the last web poll failed.                                   |
+| unknown                |                             |                                  | The component endpoint or model 103 could not be read, the last web poll failed, the firmware does not report the flags, or the entry waits for a new web login. |
 
 Where the states come from, measured on a GEN24 and a Verto:
 

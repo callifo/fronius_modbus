@@ -86,6 +86,7 @@ VERTO_ONLY = {
     "inverter_temperature_2",
 }
 NOT_ON_THE_VERTO = {
+    "module_temperature_10",
     "module_temperature_6",
     "module_temperature_7",
     "module_temperature_8",
@@ -393,3 +394,17 @@ def test_the_surplus_flag_is_offered_disabled():
     assert surplus.entity_registry_enabled_default is False
     assert surplus.value_fn(verto) == "yes"
     assert component_sensors(gen24)["surplus_power_available"].value_fn(gen24) == "no"
+
+
+def test_the_tenth_module_reads_its_own_two_digit_channel():
+    """The web interface knows modules up to 10; "0{index}" made channel "010"."""
+    readings = read_verto()
+    readings.inverter_readings = {
+        **readings.inverter_readings,
+        "MODULE_TEMPERATURE_MEAN_10_F32": 41.0,
+    }
+    runtime = runtime_with(readings)
+
+    sensor = component_sensors(runtime)["module_temperature_10"]
+
+    assert sensor.value_fn(runtime) == 41.0

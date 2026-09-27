@@ -257,7 +257,7 @@ Modbus reports events only as severity bits, and none that only the service leve
 | Active events | sensor, diagnostic | How many events are active. |
 | Inverter event | event | Fires once for every new entry of the inverter's event log, with the severity as its event type (`error`, `warning`, `info`) and the same attributes. It catches entries that last no time at all and never show as active, such as a short battery fault. |
 
-- The texts come from the inverter itself, in Home Assistant's language, and in English where the inverter has none in that language; a code without a text shows its short name.
+- The texts come from the inverter itself, in Home Assistant's language, and in English where the inverter has none in that language; a code without a text shows its short name. They are read once: after changing Home Assistant's language, reload the entry.
 - The active events are read with every web poll; the log (about 60 KB) every 5 minutes, so an event can arrive up to 5 minutes late, with its own time in `since`.
 - The log is read once at start without firing: entries from before, and from while Home Assistant was off, do not fire.
 - `severity` and `visible_to` are read from the inverter's log, not documented by Fronius: the nightly "not enough DC power" is a warning a customer sees, the daily isolation measurement an info. Events of the service level show too; the web interface shows them to its service login only.
@@ -500,6 +500,7 @@ automation:
 
 ## Known limitations
 
+- Firmware without the web interface's event endpoints leaves `Active event` and `Active events` unknown, and `Inverter event` never fires.
 - Models other than the verified setup (see [Supported devices](#supported-devices)) are untested.
 - A power module or a limit sensor that appears later, for example after a firmware update, gets its entity at the next reload of the entry.
 - The Web API cannot be reached through an IPv6 address; set the entry up with an IPv4 address or a host name.

@@ -19,6 +19,7 @@ from custom_components.fronius_modbus.fronius_modbus_api.exceptions import (
 from custom_components.fronius_modbus.froniuswebclient import (
     FroniusWebAuthError,
     FroniusWebResponseError,
+    FroniusWebUnreachable,
 )
 from custom_components.fronius_modbus.token_store import async_get_token_store
 from custom_components.fronius_modbus.web_control import FroniusWebControl
@@ -446,6 +447,35 @@ async def test_a_log_entry_after_a_failed_first_read_is_news(hass):
 
     assert first.new_events == ()
     assert [event.code for event in second.new_events] == ["BYD2-44"]
+
+
+async def test_a_log_entry_after_a_first_poll_that_raised_is_news(hass):
+    """The web interface did not answer at start, and setup went on without it.
+
+    The poll that raised never reached the log, so the first one that then
+    succeeded took an entry started meanwhile for history.
+    """
+    client = FakeClientWithEvents()
+    control = make_control(hass, client=client)
+
+    def unreachable():
+        raise FroniusWebUnreachable("ConnectTimeout")
+
+    try:
+        client.get_inverter_info = unreachable
+        with pytest.raises(FroniusWebUnreachable):
+            await control.async_refresh()
+        del client.get_inverter_info
+        started = int(time.time()) + 60
+        client.log = [
+            ACTIVE_AFCI,
+            BATTERY_FAULT | {"timestamp": started, "activeUntil": started},
+        ]
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert [event.code for event in data.new_events] == ["BYD2-44"]
 
 
 async def test_firmware_without_the_event_endpoints_has_no_events(hass):

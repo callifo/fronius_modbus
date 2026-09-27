@@ -105,15 +105,34 @@ COMPONENT_READINGS: tuple[ComponentReading, ...] = (
         "temperature",
     ),
     ComponentReading(
+        "inverter_temperature_2",
+        "inverter",
+        ("DEVICE_TEMPERATURE_AMBIENTMEAN_02_F32",),
+        "°C",
+        "temperature",
+        once_reported=True,
+    ),
+    ComponentReading(
         "storage_temperature",
         "storage",
         ("BAT_TEMPERATURE_CELL_F64",),
         "°C",
         "temperature",
     ),
-    *(_module_temperature(index) for index in (1, 2, 3, 4)),
+    # A Verto 30.0 Plus reported modules 1-5 and 9 and fans 1, 2, 3 and 5.
+    *(_module_temperature(index) for index in range(1, 10)),
     ComponentReading("fan_1", "inverter", ("FANCONTROL_PERCENT_01_F32",), "%"),
     ComponentReading("fan_2", "inverter", ("FANCONTROL_PERCENT_02_F32",), "%"),
+    *(
+        ComponentReading(
+            f"fan_{index}",
+            "inverter",
+            (f"FANCONTROL_PERCENT_0{index}_F32",),
+            "%",
+            once_reported=True,
+        )
+        for index in (3, 4, 5)
+    ),
     *(
         ComponentReading(
             f"inverter_power_l{phase}",
@@ -165,6 +184,16 @@ COMPONENT_READINGS: tuple[ComponentReading, ...] = (
         "voltage",
         diagnostic=True,
         enabled=False,
+    ),
+    # Seen set only while an export limit curtailed PV (#26); undocumented.
+    ComponentReading(
+        "surplus_power_available",
+        "inverter",
+        ("POWERMANAGER_VALUE_SURPLUS_POWER_AVAILABLE_U8",),
+        measurement=False,
+        enabled=False,
+        transform="yes_no",
+        once_reported=True,
     ),
     ComponentReading(
         "grid_valid",

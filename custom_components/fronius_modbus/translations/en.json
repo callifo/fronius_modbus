@@ -654,6 +654,40 @@
       },
       "imported_l3": {
         "name": "Imported L3"
+      },
+      "inverter_temperature_2": {
+        "name": "Temperature 2"
+      },
+      "surplus_power_available": {
+        "name": "Surplus power available",
+        "state": {
+          "yes": "Yes",
+          "no": "No"
+        }
+      },
+      "module_temperature_5": {
+        "name": "Power module 5 temperature"
+      },
+      "module_temperature_6": {
+        "name": "Power module 6 temperature"
+      },
+      "module_temperature_7": {
+        "name": "Power module 7 temperature"
+      },
+      "module_temperature_8": {
+        "name": "Power module 8 temperature"
+      },
+      "module_temperature_9": {
+        "name": "Power module 9 temperature"
+      },
+      "fan_3": {
+        "name": "Fan 3"
+      },
+      "fan_4": {
+        "name": "Fan 4"
+      },
+      "fan_5": {
+        "name": "Fan 5"
       }
     },
     "switch": {

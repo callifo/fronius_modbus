@@ -196,6 +196,21 @@
       },
       "storage_rated_soc_max": {
         "default": "mdi:battery-high"
+      },
+      "fan_3": {
+        "default": "mdi:fan"
+      },
+      "fan_4": {
+        "default": "mdi:fan"
+      },
+      "fan_5": {
+        "default": "mdi:fan"
+      },
+      "inverter_temperature_2": {
+        "default": "mdi:thermometer"
+      },
+      "surplus_power_available": {
+        "default": "mdi:solar-power-variant"
       }
     },
     "switch": {

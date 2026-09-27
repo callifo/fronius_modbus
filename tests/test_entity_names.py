@@ -97,3 +97,15 @@ def test_the_readme_names_every_throttle_state_as_the_translations_do():
     assert set(rows) == set(states["en"]) - {"unknown"}
     for key, (english, german) in rows.items():
         assert (english, german) == (states["en"][key], states["de"][key])
+
+
+def test_a_limit_in_watts_reads_as_the_export_limit_it_mostly_is():
+    """ "Leistungsgrenze" read as the inverter at its own maximum, and a bare
+    "Leistungsbegrenzung" as the AC limit next to it."""
+    states = {
+        language: NAMES[language]["sensor"]["throttle_reason"]["state"]
+        for language in ("en", "de")
+    }
+
+    assert states["en"]["power_limit"] == "Export limit"
+    assert states["de"]["power_limit"] == "Einspeisebegrenzung"

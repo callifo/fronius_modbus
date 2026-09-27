@@ -199,14 +199,13 @@ def test_the_limit_reason_is_named_after_the_ac_limit_it_reads():
 
 def test_the_production_limit_pair_is_a_power_limit_apart_from_the_battery_s():
     """ "Aktuelle Produktionsgrenze" and "Leistungsgrenze erreicht" read as two
-    limits; "Aktuelle Leistungsgrenze" is the battery's own sensor."""
+    limits; "Aktuelle Leistungsgrenze" is the battery's own sensor. "... erreicht"
+    also read as the inverter at its own maximum, while the flag says a limit
+    set on it holds the output."""
     root = pathlib.Path(__file__).parent.parent / "custom_components/fronius_modbus"
     expected = {
-        "en": ("Production power limit", "Production power limit reached"),
-        "de": (
-            "Aktuelle Erzeugungs-Leistungsgrenze",
-            "Erzeugungs-Leistungsgrenze erreicht",
-        ),
+        "en": ("Production power limit", "Limit active"),
+        "de": ("Aktuelle Erzeugungs-Leistungsgrenze", "Begrenzung greift"),
     }
     for language, names in expected.items():
         sensors = json.loads(

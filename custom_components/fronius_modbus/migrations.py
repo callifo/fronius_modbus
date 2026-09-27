@@ -31,7 +31,8 @@ from .const import (
     ModbusRestriction,
 )
 from .component_readings import ONCE_REPORTED_KEYS
-from .entities import expected_device_identifiers, expected_unique_ids
+from .entities import expected_unique_ids
+from .entity_base import expected_device_identifiers
 from .token_store import async_forget_unused_tokens, async_get_token_store
 
 _LOGGER = logging.getLogger(__name__)

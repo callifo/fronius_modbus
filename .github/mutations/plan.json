@@ -78,7 +78,7 @@
   },
   {
     "label": "entities: a total sensor rejects an implausible jump",
-    "path": "custom_components/fronius_modbus/entities.py",
+    "path": "custom_components/fronius_modbus/entity_base.py",
     "old": "TOTAL_INCREASING_MAX_STEP_WH = 100_000",
     "new": "TOTAL_INCREASING_MAX_STEP_WH = 10**12",
     "tests": "total_sensor_ignores_an_implausible_jump"
@@ -127,7 +127,7 @@
   },
   {
     "label": "entities: a stale reading is not an observation",
-    "path": "custom_components/fronius_modbus/entities.py",
+    "path": "custom_components/fronius_modbus/entity_base.py",
     "old": "        reading = description.value_fn(self._runtime) if self._source_sampled else None",
     "new": "        reading = description.value_fn(self._runtime)",
     "tests": "failed_polls_do_not_confirm_a_bad_energy_sample"
@@ -449,7 +449,7 @@
   },
   {
     "label": "entities: a refused write reaches the user translated",
-    "path": "custom_components/fronius_modbus/entities.py",
+    "path": "custom_components/fronius_modbus/entity_base.py",
     "old": "                translation_key=err.key,\n                translation_placeholders=err.placeholders,\n            ) from err\n        except ControlUnavailable",
     "new": "                translation_key=\"value_refused\",\n                translation_placeholders={\"error\": str(err)},\n            ) from err\n        except ControlUnavailable",
     "tests": "a_number_write_reaches_the_register"
@@ -638,7 +638,7 @@
   },
   {
     "label": "entities: an unreachable web interface is a translated error",
-    "path": "custom_components/fronius_modbus/entities.py",
+    "path": "custom_components/fronius_modbus/entity_base.py",
     "old": "        except FroniusWebUnreachable as err:\n",
     "new": "        except ZeroDivisionError as err:\n",
     "tests": "an_unreachable_web_interface_is_a_translated_error"
@@ -666,7 +666,7 @@
   },
   {
     "label": "entities: the battery device carries its firmware",
-    "path": "custom_components/fronius_modbus/entities.py",
+    "path": "custom_components/fronius_modbus/entity_base.py",
     "old": "            sw_version=readings.get(\"sw_version\"),\n",
     "new": "",
     "tests": "the_battery_device_carries_its_firmware_and_hardware"
@@ -1129,8 +1129,8 @@
   {
     "label": "entities: the component sensors need no login",
     "path": "custom_components/fronius_modbus/entities.py",
-    "old": "        web_client=\"public\",\n",
-    "new": "",
+    "old": "        device=reading.component,\n        source=\"web\",\n        web_client=\"public\",\n",
+    "new": "        device=reading.component,\n        source=\"web\",\n",
     "tests": "entry_without_the_web_api_reads_the_public_endpoints"
   },
   {
@@ -1429,14 +1429,14 @@
   },
   {
     "label": "entities: an ignored counter glitch is no warning",
-    "path": "custom_components/fronius_modbus/entities.py",
+    "path": "custom_components/fronius_modbus/entity_base.py",
     "old": "        level = logging.WARNING if verdict.adopted else logging.DEBUG\n",
     "new": "        level = logging.WARNING\n",
     "tests": "ignored_counter_glitch_is_no_warning"
   },
   {
     "label": "entities: an adopted counter jump is a warning",
-    "path": "custom_components/fronius_modbus/entities.py",
+    "path": "custom_components/fronius_modbus/entity_base.py",
     "old": "        level = logging.WARNING if verdict.adopted else logging.DEBUG\n",
     "new": "        level = logging.DEBUG\n",
     "tests": "ignored_counter_glitch_is_no_warning"
@@ -1506,7 +1506,7 @@
   },
   {
     "label": "entities: a mixed-source sensor stays up on a fresh web poll",
-    "path": "custom_components/fronius_modbus/entities.py",
+    "path": "custom_components/fronius_modbus/entity_base.py",
     "old": "                return description.also_web and bool(web and web.last_update_success)\n",
     "new": "                return False\n",
     "tests": "a_modbus_outage_keeps_a_reached_limit_shown"
@@ -1552,5 +1552,173 @@
     "old": "(f\"MODULE_TEMPERATURE_MEAN_{index:02d}_F32\",),",
     "new": "(f\"MODULE_TEMPERATURE_MEAN_0{index}_F32\",),",
     "tests": "tenth_module_reads_its_own_two_digit_channel"
+  },
+  {
+    "label": "events: an entry without a code is no event",
+    "path": "custom_components/fronius_modbus/inverter_events.py",
+    "old": "    if not isinstance(event_id, int) or event_id == _NO_CODE:\n",
+    "new": "    if not isinstance(event_id, int):\n",
+    "tests": "entry_without_a_code_is_no_event"
+  },
+  {
+    "label": "events: an error leads a warning",
+    "path": "custom_components/fronius_modbus/inverter_events.py",
+    "old": "    return (level, -event.started)\n",
+    "new": "    return (-event.started, level)\n",
+    "tests": "error_leads_a_warning"
+  },
+  {
+    "label": "events: the newest leads among equals",
+    "path": "custom_components/fronius_modbus/inverter_events.py",
+    "old": "    return (level, -event.started)\n",
+    "new": "    return (level, event.started)\n",
+    "tests": "among_equal_levels_the_newest_leads"
+  },
+  {
+    "label": "events: the first log read only learns",
+    "path": "custom_components/fronius_modbus/inverter_events.py",
+    "old": "        return self._unread_since is not None and event.started >= self._unread_since\n",
+    "new": "        return True\n",
+    "tests": "first_read_of_the_log_only_learns_it"
+  },
+  {
+    "label": "events: an event without a text shows its label",
+    "path": "custom_components/fronius_modbus/inverter_events.py",
+    "old": "        text=texts.get(code) or label or code,\n",
+    "new": "        text=texts.get(code) or code,\n",
+    "tests": "event_without_a_text_shows_its_label"
+  },
+  {
+    "label": "web control: the log keeps its slower interval",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        if time.monotonic() < self._next_event_log_read:\n            return\n",
+    "new": "",
+    "tests": "log_is_read_on_its_own_slower_interval"
+  },
+  {
+    "label": "web control: event texts fall back to English",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "            for candidate in dict.fromkeys((EVENT_TEXTS_FALLBACK_LANGUAGE, language)):\n",
+    "new": "            for candidate in (language,):\n",
+    "tests": "event_texts_missing_in_a_language_fall_back_to_english or english_one"
+  },
+  {
+    "label": "web control: new log entries are handed on once",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "            self._event_tracker.delivered(data.new_events)\n",
+    "new": "",
+    "tests": "log_entry_after_the_first_read_is_handed_on_once"
+  },
+  {
+    "label": "event: an entry fires once",
+    "path": "custom_components/fronius_modbus/event.py",
+    "old": "            if event.uuid in self._fired:\n                continue\n",
+    "new": "",
+    "tests": "inverter_events_reach_home_assistant"
+  },
+  {
+    "label": "event entities: no active event reads OK",
+    "path": "custom_components/fronius_modbus/event_entities.py",
+    "old": "    return NO_ACTIVE_EVENT if event is None else event.text\n",
+    "new": "    return None if event is None else event.text\n",
+    "tests": "no_active_event_reads_ok"
+  },
+  {
+    "label": "web control: the language's text wins over the English one",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "            for candidate in dict.fromkeys((EVENT_TEXTS_FALLBACK_LANGUAGE, language)):\n",
+    "new": "            for candidate in dict.fromkeys((language, EVENT_TEXTS_FALLBACK_LANGUAGE)):\n",
+    "tests": "names_the_active_events_in_the_language_of_home_assistant"
+  },
+  {
+    "label": "events: after a failed first read only what started since is new",
+    "path": "custom_components/fronius_modbus/inverter_events.py",
+    "old": "        return self._unread_since is not None and event.started >= self._unread_since\n",
+    "new": "        return self._unread_since is not None\n",
+    "tests": "after_a_failed_first_read_what_started_since_is_new"
+  },
+  {
+    "label": "events: the first failure sets the boundary",
+    "path": "custom_components/fronius_modbus/inverter_events.py",
+    "old": "        if self._seen is None and self._unread_since is None:\n",
+    "new": "        if self._seen is None:\n",
+    "tests": "after_a_failed_first_read_what_started_since_is_new"
+  },
+  {
+    "label": "events: new entries wait until delivered",
+    "path": "custom_components/fronius_modbus/inverter_events.py",
+    "old": "        by_uuid = {event.uuid: event for event in (*self.pending, *fresh)}\n",
+    "new": "        by_uuid = {event.uuid: event for event in fresh}\n",
+    "tests": "new_entries_wait_until_a_poll_delivers_them"
+  },
+  {
+    "label": "events: a failed read is unreadable",
+    "path": "custom_components/fronius_modbus/inverter_events.py",
+    "old": "        self.readable = log is not None\n",
+    "new": "        self.readable = True\n",
+    "tests": "after_a_failed_first_read_what_started_since_is_new"
+  },
+  {
+    "label": "events: a level of an unknown shape is unknown",
+    "path": "custom_components/fronius_modbus/inverter_events.py",
+    "old": "    return levels.get(value) if isinstance(value, int) else None\n",
+    "new": "    return levels.get(value)  # type: ignore[call-overload]\n",
+    "tests": "level_in_an_unknown_shape_is_unknown"
+  },
+  {
+    "label": "web control: a log that did not answer is asked again",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        if log is not None:\n            self._next_event_log_read",
+    "new": "        if True:\n            self._next_event_log_read",
+    "tests": "log_entry_after_a_failed_first_read_is_news"
+  },
+  {
+    "label": "web control: new log entries survive a rejected login",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        self.data.new_events = self._event_tracker.batch\n        self.data.event_log_readable = self._event_tracker.readable\n        return replace(self.data)\n",
+    "new": "        self.data.event_log_readable = self._event_tracker.readable\n        return replace(self.data)\n",
+    "tests": "log_entry_survives_an_auth_failure_in_the_same_poll"
+  },
+  {
+    "label": "event: unavailable while the log does not answer",
+    "path": "custom_components/fronius_modbus/event.py",
+    "old": "        return readable and super().available\n",
+    "new": "        return super().available\n",
+    "tests": "event_log_that_does_not_answer_leaves_the_event_unavailable"
+  },
+  {
+    "label": "web control: a first poll that raised marks the start",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "                self._event_tracker.missed(time.time())\n",
+    "new": "",
+    "tests": "log_entry_after_a_first_poll_that_raised_is_news"
+  },
+  {
+    "label": "events: nothing is published while the log does not answer",
+    "path": "custom_components/fronius_modbus/inverter_events.py",
+    "old": "        return self.pending if self.readable else ()\n",
+    "new": "        return self.pending\n",
+    "tests": "entry_of_a_failed_poll_notifies_once"
+  },
+  {
+    "label": "events: only the published batch leaves the pending entries",
+    "path": "custom_components/fronius_modbus/inverter_events.py",
+    "old": "        self.pending = tuple(remaining)\n",
+    "new": "        self.pending = ()\n",
+    "tests": "entry_of_a_failed_poll_notifies_once or held_back_while_the_log_does_not_answer"
+  },
+  {
+    "label": "event: an unknown severity is no info",
+    "path": "custom_components/fronius_modbus/event.py",
+    "old": "                event.severity or UNCLASSIFIED_SEVERITY, event_attributes(event)\n",
+    "new": "                event.severity or \"info\", event_attributes(event)\n",
+    "tests": "entry_of_an_unknown_severity_is_no_info"
+  },
+  {
+    "label": "event: back from unavailable before it fires",
+    "path": "custom_components/fronius_modbus/event.py",
+    "old": "        if batch:\n            self.async_write_ha_state()\n",
+    "new": "",
+    "tests": "entry_of_a_failed_poll_notifies_once"
   }
 ]

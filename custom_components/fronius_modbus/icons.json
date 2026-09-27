@@ -211,6 +211,12 @@
       },
       "surplus_power_available": {
         "default": "mdi:solar-power-variant"
+      },
+      "active_event": {
+        "default": "mdi:alert-circle-outline"
+      },
+      "active_events": {
+        "default": "mdi:counter"
       }
     },
     "switch": {
@@ -222,6 +228,11 @@
       },
       "api_solar_api_enabled": {
         "default": "mdi:api"
+      }
+    },
+    "event": {
+      "inverter_event": {
+        "default": "mdi:bell-outline"
       }
     }
   }

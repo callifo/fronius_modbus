@@ -658,7 +658,7 @@ class FroniusWebClient:
     def get_solar_api_config(self) -> dict[str, Any]:
         return self._get_json("/api/config/solar_api")
 
-    def _get_optional_json(self, path: str) -> Any:
+    def get_optional_json(self, path: str) -> Any:
         """A display-only read: when it fails its values are unknown, not the refresh.
 
         The component endpoints differ between firmware versions, and one of
@@ -683,12 +683,12 @@ class FroniusWebClient:
 
     def get_storage_info(self) -> dict[str, Any]:
         return _parse_storage_readable(
-            self._get_optional_json("/api/components/BatteryManagementSystem/readable")
+            self.get_optional_json("/api/components/BatteryManagementSystem/readable")
         )
 
     def get_inverter_info(self) -> dict[str, Any]:
         return _parse_inverter_readable(
-            self._get_optional_json("/api/components/inverter/readable")
+            self.get_optional_json("/api/components/inverter/readable")
         )
 
     def get_power_meter_info(

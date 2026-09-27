@@ -1,10 +1,12 @@
 """Web control: battery mode rules and the write side effects, with the HTTP client stubbed."""
 
 import asyncio
+import time
 
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.fronius_modbus import web_control
 from custom_components.fronius_modbus.const import (
     API_USERNAME,
     DOMAIN,
@@ -17,6 +19,7 @@ from custom_components.fronius_modbus.fronius_modbus_api.exceptions import (
 from custom_components.fronius_modbus.froniuswebclient import (
     FroniusWebAuthError,
     FroniusWebResponseError,
+    FroniusWebUnreachable,
 )
 from custom_components.fronius_modbus.token_store import async_get_token_store
 from custom_components.fronius_modbus.web_control import FroniusWebControl
@@ -72,6 +75,9 @@ class FakeWebClient:
                 "activePower": {"softLimit": {"enabled": True, "powerLimit": 7000}}
             }
         }
+
+    def get_optional_json(self, _path):
+        return None
 
     def set_battery_config(self, mode, power=None):
         self.calls.append(("battery", mode, power))
@@ -229,6 +235,258 @@ async def test_the_refresh_hands_on_missing_component_endpoints(hass):
         True,
         True,
     )
+
+
+ACTIVE_AFCI = {
+    "activeUntil": None,
+    "confirmable": False,
+    "eventID": 1009,
+    "label": "AfciSelftestFailed",
+    "prefix": "GEN24",
+    "severity": 2,
+    "timestamp": 1788683992,
+    "uuid": "a",
+    "viewer": 3,
+}
+
+
+class FakeClientWithEvents(FakeWebClient):
+    """The event endpoints of a GEN24, and the StateCodeTranslations it serves."""
+
+    def __init__(self, texts=None):
+        super().__init__()
+        self.log = [ACTIVE_AFCI]
+        self.texts = (
+            texts
+            if texts is not None
+            else {
+                "de": {"StateCodes": {"GEN24-1009": "AFCI-Selbst­test fehlgeschlagen"}},
+                "en": {"StateCodes": {"GEN24-1009": "AFCI selftest failed"}},
+            }
+        )
+        self.reads: list[str] = []
+
+    def get_optional_json(self, path):
+        self.reads.append(path)
+        if path == "/api/status/activeEvents":
+            return [ACTIVE_AFCI]
+        if path == "/api/status/events":
+            return None if self.log is None else list(self.log)
+        language = path.rsplit("/", 1)[-1].removesuffix(".json")
+        return self.texts.get(language)
+
+
+async def test_the_refresh_names_the_active_events_in_the_language_of_home_assistant(
+    hass,
+):
+    hass.config.language = "de"
+    control = make_control(hass, client=FakeClientWithEvents())
+    try:
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    (event,) = data.active_events
+    assert (event.code, event.text) == ("GEN24-1009", "AFCI-Selbsttest fehlgeschlagen")
+
+
+async def test_event_texts_missing_in_a_language_fall_back_to_english(hass):
+    hass.config.language = "pt-BR"
+    control = make_control(hass, client=FakeClientWithEvents())
+    try:
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert data.active_events[0].text == "AFCI selftest failed"
+
+
+async def test_a_code_without_a_text_in_the_language_reads_the_english_one(hass):
+    """The German file lacks 200 of the 944 codes, the battery's BYD2-44 among them."""
+    hass.config.language = "de"
+    client = FakeClientWithEvents(
+        texts={
+            "de": {"StateCodes": {"GEN24-1175": "Zu wenig DC-Leistung"}},
+            "en": {"StateCodes": {"GEN24-1009": "AFCI selftest failed"}},
+        }
+    )
+    control = make_control(hass, client=client)
+    try:
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert data.active_events[0].text == "AFCI selftest failed"
+
+
+async def test_the_log_is_read_on_its_own_slower_interval(hass):
+    client = FakeClientWithEvents()
+    control = make_control(hass, client=client)
+    try:
+        await control.async_refresh()
+        await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert client.reads.count("/api/status/events") == 1
+    assert client.reads.count("/api/status/activeEvents") == 2
+
+
+async def test_a_log_entry_after_the_first_read_is_handed_on_once(hass, monkeypatch):
+    """A zero-length battery warning (BYD2-44) never shows among the active events.
+
+    The poll after it, before the log is due again, hands on nothing.
+    """
+    monkeypatch.setattr(web_control, "EVENT_LOG_INTERVAL_SECONDS", 0)
+    client = FakeClientWithEvents()
+    control = make_control(hass, client=client)
+    try:
+        first = await control.async_refresh()
+        client.log.append(
+            ACTIVE_AFCI
+            | {
+                "uuid": "b",
+                "prefix": "BYD2",
+                "eventID": 44,
+                "label": "",
+                "activeUntil": 1790500000,
+                "timestamp": 1790500000,
+                "viewer": 1,
+            }
+        )
+        # The log is due now, and then not again for an hour.
+        monkeypatch.setattr(web_control, "EVENT_LOG_INTERVAL_SECONDS", 3600)
+        second = await control.async_refresh()
+        third = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert first.new_events == ()
+    assert [event.code for event in second.new_events] == ["BYD2-44"]
+    assert third.new_events == ()
+
+
+BATTERY_FAULT = ACTIVE_AFCI | {
+    "uuid": "b",
+    "prefix": "BYD2",
+    "eventID": 44,
+    "label": "",
+    "activeUntil": 1790500000,
+    "timestamp": 1790500000,
+    "viewer": 1,
+}
+
+
+async def test_a_log_entry_of_a_failed_poll_is_handed_on_by_the_next(hass, monkeypatch):
+    """The log read marked the entry seen, then a later read failed.
+
+    The coordinator publishes nothing of a failed poll, so the entry was lost.
+    """
+    monkeypatch.setattr(web_control, "EVENT_LOG_INTERVAL_SECONDS", 0)
+    client = FakeClientWithEvents()
+    control = make_control(hass, client=client)
+
+    def modbus_config_fails():
+        raise RuntimeError("no answer")
+
+    try:
+        await control.async_refresh()
+        client.log.append(BATTERY_FAULT)
+        client.get_modbus_config = modbus_config_fails
+        with pytest.raises(RuntimeError):
+            await control.async_refresh()
+        del client.get_modbus_config
+        after = await control.async_refresh()
+        again = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert [event.code for event in after.new_events] == ["BYD2-44"]
+    assert again.new_events == ()
+
+
+async def test_a_log_entry_survives_an_auth_failure_in_the_same_poll(hass, monkeypatch):
+    """The rejected login replaces the data after the log read; the poll still succeeds."""
+    monkeypatch.setattr(web_control, "EVENT_LOG_INTERVAL_SECONDS", 0)
+    client = FakeClientWithEvents()
+    control = make_control(hass, client=client)
+
+    def login_rejected():
+        raise FroniusWebAuthError("token rejected")
+
+    try:
+        await control.async_refresh()
+        client.log.append(BATTERY_FAULT)
+        client.get_modbus_config = login_rejected
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert [event.code for event in data.new_events] == ["BYD2-44"]
+
+
+async def test_a_log_entry_after_a_failed_first_read_is_news(hass):
+    """The first read failed, and the next waited five minutes.
+
+    The first read that then succeeded took an entry started meanwhile for
+    history from before Home Assistant watched, and never handed it on.
+    """
+    client = FakeClientWithEvents()
+    client.log = None
+    control = make_control(hass, client=client)
+    try:
+        first = await control.async_refresh()
+        started = int(time.time()) + 60
+        client.log = [
+            ACTIVE_AFCI,
+            BATTERY_FAULT | {"timestamp": started, "activeUntil": started},
+        ]
+        second = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert first.new_events == ()
+    assert [event.code for event in second.new_events] == ["BYD2-44"]
+
+
+async def test_a_log_entry_after_a_first_poll_that_raised_is_news(hass):
+    """The web interface did not answer at start, and setup went on without it.
+
+    The poll that raised never reached the log, so the first one that then
+    succeeded took an entry started meanwhile for history.
+    """
+    client = FakeClientWithEvents()
+    control = make_control(hass, client=client)
+
+    def unreachable():
+        raise FroniusWebUnreachable("ConnectTimeout")
+
+    try:
+        client.get_inverter_info = unreachable
+        with pytest.raises(FroniusWebUnreachable):
+            await control.async_refresh()
+        del client.get_inverter_info
+        started = int(time.time()) + 60
+        client.log = [
+            ACTIVE_AFCI,
+            BATTERY_FAULT | {"timestamp": started, "activeUntil": started},
+        ]
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert [event.code for event in data.new_events] == ["BYD2-44"]
+
+
+async def test_firmware_without_the_event_endpoints_has_no_events(hass):
+    control = make_control(hass)
+    try:
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert data.active_events is None
+    assert data.new_events == ()
 
 
 async def test_refresh_fills_the_web_data(control):
@@ -823,7 +1081,18 @@ async def test_a_web_switch_in_no_known_form_shows_as_unknown(hass):
 class RecordingPublicClient(FakeWebClient):
     """Records every read, write and login it is asked for."""
 
-    PUBLIC = {"get_inverter_info", "get_storage_info", "get_power_meter_info"}
+    PUBLIC = {
+        "get_inverter_info",
+        "get_storage_info",
+        "get_power_meter_info",
+        "get_optional_json",
+    }
+    # The event list, its log and their texts answered a GEN24 without a login.
+    PUBLIC_PATHS = (
+        "/api/status/activeEvents",
+        "/api/status/events",
+        "/app/assets/i18n/",
+    )
 
     def __getattribute__(self, name):
         attribute = super().__getattribute__(name)
@@ -834,9 +1103,13 @@ class RecordingPublicClient(FakeWebClient):
     def get_power_meter_info(self, *_args):
         return None
 
+    def get_optional_json(self, path):
+        super().__getattribute__("paths").append(path)
+
 
 async def test_the_public_mode_reads_only_public_endpoints(hass):
     public = RecordingPublicClient()
+    public.paths = []
     control = make_control(hass, client=None, public_client=public)
     try:
         data = await control.async_refresh()
@@ -846,6 +1119,10 @@ async def test_the_public_mode_reads_only_public_endpoints(hass):
 
     assert public.calls
     assert set(public.calls) <= RecordingPublicClient.PUBLIC
+    assert public.paths
+    assert all(
+        path.startswith(RecordingPublicClient.PUBLIC_PATHS) for path in public.paths
+    )
     assert data.inverter_readings == {"DEVICE_TEMPERATURE_AMBIENTMEAN_01_F32": 41.5}
     assert data.storage_readings == {"BAT_TEMPERATURE_CELL_F64": 22.0}
     assert control.configured is False

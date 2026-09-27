@@ -8,6 +8,7 @@ from dataclasses import dataclass, replace
 import functools
 import logging
 import re
+import time
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -25,9 +26,22 @@ from .const import (
 )
 from .fronius_modbus_api.exceptions import ControlRefused, ControlUnavailable
 from .froniuswebclient import FroniusWebAuthError, FroniusWebClient, is_enabled
+from .inverter_events import (
+    ACTIVE_EVENTS_PATH,
+    EVENT_LOG_PATH,
+    EVENT_TEXTS_FALLBACK_LANGUAGE,
+    EVENT_TEXTS_PATH,
+    EventTracker,
+    InverterEvent,
+    event_texts,
+    parse_events,
+)
 from .token_store import async_get_token_store
 
 _LOGGER = logging.getLogger(__name__)
+# The log is ~60 KB on a GEN24 two years in; its entries keep their own time,
+# so reading it less often only delays a new one (seconds).
+EVENT_LOG_INTERVAL_SECONDS = 300
 WEB_API_NOT_CONFIGURED = "Fronius Web API is not configured"
 TECHNICIAN_NOT_CONFIGURED = (
     "Technician access is not selected - choose the technician role via Configure"
@@ -127,6 +141,11 @@ class WebData:
     # The endpoint answered 404: firmware without it, so no component sensors.
     inverter_endpoint_missing: bool = False
     storage_endpoint_missing: bool = False
+    # None while the event list has not answered; new_events holds the log
+    # entries no published poll has carried yet.
+    active_events: tuple[InverterEvent, ...] | None = None
+    new_events: tuple[InverterEvent, ...] = ()
+    event_log_readable: bool = False
 
 
 def _export_limit_summary(config: dict[str, Any] | None) -> dict[str, Any]:
@@ -290,6 +309,9 @@ class FroniusWebControl:
         self.data = WebData()
         self._coordinator: Any = None
         self._delayed_refresh_task: asyncio.Task | None = None
+        self._event_tracker = EventTracker()
+        self._event_texts: dict[str, str] | None = None
+        self._next_event_log_read = 0.0
 
     def attach_coordinator(self, coordinator: Any) -> None:
         """Bind the web coordinator so the delayed post-write refresh can push new data."""
@@ -502,7 +524,17 @@ class FroniusWebControl:
         otherwise overwrite the confirmed new state with the older reading.
         """
         async with self._write_lock:
-            return await self._async_refresh_locked()
+            try:
+                data = await self._async_refresh_locked()
+            except Exception:
+                # Setup goes on without the web interface, so a poll that
+                # raised before the log answered must still mark the start.
+                self._event_tracker.missed(time.time())
+                raise
+            # A poll that raised is never published: its new entries wait for
+            # the next one.
+            self._event_tracker.delivered(data.new_events)
+            return data
 
     async def _async_refresh_locked(self) -> WebData:
         if not self._public_client:
@@ -512,6 +544,7 @@ class FroniusWebControl:
         inverter = inverter_info if isinstance(inverter_info, dict) else {}
         self.data.inverter_readings = inverter.get("readings")
         self.data.inverter_endpoint_missing = bool(inverter.get("missing"))
+        await self._async_refresh_events()
 
         modbus_config = await self._async_client_job("get_modbus_config")
         if isinstance(modbus_config, dict):
@@ -548,7 +581,42 @@ class FroniusWebControl:
             self.data.export_soft_limit_w = _as_int(soft.get("powerLimit"))
 
         self._async_sync_solar_api_warning()
+        # Last: an auth failure above replaces the data, and these entries are
+        # delivered with this snapshot.
+        self.data.new_events = self._event_tracker.batch
+        self.data.event_log_readable = self._event_tracker.readable
         return replace(self.data)
+
+    async def _async_refresh_events(self) -> None:
+        texts = await self._async_event_texts()
+        active = await self._async_public_read(ACTIVE_EVENTS_PATH)
+        self.data.active_events = parse_events(active, texts)
+        if time.monotonic() < self._next_event_log_read:
+            return
+        log = parse_events(await self._async_public_read(EVENT_LOG_PATH), texts)
+        self._event_tracker.read(log, time.time())
+        # A log that did not answer is asked again at the next poll, not after
+        # the interval.
+        if log is not None:
+            self._next_event_log_read = time.monotonic() + EVENT_LOG_INTERVAL_SECONDS
+
+    async def _async_event_texts(self) -> dict[str, str]:
+        """The inverter's own texts for its codes: Home Assistant's language first.
+
+        A language file lacks some codes (the German one 200 of 944); those
+        read in English rather than as a bare short name.
+        """
+        if self._event_texts is None:
+            language = self._hass.config.language.split("-")[0].lower()
+            merged: dict[str, str] = {}
+            for candidate in dict.fromkeys((EVENT_TEXTS_FALLBACK_LANGUAGE, language)):
+                path = EVENT_TEXTS_PATH.format(language=candidate)
+                merged |= event_texts(await self._async_public_read(path))
+            self._event_texts = merged or None
+        return self._event_texts or {}
+
+    async def _async_public_read(self, path: str) -> Any:
+        return await self._async_client_job("get_optional_json", path, public=True)
 
     # -- battery write transition -------------------------------------------------
 

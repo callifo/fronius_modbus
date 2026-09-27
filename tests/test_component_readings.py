@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from custom_components.fronius_modbus import entities, migrations
+from custom_components.fronius_modbus import entities, entity_base, migrations
 from custom_components.fronius_modbus.component_readings import (
     COMPONENT_READINGS,
     ONCE_REPORTED_KEYS,
@@ -265,7 +265,7 @@ def test_the_battery_device_carries_its_firmware_and_hardware():
     runtime = runtime_with(read_gen24())
     entry = MagicMock(entry_id="01TESTENTRY")
 
-    info = entities.device_info(runtime, entry, "storage")
+    info = entity_base.device_info(runtime, entry, "storage")
 
     assert (info["sw_version"], info["hw_version"]) == ("3.26", "5.0")
 

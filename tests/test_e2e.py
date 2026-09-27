@@ -10,10 +10,13 @@ from modbus_connection import (
     ServerDeviceFailureError,
 )
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_capture_events,
+)
 
 from custom_components import fronius_modbus
-from custom_components.fronius_modbus import config_flow, migrations
+from custom_components.fronius_modbus import config_flow, migrations, web_control
 from custom_components.fronius_modbus.const import (
     CONF_RECONFIGURE_REQUIRED,
     DOMAIN,
@@ -39,6 +42,7 @@ from homeassistant.helpers import (
     issue_registry as ir,
 )
 from homeassistant.helpers.entity_platform import async_get_platforms
+from homeassistant.setup import async_setup_component
 
 from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID
 
@@ -1161,3 +1165,177 @@ async def test_a_modbus_outage_without_a_reached_limit_is_no_answer(
     await hass.async_block_till_done()
 
     assert state_of(hass, entry, "throttle_reason") == "unknown"
+
+
+def _log_entry(uuid, prefix, event_id, label, severity, viewer, start, end=None):
+    return {
+        "activeUntil": end,
+        "confirmable": False,
+        "eventID": event_id,
+        "label": label,
+        "prefix": prefix,
+        "severity": severity,
+        "timestamp": start,
+        "uuid": uuid,
+        "viewer": viewer,
+    }
+
+
+class _WebClientWithEvents(_FakeWebClientWithTopology):
+    """The event list, the log and the English texts of a GEN24."""
+
+    active: list = [
+        _log_entry("a", "GEN24", 1009, "AfciSelftestFailed", 2, 3, 1788683992)
+    ]
+    log: list = list(active)
+    texts = {"StateCodes": {"GEN24-1009": "AFCI selftest failed"}}
+    # Fails a read the poll makes after the log's.
+    export_limit_fails = False
+
+    def get_export_limit_config(self):
+        if self.export_limit_fails:
+            raise RuntimeError("no answer")
+
+    def get_optional_json(self, path):
+        if path == "/api/status/activeEvents":
+            return list(self.active)
+        if path == "/api/status/events":
+            return None if self.log is None else list(self.log)
+        return self.texts if path.endswith("/en.json") else None
+
+
+@pytest.mark.parametrize("log_answers_next", [True, False])
+async def test_an_entry_of_a_failed_poll_notifies_once(
+    hass, mock_modbus, monkeypatch, log_answers_next
+):
+    """A poll failed after reading a new entry; the next may not read the log.
+
+    The failed poll left the event unavailable, and event.received ignores a
+    change away from unavailable: an entry fired in the poll that brought the
+    event back, or into an event still unavailable, never ran the README's
+    automation.
+    """
+    mock_modbus.add_unit(201, like=METER_UNIT_ID)
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientWithEvents)
+    monkeypatch.setattr(_WebClientWithEvents, "log", list(_WebClientWithEvents.log))
+    monkeypatch.setattr(web_control, "EVENT_LOG_INTERVAL_SECONDS", 0)
+    entry = make_entry(hass)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+    await setup_entry(hass, entry)
+    event_id = entity_id_for(hass, entry, "event", "inverter_event")
+    assert await async_setup_component(
+        hass,
+        "automation",
+        {
+            "automation": {
+                "triggers": [
+                    {
+                        "trigger": "event.received",
+                        "target": {"entity_id": event_id},
+                        "options": {"event_type": ["error", "warning"]},
+                    }
+                ],
+                "actions": [
+                    {
+                        "event": "notified",
+                        "event_data": {
+                            "code": "{{ trigger.to_state.attributes.code }}"
+                        },
+                    }
+                ],
+            }
+        },
+    )
+    notified = async_capture_events(hass, "notified")
+    web = entry.runtime_data.web
+
+    log = [*_WebClientWithEvents.log, _log_entry("b", "BYD2", 44, "", 2, 1, 1790500000)]
+    monkeypatch.setattr(_WebClientWithEvents, "log", log)
+    monkeypatch.setattr(_WebClientWithEvents, "export_limit_fails", True)
+    await web.async_refresh()
+    monkeypatch.setattr(_WebClientWithEvents, "export_limit_fails", False)
+    if not log_answers_next:
+        monkeypatch.setattr(_WebClientWithEvents, "log", None)
+        await web.async_refresh()
+        monkeypatch.setattr(_WebClientWithEvents, "log", log)
+    await web.async_refresh()
+    await hass.async_block_till_done()
+
+    assert [event.data["code"] for event in notified] == ["BYD2-44"]
+
+
+async def test_an_entry_of_an_unknown_severity_is_no_info(
+    hass, mock_modbus, monkeypatch
+):
+    """An info would pass an automation for errors and warnings by silently."""
+    mock_modbus.add_unit(201, like=METER_UNIT_ID)
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientWithEvents)
+    monkeypatch.setattr(_WebClientWithEvents, "log", list(_WebClientWithEvents.log))
+    monkeypatch.setattr(web_control, "EVENT_LOG_INTERVAL_SECONDS", 0)
+    entry = make_entry(hass)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+    await setup_entry(hass, entry)
+
+    _WebClientWithEvents.log.append(
+        _log_entry("b", "GEN24", 9999, "NewCode", 7, 1, 1790500000)
+    )
+    await entry.runtime_data.web.async_refresh()
+    await hass.async_block_till_done()
+
+    fired = hass.states.get(entity_id_for(hass, entry, "event", "inverter_event"))
+    assert fired.attributes["event_type"] == "unclassified"
+    assert fired.attributes["code"] == "GEN24-9999"
+
+
+async def test_an_event_log_that_does_not_answer_leaves_the_event_unavailable(
+    hass, mock_modbus, monkeypatch
+):
+    """The entity said it was watching a log that never answered."""
+    mock_modbus.add_unit(201, like=METER_UNIT_ID)
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientWithEvents)
+    monkeypatch.setattr(_WebClientWithEvents, "log", None)
+    entry = make_entry(hass)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+    await setup_entry(hass, entry)
+    event_id = entity_id_for(hass, entry, "event", "inverter_event")
+
+    assert hass.states.get(event_id).state == "unavailable"
+    assert state_of(hass, entry, "active_events") == "1"
+
+    monkeypatch.setattr(_WebClientWithEvents, "log", [])
+    await entry.runtime_data.web.async_refresh()
+    await hass.async_block_till_done()
+
+    assert hass.states.get(event_id).state == "unknown"
+
+
+async def test_the_inverter_events_reach_home_assistant(hass, mock_modbus, monkeypatch):
+    """A zero-length battery warning (BYD2-44) only ever shows in the log."""
+    mock_modbus.add_unit(201, like=METER_UNIT_ID)
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientWithEvents)
+    monkeypatch.setattr(_WebClientWithEvents, "log", list(_WebClientWithEvents.log))
+    monkeypatch.setattr(web_control, "EVENT_LOG_INTERVAL_SECONDS", 0)
+    entry = make_entry(hass)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+    await setup_entry(hass, entry)
+
+    assert state_of(hass, entry, "active_event") == "AFCI selftest failed"
+    assert state_of(hass, entry, "active_events") == "1"
+    event_id = entity_id_for(hass, entry, "event", "inverter_event")
+    assert hass.states.get(event_id).attributes.get("event_type") is None
+
+    _WebClientWithEvents.log.append(
+        _log_entry("b", "BYD2", 44, "", 2, 1, 1790500000, 1790500000)
+    )
+    await entry.runtime_data.web.async_refresh()
+    await hass.async_block_till_done()
+
+    fired = hass.states.get(event_id)
+    assert fired.attributes["event_type"] == "warning"
+    assert fired.attributes["code"] == "BYD2-44"
+    assert fired.attributes["visible_to"] == "customer"
+
+    # A write hands the poll it holds to the listeners again; nothing fires twice.
+    entry.runtime_data.web.async_update_listeners()
+    await hass.async_block_till_done()
+    assert hass.states.get(event_id).state == fired.state

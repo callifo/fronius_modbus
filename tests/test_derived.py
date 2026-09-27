@@ -71,6 +71,23 @@ def test_strong_charging_makes_a_negative_load_unavailable():
     )
 
 
+def test_a_negative_load_with_an_unknown_charge_is_no_reading():
+    """The MPPT block did not answer, so the charge that may explain it is unknown.
+
+    Taken for 0 W, it let the negative load pass as a measured 0 W.
+    """
+    assert (
+        _update(
+            LoadEstimator(),
+            meter_power_w=-5000.0,
+            inverter_power_w=3000.0,
+            pv_power_w=None,
+            storage_charge_power_w=None,
+        )
+        is None
+    )
+
+
 def _guard(value=1000.0):
     guard = TotalGuard(max_step=100.0, confirmations=3)
     guard.seed(value)

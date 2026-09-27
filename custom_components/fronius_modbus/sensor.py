@@ -7,12 +7,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import FroniusConfigEntry
-from .entities import (
-    FroniusEntity,
-    FroniusSensorDescription,
-    FroniusTotalSensor,
-    sensor_descriptions,
-)
+from .entities import FroniusSensorDescription, sensor_descriptions
+from .entity_base import FroniusEntity, FroniusTotalSensor
 
 # The coordinator polls; entities never fetch on their own.
 PARALLEL_UPDATES = 0

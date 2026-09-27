@@ -44,7 +44,9 @@ LINE_BUDGETS = {
     # 1850 + the translated error for an unreachable web interface (R24-02)
     # 1910 + the component sensor builder; the table is component_readings.py
     # 1889 - the two web temperatures, now rows of that table
-    "entities.py": 1900,  # + a power module kept once registered (RE26-03)
+    # 1900 + a power module kept once registered (RE26-03)
+    # 1625 - the base entity and the device info, now entity_base.py
+    "entities.py": 1680,  # + room for the inverter event entities
 }
 
 # SonarSource's own default. Above it, a function is one somebody has to

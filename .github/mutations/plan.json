@@ -78,7 +78,7 @@
   },
   {
     "label": "entities: a total sensor rejects an implausible jump",
-    "path": "custom_components/fronius_modbus/entities.py",
+    "path": "custom_components/fronius_modbus/entity_base.py",
     "old": "TOTAL_INCREASING_MAX_STEP_WH = 100_000",
     "new": "TOTAL_INCREASING_MAX_STEP_WH = 10**12",
     "tests": "total_sensor_ignores_an_implausible_jump"
@@ -127,7 +127,7 @@
   },
   {
     "label": "entities: a stale reading is not an observation",
-    "path": "custom_components/fronius_modbus/entities.py",
+    "path": "custom_components/fronius_modbus/entity_base.py",
     "old": "        reading = description.value_fn(self._runtime) if self._source_sampled else None",
     "new": "        reading = description.value_fn(self._runtime)",
     "tests": "failed_polls_do_not_confirm_a_bad_energy_sample"
@@ -449,7 +449,7 @@
   },
   {
     "label": "entities: a refused write reaches the user translated",
-    "path": "custom_components/fronius_modbus/entities.py",
+    "path": "custom_components/fronius_modbus/entity_base.py",
     "old": "                translation_key=err.key,\n                translation_placeholders=err.placeholders,\n            ) from err\n        except ControlUnavailable",
     "new": "                translation_key=\"value_refused\",\n                translation_placeholders={\"error\": str(err)},\n            ) from err\n        except ControlUnavailable",
     "tests": "a_number_write_reaches_the_register"
@@ -638,7 +638,7 @@
   },
   {
     "label": "entities: an unreachable web interface is a translated error",
-    "path": "custom_components/fronius_modbus/entities.py",
+    "path": "custom_components/fronius_modbus/entity_base.py",
     "old": "        except FroniusWebUnreachable as err:\n",
     "new": "        except ZeroDivisionError as err:\n",
     "tests": "an_unreachable_web_interface_is_a_translated_error"
@@ -666,7 +666,7 @@
   },
   {
     "label": "entities: the battery device carries its firmware",
-    "path": "custom_components/fronius_modbus/entities.py",
+    "path": "custom_components/fronius_modbus/entity_base.py",
     "old": "            sw_version=readings.get(\"sw_version\"),\n",
     "new": "",
     "tests": "the_battery_device_carries_its_firmware_and_hardware"
@@ -1429,14 +1429,14 @@
   },
   {
     "label": "entities: an ignored counter glitch is no warning",
-    "path": "custom_components/fronius_modbus/entities.py",
+    "path": "custom_components/fronius_modbus/entity_base.py",
     "old": "        level = logging.WARNING if verdict.adopted else logging.DEBUG\n",
     "new": "        level = logging.WARNING\n",
     "tests": "ignored_counter_glitch_is_no_warning"
   },
   {
     "label": "entities: an adopted counter jump is a warning",
-    "path": "custom_components/fronius_modbus/entities.py",
+    "path": "custom_components/fronius_modbus/entity_base.py",
     "old": "        level = logging.WARNING if verdict.adopted else logging.DEBUG\n",
     "new": "        level = logging.DEBUG\n",
     "tests": "ignored_counter_glitch_is_no_warning"
@@ -1506,7 +1506,7 @@
   },
   {
     "label": "entities: a mixed-source sensor stays up on a fresh web poll",
-    "path": "custom_components/fronius_modbus/entities.py",
+    "path": "custom_components/fronius_modbus/entity_base.py",
     "old": "                return description.also_web and bool(web and web.last_update_success)\n",
     "new": "                return False\n",
     "tests": "a_modbus_outage_keeps_a_reached_limit_shown"

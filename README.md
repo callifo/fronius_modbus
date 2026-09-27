@@ -63,7 +63,7 @@ What changes for users of [callifo/fronius_modbus](https://github.com/callifo/fr
 
 **New entities and tools**
 
-- Component sensors from the inverter's Web API: power module temperatures, fans, per-phase AC power, output power limit, grid validity, battery state of health and more (see [Component sensors](#component-sensors-web-api)).
+- Component sensors from the inverter's Web API: AC and DC module temperatures, fans, per-phase AC power, output power limit, grid validity, battery state of health and more (see [Component sensors](#component-sensors-web-api)).
 - `Throttle reason`, `Web API SoC mode`, `SoC Minimum (Web API)`.
 - Diagnostics download (Settings -> Devices -> device -> Download diagnostics), with the raw SunSpec register map; serial numbers are redacted.
 
@@ -191,26 +191,28 @@ Set during setup; change them later with **Configure** or **Reconfigure** on the
 The inverter's component endpoints (`/api/components/inverter/readable` and `/api/components/BatteryManagementSystem/readable`) add values Modbus does not carry.
 
 - A value the inverter does not report shows as unknown.
-- A power module the inverter does not report creates no entity; one it has reported before keeps its entity, as unknown. A power module that appears later gets its entity at the next reload.
+- A module temperature, a fan beyond the first two or a second temperature the inverter does not report creates no entity; one it has reported before keeps its entity, as unknown. A module that appears later gets its entity at the next reload.
 - `Output power limit`, `Output limited`, `Battery max charge power (DC-DC)` and `Battery max discharge power (DC-DC)` follow the same rule, since older firmware lacks these fields. Such sensors an entry already has from an earlier version stay; if they only ever show unknown, disable them.
 - Firmware without these endpoints (HTTP 404) gets none of these sensors; a sensor registered before stays, as unknown, since one 404 from an endpoint that answered before proves nothing.
 - No sensor takes their serial numbers, part serials or device ids; the battery's serial number shows on its device page, as before, and is redacted in diagnostics.
 
 | Entity                                                                                                  | Device   | Default  | Description                                                                              |
 | ------------------------------------------------------------------------------------------------------- | -------- | -------- | ---------------------------------------------------------------------------------------- |
-| Power module 1–4 temperature                                                                            | Inverter | enabled  | Temperatures of the power modules the inverter reports.                                  |
-| Fan 1 / 2                                                                                               | Inverter | enabled  | Fan speed in percent.                                                                    |
+| AC module 1–6 temperature, DC module temperature (3, 9, 10), DC or battery module temperature           | Inverter | enabled  | The module temperatures the inverter reports, named as its web interface names them; channels 1, 2 and 5–8 are the AC modules 1–6. A GEN24 10.0 reports 1, 3 and 4, a Verto 30.0 Plus 1–5 and 9. |
+| Internal temperature / Ambient temperature 2                                                            | Inverter | enabled  | The inverter's internal temperature, and a second ambient temperature on inverters that report one. |
+| Fan 1–5                                                                                                 | Inverter | enabled  | Fan speed in percent. Fans 3–5 exist only where the inverter reports them.               |
 | AC power L1 / L2 / L3                                                                                   | Inverter | enabled  | Per-phase active power of the inverter.                                                  |
 | Output power limit / Output limited                                                                     | Inverter | enabled  | The power limit in effect (the nameplate power, or the AC limit while it is set; an export limit does not lower it), and whether a limit set on the inverter holds the output, in percent or in watts. |
 | Battery max charge / discharge power (DC-DC)                                                            | Inverter | enabled  | What the battery converter can take or give right now.                                   |
 | Grid valid                                                                                              | Inverter | enabled  | The inverter's own verdict on the grid at its feed-in point.                             |
+| Surplus power available                                                                                 | Inverter | disabled | Observed, not documented by Fronius: yes while an export limit curtailed PV, no otherwise, also while the AC limit held the output. Seen on two inverters. |
 | Power stage 1 / 2 firmware                                                                              | Inverter | enabled  | Diagnostic.                                                                              |
 | Feed-in point voltage L1–L3, L1-L2–L3-L1, frequency                                                     | Inverter | disabled | Grid side of the inverter's relays; differs from the AC output only while they are open. |
 | DC link voltage, Operating time, Power stage hardware                                                   | Inverter | disabled | Diagnostic. The operating time counts in seconds but is no exact clock.                  |
 | Time in backup mode                                                                                     | Inverter | disabled | Total time the inverter ran in backup mode.                                              |
 | State of health                                                                                         | Battery  | enabled  | The battery's own estimate, in percent.                                                  |
 | Cell temperature min / max, BMS ambient temperature                                                     | Battery  | disabled |                                                                                          |
-| Current discharge limit / Current power limit                                                           | Battery  | disabled | The limits the battery management system reports right now.                              |
+| Current discharge limit / Current charge limit                                                          | Battery  | disabled | What the battery management system allows right now. Observed, not documented by Fronius: the charge limit fell to 0 W near a full battery while discharging stayed allowed. |
 | Peak charge / discharge power, Manufacturer SoC min / max, Voltage range min / max, Modules, Connection | Battery  | disabled | Diagnostic, from the battery's nameplate and attributes.                                 |
 
 The battery's own firmware and hardware version appear on its device page.
@@ -360,7 +362,7 @@ Grid charging also stops at around 500 W while the inverter's own battery config
 - **Dynamic electricity prices:** charge the battery from the grid in the cheap hours (`Charge from Grid` with `Grid charge power`) and keep it from discharging while the price is low (`Block Discharging`).
 - **Negative prices or an export cap:** limit the inverter's output with `AC limit enable` and `AC limit rate`, or, with the `technician` role, only the feed-in with the export soft limit.
 - **Keeping energy for later:** hold the battery for the evening or for backup power with `Block Discharging`, the `Modbus storage reserve` (it applies in a Modbus storage mode, not in `Auto`), or the `Backup reserve` of the inverter's own battery management.
-- **Monitoring:** household load, grid power per phase, battery state of charge and state of health, power module temperatures and fans, and why the inverter throttles (`Throttle reason`), all without a cloud connection.
+- **Monitoring:** household load, grid power per phase, battery state of charge and state of health, module temperatures and fans, and why the inverter throttles (`Throttle reason`), all without a cloud connection.
 - **Modbus only:** read the inverter and steer the battery over Modbus without handing Home Assistant a web password (see [Without the web API](#without-the-web-api)).
 
 ## Examples
@@ -465,9 +467,9 @@ automation:
 ## Known limitations
 
 - Models other than the verified setup (see [Supported devices](#supported-devices)) are untested.
-- A power module or a limit sensor that appears later, for example after a firmware update, gets its entity at the next reload of the entry.
+- A module temperature or a limit sensor that appears later, for example after a firmware update, gets its entity at the next reload of the entry.
 - The Web API cannot be reached through an IPv6 address; set the entry up with an IPv4 address or a host name.
-- A power module entity that stays unknown for good, because the module is gone or because a development build created it as a placeholder, can be disabled in Home Assistant. It cannot be deleted: the integration keeps every module the inverter once reported, so one incomplete answer cannot take a real module with its history.
+- A module temperature entity that stays unknown for good, because the module is gone or because a development build created it as a placeholder, can be disabled in Home Assistant. It cannot be deleted: the integration keeps every module the inverter once reported, so one incomplete answer cannot take a real module with its history.
 - When the last smart meter is removed, its entities stay unavailable; delete them in Home Assistant, where they show as no longer provided. An empty meter list from the inverter is not taken as proof that no meter exists, so one short answer cannot delete meter entities and their history.
 - While the SoC mode is `Manual`, the `Modbus storage reserve` cannot be changed while the Web API does not answer (see [Two minimum SoC values](#two-minimum-soc-values)).
 - Scheduled (dis)charging in the inverter's web UI and the Modbus storage modes get in each other's way; turn the schedule off when using the modes.

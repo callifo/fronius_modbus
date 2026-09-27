@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+- Sensors for the modules, fans and second ambient temperature a larger inverter reports: a Verto 30.0 Plus reports module temperatures 1–5 and 9, fans 1, 2, 3 and 5 and a second temperature. Module temperatures 1–10, fans 3–5 and the second temperature exist only where the inverter reports them.
+- `Surplus power available` ("Überschuss verfügbar"), disabled by default: an undocumented flag of the component endpoint, seen set while an export limit curtailed PV and clear otherwise, also while the AC limit held the output.
+
+### Changed
+- Module and temperature sensors carry the names the inverter's own web interface uses: `AC module 1–6 temperature` ("Temperatur AC-Modul 1–6"), `DC module temperature (3/9/10)` ("Temperatur DC-Modul"), `DC or battery module temperature` ("Temperatur DC- oder Batteriemodul"), `Internal temperature` ("Innentemperatur") and `Ambient temperature 2` ("Umgebungstemperatur 2"), instead of numbered power modules. Entity ids do not change.
+- The battery's `Current power limit` is `Current charge limit` ("Aktuelle Ladegrenze"): it fell to 0 W near a full battery while the discharge limit stayed, so it is the charge counterpart of `Current discharge limit`.
+
 ### Fixed
 - Two entries set up at the same time on a fresh installation kept only one Web API token; the other asked for its password again after a reload.
 - While the MPPT block did not answer, a negative household load during battery charging showed as 0 W; it is unknown now.

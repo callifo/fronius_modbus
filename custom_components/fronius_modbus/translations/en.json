@@ -354,7 +354,7 @@
         "name": "Isolation Resistance"
       },
       "inverter_temperature": {
-        "name": "Temperature"
+        "name": "Internal temperature"
       },
       "api_modbus_mode": {
         "name": "Web API Modbus mode"
@@ -507,16 +507,16 @@
         }
       },
       "module_temperature_1": {
-        "name": "Power module 1 temperature"
+        "name": "AC module 1 temperature"
       },
       "module_temperature_2": {
-        "name": "Power module 2 temperature"
+        "name": "AC module 2 temperature"
       },
       "module_temperature_3": {
-        "name": "Power module 3 temperature"
+        "name": "DC module temperature (3)"
       },
       "module_temperature_4": {
-        "name": "Power module 4 temperature"
+        "name": "DC or battery module temperature"
       },
       "fan_1": {
         "name": "Fan 1"
@@ -611,7 +611,7 @@
         "name": "Current discharge limit"
       },
       "storage_power_limit": {
-        "name": "Current power limit"
+        "name": "Current charge limit"
       },
       "storage_peak_charge_power": {
         "name": "Peak charge power (10 s)"
@@ -654,6 +654,43 @@
       },
       "imported_l3": {
         "name": "Imported L3"
+      },
+      "inverter_temperature_2": {
+        "name": "Ambient temperature 2"
+      },
+      "surplus_power_available": {
+        "name": "Surplus power available",
+        "state": {
+          "yes": "Yes",
+          "no": "No"
+        }
+      },
+      "module_temperature_5": {
+        "name": "AC module 3 temperature"
+      },
+      "module_temperature_6": {
+        "name": "AC module 4 temperature"
+      },
+      "module_temperature_7": {
+        "name": "AC module 5 temperature"
+      },
+      "module_temperature_8": {
+        "name": "AC module 6 temperature"
+      },
+      "module_temperature_9": {
+        "name": "DC module temperature (9)"
+      },
+      "fan_3": {
+        "name": "Fan 3"
+      },
+      "fan_4": {
+        "name": "Fan 4"
+      },
+      "fan_5": {
+        "name": "Fan 5"
+      },
+      "module_temperature_10": {
+        "name": "DC module temperature (10)"
       }
     },
     "switch": {

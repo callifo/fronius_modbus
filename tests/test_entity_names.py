@@ -58,6 +58,31 @@ EXPECTED = {
             ("l3_l1", "L3-L1"),
         )
     },
+    # The module and temperature names the inverter's own web interface uses.
+    **{
+        ("sensor", f"module_temperature_{index}", language): name
+        for index, names in {
+            1: ("AC module 1 temperature", "Temperatur AC-Modul 1"),
+            2: ("AC module 2 temperature", "Temperatur AC-Modul 2"),
+            3: ("DC module temperature (3)", "Temperatur DC-Modul (3)"),
+            4: (
+                "DC or battery module temperature",
+                "Temperatur DC- oder Batteriemodul",
+            ),
+            5: ("AC module 3 temperature", "Temperatur AC-Modul 3"),
+            8: ("AC module 6 temperature", "Temperatur AC-Modul 6"),
+            9: ("DC module temperature (9)", "Temperatur DC-Modul (9)"),
+            10: ("DC module temperature (10)", "Temperatur DC-Modul (10)"),
+        }.items()
+        for language, name in zip(("en", "de"), names, strict=True)
+    },
+    ("sensor", "inverter_temperature", "en"): "Internal temperature",
+    ("sensor", "inverter_temperature", "de"): "Innentemperatur",
+    ("sensor", "inverter_temperature_2", "en"): "Ambient temperature 2",
+    ("sensor", "inverter_temperature_2", "de"): "Umgebungstemperatur 2",
+    # Measured: 0 W near a full battery while discharging stays allowed.
+    ("sensor", "storage_power_limit", "en"): "Current charge limit",
+    ("sensor", "storage_power_limit", "de"): "Aktuelle Ladegrenze",
     ("sensor", "max_charge", "en"): "Charge/discharge reference power",
     ("sensor", "max_charge", "de"): "Lade-/Entlade-Referenzleistung",
 }

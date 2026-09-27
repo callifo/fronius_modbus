@@ -73,6 +73,24 @@ DISABLED = {
     "storage_voltage_max",
     "storage_modules",
     "storage_link",
+    "surplus_power_available",
+}
+# What a larger inverter reports beyond the GEN24 (a Verto 30.0 Plus, 2026-09-27):
+# more power modules, fans and a second ambient temperature, numbered with gaps.
+VERTO_ONLY = {
+    "module_temperature_2",
+    "module_temperature_5",
+    "module_temperature_9",
+    "fan_3",
+    "fan_5",
+    "inverter_temperature_2",
+}
+NOT_ON_THE_VERTO = {
+    "module_temperature_10",
+    "module_temperature_6",
+    "module_temperature_7",
+    "module_temperature_8",
+    "fan_4",
 }
 
 
@@ -92,7 +110,7 @@ def read_gen24() -> WebData:
 
 
 def component_sensors(runtime) -> dict:
-    keys = ENABLED | DISABLED | {"module_temperature_2"}
+    keys = ENABLED | DISABLED | VERTO_ONLY | NOT_ON_THE_VERTO
     return {d.key: d for d in entities.sensor_descriptions(runtime) if d.key in keys}
 
 
@@ -342,3 +360,51 @@ def test_every_measured_reading_has_a_display_precision():
     ]
 
     assert missing == []
+
+
+def read_verto() -> WebData:
+    readings = read_gen24()
+    readings.inverter_readings = {
+        **readings.inverter_readings,
+        **{f"MODULE_TEMPERATURE_MEAN_0{i}_F32": 38.5 for i in (1, 2, 3, 4, 5, 9)},
+        **{f"FANCONTROL_PERCENT_0{i}_F32": 0.0 for i in (1, 2, 3, 5)},
+        "DEVICE_TEMPERATURE_AMBIENTMEAN_02_F32": 35.4,
+        "POWERMANAGER_VALUE_SURPLUS_POWER_AVAILABLE_U8": 1.0,
+    }
+    return readings
+
+
+def test_a_verto_gets_every_module_fan_and_temperature_it_reports():
+    """Its modules 5 and 9, fans 3 and 5 and second temperature had no sensor."""
+    runtime = runtime_with(read_verto())
+    sensors = component_sensors(runtime)
+
+    assert set(sensors) >= VERTO_ONLY
+    assert not NOT_ON_THE_VERTO & set(sensors)
+    assert sensors["module_temperature_9"].value_fn(runtime) == 38.5
+    assert sensors["inverter_temperature_2"].value_fn(runtime) == 35.4
+
+
+def test_the_surplus_flag_is_offered_disabled():
+    """Seen set only while an export limit curtailed PV; two samples, so opt-in."""
+    verto = runtime_with(read_verto())
+    gen24 = runtime_with(read_gen24())
+    surplus = component_sensors(verto)["surplus_power_available"]
+
+    assert surplus.entity_registry_enabled_default is False
+    assert surplus.value_fn(verto) == "yes"
+    assert component_sensors(gen24)["surplus_power_available"].value_fn(gen24) == "no"
+
+
+def test_the_tenth_module_reads_its_own_two_digit_channel():
+    """The web interface knows modules up to 10; "0{index}" made channel "010"."""
+    readings = read_verto()
+    readings.inverter_readings = {
+        **readings.inverter_readings,
+        "MODULE_TEMPERATURE_MEAN_10_F32": 41.0,
+    }
+    runtime = runtime_with(readings)
+
+    sensor = component_sensors(runtime)["module_temperature_10"]
+
+    assert sensor.value_fn(runtime) == 41.0

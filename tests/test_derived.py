@@ -204,8 +204,8 @@ def test_the_production_limit_pair_is_a_power_limit_apart_from_the_battery_s():
     set on it holds the output."""
     root = pathlib.Path(__file__).parent.parent / "custom_components/fronius_modbus"
     expected = {
-        "en": ("Production power limit", "Output limited"),
-        "de": ("Aktuelle Erzeugungs-Leistungsgrenze", "Ausgangsleistung begrenzt"),
+        "en": ("Output power limit", "Output limited"),
+        "de": ("Zulässige Ausgangsleistung", "Ausgangsleistung begrenzt"),
     }
     for language, names in expected.items():
         sensors = json.loads(
@@ -217,3 +217,5 @@ def test_the_production_limit_pair_is_a_power_limit_apart_from_the_battery_s():
         )
         assert pair == names
         assert sensors["storage_power_limit"]["name"] not in pair
+        # WMax is the fixed nameplate setting; this value drops with an AC limit.
+        assert sensors["max_power"]["name"] not in pair

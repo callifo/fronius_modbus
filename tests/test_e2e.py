@@ -13,7 +13,7 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components import fronius_modbus
-from custom_components.fronius_modbus import config_flow, migrations
+from custom_components.fronius_modbus import config_flow, migrations, web_control
 from custom_components.fronius_modbus.const import (
     CONF_RECONFIGURE_REQUIRED,
     DOMAIN,
@@ -1161,3 +1161,61 @@ async def test_a_modbus_outage_without_a_reached_limit_is_no_answer(
     await hass.async_block_till_done()
 
     assert state_of(hass, entry, "throttle_reason") == "unknown"
+
+
+def _log_entry(uuid, prefix, event_id, label, severity, viewer, start, end=None):
+    return {
+        "activeUntil": end,
+        "confirmable": False,
+        "eventID": event_id,
+        "label": label,
+        "prefix": prefix,
+        "severity": severity,
+        "timestamp": start,
+        "uuid": uuid,
+        "viewer": viewer,
+    }
+
+
+class _WebClientWithEvents(_FakeWebClientWithTopology):
+    """The event list, the log and the English texts of a GEN24."""
+
+    active: list = [
+        _log_entry("a", "GEN24", 1009, "AfciSelftestFailed", 2, 3, 1788683992)
+    ]
+    log: list = list(active)
+    texts = {"StateCodes": {"GEN24-1009": "AFCI selftest failed"}}
+
+    def get_optional_json(self, path):
+        if path == "/api/status/activeEvents":
+            return list(self.active)
+        if path == "/api/status/events":
+            return list(self.log)
+        return self.texts if path.endswith("/en.json") else None
+
+
+async def test_the_inverter_events_reach_home_assistant(hass, mock_modbus, monkeypatch):
+    """A zero-length battery warning (BYD2-44) only ever shows in the log."""
+    mock_modbus.add_unit(201, like=METER_UNIT_ID)
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientWithEvents)
+    monkeypatch.setattr(_WebClientWithEvents, "log", list(_WebClientWithEvents.log))
+    monkeypatch.setattr(web_control, "EVENT_LOG_INTERVAL_SECONDS", 0)
+    entry = make_entry(hass)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+    await setup_entry(hass, entry)
+
+    assert state_of(hass, entry, "active_event") == "AFCI selftest failed"
+    assert state_of(hass, entry, "active_events") == "1"
+    event_id = entity_id_for(hass, entry, "event", "inverter_event")
+    assert hass.states.get(event_id).attributes.get("event_type") is None
+
+    _WebClientWithEvents.log.append(
+        _log_entry("b", "BYD2", 44, "", 2, 1, 1790500000, 1790500000)
+    )
+    await entry.runtime_data.web.async_refresh()
+    await hass.async_block_till_done()
+
+    fired = hass.states.get(event_id)
+    assert fired.attributes["event_type"] == "warning"
+    assert fired.attributes["code"] == "BYD2-44"
+    assert fired.attributes["visible_to"] == "customer"

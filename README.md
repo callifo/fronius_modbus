@@ -230,19 +230,20 @@ The battery's own firmware and hardware version appear on its device page.
 
 The sensor names the limit the output is held at right now. A limit that is only switched on, such as an AC limit at 100 % or above the current output, is no reason.
 
-| State                  | English                 | German                           | When                                                                                          |
-| ---------------------- | ----------------------- | -------------------------------- | --------------------------------------------------------------------------------------------- |
-| `none`                 | Not throttled           | Keine Drosselung                 | No limit holds the output.                                                                    |
-| `export_limit`         | AC limit                | AC-Leistungsbegrenzung           | A percentage limit is reached, such as the AC limit (`AC limit enable`, `AC limit rate`).     |
-| `power_limit`          | Export limit            | Einspeisebegrenzung              | A limit in watts is reached. In practice the export limit set in the inverter's web interface; the inverter reports any limit in watts this way. |
-| `inverter_state`       | Inverter reports throttling | Wechselrichter meldet Drosselung | The inverter reports the SunSpec operating state throttled (model 103 `St`).                 |
-| `several`              | Several reasons         | Mehrere Gründe                   | More than one of the above at once.                                                           |
-| `active_power_control` | Active power control    | Wirkleistungsvorgabe             | No longer reported; kept so older history keeps its label.                                    |
-| unknown                |                         |                                  | The component endpoint or model 103 could not be read, or the last web poll failed.           |
+| State                  | English                     | German                           | When                                                                                                                  |
+| ---------------------- | --------------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `none`                 | Not throttled               | Keine Drosselung                 | No limit holds the output.                                                                                            |
+| `ac_limit`             | AC limit                    | AC-Leistungsbegrenzung           | A percentage limit is reached, such as the AC limit (`AC limit enable`, `AC limit rate`).                             |
+| `feed_in_limit`        | Export limit                | Einspeisebegrenzung              | A limit in watts is reached. In practice the export limit set in the inverter's web interface; the inverter reports any limit in watts this way. |
+| `inverter_state`       | Inverter reports throttling | Wechselrichter meldet Drosselung | The inverter reports the SunSpec operating state throttled (model 103 `St`).                                          |
+| `several`              | Several reasons             | Mehrere Gründe                   | More than one of the above at once.                                                                                   |
+| `active_power_control` | Active power control        | Wirkleistungsvorgabe             | No longer reported; kept so older history keeps its label.                                                            |
+| `export_limit`         | AC limit                    | AC-Leistungsbegrenzung           | No longer reported: before 1.2.0b5 it meant an AC limit that was switched on. Kept so older history keeps its label.   |
+| unknown                |                             |                                  | The component endpoint or model 103 could not be read, or the last web poll failed.                                   |
 
 Where the states come from, measured on a GEN24 and a Verto:
 
-- `export_limit` and `power_limit` come from the inverter's public component endpoint (`/api/components/inverter/readable`): `ACBRIDGE_VALUE_POWERACTIVE_RELATIVE_PRODUCTION_LIMIT_REACHED_U8` is set while a percentage limit holds the output, `ACBRIDGE_VALUE_POWERACTIVE_PRODUCTION_LIMIT_REACHED_U8` while a limit in watts does. They need no web login, so an entry without the web API has them too.
+- `ac_limit` and `feed_in_limit` come from the inverter's public component endpoint (`/api/components/inverter/readable`): `ACBRIDGE_VALUE_POWERACTIVE_RELATIVE_PRODUCTION_LIMIT_REACHED_U8` is set while a percentage limit holds the output, `ACBRIDGE_VALUE_POWERACTIVE_PRODUCTION_LIMIT_REACHED_U8` while a limit in watts does. They need no web login, so an entry without the web API has them too.
 - The Modbus signals only say a limit is switched on: `StActCtl` bit 0 (model 122) is set as soon as the AC limit is enabled, even at 100 %, and Fronius leaves `St` at normal while it throttles. They are no longer used for the reason.
 - The flags come with the web poll, so the reason can trail a change by up to the web scan interval (default 60 s).
 

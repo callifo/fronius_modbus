@@ -99,24 +99,70 @@ def test_no_active_event_leads_nothing():
     assert leading_event(()) is None
 
 
+# Home Assistant's clock at a read; the entries above all started before it.
+NOW = 1790600000.0
+
+
+def codes(events):
+    return [event.code for event in events]
+
+
 def test_the_first_read_of_the_log_only_learns_it():
     """Old entries fired at every restart would flood the logbook."""
     tracker = EventTracker()
 
-    assert tracker.new(parse_events([AFCI, POWER_LOW], TEXTS)) == ()
+    tracker.read(parse_events([AFCI, POWER_LOW], TEXTS), NOW)
+
+    assert tracker.pending == ()
+    assert tracker.readable
 
 
 def test_a_later_read_reports_only_what_is_new_oldest_first():
     """A zero-length entry (the battery's BYD2-44) is new like any other."""
     tracker = EventTracker()
-    tracker.new(parse_events([AFCI], TEXTS))
+    tracker.read(parse_events([AFCI], TEXTS), NOW)
     later = entry("e", "BYD2", 44, "", 2, 1, 1790500001, 1790500001)
     earlier = entry("f", "GEN24", 1187, "NoBatteryVoltageMeasured", 1, 1, 1790500000)
 
-    new = tracker.new(parse_events([later, AFCI, earlier], TEXTS))
+    tracker.read(parse_events([later, AFCI, earlier], TEXTS), NOW)
 
-    assert [event.code for event in new] == ["GEN24-1187", "BYD2-44"]
-    assert tracker.new(parse_events([later, AFCI, earlier], TEXTS)) == ()
+    assert codes(tracker.pending) == ["GEN24-1187", "BYD2-44"]
+    tracker.delivered()
+    tracker.read(parse_events([later, AFCI, earlier], TEXTS), NOW)
+    assert tracker.pending == ()
+
+
+def test_new_entries_wait_until_a_poll_delivers_them():
+    """Audit P2-01: a poll that failed after the log read published nothing."""
+    tracker = EventTracker()
+    tracker.read(parse_events([AFCI], TEXTS), NOW)
+    tracker.read(parse_events([AFCI, POWER_LOW], TEXTS), NOW)
+    tracker.read(parse_events([AFCI, POWER_LOW, NO_BATTERY_VOLTAGE], TEXTS), NOW)
+
+    assert codes(tracker.pending) == ["GEN24-1187", "GEN24-1175"]
+
+
+def test_after_a_failed_first_read_what_started_since_is_new():
+    """Audit P2-02: the first read that succeeds is late, not the start."""
+    tracker = EventTracker()
+    tracker.read(None, 1790400000.0)
+    # A later failure keeps the first one's boundary: PowerLow started between.
+    tracker.read(None, 1790480000.0)
+
+    assert not tracker.readable
+    tracker.read(parse_events([AFCI, POWER_LOW, NO_BATTERY_VOLTAGE], TEXTS), NOW)
+
+    assert codes(tracker.pending) == ["GEN24-1175"]
+    assert tracker.readable
+
+
+def test_a_failed_read_after_the_first_changes_nothing_but_readability():
+    tracker = EventTracker()
+    tracker.read(parse_events([AFCI], TEXTS), NOW)
+    tracker.read(None, NOW)
+    tracker.read(parse_events([AFCI, NO_BATTERY_VOLTAGE], TEXTS), NOW)
+
+    assert codes(tracker.pending) == ["GEN24-1187"]
 
 
 def test_texts_that_are_no_mapping_are_no_texts():

@@ -142,9 +142,10 @@ class WebData:
     inverter_endpoint_missing: bool = False
     storage_endpoint_missing: bool = False
     # None while the event list has not answered; new_events holds the log
-    # entries this poll found for the first time.
+    # entries no published poll has carried yet.
     active_events: tuple[InverterEvent, ...] | None = None
     new_events: tuple[InverterEvent, ...] = ()
+    event_log_readable: bool = False
 
 
 def _export_limit_summary(config: dict[str, Any] | None) -> dict[str, Any]:
@@ -523,7 +524,11 @@ class FroniusWebControl:
         otherwise overwrite the confirmed new state with the older reading.
         """
         async with self._write_lock:
-            return await self._async_refresh_locked()
+            data = await self._async_refresh_locked()
+            # A poll that raised is never published: its new entries wait for
+            # the next one (audit P2-01).
+            self._event_tracker.delivered()
+            return data
 
     async def _async_refresh_locked(self) -> WebData:
         if not self._public_client:
@@ -570,19 +575,24 @@ class FroniusWebControl:
             self.data.export_soft_limit_w = _as_int(soft.get("powerLimit"))
 
         self._async_sync_solar_api_warning()
+        # Last: an auth failure above replaces the data, and these entries are
+        # delivered with this snapshot.
+        self.data.new_events = self._event_tracker.pending
+        self.data.event_log_readable = self._event_tracker.readable
         return replace(self.data)
 
     async def _async_refresh_events(self) -> None:
         texts = await self._async_event_texts()
         active = await self._async_public_read(ACTIVE_EVENTS_PATH)
         self.data.active_events = parse_events(active, texts)
-        self.data.new_events = ()
         if time.monotonic() < self._next_event_log_read:
             return
-        self._next_event_log_read = time.monotonic() + EVENT_LOG_INTERVAL_SECONDS
         log = parse_events(await self._async_public_read(EVENT_LOG_PATH), texts)
+        self._event_tracker.read(log, time.time())
+        # A log that did not answer is asked again at the next poll, not after
+        # the interval (audit P2-02).
         if log is not None:
-            self.data.new_events = self._event_tracker.new(log)
+            self._next_event_log_read = time.monotonic() + EVENT_LOG_INTERVAL_SECONDS
 
     async def _async_event_texts(self) -> dict[str, str]:
         """The inverter's own texts for its codes: Home Assistant's language first.

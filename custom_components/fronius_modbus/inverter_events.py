@@ -103,21 +103,40 @@ def leading_event(events: Iterable[InverterEvent]) -> InverterEvent | None:
 
 
 class EventTracker:
-    """Which log entries are new since the last read.
+    """Which log entries are new, held until a poll that publishes them.
 
     The first read only learns the log: its entries happened before the
     integration watched, and firing them at every restart would repeat them.
+    When reads failed before it, the log alone cannot tell history from what
+    started meanwhile; the entries that started after the first failure are new.
     """
 
     def __init__(self) -> None:
         """Start without having read the log."""
         self._seen: set[str] | None = None
+        self._unread_since: float | None = None
+        self.pending: tuple[InverterEvent, ...] = ()
+        self.readable = False
 
-    def new(self, log: Iterable[InverterEvent]) -> tuple[InverterEvent, ...]:
-        """The entries not seen before, oldest first."""
-        entries = list(log)
-        seen, self._seen = self._seen, {event.uuid for event in entries}
-        if seen is None:
-            return ()
-        fresh = (event for event in entries if event.uuid not in seen)
-        return tuple(sorted(fresh, key=lambda event: event.started))
+    def read(self, log: tuple[InverterEvent, ...] | None, now: float) -> None:
+        """Take a read of the log, None when it did not answer at `now`."""
+        self.readable = log is not None
+        if log is None:
+            if self._seen is None and self._unread_since is None:
+                self._unread_since = now
+            return
+        seen, self._seen = self._seen, {event.uuid for event in log}
+        fresh = [event for event in log if self._is_new(event, seen)]
+        by_uuid = {event.uuid: event for event in (*self.pending, *fresh)}
+        self.pending = tuple(sorted(by_uuid.values(), key=lambda event: event.started))
+
+    def _is_new(self, event: InverterEvent, seen: set[str] | None) -> bool:
+        if seen is not None:
+            return event.uuid not in seen
+        # ponytail: the inverter's clock against Home Assistant's; a drift
+        # between them moves this boundary, and only after a failed first read.
+        return self._unread_since is not None and event.started >= self._unread_since
+
+    def delivered(self) -> None:
+        """A poll published the pending entries; a failed one keeps them."""
+        self.pending = ()

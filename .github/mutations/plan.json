@@ -1542,8 +1542,8 @@
   {
     "label": "events: the first log read only learns",
     "path": "custom_components/fronius_modbus/inverter_events.py",
-    "old": "        if seen is None:\n            return ()\n",
-    "new": "        if seen is None:\n            seen = set()\n",
+    "old": "        return self._unread_since is not None and event.started >= self._unread_since\n",
+    "new": "        return True\n",
     "tests": "first_read_of_the_log_only_learns_it"
   },
   {
@@ -1570,7 +1570,7 @@
   {
     "label": "web control: new log entries are handed on once",
     "path": "custom_components/fronius_modbus/web_control.py",
-    "old": "        self.data.new_events = ()\n",
+    "old": "            self._event_tracker.delivered()\n",
     "new": "",
     "tests": "log_entry_after_the_first_read_is_handed_on_once"
   },
@@ -1594,5 +1594,61 @@
     "old": "            for candidate in dict.fromkeys((EVENT_TEXTS_FALLBACK_LANGUAGE, language)):\n",
     "new": "            for candidate in dict.fromkeys((language, EVENT_TEXTS_FALLBACK_LANGUAGE)):\n",
     "tests": "names_the_active_events_in_the_language_of_home_assistant"
+  },
+  {
+    "label": "events: after a failed first read only what started since is new",
+    "path": "custom_components/fronius_modbus/inverter_events.py",
+    "old": "        return self._unread_since is not None and event.started >= self._unread_since\n",
+    "new": "        return self._unread_since is not None\n",
+    "tests": "after_a_failed_first_read_what_started_since_is_new"
+  },
+  {
+    "label": "events: the first failure sets the boundary",
+    "path": "custom_components/fronius_modbus/inverter_events.py",
+    "old": "            if self._seen is None and self._unread_since is None:\n",
+    "new": "            if self._seen is None:\n",
+    "tests": "after_a_failed_first_read_what_started_since_is_new"
+  },
+  {
+    "label": "events: new entries wait until delivered",
+    "path": "custom_components/fronius_modbus/inverter_events.py",
+    "old": "        by_uuid = {event.uuid: event for event in (*self.pending, *fresh)}\n",
+    "new": "        by_uuid = {event.uuid: event for event in fresh}\n",
+    "tests": "new_entries_wait_until_a_poll_delivers_them"
+  },
+  {
+    "label": "events: a failed read is unreadable",
+    "path": "custom_components/fronius_modbus/inverter_events.py",
+    "old": "        self.readable = log is not None\n",
+    "new": "        self.readable = True\n",
+    "tests": "after_a_failed_first_read_what_started_since_is_new"
+  },
+  {
+    "label": "events: a level of an unknown shape is unknown",
+    "path": "custom_components/fronius_modbus/inverter_events.py",
+    "old": "    return levels.get(value) if isinstance(value, int) else None\n",
+    "new": "    return levels.get(value)  # type: ignore[call-overload]\n",
+    "tests": "level_in_an_unknown_shape_is_unknown"
+  },
+  {
+    "label": "web control: a log that did not answer is asked again",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        if log is not None:\n            self._next_event_log_read",
+    "new": "        if True:\n            self._next_event_log_read",
+    "tests": "log_entry_after_a_failed_first_read_is_news"
+  },
+  {
+    "label": "web control: new log entries survive a rejected login",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        self.data.new_events = self._event_tracker.pending\n        self.data.event_log_readable = self._event_tracker.readable\n        return replace(self.data)\n",
+    "new": "        self.data.event_log_readable = self._event_tracker.readable\n        return replace(self.data)\n",
+    "tests": "log_entry_survives_an_auth_failure_in_the_same_poll"
+  },
+  {
+    "label": "event: unavailable while the log does not answer",
+    "path": "custom_components/fronius_modbus/event.py",
+    "old": "        return readable and super().available\n",
+    "new": "        return super().available\n",
+    "tests": "event_log_that_does_not_answer_leaves_the_event_unavailable"
   }
 ]

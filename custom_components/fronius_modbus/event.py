@@ -34,6 +34,13 @@ class FroniusEvent(FroniusEntity, EventEntity):
         super().__init__(runtime, entry, description)
         self._fired: set[str] = set()
 
+    @property
+    def available(self) -> bool:
+        """Only while the log answers: otherwise nothing could ever fire (audit P3-02)."""
+        web_data = self._runtime.web_data
+        readable = web_data is not None and web_data.event_log_readable
+        return readable and super().available
+
     @callback
     def _handle_coordinator_update(self) -> None:
         web_data = self._runtime.web_data

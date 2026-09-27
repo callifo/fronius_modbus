@@ -534,7 +534,7 @@
         "name": "AC power L3"
       },
       "production_limit": {
-        "name": "Production power limit"
+        "name": "Output power limit"
       },
       "production_limit_reached": {
         "name": "Output limited",

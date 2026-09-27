@@ -1517,5 +1517,75 @@
     "old": "operating_state=self.modbus.data.operating_state if modbus_fresh else None,",
     "new": "operating_state=self.modbus.data.operating_state,",
     "tests": "a_modbus_outage_without_a_reached_limit_is_no_answer"
+  },
+  {
+    "label": "events: an entry without a code is no event",
+    "path": "custom_components/fronius_modbus/inverter_events.py",
+    "old": "    if not isinstance(event_id, int) or event_id == _NO_CODE:\n",
+    "new": "    if not isinstance(event_id, int):\n",
+    "tests": "entry_without_a_code_is_no_event"
+  },
+  {
+    "label": "events: an error leads a warning",
+    "path": "custom_components/fronius_modbus/inverter_events.py",
+    "old": "    return (level, -event.started)\n",
+    "new": "    return (-event.started, level)\n",
+    "tests": "error_leads_a_warning"
+  },
+  {
+    "label": "events: the newest leads among equals",
+    "path": "custom_components/fronius_modbus/inverter_events.py",
+    "old": "    return (level, -event.started)\n",
+    "new": "    return (level, event.started)\n",
+    "tests": "among_equal_levels_the_newest_leads"
+  },
+  {
+    "label": "events: the first log read only learns",
+    "path": "custom_components/fronius_modbus/inverter_events.py",
+    "old": "        if seen is None:\n            return ()\n",
+    "new": "        if seen is None:\n            seen = set()\n",
+    "tests": "first_read_of_the_log_only_learns_it"
+  },
+  {
+    "label": "events: an event without a text shows its label",
+    "path": "custom_components/fronius_modbus/inverter_events.py",
+    "old": "        text=texts.get(code) or label or code,\n",
+    "new": "        text=texts.get(code) or code,\n",
+    "tests": "event_without_a_text_shows_its_label"
+  },
+  {
+    "label": "web control: the log keeps its slower interval",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        if time.monotonic() < self._next_event_log_read:\n            return\n",
+    "new": "",
+    "tests": "log_is_read_on_its_own_slower_interval"
+  },
+  {
+    "label": "web control: event texts fall back to English",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "            for candidate in dict.fromkeys((language, EVENT_TEXTS_FALLBACK_LANGUAGE)):\n",
+    "new": "            for candidate in (language,):\n",
+    "tests": "event_texts_missing_in_a_language_fall_back_to_english"
+  },
+  {
+    "label": "web control: new log entries are handed on once",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        self.data.new_events = ()\n",
+    "new": "",
+    "tests": "log_entry_after_the_first_read_is_handed_on_once"
+  },
+  {
+    "label": "event: an entry fires once",
+    "path": "custom_components/fronius_modbus/event.py",
+    "old": "            if event.uuid in self._fired:\n                continue\n",
+    "new": "",
+    "tests": "inverter_events_reach_home_assistant"
+  },
+  {
+    "label": "event entities: no active event reads OK",
+    "path": "custom_components/fronius_modbus/event_entities.py",
+    "old": "    return NO_ACTIVE_EVENT if event is None else event.text\n",
+    "new": "    return None if event is None else event.text\n",
+    "tests": "no_active_event_reads_ok"
   }
 ]

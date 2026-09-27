@@ -164,6 +164,7 @@ type FroniusDescription = (
     | FroniusSelectDescription
     | FroniusSwitchDescription
     | FroniusButtonDescription
+    | FroniusEventDescription
 )
 
 

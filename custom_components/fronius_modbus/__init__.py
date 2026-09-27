@@ -51,6 +51,7 @@ PLATFORMS = [
     Platform.NUMBER,
     Platform.SENSOR,
     Platform.BUTTON,
+    Platform.EVENT,
 ]
 
 

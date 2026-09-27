@@ -12,7 +12,7 @@ import pytest
 
 from custom_components.fronius_modbus import PLATFORMS
 
-READING_PLATFORMS = {"sensor"}
+READING_PLATFORMS = {"sensor", "event"}
 
 
 @pytest.mark.parametrize("platform", [str(platform) for platform in PLATFORMS])

@@ -1219,3 +1219,8 @@ async def test_the_inverter_events_reach_home_assistant(hass, mock_modbus, monke
     assert fired.attributes["event_type"] == "warning"
     assert fired.attributes["code"] == "BYD2-44"
     assert fired.attributes["visible_to"] == "customer"
+
+    # A write hands the poll it holds to the listeners again; nothing fires twice.
+    entry.runtime_data.web.async_update_listeners()
+    await hass.async_block_till_done()
+    assert hass.states.get(event_id).state == fired.state

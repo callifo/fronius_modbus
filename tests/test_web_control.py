@@ -313,7 +313,10 @@ async def test_the_log_is_read_on_its_own_slower_interval(hass):
 
 
 async def test_a_log_entry_after_the_first_read_is_handed_on_once(hass, monkeypatch):
-    """A zero-length battery warning (BYD2-44) never shows among the active events."""
+    """A zero-length battery warning (BYD2-44) never shows among the active events.
+
+    The poll after it, before the log is due again, hands on nothing.
+    """
     monkeypatch.setattr(web_control, "EVENT_LOG_INTERVAL_SECONDS", 0)
     client = FakeClientWithEvents()
     control = make_control(hass, client=client)
@@ -331,6 +334,8 @@ async def test_a_log_entry_after_the_first_read_is_handed_on_once(hass, monkeypa
                 "viewer": 1,
             }
         )
+        # The log is due now, and then not again for an hour.
+        monkeypatch.setattr(web_control, "EVENT_LOG_INTERVAL_SECONDS", 3600)
         second = await control.async_refresh()
         third = await control.async_refresh()
     finally:

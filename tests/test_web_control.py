@@ -5,6 +5,7 @@ import asyncio
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.fronius_modbus import web_control
 from custom_components.fronius_modbus.const import (
     API_USERNAME,
     DOMAIN,
@@ -72,6 +73,9 @@ class FakeWebClient:
                 "activePower": {"softLimit": {"enabled": True, "powerLimit": 7000}}
             }
         }
+
+    def get_optional_json(self, _path):
+        return None
 
     def set_battery_config(self, mode, power=None):
         self.calls.append(("battery", mode, power))
@@ -229,6 +233,123 @@ async def test_the_refresh_hands_on_missing_component_endpoints(hass):
         True,
         True,
     )
+
+
+ACTIVE_AFCI = {
+    "activeUntil": None,
+    "confirmable": False,
+    "eventID": 1009,
+    "label": "AfciSelftestFailed",
+    "prefix": "GEN24",
+    "severity": 2,
+    "timestamp": 1788683992,
+    "uuid": "a",
+    "viewer": 3,
+}
+
+
+class FakeClientWithEvents(FakeWebClient):
+    """The event endpoints of a GEN24, and the StateCodeTranslations it serves."""
+
+    def __init__(self, texts=None):
+        super().__init__()
+        self.log = [ACTIVE_AFCI]
+        self.texts = (
+            texts
+            if texts is not None
+            else {
+                "de": {"StateCodes": {"GEN24-1009": "AFCI-Selbst­test fehlgeschlagen"}},
+                "en": {"StateCodes": {"GEN24-1009": "AFCI selftest failed"}},
+            }
+        )
+        self.reads: list[str] = []
+
+    def get_optional_json(self, path):
+        self.reads.append(path)
+        if path == "/api/status/activeEvents":
+            return [ACTIVE_AFCI]
+        if path == "/api/status/events":
+            return list(self.log)
+        language = path.rsplit("/", 1)[-1].removesuffix(".json")
+        return self.texts.get(language)
+
+
+async def test_the_refresh_names_the_active_events_in_the_language_of_home_assistant(
+    hass,
+):
+    hass.config.language = "de"
+    control = make_control(hass, client=FakeClientWithEvents())
+    try:
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    (event,) = data.active_events
+    assert (event.code, event.text) == ("GEN24-1009", "AFCI-Selbsttest fehlgeschlagen")
+
+
+async def test_event_texts_missing_in_a_language_fall_back_to_english(hass):
+    hass.config.language = "pt-BR"
+    control = make_control(hass, client=FakeClientWithEvents())
+    try:
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert data.active_events[0].text == "AFCI selftest failed"
+
+
+async def test_the_log_is_read_on_its_own_slower_interval(hass):
+    client = FakeClientWithEvents()
+    control = make_control(hass, client=client)
+    try:
+        await control.async_refresh()
+        await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert client.reads.count("/api/status/events") == 1
+    assert client.reads.count("/api/status/activeEvents") == 2
+
+
+async def test_a_log_entry_after_the_first_read_is_handed_on_once(hass, monkeypatch):
+    """A zero-length battery warning (BYD2-44) never shows among the active events."""
+    monkeypatch.setattr(web_control, "EVENT_LOG_INTERVAL_SECONDS", 0)
+    client = FakeClientWithEvents()
+    control = make_control(hass, client=client)
+    try:
+        first = await control.async_refresh()
+        client.log.append(
+            ACTIVE_AFCI
+            | {
+                "uuid": "b",
+                "prefix": "BYD2",
+                "eventID": 44,
+                "label": "",
+                "activeUntil": 1790500000,
+                "timestamp": 1790500000,
+                "viewer": 1,
+            }
+        )
+        second = await control.async_refresh()
+        third = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert first.new_events == ()
+    assert [event.code for event in second.new_events] == ["BYD2-44"]
+    assert third.new_events == ()
+
+
+async def test_firmware_without_the_event_endpoints_has_no_events(hass):
+    control = make_control(hass)
+    try:
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert data.active_events is None
+    assert data.new_events == ()
 
 
 async def test_refresh_fills_the_web_data(control):

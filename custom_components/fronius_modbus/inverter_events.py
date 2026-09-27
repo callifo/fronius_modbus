@@ -107,7 +107,7 @@ class EventTracker:
 
     The first read only learns the log: its entries happened before the
     integration watched, and firing them at every restart would repeat them.
-    When reads failed before it, the log alone cannot tell history from what
+    When polls failed before it, the log alone cannot tell history from what
     started meanwhile; the entries that started after the first failure are new.
     """
 
@@ -122,8 +122,7 @@ class EventTracker:
         """Take a read of the log, None when it did not answer at `now`."""
         self.readable = log is not None
         if log is None:
-            if self._seen is None and self._unread_since is None:
-                self._unread_since = now
+            self.missed(now)
             return
         seen, self._seen = self._seen, {event.uuid for event in log}
         fresh = [event for event in log if self._is_new(event, seen)]
@@ -135,7 +134,13 @@ class EventTracker:
             return event.uuid not in seen
         # ponytail: the inverter's clock against Home Assistant's; a drift
         # between them moves this boundary, and only after a failed first read.
+        # Take the inverter's own time instead should it ever serve one.
         return self._unread_since is not None and event.started >= self._unread_since
+
+    def missed(self, now: float) -> None:
+        """A poll failed at `now`; before the first read, what starts from now is new."""
+        if self._seen is None and self._unread_since is None:
+            self._unread_since = now
 
     def delivered(self) -> None:
         """A poll published the pending entries; a failed one keeps them."""

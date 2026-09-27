@@ -524,7 +524,13 @@ class FroniusWebControl:
         otherwise overwrite the confirmed new state with the older reading.
         """
         async with self._write_lock:
-            data = await self._async_refresh_locked()
+            try:
+                data = await self._async_refresh_locked()
+            except Exception:
+                # Setup goes on without the web interface, so a poll that
+                # raised before the log answered must still mark the start.
+                self._event_tracker.missed(time.time())
+                raise
             # A poll that raised is never published: its new entries wait for
             # the next one.
             self._event_tracker.delivered()

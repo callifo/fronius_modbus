@@ -259,7 +259,7 @@ Modbus reports events only as severity bits, and none that only the service leve
 
 - The texts come from the inverter itself, in Home Assistant's language, and in English where the inverter has none in that language; a code without a text shows its short name. They are read once: after changing Home Assistant's language, reload the entry.
 - The active events are read with every web poll; the log (about 60 KB) at the first web poll after 5 minutes have passed, and again at the next poll when it did not answer. An entry therefore arrives up to 5 minutes plus one web interval late (longer while the web API fails), with its own time in `since`.
-- The log is read once at start without firing: entries from before, and from while Home Assistant was off, do not fire. When that first read fails, the first one that succeeds fires the entries that started after the failure, by the inverter's clock.
+- The log is read once at start without firing: entries from before, and from while Home Assistant was off, do not fire. When the web API fails before that first read, the first read that succeeds fires the entries that started after the failure, by the inverter's clock.
 - `severity` and `visible_to` are read from the inverter's log, not documented by Fronius: the nightly "not enough DC power" is a warning a customer sees, the daily isolation measurement an info. Events of the service level show too; the web interface shows them to its service login only.
 - The integration does not confirm events. The few that need it (such as too many shutdowns in backup mode) are meant to bring someone to the system; confirm them in the inverter's web interface.
 

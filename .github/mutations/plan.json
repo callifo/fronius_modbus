@@ -1605,8 +1605,8 @@
   {
     "label": "events: the first failure sets the boundary",
     "path": "custom_components/fronius_modbus/inverter_events.py",
-    "old": "            if self._seen is None and self._unread_since is None:\n",
-    "new": "            if self._seen is None:\n",
+    "old": "        if self._seen is None and self._unread_since is None:\n",
+    "new": "        if self._seen is None:\n",
     "tests": "after_a_failed_first_read_what_started_since_is_new"
   },
   {
@@ -1650,5 +1650,12 @@
     "old": "        return readable and super().available\n",
     "new": "        return super().available\n",
     "tests": "event_log_that_does_not_answer_leaves_the_event_unavailable"
+  },
+  {
+    "label": "web control: a first poll that raised marks the start",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "                self._event_tracker.missed(time.time())\n",
+    "new": "",
+    "tests": "log_entry_after_a_first_poll_that_raised_is_news"
   }
 ]

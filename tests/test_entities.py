@@ -442,6 +442,8 @@ async def test_a_retained_poll_does_not_confirm_a_bad_energy_sample(
     assert sensor.native_value == original
 
 
+# The model-103 header; failing it fails the inverter report.
+INVERTER_HEADER_ADDRESS = 40069
 # Model-122 StActCtl (low word) and model-123 WMaxLim_Ena in the captured fixture.
 STATUS_ACTIVE_CONTROLS_ADDRESS = 40216
 LIMIT_ENABLE_ADDRESS = 40236
@@ -501,6 +503,21 @@ async def test_limit_flags_from_a_failed_web_poll_are_no_answer(
     runtime = await make_runtime(hass, entry, connection)
     with_limit_flags(runtime, absolute=1.0, relative=0.0, fresh=False)
     description = _description(entities.sensor_descriptions(runtime), "throttle_reason")
+
+    assert description.value_fn(runtime) is None
+
+
+async def test_a_stale_inverter_report_leaves_the_throttle_reason_unknown(
+    hass, entry, connection, inverter_unit
+):
+    """The operating state of a poll that did not read model 103 is no answer."""
+    runtime = await make_runtime(hass, entry, connection)
+    with_limit_flags(runtime, absolute=0.0, relative=0.0)
+    description = _description(entities.sensor_descriptions(runtime), "throttle_reason")
+    assert description.value_fn(runtime) == "none"
+
+    inverter_unit.fail_read(INVERTER_HEADER_ADDRESS, ServerDeviceFailureError())
+    await runtime.modbus.async_refresh()
 
     assert description.value_fn(runtime) is None
 

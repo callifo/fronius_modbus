@@ -329,18 +329,11 @@
     "tests": "an_unreachable_device_is_not_logged_as_an_error"
   },
   {
-    "label": "derived: a limit at full power is no throttling",
-    "path": "custom_components/fronius_modbus/derived.py",
-    "old": "    return limit_percent < FULL_POWER_PERCENT",
-    "new": "    return limit_percent <= FULL_POWER_PERCENT",
-    "tests": "a_limit_at_full_power_is_no_reason"
-  },
-  {
     "label": "derived: an unread source is not a no",
     "path": "custom_components/fronius_modbus/derived.py",
     "old": "    return None if unknown else NO_REASON",
     "new": "    return NO_REASON",
-    "tests": "a_source_that_did_not_answer_prevents_a_no"
+    "tests": "an_unread_limit_flag_prevents_a_no"
   },
   {
     "label": "web_control: a reserve outside the range is refused",
@@ -390,20 +383,6 @@
     "old": "class FroniusWebResponseError(RuntimeError):",
     "new": "class FroniusWebResponseError(OSError):",
     "tests": "a_server_error_is_an_answer_not_an_outage or a_web_server_error_is_still_an_error"
-  },
-  {
-    "label": "derived: an enabled limit with an unread percent is no answer",
-    "path": "custom_components/fronius_modbus/derived.py",
-    "old": "    if limit_percent is None:\n        return None\n    return limit_percent < FULL_POWER_PERCENT",
-    "new": "    if limit_percent is None:\n        return True\n    return limit_percent < FULL_POWER_PERCENT",
-    "tests": "an_enabled_limit_with_an_unread_percent_is_no_answer"
-  },
-  {
-    "label": "coordinator: an unread enable flag stays unread",
-    "path": "custom_components/fronius_modbus/coordinator.py",
-    "old": "                if controls is None or controls.w_max_lim_ena is None\n",
-    "new": "                if controls is None\n",
-    "tests": "an_unimplemented_enable_flag_leaves_the_throttle_reason_unknown"
   },
   {
     "label": "device: a recovered meter's first read goes through the report",
@@ -1482,5 +1461,40 @@
     "old": "DISPLAY_PRECISION = {\"%\": 0,",
     "new": "DISPLAY_PRECISION = {\"%\": 2,",
     "tests": "float_reading_shows_the_digits_it_has"
+  },
+  {
+    "label": "derived: a reached percentage limit is the AC limit",
+    "path": "custom_components/fronius_modbus/derived.py",
+    "old": "        (THROTTLE_REASONS[3], relative_limit_reached),\n",
+    "new": "",
+    "tests": "a_reached_percentage_limit_is_the_ac_limit"
+  },
+  {
+    "label": "derived: a reached limit in watts is a power limit",
+    "path": "custom_components/fronius_modbus/derived.py",
+    "old": "        (THROTTLE_REASONS[4], absolute_limit_reached),\n",
+    "new": "",
+    "tests": "a_reached_limit_in_watts_is_a_power_limit"
+  },
+  {
+    "label": "component readings: the relative flag is the percentage limit",
+    "path": "custom_components/fronius_modbus/component_readings.py",
+    "old": "        flag_value(readings.get(RELATIVE_LIMIT_REACHED)),\n        flag_value(readings.get(ABSOLUTE_LIMIT_REACHED)),\n",
+    "new": "        flag_value(readings.get(ABSOLUTE_LIMIT_REACHED)),\n        flag_value(readings.get(RELATIVE_LIMIT_REACHED)),\n",
+    "tests": "export_limit_holding_the_inverter_is_a_throttle_reason"
+  },
+  {
+    "label": "coordinator: flags from a failed web poll are no answer",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "        fresh = self.web is not None and self.web.last_update_success\n",
+    "new": "        fresh = self.web is not None\n",
+    "tests": "limit_flags_from_a_failed_web_poll_are_no_answer"
+  },
+  {
+    "label": "coordinator: an operating state from a stale inverter report is unread",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "        if REPORT_INVERTER not in report.updated:\n            return None\n",
+    "new": "",
+    "tests": "a_stale_inverter_report_leaves_the_throttle_reason_unknown"
   }
 ]

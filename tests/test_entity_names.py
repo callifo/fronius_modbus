@@ -75,3 +75,25 @@ def test_the_ac_limit_flag_is_shown_once_by_default():
     )
 
     assert duplicate.entity_registry_enabled_default is False
+
+
+def test_the_readme_names_every_throttle_state_as_the_translations_do():
+    """The state table in the README is what users compare their sensor with."""
+    readme = (TRANSLATIONS.parent.parent.parent / "README.md").read_text(
+        encoding="utf-8"
+    )
+    section = readme.split("### Throttle reason\n", 1)[1].split("\n### ", 1)[0]
+    rows = {
+        cells[0].strip("` "): (cells[1].strip(), cells[2].strip())
+        for line in section.splitlines()
+        if line.startswith("| `")
+        for cells in [line.strip("|").split("|")]
+    }
+    states = {
+        language: NAMES[language]["sensor"]["throttle_reason"]["state"]
+        for language in ("en", "de")
+    }
+
+    assert set(rows) == set(states["en"]) - {"unknown"}
+    for key, (english, german) in rows.items():
+        assert (english, german) == (states["en"][key], states["de"][key])

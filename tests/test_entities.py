@@ -623,7 +623,7 @@ async def test_a_zero_accumulator_is_no_reading_not_a_reset(
 
     assert description.value_fn(runtime) is None
     assert sensor.native_value == before
-    assert not [r for r in caplog.records if r.name.endswith("entities")]
+    assert not [r for r in caplog.records if r.name == entity_base.__name__]
 
 
 async def test_an_unreachable_web_interface_is_a_translated_error():

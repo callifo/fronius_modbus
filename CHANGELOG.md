@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- The inverter's events, from its own web interface and without a login: `Active event` shows the leading active event's text in Home Assistant's language with its code, severity, level and time as attributes; `Active events` counts them; the event entity `Inverter event` fires once for every new entry of the inverter's log, also for entries that last no time at all. Modbus reports events only as severity bits and none of the service level.
+
 ## 1.2.0b5
 
 A beta on 1.2.0b4 that makes the throttle reason report a limit that actually holds the output, renames several sensors after what they measure, and makes discovery confirm a moved inverter before following it. No migration; unique ids and entity ids do not change. Automations that wait for the throttle states `export_limit` or `active_power_control` need the new states (see below).

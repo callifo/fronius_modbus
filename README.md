@@ -247,6 +247,22 @@ Where the states come from, measured on a GEN24 and a Verto:
 - The Modbus signals only say a limit is switched on: `StActCtl` bit 0 (model 122) is set as soon as the AC limit is enabled, even at 100 %, and a GEN24 left `St` at normal while it throttled. They are no longer used for the reason.
 - The flags come with the web poll, which updates the sensor on its own, so the reason can trail a change by up to the web scan interval (default 60 s). While Modbus is down the sensor stays available as long as the web poll answers.
 
+### Inverter events
+
+Modbus reports events only as severity bits, and none that only the service level sees. The inverter's own web interface lists every event with its code, its time and a text; the integration reads that list without a login, so an entry without the web API has it too.
+
+| Entity | Type | What it shows |
+| ------ | ---- | ------------- |
+| Active event | sensor, diagnostic | The text of the leading active event: an error before a warning before an info, the newest among equals. `OK` while none is active; unknown while the list could not be read. The attributes carry its `code` (such as `GEN24-1009`), `text`, `severity`, `visible_to` (`customer`, `technician` or `service`), `since` and `confirmable`, and the other active events under `other_events`. |
+| Active events | sensor, diagnostic | How many events are active. |
+| Inverter event | event | Fires once for every new entry of the inverter's event log, with the severity as its event type (`error`, `warning`, `info`) and the same attributes. It catches entries that last no time at all and never show as active, such as a short battery fault. |
+
+- The texts come from the inverter itself, in Home Assistant's language, and in English where the inverter has none in that language; a code without a text shows its short name.
+- The active events are read with every web poll; the log (about 60 KB) every 5 minutes, so an event can arrive up to 5 minutes late, with its own time in `since`.
+- The log is read once at start without firing: entries from before, and from while Home Assistant was off, do not fire.
+- `severity` and `visible_to` are read from the inverter's log, not documented by Fronius: the nightly "not enough DC power" is a warning a customer sees, the daily isolation measurement an info. Events of the service level show too; the web interface shows them to its service login only.
+- The integration does not confirm events. The few that need it (such as too many shutdowns in backup mode) are meant to bring someone to the system; confirm them in the inverter's web interface.
+
 ### Inverter controls
 
 | Entity               | Description                                                                                                                                                              |
@@ -460,6 +476,26 @@ automation:
                   entity_id: select.fronius_ac_limit_enable
                 data:
                   option: disabled
+```
+
+Send a notification for every error or warning the inverter logs:
+
+```yaml
+automation:
+  - alias: "Inverter: notify on errors and warnings"
+    triggers:
+      - trigger: state
+        entity_id: event.fronius_inverter_event
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.to_state.attributes.event_type in ['error', 'warning'] }}"
+    actions:
+      - action: notify.notify
+        data:
+          title: "Inverter {{ trigger.to_state.attributes.event_type }}"
+          message: >-
+            {{ trigger.to_state.attributes.code }}:
+            {{ trigger.to_state.attributes.text }}
 ```
 
 ## Known limitations

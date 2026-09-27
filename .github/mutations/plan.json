@@ -1517,5 +1517,19 @@
     "old": "operating_state=self.modbus.data.operating_state if modbus_fresh else None,",
     "new": "operating_state=self.modbus.data.operating_state,",
     "tests": "a_modbus_outage_without_a_reached_limit_is_no_answer"
+  },
+  {
+    "label": "component readings: power modules up to 9",
+    "path": "custom_components/fronius_modbus/component_readings.py",
+    "old": "    *(_module_temperature(index) for index in range(1, 10)),\n",
+    "new": "    *(_module_temperature(index) for index in range(1, 5)),\n",
+    "tests": "verto_gets_every_module_fan_and_temperature_it_reports"
+  },
+  {
+    "label": "component readings: the surplus flag comes disabled",
+    "path": "custom_components/fronius_modbus/component_readings.py",
+    "old": "        measurement=False,\n        enabled=False,\n        transform=\"yes_no\",\n        once_reported=True,\n",
+    "new": "        measurement=False,\n        transform=\"yes_no\",\n        once_reported=True,\n",
+    "tests": "surplus_flag_is_offered_disabled"
   }
 ]

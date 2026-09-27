@@ -192,7 +192,7 @@ The inverter's component endpoints (`/api/components/inverter/readable` and `/ap
 
 - A value the inverter does not report shows as unknown.
 - A power module the inverter does not report creates no entity; one it has reported before keeps its entity, as unknown. A power module that appears later gets its entity at the next reload.
-- `Production power limit`, `Production power limit reached`, `Battery max charge power (DC-DC)` and `Battery max discharge power (DC-DC)` follow the same rule, since older firmware lacks these fields. Such sensors an entry already has from an earlier version stay; if they only ever show unknown, disable them.
+- `Production power limit`, `Output limited`, `Battery max charge power (DC-DC)` and `Battery max discharge power (DC-DC)` follow the same rule, since older firmware lacks these fields. Such sensors an entry already has from an earlier version stay; if they only ever show unknown, disable them.
 - Firmware without these endpoints (HTTP 404) gets none of these sensors; a sensor registered before stays, as unknown, since one 404 from an endpoint that answered before proves nothing.
 - No sensor takes their serial numbers, part serials or device ids; the battery's serial number shows on its device page, as before, and is redacted in diagnostics.
 
@@ -201,7 +201,7 @@ The inverter's component endpoints (`/api/components/inverter/readable` and `/ap
 | Power module 1–4 temperature                                                                            | Inverter | enabled  | Temperatures of the power modules the inverter reports.                                  |
 | Fan 1 / 2                                                                                               | Inverter | enabled  | Fan speed in percent.                                                                    |
 | AC power L1 / L2 / L3                                                                                   | Inverter | enabled  | Per-phase active power of the inverter.                                                  |
-| Production power limit / Production power limit reached                                                 | Inverter | enabled  | The power limit in effect (the nameplate power, or the AC limit while it is set; an export limit does not lower it), and whether the output is held at a limit, in percent or in watts. |
+| Production power limit / Output limited                                                                 | Inverter | enabled  | The power limit in effect (the nameplate power, or the AC limit while it is set; an export limit does not lower it), and whether a limit set on the inverter holds the output, in percent or in watts. |
 | Battery max charge / discharge power (DC-DC)                                                            | Inverter | enabled  | What the battery converter can take or give right now.                                   |
 | Grid valid                                                                                              | Inverter | enabled  | The inverter's own verdict on the grid at its feed-in point.                             |
 | Power stage 1 / 2 firmware                                                                              | Inverter | enabled  | Diagnostic.                                                                              |
@@ -234,7 +234,7 @@ The sensor names the limit the output is held at right now. A limit that is only
 | ---------------------- | ----------------------- | -------------------------------- | --------------------------------------------------------------------------------------------- |
 | `none`                 | Not throttled           | Keine Drosselung                 | No limit holds the output.                                                                    |
 | `export_limit`         | AC limit                | AC-Leistungsbegrenzung           | A percentage limit is reached, such as the AC limit (`AC limit enable`, `AC limit rate`).     |
-| `power_limit`          | Power limit (W) reached | Leistungsgrenze (W) erreicht     | A limit in watts is reached, such as an export limit set in the inverter's web interface.     |
+| `power_limit`          | Export limit            | Einspeisebegrenzung              | A limit in watts is reached. In practice the export limit set in the inverter's web interface; the inverter reports any limit in watts this way. |
 | `inverter_state`       | Inverter reports throttling | Wechselrichter meldet Drosselung | The inverter reports the SunSpec operating state throttled (model 103 `St`).                 |
 | `several`              | Several reasons         | Mehrere Gründe                   | More than one of the above at once.                                                           |
 | `active_power_control` | Active power control    | Wirkleistungsvorgabe             | No longer reported; kept so older history keeps its label.                                    |

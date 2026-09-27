@@ -156,12 +156,12 @@ def test_the_inverter_reporting_the_state_itself_is_a_reason():
 
 def test_a_reached_percentage_limit_is_the_ac_limit():
     """Measured: the AC limit at 400 W held the output and set only the relative flag."""
-    assert _reason(relative_reached=True) == "export_limit"
+    assert _reason(relative_reached=True) == "ac_limit"
 
 
-def test_a_reached_limit_in_watts_is_a_power_limit():
+def test_a_reached_limit_in_watts_is_the_feed_in_limit():
     """Measured in #26: an export limit held at 400 W set only the absolute flag."""
-    assert _reason(absolute_reached=True) == "power_limit"
+    assert _reason(absolute_reached=True) == "feed_in_limit"
 
 
 def test_two_reasons_at_once_are_reported_as_several():
@@ -182,7 +182,7 @@ def test_an_unread_limit_flag_prevents_a_no():
 
 
 def test_a_found_reason_stands_even_while_another_source_is_silent():
-    assert _reason(absolute_reached=True, relative_reached=None) == "power_limit"
+    assert _reason(absolute_reached=True, relative_reached=None) == "feed_in_limit"
 
 
 def test_the_limit_reason_is_named_after_the_ac_limit_it_reads():
@@ -193,7 +193,7 @@ def test_the_limit_reason_is_named_after_the_ac_limit_it_reads():
         texts = json.loads(
             (root / "translations" / f"{language}.json").read_text(encoding="utf-8")
         )["entity"]
-        reason = texts["sensor"]["throttle_reason"]["state"]["export_limit"]
+        reason = texts["sensor"]["throttle_reason"]["state"]["ac_limit"]
         assert reason == texts["number"]["ac_limit_rate"]["name"].removesuffix(" rate")
 
 
@@ -205,7 +205,7 @@ def test_the_production_limit_pair_is_a_power_limit_apart_from_the_battery_s():
     root = pathlib.Path(__file__).parent.parent / "custom_components/fronius_modbus"
     expected = {
         "en": ("Production power limit", "Output limited"),
-        "de": ("Aktuelle Erzeugungs-Leistungsgrenze", "Begrenzung greift"),
+        "de": ("Aktuelle Erzeugungs-Leistungsgrenze", "Ausgangsleistung begrenzt"),
     }
     for language, names in expected.items():
         sensors = json.loads(

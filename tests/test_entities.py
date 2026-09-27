@@ -476,7 +476,7 @@ async def test_an_export_limit_holding_the_inverter_is_a_throttle_reason(
     with_limit_flags(runtime, absolute=1.0, relative=0.0)
     description = _description(entities.sensor_descriptions(runtime), "throttle_reason")
 
-    assert description.value_fn(runtime) == "power_limit"
+    assert description.value_fn(runtime) == "feed_in_limit"
 
 
 async def test_an_ac_limit_that_is_set_but_not_reached_is_no_throttling(

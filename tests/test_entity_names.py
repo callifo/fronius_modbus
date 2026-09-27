@@ -107,5 +107,16 @@ def test_a_limit_in_watts_reads_as_the_export_limit_it_mostly_is():
         for language in ("en", "de")
     }
 
-    assert states["en"]["power_limit"] == "Export limit"
-    assert states["de"]["power_limit"] == "Einspeisebegrenzung"
+    assert states["en"]["feed_in_limit"] == "Export limit"
+    assert states["de"]["feed_in_limit"] == "Einspeisebegrenzung"
+
+
+def test_the_old_limit_keys_are_history_only():
+    """export_limit meant a switched-on AC limit; reusing it for the export limit
+    would relabel old history and turn old automations silently."""
+    options = entities.SENSOR_STATE_OPTIONS["throttle_reason"]
+
+    assert {"export_limit", "active_power_control"} <= set(options)
+    assert (
+        NAMES["en"]["sensor"]["throttle_reason"]["state"]["export_limit"] == "AC limit"
+    )

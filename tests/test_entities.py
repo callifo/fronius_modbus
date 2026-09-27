@@ -451,7 +451,9 @@ RELATIVE_LIMIT_REACHED = (
 )
 
 
-def with_limit_flags(runtime, absolute: float, relative: float) -> None:
+def with_limit_flags(
+    runtime, absolute: float, relative: float, *, fresh: bool = True
+) -> None:
     """The component answer as the inverter sends it, 0.0 or 1.0."""
     runtime.web = SimpleNamespace(
         data=WebData(
@@ -459,7 +461,8 @@ def with_limit_flags(runtime, absolute: float, relative: float) -> None:
                 ABSOLUTE_LIMIT_REACHED: absolute,
                 RELATIVE_LIMIT_REACHED: relative,
             }
-        )
+        ),
+        last_update_success=fresh,
     )
 
 
@@ -488,6 +491,18 @@ async def test_an_ac_limit_that_is_set_but_not_reached_is_no_throttling(
     description = _description(entities.sensor_descriptions(runtime), "throttle_reason")
 
     assert description.value_fn(runtime) == "none"
+
+
+async def test_limit_flags_from_a_failed_web_poll_are_no_answer(
+    hass, entry, connection
+):
+    """The web coordinator keeps its last data after a failure; a limit may have
+    lifted or set since."""
+    runtime = await make_runtime(hass, entry, connection)
+    with_limit_flags(runtime, absolute=1.0, relative=0.0, fresh=False)
+    description = _description(entities.sensor_descriptions(runtime), "throttle_reason")
+
+    assert description.value_fn(runtime) is None
 
 
 async def test_without_the_component_flags_the_throttle_reason_is_unknown(

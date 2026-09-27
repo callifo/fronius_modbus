@@ -191,19 +191,21 @@ Set during setup; change them later with **Configure** or **Reconfigure** on the
 The inverter's component endpoints (`/api/components/inverter/readable` and `/api/components/BatteryManagementSystem/readable`) add values Modbus does not carry.
 
 - A value the inverter does not report shows as unknown.
-- A power module the inverter does not report creates no entity; one it has reported before keeps its entity, as unknown. A power module that appears later gets its entity at the next reload.
+- A power module, a fan beyond the first two or a second temperature the inverter does not report creates no entity; one it has reported before keeps its entity, as unknown. A power module that appears later gets its entity at the next reload.
 - `Output power limit`, `Output limited`, `Battery max charge power (DC-DC)` and `Battery max discharge power (DC-DC)` follow the same rule, since older firmware lacks these fields. Such sensors an entry already has from an earlier version stay; if they only ever show unknown, disable them.
 - Firmware without these endpoints (HTTP 404) gets none of these sensors; a sensor registered before stays, as unknown, since one 404 from an endpoint that answered before proves nothing.
 - No sensor takes their serial numbers, part serials or device ids; the battery's serial number shows on its device page, as before, and is redacted in diagnostics.
 
 | Entity                                                                                                  | Device   | Default  | Description                                                                              |
 | ------------------------------------------------------------------------------------------------------- | -------- | -------- | ---------------------------------------------------------------------------------------- |
-| Power module 1–4 temperature                                                                            | Inverter | enabled  | Temperatures of the power modules the inverter reports.                                  |
-| Fan 1 / 2                                                                                               | Inverter | enabled  | Fan speed in percent.                                                                    |
+| Power module 1–9 temperature                                                                            | Inverter | enabled  | Temperatures of the power modules the inverter reports (a Verto 30.0 Plus reports 1–5 and 9). |
+| Temperature 2                                                                                           | Inverter | enabled  | A second ambient temperature, on inverters that report one.                              |
+| Fan 1–5                                                                                                 | Inverter | enabled  | Fan speed in percent. Fans 3–5 exist only where the inverter reports them.               |
 | AC power L1 / L2 / L3                                                                                   | Inverter | enabled  | Per-phase active power of the inverter.                                                  |
 | Output power limit / Output limited                                                                     | Inverter | enabled  | The power limit in effect (the nameplate power, or the AC limit while it is set; an export limit does not lower it), and whether a limit set on the inverter holds the output, in percent or in watts. |
 | Battery max charge / discharge power (DC-DC)                                                            | Inverter | enabled  | What the battery converter can take or give right now.                                   |
 | Grid valid                                                                                              | Inverter | enabled  | The inverter's own verdict on the grid at its feed-in point.                             |
+| Surplus power available                                                                                 | Inverter | disabled | Observed, not documented by Fronius: yes while an export limit curtailed PV, no otherwise, also while the AC limit held the output. Seen on two inverters. |
 | Power stage 1 / 2 firmware                                                                              | Inverter | enabled  | Diagnostic.                                                                              |
 | Feed-in point voltage L1–L3, L1-L2–L3-L1, frequency                                                     | Inverter | disabled | Grid side of the inverter's relays; differs from the AC output only while they are open. |
 | DC link voltage, Operating time, Power stage hardware                                                   | Inverter | disabled | Diagnostic. The operating time counts in seconds but is no exact clock.                  |

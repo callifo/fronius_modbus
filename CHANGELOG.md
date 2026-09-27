@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Sensors for the power modules, fans and second ambient temperature a larger inverter reports: a Verto 30.0 Plus reports power modules 1–5 and 9, fans 1, 2, 3 and 5 and a second temperature. Modules 1–9, fans 3–5 and the second temperature exist only where the inverter reports them.
+- `Surplus power available` ("Überschuss verfügbar"), disabled by default: an undocumented flag of the component endpoint, seen set while an export limit curtailed PV and clear otherwise, also while the AC limit held the output.
+
 ## 1.2.0b5
 
 A beta on 1.2.0b4 that makes the throttle reason report a limit that actually holds the output, renames several sensors after what they measure, and makes discovery confirm a moved inverter before following it. No migration; unique ids and entity ids do not change. Automations that wait for the throttle states `export_limit` or `active_power_control` need the new states (see below).

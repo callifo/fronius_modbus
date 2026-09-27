@@ -140,11 +140,13 @@ class LoadEstimator:
         if glitch:
             self._consecutive_bad_polls += 1
             return self._last_good_load_w if self._consecutive_bad_polls == 1 else None
-        charging_hard = (
-            storage_present
-            and (storage_charge_power_w or 0.0) >= LOAD_STORAGE_CHARGE_MIN_W
+        # An unknown charge (the MPPT block did not answer) may explain a
+        # negative load as well as a strong one; it is no 0 W.
+        charge_may_explain_it = storage_present and (
+            storage_charge_power_w is None
+            or storage_charge_power_w >= LOAD_STORAGE_CHARGE_MIN_W
         )
-        if candidate < 0 and charging_hard:
+        if candidate < 0 and charge_may_explain_it:
             self._consecutive_bad_polls = 0
             return None
         return self._good(max(candidate, 0.0), inverter_power_w)

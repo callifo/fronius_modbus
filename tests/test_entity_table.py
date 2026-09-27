@@ -55,6 +55,20 @@ def test_every_legacy_key_is_still_registered():
         )
 
 
+def test_every_event_type_has_a_text_in_every_language():
+    """A type without one shows as its raw name in the logbook."""
+    runtime = _everything_present()
+    for language in ("en", "de"):
+        translations = json.loads(
+            (PACKAGE / "translations" / f"{language}.json").read_text(encoding="utf-8")
+        )["entity"]["event"]
+        for description in entities.event_descriptions(runtime):
+            event_type = translations[description.translation_key]["state_attributes"][
+                "event_type"
+            ]
+            assert set(event_type["state"]) == set(description.event_types), language
+
+
 def test_every_translation_key_has_a_name_in_every_language():
     runtime = _everything_present()
     for language in ("en", "de"):
@@ -67,6 +81,7 @@ def test_every_translation_key_has_a_name_in_every_language():
             ("select", entities.select_descriptions),
             ("switch", entities.switch_descriptions),
             ("button", entities.button_descriptions),
+            ("event", entities.event_descriptions),
         ):
             for description in factory(runtime):
                 assert "name" in translations[platform].get(

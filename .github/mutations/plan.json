@@ -1496,5 +1496,26 @@
     "old": "        if REPORT_INVERTER not in report.updated:\n            return None\n",
     "new": "",
     "tests": "a_stale_inverter_report_leaves_the_throttle_reason_unknown"
+  },
+  {
+    "label": "sensor: a mixed-source sensor follows the web poll",
+    "path": "custom_components/fronius_modbus/sensor.py",
+    "old": "        if self.entity_description.also_web and web is not None:\n",
+    "new": "        if False:\n",
+    "tests": "a_web_poll_alone_updates_the_throttle_reason"
+  },
+  {
+    "label": "entities: a mixed-source sensor stays up on a fresh web poll",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "                return description.also_web and bool(web and web.last_update_success)\n",
+    "new": "                return False\n",
+    "tests": "a_modbus_outage_keeps_a_reached_limit_shown"
+  },
+  {
+    "label": "coordinator: no operating state from a failed Modbus poll",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "operating_state=self.modbus.data.operating_state if modbus_fresh else None,",
+    "new": "operating_state=self.modbus.data.operating_state,",
+    "tests": "a_modbus_outage_without_a_reached_limit_is_no_answer"
   }
 ]

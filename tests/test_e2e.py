@@ -1148,3 +1148,16 @@ async def test_a_modbus_outage_keeps_a_reached_limit_shown(
 
     assert state_of(hass, entry, "acpower") == "unavailable"
     assert state_of(hass, entry, "throttle_reason") == "feed_in_limit"
+
+
+async def test_a_modbus_outage_without_a_reached_limit_is_no_answer(
+    hass, mock_modbus, monkeypatch
+):
+    """The operating state of the last good poll may be stale; "none" would guess."""
+    entry = await _set_up_with_limit_flags(hass, mock_modbus, monkeypatch, 0.0)
+
+    mock_modbus.fail_requests(INVERTER_UNIT_ID, ModbusConnectionError())
+    await entry.runtime_data.modbus.async_refresh()
+    await hass.async_block_till_done()
+
+    assert state_of(hass, entry, "throttle_reason") == "unknown"

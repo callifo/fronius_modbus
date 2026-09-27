@@ -21,13 +21,12 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
+from .component_readings import limits_reached
 from .derived import LoadEstimator, grid_status, throttle_reason
 from .fronius_modbus_api.controls import InverterControls
 from .fronius_modbus_api.device import (
-    REPORT_CONTROLS,
     REPORT_INVERTER,
     REPORT_MPPT,
-    REPORT_STATUS,
     FroniusInverter,
     UpdateReport,
     meter_report_name,
@@ -106,7 +105,7 @@ class ModbusPoll:
     report: UpdateReport
     load_w: float | None
     grid_status: str | None
-    throttle_reason: str | None
+    operating_state: int | None
     # True when this is the previous poll served again during a tolerated
     # outage: usable for display, but not a new reading (audit B05).
     retained: bool = False
@@ -146,6 +145,19 @@ class FroniusRuntimeData:
     def web_data(self) -> WebData | None:
         """The web coordinator's last data, or None when the web API is not set up."""
         return None if self.web is None else self.web.data
+
+    @property
+    def throttle_reason(self) -> str | None:
+        """Why the inverter holds its output back, from both coordinators' last polls."""
+        # A failed web poll keeps its last data; a limit may have lifted since.
+        fresh = self.web is not None and self.web.last_update_success
+        readings = self.web_data.inverter_readings if fresh and self.web_data else None
+        relative, absolute = limits_reached(readings)
+        return throttle_reason(
+            operating_state=self.modbus.data.operating_state,
+            relative_limit_reached=relative,
+            absolute_limit_reached=absolute,
+        )
 
     async def async_set_soc_minimum(self, value: float) -> None:
         """Write the SoC minimum to Modbus, and to the web API in Manual mode.
@@ -259,7 +271,7 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
             report=report,
             load_w=self._load_w(report),
             grid_status=self._grid_status(report),
-            throttle_reason=self._throttle_reason(report),
+            operating_state=self._operating_state(report),
         )
 
     async def _failed_poll(self, err: ModbusError) -> ModbusPoll:
@@ -392,24 +404,10 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
             storage_present=self.device.storage is not None,
         )
 
-    def _throttle_reason(self, report: UpdateReport) -> str | None:
-        """The throttling reason, from the two models that answered this poll."""
-        status = self.device.status if REPORT_STATUS in report.updated else None
-        controls = self.device.controls if REPORT_CONTROLS in report.updated else None
-        return throttle_reason(
-            operating_state=(
-                assume_present(self.device.inverter).st
-                if REPORT_INVERTER in report.updated
-                else None
-            ),
-            active_controls=None if status is None else status.st_act_ctl,
-            limit_enabled=(
-                None
-                if controls is None or controls.w_max_lim_ena is None
-                else controls.w_max_lim_ena == 1
-            ),
-            limit_percent=None if controls is None else controls.w_max_lim_pct,
-        )
+    def _operating_state(self, report: UpdateReport) -> int | None:
+        if REPORT_INVERTER not in report.updated:
+            return None
+        return assume_present(self.device.inverter).st
 
     def _grid_status(self, report: UpdateReport) -> str | None:
         meter = self._primary_meter_fresh(report)

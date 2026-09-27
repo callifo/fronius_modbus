@@ -136,10 +136,14 @@ CHARGE_GRID_STATUS = {
 THROTTLE_REASONS = (
     "none",
     "inverter_state",
+    # No longer reported: StActCtl bit 0 says a limit is set, even at 100 %, not
+    # that it holds (#26). Kept so the states in history keep their label.
     "active_power_control",
-    # The AC limit (model 123 WMaxLim); the key keeps its first name for the
-    # automations built on it. A grid export limit sets none of these signals.
+    # A percentage limit reached, such as the AC limit (model 123 WMaxLim); the
+    # key keeps its first name for the automations built on it.
     "export_limit",
+    # A limit in watts reached, such as an export limit set in the web interface.
+    "power_limit",
     "several",
 )
 

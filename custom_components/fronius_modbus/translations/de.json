@@ -500,6 +500,7 @@
           "inverter_state": "Wechselrichter meldet Drosselung",
           "active_power_control": "Wirkleistungsvorgabe",
           "export_limit": "AC-Leistungsbegrenzung",
+          "power_limit": "Leistungsgrenze (W) erreicht",
           "several": "Mehrere Gründe",
           "unknown": "Unbekannt"
         }

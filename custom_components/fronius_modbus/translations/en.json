@@ -500,6 +500,7 @@
           "inverter_state": "Inverter reports throttling",
           "active_power_control": "Active power control",
           "export_limit": "AC limit",
+          "power_limit": "Power limit (W) reached",
           "several": "Several reasons",
           "unknown": "Unknown"
         }

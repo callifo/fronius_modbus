@@ -25,6 +25,12 @@ YES, NO = "yes", "no"
 # The endpoints send raw float32 values (a fan at 37.254902 %); what a unit is
 # worth showing. Durations are left to the unit they are shown in.
 DISPLAY_PRECISION = {"%": 0, "W": 0, "°C": 1, "V": 1, "Hz": 2}
+# Set while the output is held at a limit: one in watts, such as an export
+# limit, or a percentage one, such as the Modbus AC limit (measured, #26).
+ABSOLUTE_LIMIT_REACHED = "ACBRIDGE_VALUE_POWERACTIVE_PRODUCTION_LIMIT_REACHED_U8"
+RELATIVE_LIMIT_REACHED = (
+    "ACBRIDGE_VALUE_POWERACTIVE_RELATIVE_PRODUCTION_LIMIT_REACHED_U8"
+)
 # How the inverter spells a flag, in its configs and its component attributes.
 FLAG_WORDS = {
     **dict.fromkeys(("1", "true", "on", "yes", "enabled"), True),
@@ -129,10 +135,7 @@ COMPONENT_READINGS: tuple[ComponentReading, ...] = (
     ComponentReading(
         "production_limit_reached",
         "inverter",
-        (
-            "ACBRIDGE_VALUE_POWERACTIVE_PRODUCTION_LIMIT_REACHED_U8",
-            "ACBRIDGE_VALUE_POWERACTIVE_RELATIVE_PRODUCTION_LIMIT_REACHED_U8",
-        ),
+        (ABSOLUTE_LIMIT_REACHED, RELATIVE_LIMIT_REACHED),
         measurement=False,
         transform="yes_no",
         once_reported=True,
@@ -423,6 +426,18 @@ def flag_value(value: Any) -> bool | None:
     if isinstance(value, str):
         return FLAG_WORDS.get(value.strip().lower())
     return None
+
+
+def limits_reached(
+    readings: dict[str, Any] | None,
+) -> tuple[bool | None, bool | None]:
+    """Whether a percentage limit and a limit in watts hold the output; None if unread."""
+    if readings is None:
+        return None, None
+    return (
+        flag_value(readings.get(RELATIVE_LIMIT_REACHED)),
+        flag_value(readings.get(ABSOLUTE_LIMIT_REACHED)),
+    )
 
 
 def take_readings(device: dict[str, Any], component: Component) -> dict[str, Any]:

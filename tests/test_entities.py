@@ -33,6 +33,7 @@ from custom_components.fronius_modbus.froniuswebclient import (
     FroniusWebUnreachable,
 )
 from custom_components.fronius_modbus.sensor import FroniusSensor
+from custom_components.fronius_modbus.web_control import WebData
 from homeassistant.exceptions import HomeAssistantError
 
 from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID
@@ -40,8 +41,6 @@ from .test_web_control import make_control
 
 # MinRsvPct in the captured fixture; the model-124 scale factor is -2.
 SOC_MINIMUM_ADDRESS = 40350
-# The model-123 header; failing it fails the controls report.
-CONTROLS_HEADER_ADDRESS = 40227
 
 # A rejected login asks Home Assistant for a new one; here it is only recorded.
 pytestmark = pytest.mark.usefixtures("reauth_requests")
@@ -443,16 +442,92 @@ async def test_a_retained_poll_does_not_confirm_a_bad_energy_sample(
     assert sensor.native_value == original
 
 
-async def test_the_throttle_reason_needs_both_of_its_reports(
+# The model-103 header; failing it fails the inverter report.
+INVERTER_HEADER_ADDRESS = 40069
+# Model-122 StActCtl (low word) and model-123 WMaxLim_Ena in the captured fixture.
+STATUS_ACTIVE_CONTROLS_ADDRESS = 40216
+LIMIT_ENABLE_ADDRESS = 40236
+ABSOLUTE_LIMIT_REACHED = "ACBRIDGE_VALUE_POWERACTIVE_PRODUCTION_LIMIT_REACHED_U8"
+RELATIVE_LIMIT_REACHED = (
+    "ACBRIDGE_VALUE_POWERACTIVE_RELATIVE_PRODUCTION_LIMIT_REACHED_U8"
+)
+
+
+def with_limit_flags(
+    runtime, absolute: float, relative: float, *, fresh: bool = True
+) -> None:
+    """The component answer as the inverter sends it, 0.0 or 1.0."""
+    runtime.web = SimpleNamespace(
+        data=WebData(
+            inverter_readings={
+                ABSOLUTE_LIMIT_REACHED: absolute,
+                RELATIVE_LIMIT_REACHED: relative,
+            }
+        ),
+        last_update_success=fresh,
+    )
+
+
+async def test_an_export_limit_holding_the_inverter_is_a_throttle_reason(
+    hass, entry, connection
+):
+    """#26: held at a 400 W export limit, the sensor said "not throttled" all day."""
+    runtime = await make_runtime(hass, entry, connection)
+    with_limit_flags(runtime, absolute=1.0, relative=0.0)
+    description = _description(entities.sensor_descriptions(runtime), "throttle_reason")
+
+    assert description.value_fn(runtime) == "feed_in_limit"
+
+
+async def test_an_ac_limit_that_is_set_but_not_reached_is_no_throttling(
     hass, entry, connection, inverter_unit
 ):
-    """It reads the status and the controls model, so a stale one must not answer."""
+    """Measured: an AC limit at 100 % (or above the output) sets StActCtl bit 0
+    and read as "active power control" or "several" while nothing throttled."""
+    inverter_unit.holding[STATUS_ACTIVE_CONTROLS_ADDRESS + 1] = 1
+    inverter_unit.holding[LIMIT_ENABLE_ADDRESS] = 1
     runtime = await make_runtime(hass, entry, connection)
+    assert runtime.device.status.st_act_ctl == 1
+    assert runtime.device.controls.w_max_lim_ena == 1
+    with_limit_flags(runtime, absolute=0.0, relative=0.0)
+    description = _description(entities.sensor_descriptions(runtime), "throttle_reason")
+
+    assert description.value_fn(runtime) == "none"
+
+
+async def test_limit_flags_from_a_failed_web_poll_are_no_answer(
+    hass, entry, connection
+):
+    """The web coordinator keeps its last data after a failure; a limit may have
+    lifted or set since."""
+    runtime = await make_runtime(hass, entry, connection)
+    with_limit_flags(runtime, absolute=1.0, relative=0.0, fresh=False)
+    description = _description(entities.sensor_descriptions(runtime), "throttle_reason")
+
+    assert description.value_fn(runtime) is None
+
+
+async def test_a_stale_inverter_report_leaves_the_throttle_reason_unknown(
+    hass, entry, connection, inverter_unit
+):
+    """The operating state of a poll that did not read model 103 is no answer."""
+    runtime = await make_runtime(hass, entry, connection)
+    with_limit_flags(runtime, absolute=0.0, relative=0.0)
     description = _description(entities.sensor_descriptions(runtime), "throttle_reason")
     assert description.value_fn(runtime) == "none"
 
-    inverter_unit.fail_read(CONTROLS_HEADER_ADDRESS, ServerDeviceFailureError())
+    inverter_unit.fail_read(INVERTER_HEADER_ADDRESS, ServerDeviceFailureError())
     await runtime.modbus.async_refresh()
+
+    assert description.value_fn(runtime) is None
+
+
+async def test_without_the_component_flags_the_throttle_reason_is_unknown(
+    hass, entry, connection
+):
+    """The Modbus signals only say a limit is set, not that it holds."""
+    runtime = await make_runtime(hass, entry, connection)
+    description = _description(entities.sensor_descriptions(runtime), "throttle_reason")
 
     assert description.value_fn(runtime) is None
 
@@ -511,23 +586,6 @@ async def test_the_web_soc_limits_are_writable_in_manual_soc_mode_alone(
     finally:
         web_control.shutdown()
     assert web_control._client.calls[-1] == ("soc", 25, None)
-
-
-# Model-123 WMaxLimPct_Ena and WMaxLimPct in the captured fixture.
-LIMIT_ENABLE_ADDRESS = 40236
-LIMIT_PERCENT_ADDRESS = 40232
-UNIMPLEMENTED_UINT16 = 0xFFFF
-
-
-async def test_an_unimplemented_enable_flag_leaves_the_throttle_reason_unknown(
-    hass, entry, connection, inverter_unit
-):
-    """Audit E02: the coordinator turned the sentinel into `== 1` -> False -> `none`."""
-    inverter_unit.holding[LIMIT_ENABLE_ADDRESS] = UNIMPLEMENTED_UINT16
-    runtime = await make_runtime(hass, entry, connection)
-    assert runtime.device.controls.w_max_lim_ena is None
-    description = _description(entities.sensor_descriptions(runtime), "throttle_reason")
-    assert description.value_fn(runtime) is None
 
 
 # Model-203 TotWhExp of the captured meter: two registers, 0 is SunSpec's "not accumulated".
@@ -686,3 +744,21 @@ async def test_a_phase_energy_sensor_already_registered_stays_on_a_zero(runtime)
     }
 
     assert keys == {"meter_200_TotWhImpPhB"}
+
+
+async def test_only_a_plain_sensor_reads_the_web_poll_besides_modbus(
+    hass, entry, runtime
+):
+    """The web listener lives in FroniusSensor; any other entity would ignore it."""
+    descriptions = [
+        *entities.sensor_descriptions(runtime),
+        *entities.number_descriptions(runtime),
+        *entities.select_descriptions(runtime),
+        *entities.switch_descriptions(runtime),
+        *entities.button_descriptions(runtime),
+    ]
+    mixed = [d for d in descriptions if d.also_web]
+
+    assert [d.key for d in mixed] == ["throttle_reason"]
+    for description in mixed:
+        assert type(FroniusSensor.create(runtime, entry, description)) is FroniusSensor

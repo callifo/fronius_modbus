@@ -34,7 +34,7 @@ _LOGGER = logging.getLogger(__name__)
 
 # An announcement comes once: a new address whose read fails, because its
 # Modbus server is not up yet or the read timed out, is read again for a few
-# minutes before the move is given up (reaudit 1cd9c57 P2-01).
+# minutes before the move is given up.
 MOVE_READ_ATTEMPTS = 6
 MOVE_READ_RETRY_SECONDS = 30
 
@@ -108,8 +108,7 @@ async def _async_inverter_moved(
 
     The serial number goes out in every announcement, so the announcement alone
     proves nothing. Read now, not taken from the last poll: that one may predate
-    the move, or come from another inverter given the old address (reaudit
-    b58ccec P2-01, P2-02).
+    the move, or come from another inverter given the old address.
     """
     old_host, port, unit_id = endpoint
     for attempt in range(MOVE_READ_ATTEMPTS):
@@ -145,7 +144,7 @@ async def async_follow_host(
     if hass.config_entries.async_get_entry(entry.entry_id) is None:
         return
     # The reads awaited: a concurrent announcement or reconfiguration may have
-    # changed the endpoint they checked (reaudit 1cd9c57 P2-02).
+    # changed the endpoint they checked.
     if _endpoint(entry) != endpoint:
         return
     values = {**entry.data, **entry.options}

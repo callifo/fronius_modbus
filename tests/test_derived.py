@@ -138,14 +138,11 @@ def test_the_first_reading_seeds_an_unseeded_guard():
     assert guard.value == 42.0
 
 
-def _reason(
-    operating_state=4, active_controls=0, limit_enabled=False, limit_percent=100.0
-):
+def _reason(operating_state=4, relative_reached=False, absolute_reached=False):
     return throttle_reason(
         operating_state=operating_state,
-        active_controls=active_controls,
-        limit_enabled=limit_enabled,
-        limit_percent=limit_percent,
+        relative_limit_reached=relative_reached,
+        absolute_limit_reached=absolute_reached,
     )
 
 
@@ -157,52 +154,35 @@ def test_the_inverter_reporting_the_state_itself_is_a_reason():
     assert _reason(operating_state=5) == "inverter_state"
 
 
-def test_an_active_power_control_is_a_reason():
-    assert _reason(active_controls=0b1) == "active_power_control"
+def test_a_reached_percentage_limit_is_the_ac_limit():
+    """Measured: the AC limit at 400 W held the output and set only the relative flag."""
+    assert _reason(relative_reached=True) == "ac_limit"
 
 
-def test_a_limit_below_full_power_is_a_reason():
-    assert _reason(limit_enabled=True, limit_percent=70.0) == "export_limit"
-
-
-def test_a_limit_at_full_power_is_no_reason():
-    """The trap: many installations leave the limit switched on at 100 percent."""
-    assert _reason(limit_enabled=True, limit_percent=100.0) == "none"
+def test_a_reached_limit_in_watts_is_the_feed_in_limit():
+    """Measured in #26: an export limit held at 400 W set only the absolute flag."""
+    assert _reason(absolute_reached=True) == "feed_in_limit"
 
 
 def test_two_reasons_at_once_are_reported_as_several():
-    assert _reason(operating_state=5, active_controls=0b1) == "several"
+    assert _reason(relative_reached=True, absolute_reached=True) == "several"
 
 
 def test_nothing_known_is_no_answer():
     assert (
-        _reason(operating_state=None, active_controls=None, limit_enabled=None) is None
+        _reason(operating_state=None, relative_reached=None, absolute_reached=None)
+        is None
     )
 
 
-def test_a_source_that_did_not_answer_prevents_a_no():
-    """A limit that could not be read may be the one that is throttling."""
-    assert _reason(limit_enabled=None) is None
+def test_an_unread_limit_flag_prevents_a_no():
+    """Without the component flags a "none" would be a guess."""
+    assert _reason(absolute_reached=None) is None
+    assert _reason(relative_reached=None) is None
 
 
 def test_a_found_reason_stands_even_while_another_source_is_silent():
-    assert _reason(operating_state=5, limit_enabled=None) == "inverter_state"
-
-
-def test_an_enabled_limit_with_an_unread_percent_is_no_answer():
-    """Audit E02: `or 0.0` turned an unimplemented percent into a limit below full power."""
-    assert _reason(limit_enabled=True, limit_percent=None) is None
-
-
-def test_an_unread_enable_flag_is_no_answer():
-    assert _reason(limit_enabled=None, limit_percent=70.0) is None
-
-
-def test_an_unread_limit_does_not_hide_a_reason_that_is_known():
-    assert (
-        _reason(operating_state=5, limit_enabled=True, limit_percent=None)
-        == "inverter_state"
-    )
+    assert _reason(absolute_reached=True, relative_reached=None) == "feed_in_limit"
 
 
 def test_the_limit_reason_is_named_after_the_ac_limit_it_reads():
@@ -213,20 +193,19 @@ def test_the_limit_reason_is_named_after_the_ac_limit_it_reads():
         texts = json.loads(
             (root / "translations" / f"{language}.json").read_text(encoding="utf-8")
         )["entity"]
-        reason = texts["sensor"]["throttle_reason"]["state"]["export_limit"]
+        reason = texts["sensor"]["throttle_reason"]["state"]["ac_limit"]
         assert reason == texts["number"]["ac_limit_rate"]["name"].removesuffix(" rate")
 
 
 def test_the_production_limit_pair_is_a_power_limit_apart_from_the_battery_s():
     """ "Aktuelle Produktionsgrenze" and "Leistungsgrenze erreicht" read as two
-    limits; "Aktuelle Leistungsgrenze" is the battery's own sensor."""
+    limits; "Aktuelle Leistungsgrenze" is the battery's own sensor. "... erreicht"
+    also read as the inverter at its own maximum, while the flag says a limit
+    set on it holds the output."""
     root = pathlib.Path(__file__).parent.parent / "custom_components/fronius_modbus"
     expected = {
-        "en": ("Production power limit", "Production power limit reached"),
-        "de": (
-            "Aktuelle Erzeugungs-Leistungsgrenze",
-            "Erzeugungs-Leistungsgrenze erreicht",
-        ),
+        "en": ("Output power limit", "Output limited"),
+        "de": ("Zulässige Ausgangsleistung", "Ausgangsleistung begrenzt"),
     }
     for language, names in expected.items():
         sensors = json.loads(
@@ -238,3 +217,5 @@ def test_the_production_limit_pair_is_a_power_limit_apart_from_the_battery_s():
         )
         assert pair == names
         assert sensors["storage_power_limit"]["name"] not in pair
+        # WMax is the fixed nameplate setting; this value drops with an AC limit.
+        assert sensors["max_power"]["name"] not in pair

@@ -24,28 +24,23 @@ LOAD_STORAGE_CHARGE_MIN_W = 1000.0
 
 # Model 103 St: the operating state the inverter names itself.
 THROTTLED_OPERATING_STATE = 5
-# Model 122 StActCtl bit 0: an active power setpoint is in effect.
-ACTIVE_POWER_CONTROL_BIT = 0b1
-FULL_POWER_PERCENT = 100.0
 NO_REASON, SEVERAL_REASONS = THROTTLE_REASONS[0], THROTTLE_REASONS[-1]
 
 
 def throttle_reason(
     *,
     operating_state: int | None,
-    active_controls: int | None,
-    limit_enabled: bool | None,
-    limit_percent: float | None,
+    relative_limit_reached: bool | None,
+    absolute_limit_reached: bool | None,
 ) -> str | None:
-    """Why the inverter is limiting its output, or None while nothing is known.
+    """Why the inverter is holding its output back, or None while that is unknown.
 
-    Three independent signals say it, and a device rarely sets all of them: the
-    operating state, an active power setpoint, and a limit that is switched on
-    *and* below full power. The last condition is the one that matters in
-    practice - an installation may leave the AC limit switched on at 100
-    percent for years, and that is not a throttled inverter.
+    A limit that is set is no throttling: only one the output has reached is.
+    The component endpoint says so for a percentage limit and for one in watts
+    apart; the Modbus signals only say a limit is switched on (#26). A GEN24
+    left the operating state at normal while it throttled; other firmware
+    may not.
     """
-    limited = _limited(limit_enabled, limit_percent)
     signals = (
         (
             THROTTLE_REASONS[1],
@@ -53,13 +48,8 @@ def throttle_reason(
             if operating_state is None
             else operating_state == THROTTLED_OPERATING_STATE,
         ),
-        (
-            THROTTLE_REASONS[2],
-            None
-            if active_controls is None
-            else bool(active_controls & ACTIVE_POWER_CONTROL_BIT),
-        ),
-        (THROTTLE_REASONS[3], limited),
+        (THROTTLE_REASONS[2], relative_limit_reached),
+        (THROTTLE_REASONS[3], absolute_limit_reached),
     )
     reasons = [reason for reason, applies in signals if applies]
     if reasons:
@@ -68,21 +58,6 @@ def throttle_reason(
     # could not read may be the one that is throttling.
     unknown = any(applies is None for _, applies in signals)
     return None if unknown else NO_REASON
-
-
-def _limited(limit_enabled: bool | None, limit_percent: float | None) -> bool | None:
-    """Whether a limit below full power is switched on; None while that is unreadable.
-
-    An unimplemented percent decodes to None, and a limit that is on with an
-    unknown percent is not a limit below full power (audit E02).
-    """
-    if limit_enabled is None:
-        return None
-    if not limit_enabled:
-        return False
-    if limit_percent is None:
-        return None
-    return limit_percent < FULL_POWER_PERCENT
 
 
 def _within(value: float, centre: float, band: float) -> bool:

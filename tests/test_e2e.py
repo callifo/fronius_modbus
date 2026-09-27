@@ -1087,3 +1087,77 @@ async def test_a_reauth_of_a_running_entry_reports_its_success(
     assert result["reason"] == "reauth_successful"
     assert entry.state is ConfigEntryState.LOADED
     assert entry.runtime_data.web_control.configured
+
+
+ABSOLUTE_LIMIT_REACHED = "ACBRIDGE_VALUE_POWERACTIVE_PRODUCTION_LIMIT_REACHED_U8"
+RELATIVE_LIMIT_REACHED = (
+    "ACBRIDGE_VALUE_POWERACTIVE_RELATIVE_PRODUCTION_LIMIT_REACHED_U8"
+)
+
+
+class _WebClientReportingLimits(_FakeWebClientWithTopology):
+    """The inverter component endpoint with the two reached-limit flags."""
+
+    readings: dict = {ABSOLUTE_LIMIT_REACHED: 0.0, RELATIVE_LIMIT_REACHED: 0.0}
+
+    def get_inverter_info(self):
+        return {"readings": dict(self.readings), "missing": False}
+
+
+async def _set_up_with_limit_flags(hass, mock_modbus, monkeypatch, absolute: float):
+    mock_modbus.add_unit(201, like=METER_UNIT_ID)
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientReportingLimits)
+    monkeypatch.setattr(
+        _WebClientReportingLimits,
+        "readings",
+        {ABSOLUTE_LIMIT_REACHED: absolute, RELATIVE_LIMIT_REACHED: 0.0},
+    )
+    entry = make_entry(hass)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+    await setup_entry(hass, entry)
+    return entry
+
+
+async def test_a_web_poll_alone_updates_the_throttle_reason(
+    hass, mock_modbus, monkeypatch
+):
+    """The sensor waited for the next Modbus poll to show a flag the web poll read."""
+    entry = await _set_up_with_limit_flags(hass, mock_modbus, monkeypatch, 0.0)
+    assert state_of(hass, entry, "throttle_reason") == "none"
+
+    monkeypatch.setattr(
+        _WebClientReportingLimits,
+        "readings",
+        {ABSOLUTE_LIMIT_REACHED: 1.0, RELATIVE_LIMIT_REACHED: 0.0},
+    )
+    await entry.runtime_data.web.async_refresh()
+    await hass.async_block_till_done()
+
+    assert state_of(hass, entry, "throttle_reason") == "feed_in_limit"
+
+
+async def test_a_modbus_outage_keeps_a_reached_limit_shown(
+    hass, mock_modbus, monkeypatch
+):
+    """A fresh web flag names the reason on its own; Modbus only adds the state."""
+    entry = await _set_up_with_limit_flags(hass, mock_modbus, monkeypatch, 1.0)
+
+    mock_modbus.fail_requests(INVERTER_UNIT_ID, ModbusConnectionError())
+    await entry.runtime_data.modbus.async_refresh()
+    await hass.async_block_till_done()
+
+    assert state_of(hass, entry, "acpower") == "unavailable"
+    assert state_of(hass, entry, "throttle_reason") == "feed_in_limit"
+
+
+async def test_a_modbus_outage_without_a_reached_limit_is_no_answer(
+    hass, mock_modbus, monkeypatch
+):
+    """The operating state of the last good poll may be stale; "none" would guess."""
+    entry = await _set_up_with_limit_flags(hass, mock_modbus, monkeypatch, 0.0)
+
+    mock_modbus.fail_requests(INVERTER_UNIT_ID, ModbusConnectionError())
+    await entry.runtime_data.modbus.async_refresh()
+    await hass.async_block_till_done()
+
+    assert state_of(hass, entry, "throttle_reason") == "unknown"

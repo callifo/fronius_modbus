@@ -63,7 +63,7 @@ What changes for users of [callifo/fronius_modbus](https://github.com/callifo/fr
 
 **New entities and tools**
 
-- Component sensors from the inverter's Web API: power module temperatures, fans, per-phase AC power, production limit, grid validity, battery state of health and more (see [Component sensors](#component-sensors-web-api)).
+- Component sensors from the inverter's Web API: power module temperatures, fans, per-phase AC power, output power limit, grid validity, battery state of health and more (see [Component sensors](#component-sensors-web-api)).
 - `Throttle reason`, `Web API SoC mode`, `SoC Minimum (Web API)`.
 - Diagnostics download (Settings -> Devices -> device -> Download diagnostics), with the raw SunSpec register map; serial numbers are redacted.
 
@@ -192,7 +192,7 @@ The inverter's component endpoints (`/api/components/inverter/readable` and `/ap
 
 - A value the inverter does not report shows as unknown.
 - A power module the inverter does not report creates no entity; one it has reported before keeps its entity, as unknown. A power module that appears later gets its entity at the next reload.
-- `Production power limit`, `Production power limit reached`, `Battery max charge power (DC-DC)` and `Battery max discharge power (DC-DC)` follow the same rule, since older firmware lacks these fields. Such sensors an entry already has from an earlier version stay; if they only ever show unknown, disable them.
+- `Output power limit`, `Output limited`, `Battery max charge power (DC-DC)` and `Battery max discharge power (DC-DC)` follow the same rule, since older firmware lacks these fields. Such sensors an entry already has from an earlier version stay; if they only ever show unknown, disable them.
 - Firmware without these endpoints (HTTP 404) gets none of these sensors; a sensor registered before stays, as unknown, since one 404 from an endpoint that answered before proves nothing.
 - No sensor takes their serial numbers, part serials or device ids; the battery's serial number shows on its device page, as before, and is redacted in diagnostics.
 
@@ -201,7 +201,7 @@ The inverter's component endpoints (`/api/components/inverter/readable` and `/ap
 | Power module 1–4 temperature                                                                            | Inverter | enabled  | Temperatures of the power modules the inverter reports.                                  |
 | Fan 1 / 2                                                                                               | Inverter | enabled  | Fan speed in percent.                                                                    |
 | AC power L1 / L2 / L3                                                                                   | Inverter | enabled  | Per-phase active power of the inverter.                                                  |
-| Production power limit / Production power limit reached                                                 | Inverter | enabled  | The active power limit in effect, and whether the inverter is running at it.             |
+| Output power limit / Output limited                                                                     | Inverter | enabled  | The power limit in effect (the nameplate power, or the AC limit while it is set; an export limit does not lower it), and whether a limit set on the inverter holds the output, in percent or in watts. |
 | Battery max charge / discharge power (DC-DC)                                                            | Inverter | enabled  | What the battery converter can take or give right now.                                   |
 | Grid valid                                                                                              | Inverter | enabled  | The inverter's own verdict on the grid at its feed-in point.                             |
 | Power stage 1 / 2 firmware                                                                              | Inverter | enabled  | Diagnostic.                                                                              |
@@ -220,11 +220,32 @@ The battery's own firmware and hardware version appear on its device page.
 | Entity                                       | Description                                                                                                                                                                                                                                                                  |
 | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Grid status                                  | `on_grid_operating`, `on_grid`, `off_grid_operating` or `off_grid`, based on meter and inverter frequency. An inverter frequency of 53 Hz means off-grid operation; normally it is 50 Hz. While the inverter sleeps, the meter frequency is checked for the connection. |
-| Throttle reason                              | Why the inverter limits its output: its own operating state, an active power setpoint, or the AC limit (`AC limit enable`, `AC limit rate`) switched on below full power. `none` when nothing limits, unknown while one of the sources could not be read. An export limit set in the inverter's web interface is not among them: the inverter reports it in none of these signals, so an inverter held at its export limit shows `none`.                                                      |
+| Throttle reason                              | Why the inverter holds its output back right now; see [Throttle reason](#throttle-reason).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | Status / Vendor status                       | Standard SunSpec inverter state plus the Fronius vendor-specific state code.                                                                                                                                                                                                 |
 | Reference voltage / Reference voltage offset | SunSpec model 121 PCC voltage reference values exposed by the inverter.                                                                                                                                                                                                      |
 | Web API Modbus mode / control / SunSpec mode | Authenticated Modbus service diagnostics from `/api/config/modbus`. A value the inverter answers in an unexpected shape shows as unknown.                                                                                                                                      |
 | Web API Modbus restriction / restriction IP  | Whether the inverter is restricting Modbus access by IP.                                                                                                                                                                                                                     |
+
+### Throttle reason
+
+The sensor names the limit the output is held at right now. A limit that is only switched on, such as an AC limit at 100 % or above the current output, is no reason.
+
+| State                  | English                     | German                           | When                                                                                                                  |
+| ---------------------- | --------------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `none`                 | Not throttled               | Keine Drosselung                 | No limit holds the output.                                                                                            |
+| `ac_limit`             | AC limit                    | AC-Leistungsbegrenzung           | A percentage limit is reached, such as the AC limit (`AC limit enable`, `AC limit rate`).                             |
+| `feed_in_limit`        | Export limit                | Einspeisebegrenzung              | A limit in watts is reached. Measured with the export limit set in the inverter's web interface; other limits in watts may report the same way. |
+| `inverter_state`       | Inverter reports throttling | Wechselrichter meldet Drosselung | The inverter reports the SunSpec operating state throttled (model 103 `St`).                                          |
+| `several`              | Several reasons             | Mehrere Gründe                   | More than one of the above at once.                                                                                   |
+| `active_power_control` | Active power control        | Wirkleistungsvorgabe             | No longer reported; kept so older history keeps its label.                                                            |
+| `export_limit`         | AC limit                    | AC-Leistungsbegrenzung           | No longer reported: up to 1.2.0b4 it meant an AC limit that was switched on. Kept so older history keeps its label.    |
+| unknown                |                             |                                  | No reason is found while a source is missing: the component endpoint or model 103 could not be read, the last web poll failed, the firmware does not report the flags, or the entry waits for a new web login. A reason one source names is shown even while the other is missing. |
+
+Where the states come from, measured on a GEN24 and a Verto:
+
+- `ac_limit` and `feed_in_limit` come from the inverter's public component endpoint (`/api/components/inverter/readable`): `ACBRIDGE_VALUE_POWERACTIVE_RELATIVE_PRODUCTION_LIMIT_REACHED_U8` is set while a percentage limit holds the output, `ACBRIDGE_VALUE_POWERACTIVE_PRODUCTION_LIMIT_REACHED_U8` while a limit in watts does. They need no web login, so an entry without the web API has them too.
+- The Modbus signals only say a limit is switched on: `StActCtl` bit 0 (model 122) is set as soon as the AC limit is enabled, even at 100 %, and a GEN24 left `St` at normal while it throttled. They are no longer used for the reason.
+- The flags come with the web poll, which updates the sensor on its own, so the reason can trail a change by up to the web scan interval (default 60 s). While Modbus is down the sensor stays available as long as the web poll answers.
 
 ### Inverter controls
 
@@ -394,48 +415,51 @@ automation:
           option: "{{ 'block_discharging' if trigger.to_state.state == 'on' else 'auto' }}"
 ```
 
-Switch the inverter's output off while the price is negative. `AC limit rate` limits everything the inverter puts out, not only the feed-in, so the house then draws from the grid, which a negative price pays for:
+Switch the inverter's output off while the price is negative. `AC limit rate` limits everything the inverter puts out, not only the feed-in, so the house then draws from the grid, which a negative price pays for. One automation compares the price whenever it changes and again after a restart, a reload of the automations or of the integration, so it never waits for the next crossing of zero; an unavailable price restores the output. It owns the AC limit: whenever the price is not negative it switches off an AC limit set by other means:
 
 ```yaml
 automation:
   - alias: "Inverter: off at negative prices"
+    mode: restart
     triggers:
-      - trigger: numeric_state
+      # "to: null" leaves out changes of the price's attributes only.
+      - trigger: state
         entity_id: sensor.electricity_price
-        below: 0
-    actions:
-      - action: select.select_option
-        target:
-          entity_id: select.fronius_ac_limit_enable
-        data:
-          option: enabled
-      - action: number.set_value
-        target:
-          entity_id: number.fronius_ac_limit_rate
-        data:
-          value: 0
-  - alias: "Inverter: on again"
-    triggers:
-      # numeric_state's "above" is strict and would miss a price that stops at 0;
-      # an unavailable price counts as 0 here. A template trigger fires only when
-      # the price turns non-negative, so the price is checked again at a restart
-      # and once the inverter's entities are back after a reload.
-      - trigger: template
-        value_template: "{{ states('sensor.electricity_price') | float(0) >= 0 }}"
+        to: null
       - trigger: homeassistant
         event: start
+      - trigger: event
+        event_type: automation_reloaded
       - trigger: state
         entity_id: select.fronius_ac_limit_enable
         from: unavailable
-    conditions:
-      - condition: template
-        value_template: "{{ states('sensor.electricity_price') | float(0) >= 0 }}"
     actions:
-      - action: select.select_option
-        target:
-          entity_id: select.fronius_ac_limit_enable
-        data:
-          option: disabled
+      - choose:
+          - conditions:
+              - condition: numeric_state
+                entity_id: sensor.electricity_price
+                below: 0
+            sequence:
+              - action: select.select_option
+                target:
+                  entity_id: select.fronius_ac_limit_enable
+                data:
+                  option: enabled
+              - action: number.set_value
+                target:
+                  entity_id: number.fronius_ac_limit_rate
+                data:
+                  value: 0
+          - conditions:
+              - condition: state
+                entity_id: select.fronius_ac_limit_enable
+                state: enabled
+            sequence:
+              - action: select.select_option
+                target:
+                  entity_id: select.fronius_ac_limit_enable
+                data:
+                  option: disabled
 ```
 
 ## Known limitations

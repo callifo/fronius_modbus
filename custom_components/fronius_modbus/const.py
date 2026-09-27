@@ -136,12 +136,15 @@ CHARGE_GRID_STATUS = {
 THROTTLE_REASONS = (
     "none",
     "inverter_state",
-    "active_power_control",
-    # The AC limit (model 123 WMaxLim); the key keeps its first name for the
-    # automations built on it. A grid export limit sets none of these signals.
-    "export_limit",
+    # A percentage limit reached, such as the AC limit (model 123 WMaxLim).
+    "ac_limit",
+    # A limit in watts reached, in practice the export limit of the web interface.
+    "feed_in_limit",
     "several",
 )
+# No longer reported: both meant a limit that was switched on, not one that held
+# the output (#26). Kept so the states in history keep their label.
+LEGACY_THROTTLE_REASONS = ("active_power_control", "export_limit")
 
 GRID_STATUS = {
     0: "off_grid",
@@ -212,7 +215,7 @@ SENSOR_STATE_OPTIONS = {
     "status": _state_values(INVERTER_STATUS),
     "statusvendor": _state_values(FRONIUS_INVERTER_STATUS),
     "grid_status": _state_values(GRID_STATUS),
-    "throttle_reason": [*THROTTLE_REASONS, UNKNOWN_STATE],
+    "throttle_reason": [*THROTTLE_REASONS, *LEGACY_THROTTLE_REASONS, UNKNOWN_STATE],
     "connection_control": _state_values(CONTROL_STATUS),
     "power_limit_control": _state_values(CONTROL_STATUS),
     "power_factor_control": _state_values(CONTROL_STATUS),

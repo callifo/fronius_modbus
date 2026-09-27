@@ -11,7 +11,7 @@ rows, which only exist once the device reports them -- so a platform's
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import logging
 from operator import attrgetter
 from typing import Any, Literal, cast
@@ -121,6 +121,8 @@ class FroniusDescriptionMixin:
     # The web login a web-sourced entity needs ("public": none); unavailable without it.
     web_client: WebClientKind = "customer"
     report_name: str | None = None
+    # Reads the web poll besides Modbus: follows it, and is up while either is fresh.
+    also_web: bool = False
     meter_unit_id: int | None = None
     value_fn: Callable[[FroniusRuntimeData], Any]
     exists_fn: Callable[[FroniusRuntimeData], bool] = staticmethod(lambda runtime: True)
@@ -857,6 +859,15 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         unit="W",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
+    replace(
+        _sensor(
+            "throttle_reason",
+            "throttle_reason",
+            value_fn=lambda r: r.throttle_reason,
+            entity_category=EntityCategory.DIAGNOSTIC,
+        ),
+        also_web=True,
+    ),
 )
 
 _SINGLE_PHASE_UNSUPPORTED_METER_KEYS = (
@@ -1128,27 +1139,10 @@ def _load_and_grid_status_descriptions(
     ]
 
 
-def _throttle_descriptions(
-    runtime: FroniusRuntimeData,
-) -> list[FroniusSensorDescription]:
-    """The throttling reason, once the models it reads are present."""
-    if runtime.device.status is None or runtime.device.controls is None:
-        return []
-    return [
-        _sensor(
-            "throttle_reason",
-            "throttle_reason",
-            value_fn=lambda r: r.modbus.data.throttle_reason,
-            entity_category=EntityCategory.DIAGNOSTIC,
-        )
-    ]
-
-
 def sensor_descriptions(runtime: FroniusRuntimeData) -> list[FroniusSensorDescription]:
     """Every sensor description the current runtime produces."""
     descriptions = [d for d in _STATIC_SENSOR_DESCRIPTIONS if d.exists_fn(runtime)]
     descriptions += _load_and_grid_status_descriptions(runtime)
-    descriptions += _throttle_descriptions(runtime)
     for unit_id, info in runtime.device.meters.items():
         descriptions += _meter_sensor_descriptions(unit_id, info.phases)
         descriptions += _meter_phase_energy_descriptions(runtime, unit_id, info)
@@ -1768,7 +1762,8 @@ class FroniusEntity(
         if description.source == "modbus":
             coordinator = self._runtime.modbus
             if not coordinator.last_update_success:
-                return False
+                web = self._runtime.web
+                return description.also_web and bool(web and web.last_update_success)
             return (
                 description.report_name is None
                 or description.report_name in coordinator.data.report.updated

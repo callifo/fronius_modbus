@@ -498,9 +498,11 @@
         "state": {
           "none": "Keine Drosselung",
           "inverter_state": "Wechselrichter meldet Drosselung",
+          "ac_limit": "AC-Leistungsbegrenzung",
+          "feed_in_limit": "Einspeisebegrenzung",
+          "several": "Mehrere Gründe",
           "active_power_control": "Wirkleistungsvorgabe",
           "export_limit": "AC-Leistungsbegrenzung",
-          "several": "Mehrere Gründe",
           "unknown": "Unbekannt"
         }
       },
@@ -532,10 +534,10 @@
         "name": "AC-Wirkleistung L3"
       },
       "production_limit": {
-        "name": "Aktuelle Erzeugungs-Leistungsgrenze"
+        "name": "Zulässige Ausgangsleistung"
       },
       "production_limit_reached": {
-        "name": "Erzeugungs-Leistungsgrenze erreicht",
+        "name": "Ausgangsleistung begrenzt",
         "state": {
           "yes": "Ja",
           "no": "Nein"

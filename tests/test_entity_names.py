@@ -75,3 +75,48 @@ def test_the_ac_limit_flag_is_shown_once_by_default():
     )
 
     assert duplicate.entity_registry_enabled_default is False
+
+
+def test_the_readme_names_every_throttle_state_as_the_translations_do():
+    """The state table in the README is what users compare their sensor with."""
+    readme = (TRANSLATIONS.parent.parent.parent / "README.md").read_text(
+        encoding="utf-8"
+    )
+    section = readme.split("### Throttle reason\n", 1)[1].split("\n### ", 1)[0]
+    rows = {
+        cells[0].strip("` "): (cells[1].strip(), cells[2].strip())
+        for line in section.splitlines()
+        if line.startswith("| `")
+        for cells in [line.strip("|").split("|")]
+    }
+    states = {
+        language: NAMES[language]["sensor"]["throttle_reason"]["state"]
+        for language in ("en", "de")
+    }
+
+    assert set(rows) == set(states["en"]) - {"unknown"}
+    for key, (english, german) in rows.items():
+        assert (english, german) == (states["en"][key], states["de"][key])
+
+
+def test_a_limit_in_watts_reads_as_the_export_limit_it_mostly_is():
+    """ "Leistungsgrenze" read as the inverter at its own maximum, and a bare
+    "Leistungsbegrenzung" as the AC limit next to it."""
+    states = {
+        language: NAMES[language]["sensor"]["throttle_reason"]["state"]
+        for language in ("en", "de")
+    }
+
+    assert states["en"]["feed_in_limit"] == "Export limit"
+    assert states["de"]["feed_in_limit"] == "Einspeisebegrenzung"
+
+
+def test_the_old_limit_keys_are_history_only():
+    """export_limit meant a switched-on AC limit; reusing it for the export limit
+    would relabel old history and turn old automations silently."""
+    options = entities.SENSOR_STATE_OPTIONS["throttle_reason"]
+
+    assert {"export_limit", "active_power_control"} <= set(options)
+    assert (
+        NAMES["en"]["sensor"]["throttle_reason"]["state"]["export_limit"] == "AC limit"
+    )

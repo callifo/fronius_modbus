@@ -654,6 +654,12 @@
       },
       "imported_l3": {
         "name": "Bezogen L3"
+      },
+      "active_event": {
+        "name": "Aktives Ereignis"
+      },
+      "active_events": {
+        "name": "Aktive Ereignisse"
       }
     },
     "switch": {
@@ -671,6 +677,20 @@
       },
       "api_solar_api_enabled": {
         "name": "Solar-API"
+      }
+    },
+    "event": {
+      "inverter_event": {
+        "name": "Wechselrichter-Ereignis",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "error": "Fehler",
+              "warning": "Warnung",
+              "info": "Info"
+            }
+          }
+        }
       }
     }
   },

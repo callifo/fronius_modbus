@@ -1129,8 +1129,8 @@
   {
     "label": "entities: the component sensors need no login",
     "path": "custom_components/fronius_modbus/entities.py",
-    "old": "        web_client=\"public\",\n",
-    "new": "",
+    "old": "        device=reading.component,\n        source=\"web\",\n        web_client=\"public\",\n",
+    "new": "        device=reading.component,\n        source=\"web\",\n",
     "tests": "entry_without_the_web_api_reads_the_public_endpoints"
   },
   {

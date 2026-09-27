@@ -196,6 +196,12 @@
       },
       "storage_rated_soc_max": {
         "default": "mdi:battery-high"
+      },
+      "active_event": {
+        "default": "mdi:alert-circle-outline"
+      },
+      "active_events": {
+        "default": "mdi:counter"
       }
     },
     "switch": {
@@ -207,6 +213,11 @@
       },
       "api_solar_api_enabled": {
         "default": "mdi:api"
+      }
+    },
+    "event": {
+      "inverter_event": {
+        "default": "mdi:bell-outline"
       }
     }
   }

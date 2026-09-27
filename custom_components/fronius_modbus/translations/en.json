@@ -654,6 +654,12 @@
       },
       "imported_l3": {
         "name": "Imported L3"
+      },
+      "active_event": {
+        "name": "Active event"
+      },
+      "active_events": {
+        "name": "Active events"
       }
     },
     "switch": {
@@ -671,6 +677,20 @@
       },
       "api_solar_api_enabled": {
         "name": "Solar API"
+      }
+    },
+    "event": {
+      "inverter_event": {
+        "name": "Inverter event",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "error": "Error",
+              "warning": "Warning",
+              "info": "Info"
+            }
+          }
+        }
       }
     }
   },

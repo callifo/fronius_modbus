@@ -28,6 +28,7 @@ def _tables() -> dict[str, list]:
         "select": entities.select_descriptions(runtime),
         "switch": entities.switch_descriptions(runtime),
         "button": entities.button_descriptions(runtime),
+        "event": entities.event_descriptions(runtime),
     }
 
 

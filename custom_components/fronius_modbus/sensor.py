@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -41,6 +43,12 @@ class FroniusSensor(FroniusEntity, SensorEntity):
             self.async_on_remove(
                 web.async_add_listener(self._handle_coordinator_update)
             )
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """The description's attributes, where it has any."""
+        attributes_fn = self.entity_description.attributes_fn
+        return None if attributes_fn is None else attributes_fn(self._runtime)
 
     @property
     def native_value(self):

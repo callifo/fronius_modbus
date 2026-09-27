@@ -12,10 +12,12 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
+from functools import partial
 from operator import attrgetter
 from typing import Any, Literal
 
 from homeassistant.components.button import ButtonEntityDescription
+from homeassistant.components.event import EventEntityDescription
 from homeassistant.components.number import NumberEntityDescription, NumberMode
 from homeassistant.components.select import SelectEntityDescription
 from homeassistant.components.sensor import (
@@ -58,6 +60,11 @@ from .const import (
     map_code,
 )
 from .coordinator import FroniusConfigEntry, FroniusRuntimeData, assume_present
+from .event_entities import (
+    active_event_count,
+    leading_event_attributes,
+    leading_event_text,
+)
 from .fronius_modbus_api.device import (
     REPORT_CONTROLS,
     REPORT_INVERTER,
@@ -75,6 +82,7 @@ from .fronius_modbus_api.storage import (
     ExtendedMode,
 )
 from .fronius_modbus_api.sunspec_models import MpptModule
+from .inverter_events import SEVERITIES
 from .web_control import WebData
 
 type Source = Literal["modbus", "web"]
@@ -97,6 +105,8 @@ class FroniusDescriptionMixin:
     report_name: str | None = None
     # Reads the web poll besides Modbus: follows it, and is up while either is fresh.
     also_web: bool = False
+    # What the state alone cannot carry, such as the rest of the active events.
+    attributes_fn: Callable[[FroniusRuntimeData], dict[str, Any] | None] | None = None
     meter_unit_id: int | None = None
     value_fn: Callable[[FroniusRuntimeData], Any]
     exists_fn: Callable[[FroniusRuntimeData], bool] = staticmethod(lambda runtime: True)
@@ -108,6 +118,11 @@ class FroniusDescriptionMixin:
 @dataclass(frozen=True, kw_only=True)
 class FroniusSensorDescription(SensorEntityDescription, FroniusDescriptionMixin):
     """A sensor built from a value_fn."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class FroniusEventDescription(EventEntityDescription, FroniusDescriptionMixin):
+    """An event entity the web poll feeds with the inverter's new log entries."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -246,6 +261,16 @@ def _sensor(
         options=options,
         entity_registry_enabled_default=enabled,
     )
+
+
+# The inverter's events, read without a login from its web interface.
+_event_sensor = partial(
+    _sensor,
+    source="web",
+    web_client="public",
+    exists_fn=lambda runtime: runtime.web is not None,
+    entity_category=EntityCategory.DIAGNOSTIC,
+)
 
 
 _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
@@ -835,6 +860,11 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         ),
         also_web=True,
     ),
+    replace(
+        _event_sensor("active_event", "active_event", value_fn=leading_event_text),
+        attributes_fn=leading_event_attributes,
+    ),
+    _event_sensor("active_events", "active_events", value_fn=active_event_count),
 )
 
 _SINGLE_PHASE_UNSUPPORTED_METER_KEYS = (
@@ -1103,6 +1133,26 @@ def _load_and_grid_status_descriptions(
             value_fn=lambda r: r.modbus.data.grid_status,
             entity_category=EntityCategory.DIAGNOSTIC,
         ),
+    ]
+
+
+# -- inverter events ----------------------------------------------------------------
+
+
+def event_descriptions(runtime: FroniusRuntimeData) -> list[FroniusEventDescription]:
+    """The event entity for the inverter's log, while the web poll runs."""
+    if runtime.web is None:
+        return []
+    return [
+        FroniusEventDescription(
+            key="inverter_event",
+            translation_key="inverter_event",
+            device="inverter",
+            source="web",
+            web_client="public",
+            value_fn=lambda runtime: None,
+            event_types=list(SEVERITIES.values()),
+        )
     ]
 
 
@@ -1617,6 +1667,7 @@ def expected_unique_ids(
         select_descriptions,
         switch_descriptions,
         button_descriptions,
+        event_descriptions,
     )
     return {
         f"{prefix}_{description.key}"

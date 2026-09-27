@@ -1,6 +1,7 @@
 """Web control: battery mode rules and the write side effects, with the HTTP client stubbed."""
 
 import asyncio
+import time
 
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -269,7 +270,7 @@ class FakeClientWithEvents(FakeWebClient):
         if path == "/api/status/activeEvents":
             return [ACTIVE_AFCI]
         if path == "/api/status/events":
-            return list(self.log)
+            return None if self.log is None else list(self.log)
         language = path.rsplit("/", 1)[-1].removesuffix(".json")
         return self.texts.get(language)
 
@@ -362,6 +363,69 @@ async def test_a_log_entry_after_the_first_read_is_handed_on_once(hass, monkeypa
     assert first.new_events == ()
     assert [event.code for event in second.new_events] == ["BYD2-44"]
     assert third.new_events == ()
+
+
+BATTERY_FAULT = ACTIVE_AFCI | {
+    "uuid": "b",
+    "prefix": "BYD2",
+    "eventID": 44,
+    "label": "",
+    "activeUntil": 1790500000,
+    "timestamp": 1790500000,
+    "viewer": 1,
+}
+
+
+async def test_a_log_entry_of_a_failed_poll_is_handed_on_by_the_next(hass, monkeypatch):
+    """Audit P2-01: the log read marked the entry seen, then a later read failed.
+
+    The coordinator publishes nothing of a failed poll, so the entry was lost.
+    """
+    monkeypatch.setattr(web_control, "EVENT_LOG_INTERVAL_SECONDS", 0)
+    client = FakeClientWithEvents()
+    control = make_control(hass, client=client)
+
+    def modbus_config_fails():
+        raise RuntimeError("no answer")
+
+    try:
+        await control.async_refresh()
+        client.log.append(BATTERY_FAULT)
+        client.get_modbus_config = modbus_config_fails
+        with pytest.raises(RuntimeError):
+            await control.async_refresh()
+        del client.get_modbus_config
+        after = await control.async_refresh()
+        again = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert [event.code for event in after.new_events] == ["BYD2-44"]
+    assert again.new_events == ()
+
+
+async def test_a_log_entry_after_a_failed_first_read_is_news(hass):
+    """Audit P2-02: the first read failed, and the next waited five minutes.
+
+    The first read that then succeeded took an entry started meanwhile for
+    history from before Home Assistant watched, and never handed it on.
+    """
+    client = FakeClientWithEvents()
+    client.log = None
+    control = make_control(hass, client=client)
+    try:
+        first = await control.async_refresh()
+        started = int(time.time()) + 60
+        client.log = [
+            ACTIVE_AFCI,
+            BATTERY_FAULT | {"timestamp": started, "activeUntil": started},
+        ]
+        second = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert first.new_events == ()
+    assert [event.code for event in second.new_events] == ["BYD2-44"]
 
 
 async def test_firmware_without_the_event_endpoints_has_no_events(hass):

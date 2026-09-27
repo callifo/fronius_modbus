@@ -68,6 +68,15 @@ def test_an_entry_without_a_code_is_no_event():
     assert parse_events([PLACEHOLDER, AFCI], TEXTS) == parse_events([AFCI], TEXTS)
 
 
+def test_a_level_in_an_unknown_shape_is_unknown():
+    """Audit P3-01: a list as the severity raised and failed the whole web poll."""
+    odd = AFCI | {"severity": [2], "viewer": {"id": 3}}
+
+    (event,) = parse_events([odd], TEXTS)
+
+    assert (event.severity, event.visible_to) == (None, None)
+
+
 def test_an_answer_that_is_no_list_is_no_reading():
     assert parse_events(None, TEXTS) is None
     assert parse_events({"error": "x"}, TEXTS) is None

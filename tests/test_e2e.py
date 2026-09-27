@@ -1190,8 +1190,30 @@ class _WebClientWithEvents(_FakeWebClientWithTopology):
         if path == "/api/status/activeEvents":
             return list(self.active)
         if path == "/api/status/events":
-            return list(self.log)
+            return None if self.log is None else list(self.log)
         return self.texts if path.endswith("/en.json") else None
+
+
+async def test_an_event_log_that_does_not_answer_leaves_the_event_unavailable(
+    hass, mock_modbus, monkeypatch
+):
+    """Audit P3-02: the entity said it was watching a log that never answered."""
+    mock_modbus.add_unit(201, like=METER_UNIT_ID)
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientWithEvents)
+    monkeypatch.setattr(_WebClientWithEvents, "log", None)
+    entry = make_entry(hass)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+    await setup_entry(hass, entry)
+    event_id = entity_id_for(hass, entry, "event", "inverter_event")
+
+    assert hass.states.get(event_id).state == "unavailable"
+    assert state_of(hass, entry, "active_events") == "1"
+
+    monkeypatch.setattr(_WebClientWithEvents, "log", [])
+    await entry.runtime_data.web.async_refresh()
+    await hass.async_block_till_done()
+
+    assert hass.states.get(event_id).state == "unknown"
 
 
 async def test_the_inverter_events_reach_home_assistant(hass, mock_modbus, monkeypatch):

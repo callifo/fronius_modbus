@@ -247,8 +247,8 @@
   {
     "label": "token store: an older token file is rewritten privately",
     "path": "custom_components/fronius_modbus/token_store.py",
-    "old": "            if self._cache:\n",
-    "new": "            if False:\n",
+    "old": "        if self._cache:\n",
+    "new": "        if False:\n",
     "tests": "a_token_file_written_before_is_rewritten_privately"
   },
   {
@@ -1517,5 +1517,12 @@
     "old": "operating_state=self.modbus.data.operating_state if modbus_fresh else None,",
     "new": "operating_state=self.modbus.data.operating_state,",
     "tests": "a_modbus_outage_without_a_reached_limit_is_no_answer"
+  },
+  {
+    "label": "token store: concurrent first loads share one dictionary",
+    "path": "custom_components/fronius_modbus/token_store.py",
+    "old": "        loaded = await self._store.async_load()\n        if self._cache is not None:\n",
+    "new": "        loaded = await self._store.async_load()\n        if False:\n",
+    "tests": "two_first_setups_at_once_keep_both_tokens"
   }
 ]

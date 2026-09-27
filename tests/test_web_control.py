@@ -404,6 +404,26 @@ async def test_a_log_entry_of_a_failed_poll_is_handed_on_by_the_next(hass, monke
     assert again.new_events == ()
 
 
+async def test_a_log_entry_survives_an_auth_failure_in_the_same_poll(hass, monkeypatch):
+    """The rejected login replaces the data after the log read; the poll still succeeds."""
+    monkeypatch.setattr(web_control, "EVENT_LOG_INTERVAL_SECONDS", 0)
+    client = FakeClientWithEvents()
+    control = make_control(hass, client=client)
+
+    def login_rejected():
+        raise FroniusWebAuthError("token rejected")
+
+    try:
+        await control.async_refresh()
+        client.log.append(BATTERY_FAULT)
+        client.get_modbus_config = login_rejected
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert [event.code for event in data.new_events] == ["BYD2-44"]
+
+
 async def test_a_log_entry_after_a_failed_first_read_is_news(hass):
     """Audit P2-02: the first read failed, and the next waited five minutes.
 

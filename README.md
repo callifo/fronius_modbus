@@ -201,7 +201,7 @@ The inverter's component endpoints (`/api/components/inverter/readable` and `/ap
 | Power module 1–4 temperature                                                                            | Inverter | enabled  | Temperatures of the power modules the inverter reports.                                  |
 | Fan 1 / 2                                                                                               | Inverter | enabled  | Fan speed in percent.                                                                    |
 | AC power L1 / L2 / L3                                                                                   | Inverter | enabled  | Per-phase active power of the inverter.                                                  |
-| Production power limit / Production power limit reached                                                 | Inverter | enabled  | The active power limit in effect, and whether the inverter is running at it.             |
+| Production power limit / Production power limit reached                                                 | Inverter | enabled  | The power limit in effect (the nameplate power, or the AC limit while it is set; an export limit does not lower it), and whether the output is held at a limit, in percent or in watts. |
 | Battery max charge / discharge power (DC-DC)                                                            | Inverter | enabled  | What the battery converter can take or give right now.                                   |
 | Grid valid                                                                                              | Inverter | enabled  | The inverter's own verdict on the grid at its feed-in point.                             |
 | Power stage 1 / 2 firmware                                                                              | Inverter | enabled  | Diagnostic.                                                                              |
@@ -220,11 +220,31 @@ The battery's own firmware and hardware version appear on its device page.
 | Entity                                       | Description                                                                                                                                                                                                                                                                  |
 | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Grid status                                  | `on_grid_operating`, `on_grid`, `off_grid_operating` or `off_grid`, based on meter and inverter frequency. An inverter frequency of 53 Hz means off-grid operation; normally it is 50 Hz. While the inverter sleeps, the meter frequency is checked for the connection. |
-| Throttle reason                              | Why the inverter holds its output back right now: a percentage limit it has reached, such as the AC limit (`AC limit enable`, `AC limit rate`); a limit in watts it has reached, such as an export limit set in the web interface; or the operating state, where the firmware reports it. A limit that is only switched on is no reason. `none` when nothing holds the output, unknown while the inverter's component endpoint or model 103 could not be read. The limit flags come with the web poll, so the reason can trail a change by up to the web scan interval.                                                      |
+| Throttle reason                              | Why the inverter holds its output back right now; see [Throttle reason](#throttle-reason).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | Status / Vendor status                       | Standard SunSpec inverter state plus the Fronius vendor-specific state code.                                                                                                                                                                                                 |
 | Reference voltage / Reference voltage offset | SunSpec model 121 PCC voltage reference values exposed by the inverter.                                                                                                                                                                                                      |
 | Web API Modbus mode / control / SunSpec mode | Authenticated Modbus service diagnostics from `/api/config/modbus`. A value the inverter answers in an unexpected shape shows as unknown.                                                                                                                                      |
 | Web API Modbus restriction / restriction IP  | Whether the inverter is restricting Modbus access by IP.                                                                                                                                                                                                                     |
+
+### Throttle reason
+
+The sensor names the limit the output is held at right now. A limit that is only switched on, such as an AC limit at 100 % or above the current output, is no reason.
+
+| State                  | English                 | German                           | When                                                                                          |
+| ---------------------- | ----------------------- | -------------------------------- | --------------------------------------------------------------------------------------------- |
+| `none`                 | Not throttled           | Keine Drosselung                 | No limit holds the output.                                                                    |
+| `export_limit`         | AC limit                | AC-Leistungsbegrenzung           | A percentage limit is reached, such as the AC limit (`AC limit enable`, `AC limit rate`).     |
+| `power_limit`          | Power limit (W) reached | Leistungsgrenze (W) erreicht     | A limit in watts is reached, such as an export limit set in the inverter's web interface.     |
+| `inverter_state`       | Inverter reports throttling | Wechselrichter meldet Drosselung | The inverter reports the SunSpec operating state throttled (model 103 `St`).                 |
+| `several`              | Several reasons         | Mehrere Gründe                   | More than one of the above at once.                                                           |
+| `active_power_control` | Active power control    | Wirkleistungsvorgabe             | No longer reported; kept so older history keeps its label.                                    |
+| unknown                |                         |                                  | The component endpoint or model 103 could not be read, or the last web poll failed.           |
+
+Where the states come from, measured on a GEN24 and a Verto:
+
+- `export_limit` and `power_limit` come from the inverter's public component endpoint (`/api/components/inverter/readable`): `ACBRIDGE_VALUE_POWERACTIVE_RELATIVE_PRODUCTION_LIMIT_REACHED_U8` is set while a percentage limit holds the output, `ACBRIDGE_VALUE_POWERACTIVE_PRODUCTION_LIMIT_REACHED_U8` while a limit in watts does. They need no web login, so an entry without the web API has them too.
+- The Modbus signals only say a limit is switched on: `StActCtl` bit 0 (model 122) is set as soon as the AC limit is enabled, even at 100 %, and Fronius leaves `St` at normal while it throttles. They are no longer used for the reason.
+- The flags come with the web poll, so the reason can trail a change by up to the web scan interval (default 60 s).
 
 ### Inverter controls
 

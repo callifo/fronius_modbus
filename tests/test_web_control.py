@@ -378,7 +378,7 @@ BATTERY_FAULT = ACTIVE_AFCI | {
 
 
 async def test_a_log_entry_of_a_failed_poll_is_handed_on_by_the_next(hass, monkeypatch):
-    """Audit P2-01: the log read marked the entry seen, then a later read failed.
+    """The log read marked the entry seen, then a later read failed.
 
     The coordinator publishes nothing of a failed poll, so the entry was lost.
     """
@@ -426,7 +426,7 @@ async def test_a_log_entry_survives_an_auth_failure_in_the_same_poll(hass, monke
 
 
 async def test_a_log_entry_after_a_failed_first_read_is_news(hass):
-    """Audit P2-02: the first read failed, and the next waited five minutes.
+    """The first read failed, and the next waited five minutes.
 
     The first read that then succeeded took an entry started meanwhile for
     history from before Home Assistant watched, and never handed it on.

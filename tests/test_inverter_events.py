@@ -69,7 +69,7 @@ def test_an_entry_without_a_code_is_no_event():
 
 
 def test_a_level_in_an_unknown_shape_is_unknown():
-    """Audit P3-01: a list as the severity raised and failed the whole web poll."""
+    """A list as the severity raised and failed the whole web poll."""
     odd = AFCI | {"severity": [2], "viewer": {"id": 3}}
 
     (event,) = parse_events([odd], TEXTS)
@@ -133,7 +133,7 @@ def test_a_later_read_reports_only_what_is_new_oldest_first():
 
 
 def test_new_entries_wait_until_a_poll_delivers_them():
-    """Audit P2-01: a poll that failed after the log read published nothing."""
+    """A poll that failed after the log read published nothing."""
     tracker = EventTracker()
     tracker.read(parse_events([AFCI], TEXTS), NOW)
     tracker.read(parse_events([AFCI, POWER_LOW], TEXTS), NOW)
@@ -143,7 +143,7 @@ def test_new_entries_wait_until_a_poll_delivers_them():
 
 
 def test_after_a_failed_first_read_what_started_since_is_new():
-    """Audit P2-02: the first read that succeeds is late, not the start."""
+    """The first read that succeeds is late, not the start."""
     tracker = EventTracker()
     tracker.read(None, 1790400000.0)
     # A later failure keeps the first one's boundary: PowerLow started between.

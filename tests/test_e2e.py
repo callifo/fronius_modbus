@@ -1197,7 +1197,7 @@ class _WebClientWithEvents(_FakeWebClientWithTopology):
 async def test_an_event_log_that_does_not_answer_leaves_the_event_unavailable(
     hass, mock_modbus, monkeypatch
 ):
-    """Audit P3-02: the entity said it was watching a log that never answered."""
+    """The entity said it was watching a log that never answered."""
     mock_modbus.add_unit(201, like=METER_UNIT_ID)
     monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientWithEvents)
     monkeypatch.setattr(_WebClientWithEvents, "log", None)

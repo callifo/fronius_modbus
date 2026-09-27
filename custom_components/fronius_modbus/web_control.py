@@ -526,7 +526,7 @@ class FroniusWebControl:
         async with self._write_lock:
             data = await self._async_refresh_locked()
             # A poll that raised is never published: its new entries wait for
-            # the next one (audit P2-01).
+            # the next one.
             self._event_tracker.delivered()
             return data
 
@@ -590,7 +590,7 @@ class FroniusWebControl:
         log = parse_events(await self._async_public_read(EVENT_LOG_PATH), texts)
         self._event_tracker.read(log, time.time())
         # A log that did not answer is asked again at the next poll, not after
-        # the interval (audit P2-02).
+        # the interval.
         if log is not None:
             self._next_event_log_read = time.monotonic() + EVENT_LOG_INTERVAL_SECONDS
 

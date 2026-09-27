@@ -4,12 +4,17 @@ The entries have the shape /api/status/activeEvents and /api/status/events
 answered on a GEN24 on 2026-09-27; the uuids are made up.
 """
 
+import pathlib
+
 from custom_components.fronius_modbus.inverter_events import (
+    EVENT_TYPES,
     EventTracker,
     event_texts,
     leading_event,
     parse_events,
 )
+from homeassistant.components import event as event_component
+from homeassistant.util.yaml import load_yaml
 
 TEXTS = event_texts(
     {
@@ -183,3 +188,16 @@ def test_entries_are_held_back_while_the_log_does_not_answer():
 def test_texts_that_are_no_mapping_are_no_texts():
     assert event_texts(None) == {}
     assert event_texts({"StateCodes": "x"}) == {}
+
+
+def test_every_event_type_can_be_picked_in_the_automation_editor():
+    """The editor's event.received form hides these states from its type list.
+
+    A type named like one of them runs from YAML only.
+    """
+    triggers = load_yaml(
+        pathlib.Path(event_component.__file__).with_name("triggers.yaml")
+    )
+    selector = triggers["received"]["fields"]["event_type"]["selector"]["state"]
+
+    assert not set(EVENT_TYPES) & set(selector["hide_states"])

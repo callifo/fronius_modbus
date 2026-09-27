@@ -525,7 +525,7 @@ async def test_a_stale_inverter_report_leaves_the_throttle_reason_unknown(
 async def test_without_the_component_flags_the_throttle_reason_is_unknown(
     hass, entry, connection
 ):
-    """Choice A: the Modbus signals only say a limit is set, not that it holds."""
+    """The Modbus signals only say a limit is set, not that it holds."""
     runtime = await make_runtime(hass, entry, connection)
     description = _description(entities.sensor_descriptions(runtime), "throttle_reason")
 

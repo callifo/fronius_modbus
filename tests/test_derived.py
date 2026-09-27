@@ -176,7 +176,7 @@ def test_nothing_known_is_no_answer():
 
 
 def test_an_unread_limit_flag_prevents_a_no():
-    """Choice A: without the component flags a "none" would be a guess."""
+    """Without the component flags a "none" would be a guess."""
     assert _reason(absolute_reached=None) is None
     assert _reason(relative_reached=None) is None
 

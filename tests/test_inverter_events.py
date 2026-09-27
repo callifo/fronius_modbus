@@ -127,7 +127,7 @@ def test_a_later_read_reports_only_what_is_new_oldest_first():
     tracker.read(parse_events([later, AFCI, earlier], TEXTS), NOW)
 
     assert codes(tracker.pending) == ["GEN24-1187", "BYD2-44"]
-    tracker.delivered()
+    tracker.delivered(tracker.batch)
     tracker.read(parse_events([later, AFCI, earlier], TEXTS), NOW)
     assert tracker.pending == ()
 
@@ -163,6 +163,21 @@ def test_a_failed_read_after_the_first_changes_nothing_but_readability():
     tracker.read(parse_events([AFCI, NO_BATTERY_VOLTAGE], TEXTS), NOW)
 
     assert codes(tracker.pending) == ["GEN24-1187"]
+
+
+def test_entries_are_held_back_while_the_log_does_not_answer():
+    """The event entity is unavailable then; an entry fired into it is lost."""
+    tracker = EventTracker()
+    tracker.read(parse_events([AFCI], TEXTS), NOW)
+    tracker.read(parse_events([AFCI, POWER_LOW], TEXTS), NOW)
+    tracker.read(None, NOW)
+
+    assert tracker.batch == ()
+    tracker.delivered(tracker.batch)
+    tracker.read(parse_events([AFCI, POWER_LOW, NO_BATTERY_VOLTAGE], TEXTS), NOW)
+    assert codes(tracker.batch) == ["GEN24-1187", "GEN24-1175"]
+    tracker.delivered(tracker.batch[:1])
+    assert codes(tracker.pending) == ["GEN24-1175"]
 
 
 def test_texts_that_are_no_mapping_are_no_texts():

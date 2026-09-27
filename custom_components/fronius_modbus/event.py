@@ -45,6 +45,10 @@ class FroniusEvent(FroniusEntity, EventEntity):
     def _handle_coordinator_update(self) -> None:
         web_data = self._runtime.web_data
         batch = web_data.new_events if web_data is not None else ()
+        # event.received ignores a change away from unavailable, so the event
+        # comes back before it fires: fired together, the entry ran nothing.
+        if batch:
+            self.async_write_ha_state()
         # The same poll can reach the listeners twice (a write pushes the data
         # it holds again); an entry fires once.
         for event in batch:

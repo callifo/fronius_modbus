@@ -1570,7 +1570,7 @@
   {
     "label": "web control: new log entries are handed on once",
     "path": "custom_components/fronius_modbus/web_control.py",
-    "old": "            self._event_tracker.delivered()\n",
+    "old": "            self._event_tracker.delivered(data.new_events)\n",
     "new": "",
     "tests": "log_entry_after_the_first_read_is_handed_on_once"
   },
@@ -1640,7 +1640,7 @@
   {
     "label": "web control: new log entries survive a rejected login",
     "path": "custom_components/fronius_modbus/web_control.py",
-    "old": "        self.data.new_events = self._event_tracker.pending\n        self.data.event_log_readable = self._event_tracker.readable\n        return replace(self.data)\n",
+    "old": "        self.data.new_events = self._event_tracker.batch\n        self.data.event_log_readable = self._event_tracker.readable\n        return replace(self.data)\n",
     "new": "        self.data.event_log_readable = self._event_tracker.readable\n        return replace(self.data)\n",
     "tests": "log_entry_survives_an_auth_failure_in_the_same_poll"
   },
@@ -1657,5 +1657,26 @@
     "old": "                self._event_tracker.missed(time.time())\n",
     "new": "",
     "tests": "log_entry_after_a_first_poll_that_raised_is_news"
+  },
+  {
+    "label": "events: nothing is published while the log does not answer",
+    "path": "custom_components/fronius_modbus/inverter_events.py",
+    "old": "        return self.pending if self.readable else ()\n",
+    "new": "        return self.pending\n",
+    "tests": "entry_of_a_failed_poll_notifies_once"
+  },
+  {
+    "label": "events: only the published batch leaves the pending entries",
+    "path": "custom_components/fronius_modbus/inverter_events.py",
+    "old": "        self.pending = tuple(remaining)\n",
+    "new": "        self.pending = ()\n",
+    "tests": "entry_of_a_failed_poll_notifies_once or held_back_while_the_log_does_not_answer"
+  },
+  {
+    "label": "event: back from unavailable before it fires",
+    "path": "custom_components/fronius_modbus/event.py",
+    "old": "        if batch:\n            self.async_write_ha_state()\n",
+    "new": "",
+    "tests": "entry_of_a_failed_poll_notifies_once"
   }
 ]

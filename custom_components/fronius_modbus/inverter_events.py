@@ -142,6 +142,17 @@ class EventTracker:
         if self._seen is None and self._unread_since is None:
             self._unread_since = now
 
-    def delivered(self) -> None:
-        """A poll published the pending entries; a failed one keeps them."""
-        self.pending = ()
+    @property
+    def batch(self) -> tuple[InverterEvent, ...]:
+        """The pending entries a poll may publish.
+
+        None while the log does not answer: the event entity is unavailable
+        then, and an entry fired into it would become no event state.
+        """
+        return self.pending if self.readable else ()
+
+    def delivered(self, batch: tuple[InverterEvent, ...]) -> None:
+        """A poll published `batch`; a failed one keeps its entries pending."""
+        published = {event.uuid for event in batch}
+        remaining = (event for event in self.pending if event.uuid not in published)
+        self.pending = tuple(remaining)

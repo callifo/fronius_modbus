@@ -533,7 +533,7 @@ class FroniusWebControl:
                 raise
             # A poll that raised is never published: its new entries wait for
             # the next one.
-            self._event_tracker.delivered()
+            self._event_tracker.delivered(data.new_events)
             return data
 
     async def _async_refresh_locked(self) -> WebData:
@@ -583,7 +583,7 @@ class FroniusWebControl:
         self._async_sync_solar_api_warning()
         # Last: an auth failure above replaces the data, and these entries are
         # delivered with this snapshot.
-        self.data.new_events = self._event_tracker.pending
+        self.data.new_events = self._event_tracker.batch
         self.data.event_log_readable = self._event_tracker.readable
         return replace(self.data)
 

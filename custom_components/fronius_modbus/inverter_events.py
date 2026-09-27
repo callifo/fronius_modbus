@@ -20,8 +20,8 @@ _TEXTS_SECTION = "StateCodes"
 _SOFT_HYPHEN = "­"
 # Read from the log of a GEN24: PowerLow is a warning, the daily isolation
 # measurement an info; the service view holds what Modbus never reports.
-SEVERITIES: dict[Any, str] = {1: "error", 2: "warning", 3: "info"}
-VIEWERS: dict[Any, str] = {1: "customer", 2: "technician", 3: "service"}
+SEVERITIES: dict[int, str] = {1: "error", 2: "warning", 3: "info"}
+VIEWERS: dict[int, str] = {1: "customer", 2: "technician", 3: "service"}
 # Log entries of this id carry neither a label nor a text.
 _NO_CODE = 0xFFFFFFFF
 
@@ -53,6 +53,11 @@ def event_texts(payload: Any) -> dict[str, str]:
     }
 
 
+def _level(levels: Mapping[int, str], value: Any) -> str | None:
+    # A list here raised as a dictionary key and failed the whole web poll.
+    return levels.get(value) if isinstance(value, int) else None
+
+
 def _event(entry: Mapping[str, Any], texts: Mapping[str, str]) -> InverterEvent | None:
     event_id = entry.get("eventID")
     started = entry.get("timestamp")
@@ -68,8 +73,8 @@ def _event(entry: Mapping[str, Any], texts: Mapping[str, str]) -> InverterEvent 
         code=code,
         label=label,
         text=texts.get(code) or label or code,
-        severity=SEVERITIES.get(entry.get("severity")),
-        visible_to=VIEWERS.get(entry.get("viewer")),
+        severity=_level(SEVERITIES, entry.get("severity")),
+        visible_to=_level(VIEWERS, entry.get("viewer")),
         started=started,
         ended=ended if isinstance(ended, int) else None,
         confirmable=entry.get("confirmable") is True,

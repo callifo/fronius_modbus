@@ -8,6 +8,7 @@ from dataclasses import dataclass, replace
 import functools
 import logging
 import re
+import time
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -25,9 +26,22 @@ from .const import (
 )
 from .fronius_modbus_api.exceptions import ControlRefused, ControlUnavailable
 from .froniuswebclient import FroniusWebAuthError, FroniusWebClient, is_enabled
+from .inverter_events import (
+    ACTIVE_EVENTS_PATH,
+    EVENT_LOG_PATH,
+    EVENT_TEXTS_FALLBACK_LANGUAGE,
+    EVENT_TEXTS_PATH,
+    EventTracker,
+    InverterEvent,
+    event_texts,
+    parse_events,
+)
 from .token_store import async_get_token_store
 
 _LOGGER = logging.getLogger(__name__)
+# The log is ~60 KB on a GEN24 two years in; its entries keep their own time,
+# so reading it less often only delays a new one (seconds).
+EVENT_LOG_INTERVAL_SECONDS = 300
 WEB_API_NOT_CONFIGURED = "Fronius Web API is not configured"
 TECHNICIAN_NOT_CONFIGURED = (
     "Technician access is not selected - choose the technician role via Configure"
@@ -127,6 +141,10 @@ class WebData:
     # The endpoint answered 404: firmware without it, so no component sensors.
     inverter_endpoint_missing: bool = False
     storage_endpoint_missing: bool = False
+    # None while the event list has not answered; new_events holds the log
+    # entries this poll found for the first time.
+    active_events: tuple[InverterEvent, ...] | None = None
+    new_events: tuple[InverterEvent, ...] = ()
 
 
 def _export_limit_summary(config: dict[str, Any] | None) -> dict[str, Any]:
@@ -290,6 +308,9 @@ class FroniusWebControl:
         self.data = WebData()
         self._coordinator: Any = None
         self._delayed_refresh_task: asyncio.Task | None = None
+        self._event_tracker = EventTracker()
+        self._event_texts: dict[str, str] | None = None
+        self._next_event_log_read = 0.0
 
     def attach_coordinator(self, coordinator: Any) -> None:
         """Bind the web coordinator so the delayed post-write refresh can push new data."""
@@ -512,6 +533,7 @@ class FroniusWebControl:
         inverter = inverter_info if isinstance(inverter_info, dict) else {}
         self.data.inverter_readings = inverter.get("readings")
         self.data.inverter_endpoint_missing = bool(inverter.get("missing"))
+        await self._async_refresh_events()
 
         modbus_config = await self._async_client_job("get_modbus_config")
         if isinstance(modbus_config, dict):
@@ -549,6 +571,33 @@ class FroniusWebControl:
 
         self._async_sync_solar_api_warning()
         return replace(self.data)
+
+    async def _async_refresh_events(self) -> None:
+        texts = await self._async_event_texts()
+        active = await self._async_public_read(ACTIVE_EVENTS_PATH)
+        self.data.active_events = parse_events(active, texts)
+        self.data.new_events = ()
+        if time.monotonic() < self._next_event_log_read:
+            return
+        self._next_event_log_read = time.monotonic() + EVENT_LOG_INTERVAL_SECONDS
+        log = parse_events(await self._async_public_read(EVENT_LOG_PATH), texts)
+        if log is not None:
+            self.data.new_events = self._event_tracker.new(log)
+
+    async def _async_event_texts(self) -> dict[str, str]:
+        """The inverter's own texts for its codes, in Home Assistant's language."""
+        if self._event_texts is None:
+            language = self._hass.config.language.split("-")[0].lower()
+            for candidate in dict.fromkeys((language, EVENT_TEXTS_FALLBACK_LANGUAGE)):
+                path = EVENT_TEXTS_PATH.format(language=candidate)
+                texts = event_texts(await self._async_public_read(path))
+                if texts:
+                    self._event_texts = texts
+                    break
+        return self._event_texts or {}
+
+    async def _async_public_read(self, path: str) -> Any:
+        return await self._async_client_job("get_optional_json", path, public=True)
 
     # -- battery write transition -------------------------------------------------
 

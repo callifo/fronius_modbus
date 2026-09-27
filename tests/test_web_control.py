@@ -944,7 +944,18 @@ async def test_a_web_switch_in_no_known_form_shows_as_unknown(hass):
 class RecordingPublicClient(FakeWebClient):
     """Records every read, write and login it is asked for."""
 
-    PUBLIC = {"get_inverter_info", "get_storage_info", "get_power_meter_info"}
+    PUBLIC = {
+        "get_inverter_info",
+        "get_storage_info",
+        "get_power_meter_info",
+        "get_optional_json",
+    }
+    # The event list, its log and their texts answered a GEN24 without a login.
+    PUBLIC_PATHS = (
+        "/api/status/activeEvents",
+        "/api/status/events",
+        "/app/assets/i18n/",
+    )
 
     def __getattribute__(self, name):
         attribute = super().__getattribute__(name)
@@ -955,9 +966,13 @@ class RecordingPublicClient(FakeWebClient):
     def get_power_meter_info(self, *_args):
         return None
 
+    def get_optional_json(self, path):
+        super().__getattribute__("paths").append(path)
+
 
 async def test_the_public_mode_reads_only_public_endpoints(hass):
     public = RecordingPublicClient()
+    public.paths = []
     control = make_control(hass, client=None, public_client=public)
     try:
         data = await control.async_refresh()
@@ -967,6 +982,10 @@ async def test_the_public_mode_reads_only_public_endpoints(hass):
 
     assert public.calls
     assert set(public.calls) <= RecordingPublicClient.PUBLIC
+    assert public.paths
+    assert all(
+        path.startswith(RecordingPublicClient.PUBLIC_PATHS) for path in public.paths
+    )
     assert data.inverter_readings == {"DEVICE_TEMPERATURE_AMBIENTMEAN_01_F32": 41.5}
     assert data.storage_readings == {"BAT_TEMPERATURE_CELL_F64": 22.0}
     assert control.configured is False

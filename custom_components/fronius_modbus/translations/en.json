@@ -687,7 +687,8 @@
             "state": {
               "error": "Error",
               "warning": "Warning",
-              "info": "Info"
+              "info": "Info",
+              "unknown": "Unknown"
             }
           }
         }

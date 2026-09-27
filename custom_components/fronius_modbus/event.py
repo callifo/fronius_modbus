@@ -10,13 +10,10 @@ from .coordinator import FroniusConfigEntry, FroniusRuntimeData
 from .entities import FroniusEventDescription, event_descriptions
 from .entity_base import FroniusEntity
 from .event_entities import event_attributes
-from .inverter_events import SEVERITIES
+from .inverter_events import UNKNOWN_SEVERITY
 
 # The coordinator polls; entities never fetch on their own.
 PARALLEL_UPDATES = 0
-
-# The type of an entry whose severity the inverter sent in no known form.
-_UNKNOWN_SEVERITY = SEVERITIES[3]
 
 
 class FroniusEvent(FroniusEntity, EventEntity):
@@ -55,7 +52,7 @@ class FroniusEvent(FroniusEntity, EventEntity):
             if event.uuid in self._fired:
                 continue
             self._trigger_event(
-                event.severity or _UNKNOWN_SEVERITY, event_attributes(event)
+                event.severity or UNKNOWN_SEVERITY, event_attributes(event)
             )
             self.async_write_ha_state()
         self._fired = {event.uuid for event in batch}

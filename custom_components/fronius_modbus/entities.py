@@ -82,7 +82,7 @@ from .fronius_modbus_api.storage import (
     ExtendedMode,
 )
 from .fronius_modbus_api.sunspec_models import MpptModule
-from .inverter_events import SEVERITIES
+from .inverter_events import EVENT_TYPES
 from .web_control import WebData
 
 type Source = Literal["modbus", "web"]
@@ -1152,7 +1152,7 @@ def event_descriptions(runtime: FroniusRuntimeData) -> list[FroniusEventDescript
             source="web",
             web_client="public",
             value_fn=lambda runtime: None,
-            event_types=list(SEVERITIES.values()),
+            event_types=list(EVENT_TYPES),
         )
     ]
 

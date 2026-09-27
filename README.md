@@ -239,13 +239,13 @@ The sensor names the limit the output is held at right now. A limit that is only
 | `several`              | Several reasons             | Mehrere Gründe                   | More than one of the above at once.                                                                                   |
 | `active_power_control` | Active power control        | Wirkleistungsvorgabe             | No longer reported; kept so older history keeps its label.                                                            |
 | `export_limit`         | AC limit                    | AC-Leistungsbegrenzung           | No longer reported: before 1.2.0b5 it meant an AC limit that was switched on. Kept so older history keeps its label.   |
-| unknown                |                             |                                  | The component endpoint or model 103 could not be read, the last web poll failed, the firmware does not report the flags, or the entry waits for a new web login. |
+| unknown                |                             |                                  | No reason is found while a source is missing: the component endpoint or model 103 could not be read, the last web poll failed, the firmware does not report the flags, or the entry waits for a new web login. A reason one source names is shown even while the other is missing. |
 
 Where the states come from, measured on a GEN24 and a Verto:
 
 - `ac_limit` and `feed_in_limit` come from the inverter's public component endpoint (`/api/components/inverter/readable`): `ACBRIDGE_VALUE_POWERACTIVE_RELATIVE_PRODUCTION_LIMIT_REACHED_U8` is set while a percentage limit holds the output, `ACBRIDGE_VALUE_POWERACTIVE_PRODUCTION_LIMIT_REACHED_U8` while a limit in watts does. They need no web login, so an entry without the web API has them too.
 - The Modbus signals only say a limit is switched on: `StActCtl` bit 0 (model 122) is set as soon as the AC limit is enabled, even at 100 %, and Fronius leaves `St` at normal while it throttles. They are no longer used for the reason.
-- The flags come with the web poll, so the reason can trail a change by up to the web scan interval (default 60 s).
+- The flags come with the web poll, which updates the sensor on its own, so the reason can trail a change by up to the web scan interval (default 60 s). While Modbus is down the sensor stays available as long as the web poll answers.
 
 ### Inverter controls
 
@@ -415,48 +415,49 @@ automation:
           option: "{{ 'block_discharging' if trigger.to_state.state == 'on' else 'auto' }}"
 ```
 
-Switch the inverter's output off while the price is negative. `AC limit rate` limits everything the inverter puts out, not only the feed-in, so the house then draws from the grid, which a negative price pays for:
+Switch the inverter's output off while the price is negative. `AC limit rate` limits everything the inverter puts out, not only the feed-in, so the house then draws from the grid, which a negative price pays for. One automation compares the price whenever it changes and again after a restart, a reload of the automations or of the integration, so it never waits for the next crossing of zero; an unavailable price restores the output:
 
 ```yaml
 automation:
   - alias: "Inverter: off at negative prices"
+    mode: restart
     triggers:
-      - trigger: numeric_state
+      - trigger: state
         entity_id: sensor.electricity_price
-        below: 0
-    actions:
-      - action: select.select_option
-        target:
-          entity_id: select.fronius_ac_limit_enable
-        data:
-          option: enabled
-      - action: number.set_value
-        target:
-          entity_id: number.fronius_ac_limit_rate
-        data:
-          value: 0
-  - alias: "Inverter: on again"
-    triggers:
-      # numeric_state's "above" is strict and would miss a price that stops at 0;
-      # an unavailable price counts as 0 here. A template trigger fires only when
-      # the price turns non-negative, so the price is checked again at a restart
-      # and once the inverter's entities are back after a reload.
-      - trigger: template
-        value_template: "{{ states('sensor.electricity_price') | float(0) >= 0 }}"
       - trigger: homeassistant
         event: start
+      - trigger: event
+        event_type: automation_reloaded
       - trigger: state
         entity_id: select.fronius_ac_limit_enable
         from: unavailable
-    conditions:
-      - condition: template
-        value_template: "{{ states('sensor.electricity_price') | float(0) >= 0 }}"
     actions:
-      - action: select.select_option
-        target:
-          entity_id: select.fronius_ac_limit_enable
-        data:
-          option: disabled
+      - choose:
+          - conditions:
+              - condition: numeric_state
+                entity_id: sensor.electricity_price
+                below: 0
+            sequence:
+              - action: select.select_option
+                target:
+                  entity_id: select.fronius_ac_limit_enable
+                data:
+                  option: enabled
+              - action: number.set_value
+                target:
+                  entity_id: number.fronius_ac_limit_rate
+                data:
+                  value: 0
+          - conditions:
+              - condition: state
+                entity_id: select.fronius_ac_limit_enable
+                state: enabled
+            sequence:
+              - action: select.select_option
+                target:
+                  entity_id: select.fronius_ac_limit_enable
+                data:
+                  option: disabled
 ```
 
 ## Known limitations

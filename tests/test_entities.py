@@ -744,3 +744,21 @@ async def test_a_phase_energy_sensor_already_registered_stays_on_a_zero(runtime)
     }
 
     assert keys == {"meter_200_TotWhImpPhB"}
+
+
+async def test_only_a_plain_sensor_reads_the_web_poll_besides_modbus(
+    hass, entry, runtime
+):
+    """The web listener lives in FroniusSensor; any other entity would ignore it."""
+    descriptions = [
+        *entities.sensor_descriptions(runtime),
+        *entities.number_descriptions(runtime),
+        *entities.select_descriptions(runtime),
+        *entities.switch_descriptions(runtime),
+        *entities.button_descriptions(runtime),
+    ]
+    mixed = [d for d in descriptions if d.also_web]
+
+    assert [d.key for d in mixed] == ["throttle_reason"]
+    for description in mixed:
+        assert type(FroniusSensor.create(runtime, entry, description)) is FroniusSensor

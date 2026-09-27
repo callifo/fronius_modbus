@@ -14,6 +14,7 @@
 - `Throttle control` is disabled by default for new entries: it reads the same flag as `AC limit enabled`. Entries that have it keep it.
 
 ### Fixed
+- `Throttle reason` reports a limit the output has reached, from the inverter's component endpoint, instead of a limit that is switched on (#26). An AC limit left on at 100 % or above the output no longer reads as throttling, and an export limit holding the output, which the Modbus signals never showed, reads as the new reason `power_limit` ("Power limit (W) reached"). `active_power_control` is no longer reported. Without the component endpoint the reason is unknown.
 - The sensors from the inverter's component endpoints show as many digits as their unit is worth (fans and power without decimals, temperatures and voltages with one, frequency with two) instead of the raw float32 value. Only the display changes: the stored state keeps its value, and the precision can be changed per entity.
 
 ## 1.2.0b4

@@ -500,7 +500,7 @@
           "inverter_state": "Inverter reports throttling",
           "active_power_control": "Active power control",
           "export_limit": "AC limit",
-          "power_limit": "Power limit (W) reached",
+          "power_limit": "Export limit",
           "several": "Several reasons",
           "unknown": "Unknown"
         }
@@ -536,7 +536,7 @@
         "name": "Production power limit"
       },
       "production_limit_reached": {
-        "name": "Production power limit reached",
+        "name": "Output limited",
         "state": {
           "yes": "Yes",
           "no": "No"

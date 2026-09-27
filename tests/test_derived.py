@@ -204,7 +204,7 @@ def test_the_production_limit_pair_is_a_power_limit_apart_from_the_battery_s():
     set on it holds the output."""
     root = pathlib.Path(__file__).parent.parent / "custom_components/fronius_modbus"
     expected = {
-        "en": ("Production power limit", "Limit active"),
+        "en": ("Production power limit", "Output limited"),
         "de": ("Aktuelle Erzeugungs-Leistungsgrenze", "Begrenzung greift"),
     }
     for language, names in expected.items():

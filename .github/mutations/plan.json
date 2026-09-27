@@ -1563,9 +1563,9 @@
   {
     "label": "web control: event texts fall back to English",
     "path": "custom_components/fronius_modbus/web_control.py",
-    "old": "            for candidate in dict.fromkeys((language, EVENT_TEXTS_FALLBACK_LANGUAGE)):\n",
+    "old": "            for candidate in dict.fromkeys((EVENT_TEXTS_FALLBACK_LANGUAGE, language)):\n",
     "new": "            for candidate in (language,):\n",
-    "tests": "event_texts_missing_in_a_language_fall_back_to_english"
+    "tests": "event_texts_missing_in_a_language_fall_back_to_english or english_one"
   },
   {
     "label": "web control: new log entries are handed on once",
@@ -1587,5 +1587,12 @@
     "old": "    return NO_ACTIVE_EVENT if event is None else event.text\n",
     "new": "    return None if event is None else event.text\n",
     "tests": "no_active_event_reads_ok"
+  },
+  {
+    "label": "web control: the language's text wins over the English one",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "            for candidate in dict.fromkeys((EVENT_TEXTS_FALLBACK_LANGUAGE, language)):\n",
+    "new": "            for candidate in dict.fromkeys((language, EVENT_TEXTS_FALLBACK_LANGUAGE)):\n",
+    "tests": "names_the_active_events_in_the_language_of_home_assistant"
   }
 ]

@@ -585,15 +585,18 @@ class FroniusWebControl:
             self.data.new_events = self._event_tracker.new(log)
 
     async def _async_event_texts(self) -> dict[str, str]:
-        """The inverter's own texts for its codes, in Home Assistant's language."""
+        """The inverter's own texts for its codes: Home Assistant's language first.
+
+        A language file lacks some codes (the German one 200 of 944); those
+        read in English rather than as a bare short name.
+        """
         if self._event_texts is None:
             language = self._hass.config.language.split("-")[0].lower()
-            for candidate in dict.fromkeys((language, EVENT_TEXTS_FALLBACK_LANGUAGE)):
+            merged: dict[str, str] = {}
+            for candidate in dict.fromkeys((EVENT_TEXTS_FALLBACK_LANGUAGE, language)):
                 path = EVENT_TEXTS_PATH.format(language=candidate)
-                texts = event_texts(await self._async_public_read(path))
-                if texts:
-                    self._event_texts = texts
-                    break
+                merged |= event_texts(await self._async_public_read(path))
+            self._event_texts = merged or None
         return self._event_texts or {}
 
     async def _async_public_read(self, path: str) -> Any:

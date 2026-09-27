@@ -498,10 +498,11 @@
         "state": {
           "none": "Not throttled",
           "inverter_state": "Inverter reports throttling",
+          "ac_limit": "AC limit",
+          "feed_in_limit": "Export limit",
+          "several": "Several reasons",
           "active_power_control": "Active power control",
           "export_limit": "AC limit",
-          "power_limit": "Export limit",
-          "several": "Several reasons",
           "unknown": "Unknown"
         }
       },

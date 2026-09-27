@@ -48,8 +48,8 @@ def throttle_reason(
             if operating_state is None
             else operating_state == THROTTLED_OPERATING_STATE,
         ),
-        (THROTTLE_REASONS[3], relative_limit_reached),
-        (THROTTLE_REASONS[4], absolute_limit_reached),
+        (THROTTLE_REASONS[2], relative_limit_reached),
+        (THROTTLE_REASONS[3], absolute_limit_reached),
     )
     reasons = [reason for reason, applies in signals if applies]
     if reasons:

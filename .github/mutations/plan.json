@@ -1465,16 +1465,16 @@
   {
     "label": "derived: a reached percentage limit is the AC limit",
     "path": "custom_components/fronius_modbus/derived.py",
-    "old": "        (THROTTLE_REASONS[3], relative_limit_reached),\n",
+    "old": "        (THROTTLE_REASONS[2], relative_limit_reached),\n",
     "new": "",
     "tests": "a_reached_percentage_limit_is_the_ac_limit"
   },
   {
-    "label": "derived: a reached limit in watts is a power limit",
+    "label": "derived: a reached limit in watts is the feed-in limit",
     "path": "custom_components/fronius_modbus/derived.py",
-    "old": "        (THROTTLE_REASONS[4], absolute_limit_reached),\n",
+    "old": "        (THROTTLE_REASONS[3], absolute_limit_reached),\n",
     "new": "",
-    "tests": "a_reached_limit_in_watts_is_a_power_limit"
+    "tests": "a_reached_limit_in_watts_is_the_feed_in_limit"
   },
   {
     "label": "component readings: the relative flag is the percentage limit",

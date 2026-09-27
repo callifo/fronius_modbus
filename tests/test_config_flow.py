@@ -1232,7 +1232,7 @@ async def test_an_announced_address_without_the_inverter_is_not_followed(
 
 
 async def test_an_inverter_whose_address_another_took_is_followed(hass, inverters):
-    """Reaudit P2-01: another inverter answering at the old address blocked the move."""
+    """Another inverter answering at the old address blocked the move."""
     entry = make_entry(hass)
     with_inverter_device(hass, entry)
     entry.mock_state(hass, ConfigEntryState.LOADED)
@@ -1247,7 +1247,7 @@ async def test_an_inverter_whose_address_another_took_is_followed(hass, inverter
 
 
 async def test_a_new_address_answering_late_is_followed(hass, monkeypatch):
-    """Reaudit 1cd9c57 P2-01: one failed read at the new address lost the only announcement."""
+    """One failed read at the new address lost the only announcement."""
     entry = make_entry(hass)
     with_inverter_device(hass, entry)
     answers = iter([None, SERIAL])
@@ -1292,7 +1292,7 @@ async def test_a_new_address_that_never_answers_is_not_followed(hass, inverters)
 
 
 async def test_an_endpoint_changed_during_the_reads_is_not_moved(hass, monkeypatch):
-    """Reaudit 1cd9c57 P2-02: the reads checked a port and unit the entry no longer had."""
+    """The reads checked a port and unit the entry no longer had."""
     entry = make_entry(hass)
     with_inverter_device(hass, entry)
 
@@ -1312,7 +1312,7 @@ async def test_an_endpoint_changed_during_the_reads_is_not_moved(hass, monkeypat
 
 
 async def test_an_announcement_before_the_failed_poll_is_followed(hass):
-    """Reaudit P2-02: the last poll still succeeded, so the only announcement was lost."""
+    """The last poll still succeeded, so the only announcement was lost."""
     entry = make_entry(hass)
     with_inverter_device(hass, entry)
     entry.mock_state(hass, ConfigEntryState.LOADED)

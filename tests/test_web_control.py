@@ -299,6 +299,24 @@ async def test_event_texts_missing_in_a_language_fall_back_to_english(hass):
     assert data.active_events[0].text == "AFCI selftest failed"
 
 
+async def test_a_code_without_a_text_in_the_language_reads_the_english_one(hass):
+    """The German file lacks 200 of the 944 codes, the battery's BYD2-44 among them."""
+    hass.config.language = "de"
+    client = FakeClientWithEvents(
+        texts={
+            "de": {"StateCodes": {"GEN24-1175": "Zu wenig DC-Leistung"}},
+            "en": {"StateCodes": {"GEN24-1009": "AFCI selftest failed"}},
+        }
+    )
+    control = make_control(hass, client=client)
+    try:
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert data.active_events[0].text == "AFCI selftest failed"
+
+
 async def test_the_log_is_read_on_its_own_slower_interval(hass):
     client = FakeClientWithEvents()
     control = make_control(hass, client=client)

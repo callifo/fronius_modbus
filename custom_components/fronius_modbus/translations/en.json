@@ -688,7 +688,7 @@
               "error": "Error",
               "warning": "Warning",
               "info": "Info",
-              "unknown": "Unknown"
+              "unclassified": "Unclassified"
             }
           }
         }

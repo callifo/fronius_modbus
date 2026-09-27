@@ -1675,7 +1675,7 @@
   {
     "label": "event: an unknown severity is no info",
     "path": "custom_components/fronius_modbus/event.py",
-    "old": "                event.severity or UNKNOWN_SEVERITY, event_attributes(event)\n",
+    "old": "                event.severity or UNCLASSIFIED_SEVERITY, event_attributes(event)\n",
     "new": "                event.severity or \"info\", event_attributes(event)\n",
     "tests": "entry_of_an_unknown_severity_is_no_info"
   },

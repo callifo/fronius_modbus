@@ -23,9 +23,10 @@ _SOFT_HYPHEN = "­"
 SEVERITIES: dict[int, str] = {1: "error", 2: "warning", 3: "info"}
 VIEWERS: dict[int, str] = {1: "customer", 2: "technician", 3: "service"}
 # The event type of a severity in no known form: an info would slip past an
-# automation that watches errors and warnings.
-UNKNOWN_SEVERITY = "unknown"
-EVENT_TYPES = (*SEVERITIES.values(), UNKNOWN_SEVERITY)
+# automation that watches errors and warnings, and "unknown" is a state the
+# automation editor hides from its list of types.
+UNCLASSIFIED_SEVERITY = "unclassified"
+EVENT_TYPES = (*SEVERITIES.values(), UNCLASSIFIED_SEVERITY)
 # Log entries of this id carry neither a label nor a text.
 _NO_CODE = 0xFFFFFFFF
 

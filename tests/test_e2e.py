@@ -1283,7 +1283,7 @@ async def test_an_entry_of_an_unknown_severity_is_no_info(
     await hass.async_block_till_done()
 
     fired = hass.states.get(entity_id_for(hass, entry, "event", "inverter_event"))
-    assert fired.attributes["event_type"] == "unknown"
+    assert fired.attributes["event_type"] == "unclassified"
     assert fired.attributes["code"] == "GEN24-9999"
 
 

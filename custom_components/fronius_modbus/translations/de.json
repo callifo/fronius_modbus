@@ -688,7 +688,7 @@
               "error": "Fehler",
               "warning": "Warnung",
               "info": "Info",
-              "unknown": "Unbekannt"
+              "unclassified": "Nicht eingestuft"
             }
           }
         }

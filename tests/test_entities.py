@@ -32,6 +32,7 @@ from custom_components.fronius_modbus.froniuswebclient import (
     FroniusWebResponseError,
     FroniusWebUnreachable,
 )
+from custom_components.fronius_modbus.inverter_events import InverterEvent
 from custom_components.fronius_modbus.sensor import FroniusSensor
 from custom_components.fronius_modbus.web_control import WebData
 from homeassistant.exceptions import HomeAssistantError
@@ -764,3 +765,84 @@ async def test_only_a_plain_sensor_reads_the_web_poll_besides_modbus(
     assert [d.key for d in mixed] == ["throttle_reason"]
     for description in mixed:
         assert type(FroniusSensor.create(runtime, entry, description)) is FroniusSensor
+
+
+def _event(uuid, code, severity, viewer, started, text):
+    return InverterEvent(
+        uuid=uuid,
+        code=code,
+        label="",
+        text=text,
+        severity=severity,
+        visible_to=viewer,
+        started=started,
+        ended=None,
+        confirmable=False,
+    )
+
+
+AFCI_EVENT = _event(
+    "a",
+    "GEN24-1009",
+    "warning",
+    "service",
+    1788683992,
+    "AFCI-Selbsttest fehlgeschlagen",
+)
+POWER_LOW_EVENT = _event(
+    "b", "GEN24-1175", "warning", "customer", 1790470000, "Zu wenig DC-Leistung"
+)
+
+
+def with_active_events(runtime, events) -> None:
+    runtime.web = SimpleNamespace(
+        data=WebData(active_events=events), last_update_success=True
+    )
+
+
+async def test_the_leading_active_event_shows_its_text_and_the_rest_as_attributes(
+    hass, entry, connection
+):
+    runtime = await make_runtime(hass, entry, connection)
+    with_active_events(runtime, (AFCI_EVENT, POWER_LOW_EVENT))
+    descriptions = entities.sensor_descriptions(runtime)
+    leading = _description(descriptions, "active_event")
+    count = _description(descriptions, "active_events")
+
+    assert leading.value_fn(runtime) == "Zu wenig DC-Leistung"
+    attributes = leading.attributes_fn(runtime)
+    assert attributes["code"] == "GEN24-1175"
+    assert (attributes["severity"], attributes["visible_to"]) == ("warning", "customer")
+    assert attributes["since"].timestamp() == 1790470000
+    assert [other["code"] for other in attributes["other_events"]] == ["GEN24-1009"]
+    assert count.value_fn(runtime) == 2
+
+
+async def test_no_active_event_reads_ok(hass, entry, connection):
+    runtime = await make_runtime(hass, entry, connection)
+    with_active_events(runtime, ())
+    descriptions = entities.sensor_descriptions(runtime)
+
+    assert _description(descriptions, "active_event").value_fn(runtime) == "OK"
+    assert _description(descriptions, "active_event").attributes_fn(runtime) is None
+    assert _description(descriptions, "active_events").value_fn(runtime) == 0
+
+
+async def test_an_unread_event_list_is_no_answer(hass, entry, connection):
+    runtime = await make_runtime(hass, entry, connection)
+    with_active_events(runtime, None)
+    descriptions = entities.sensor_descriptions(runtime)
+
+    assert _description(descriptions, "active_event").value_fn(runtime) is None
+    assert _description(descriptions, "active_events").value_fn(runtime) is None
+
+
+async def test_without_the_web_poll_there_are_no_event_entities(
+    hass, entry, connection
+):
+    runtime = await make_runtime(hass, entry, connection)
+
+    keys = {d.key for d in entities.sensor_descriptions(runtime)}
+
+    assert not {"active_event", "active_events"} & keys
+    assert entities.event_descriptions(runtime) == []

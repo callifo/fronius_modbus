@@ -153,8 +153,9 @@ class FroniusRuntimeData:
         fresh = self.web is not None and self.web.last_update_success
         readings = self.web_data.inverter_readings if fresh and self.web_data else None
         relative, absolute = limits_reached(readings)
+        modbus_fresh = self.modbus.last_update_success
         return throttle_reason(
-            operating_state=self.modbus.data.operating_state,
+            operating_state=self.modbus.data.operating_state if modbus_fresh else None,
             relative_limit_reached=relative,
             absolute_limit_reached=absolute,
         )

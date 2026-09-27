@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- Two entries set up at the same time on a fresh installation kept only one Web API token; the other asked for its password again after a reload.
+- While the MPPT block did not answer, a negative household load during battery charging showed as 0 W; it is unknown now.
+
 ## 1.2.0b5
 
 A beta on 1.2.0b4 that makes the throttle reason report a limit that actually holds the output, renames several sensors after what they measure, and makes discovery confirm a moved inverter before following it. No migration; unique ids and entity ids do not change. Automations that wait for the throttle states `export_limit` or `active_power_control` need the new states (see below).

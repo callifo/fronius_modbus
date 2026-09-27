@@ -65,7 +65,7 @@ def _module_temperature(index: int) -> ComponentReading:
     return ComponentReading(
         f"module_temperature_{index}",
         "inverter",
-        (f"MODULE_TEMPERATURE_MEAN_0{index}_F32",),
+        (f"MODULE_TEMPERATURE_MEAN_{index:02d}_F32",),
         "°C",
         "temperature",
         once_reported=True,
@@ -119,8 +119,9 @@ COMPONENT_READINGS: tuple[ComponentReading, ...] = (
         "°C",
         "temperature",
     ),
-    # A Verto 30.0 Plus reported modules 1-5 and 9 and fans 1, 2, 3 and 5.
-    *(_module_temperature(index) for index in range(1, 10)),
+    # The web interface names modules 1-10 (AC modules 1-6, DC modules 3, 9 and
+    # 10, a DC or battery module 4); a Verto 30.0 Plus reported 1-5 and 9.
+    *(_module_temperature(index) for index in range(1, 11)),
     ComponentReading("fan_1", "inverter", ("FANCONTROL_PERCENT_01_F32",), "%"),
     ComponentReading("fan_2", "inverter", ("FANCONTROL_PERCENT_02_F32",), "%"),
     *(

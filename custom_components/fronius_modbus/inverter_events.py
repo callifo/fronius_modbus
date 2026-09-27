@@ -20,8 +20,8 @@ _TEXTS_SECTION = "StateCodes"
 _SOFT_HYPHEN = "­"
 # Read from the log of a GEN24: PowerLow is a warning, the daily isolation
 # measurement an info; the service view holds what Modbus never reports.
-SEVERITIES = {1: "error", 2: "warning", 3: "info"}
-VIEWERS = {1: "customer", 2: "technician", 3: "service"}
+SEVERITIES: dict[Any, str] = {1: "error", 2: "warning", 3: "info"}
+VIEWERS: dict[Any, str] = {1: "customer", 2: "technician", 3: "service"}
 # Log entries of this id carry neither a label nor a text.
 _NO_CODE = 0xFFFFFFFF
 

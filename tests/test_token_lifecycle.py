@@ -5,6 +5,7 @@ a host and role some entry still logs in with, and only readable by Home
 Assistant itself (audit A24-03, A24-04).
 """
 
+import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
@@ -82,6 +83,29 @@ async def test_a_token_file_written_before_is_rewritten_privately(hass, hass_sto
     await store.async_load_token(HOST)
 
     store._store.async_save.assert_awaited_once()
+
+
+async def test_two_first_setups_at_once_keep_both_tokens(hass):
+    """Both loaded the empty store together, and each took its own dictionary.
+
+    The later save held its own host only: the other entry lost its token and
+    asked for the password again after a reload.
+    """
+    store = FroniusTokenStore(hass)
+
+    async def load_from_disk():
+        # The real load reads the file in the executor and yields meanwhile.
+        await asyncio.sleep(0)
+
+    store._store.async_load = load_from_disk
+    await asyncio.gather(
+        store.async_save_token("a.example", realm="r", token="a"),
+        store.async_save_token("b.example", realm="r", token="b"),
+    )
+
+    reloaded = FroniusTokenStore(hass)
+    assert await reloaded.async_load_token("a.example") is not None
+    assert await reloaded.async_load_token("b.example") is not None
 
 
 async def test_removing_the_entry_deletes_its_token(hass):

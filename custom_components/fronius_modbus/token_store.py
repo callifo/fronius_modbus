@@ -38,13 +38,18 @@ class FroniusTokenStore:
         self._cache: dict[str, dict[str, str]] | None = None
 
     async def _async_load_all(self) -> dict[str, dict[str, str]]:
-        if self._cache is None:
-            loaded = await self._store.async_load()
-            self._cache = loaded if isinstance(loaded, dict) else {}
-            if self._cache:
-                # Only a write applies the private mode; a file from an older
-                # version stays world-readable until then.
-                await self._store.async_save(self._cache)
+        if self._cache is not None:
+            return self._cache
+        loaded = await self._store.async_load()
+        if self._cache is not None:
+            # Another caller awaited the same load and resumed first; a second
+            # dictionary replaced the first and lost the token saved into it.
+            return self._cache
+        self._cache = loaded if isinstance(loaded, dict) else {}
+        if self._cache:
+            # Only a write applies the private mode; a file from an older
+            # version stays world-readable until then.
+            await self._store.async_save(self._cache)
         return self._cache
 
     async def async_ready(self) -> None:

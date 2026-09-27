@@ -58,7 +58,7 @@
   {
     "label": "derived: a negative load while the battery charges hard is unavailable",
     "path": "custom_components/fronius_modbus/derived.py",
-    "old": "        if candidate < 0 and charging_hard:",
+    "old": "        if candidate < 0 and charge_may_explain_it:",
     "new": "        if False:",
     "tests": "strong_charging_makes_a_negative_load_unavailable"
   },
@@ -247,8 +247,8 @@
   {
     "label": "token store: an older token file is rewritten privately",
     "path": "custom_components/fronius_modbus/token_store.py",
-    "old": "            if self._cache:\n",
-    "new": "            if False:\n",
+    "old": "        if self._cache:\n",
+    "new": "        if False:\n",
     "tests": "a_token_file_written_before_is_rewritten_privately"
   },
   {
@@ -1517,5 +1517,19 @@
     "old": "operating_state=self.modbus.data.operating_state if modbus_fresh else None,",
     "new": "operating_state=self.modbus.data.operating_state,",
     "tests": "a_modbus_outage_without_a_reached_limit_is_no_answer"
+  },
+  {
+    "label": "derived: an unknown charge is no 0 W",
+    "path": "custom_components/fronius_modbus/derived.py",
+    "old": "            storage_charge_power_w is None\n            or storage_charge_power_w >= LOAD_STORAGE_CHARGE_MIN_W\n",
+    "new": "            storage_charge_power_w is not None\n            and storage_charge_power_w >= LOAD_STORAGE_CHARGE_MIN_W\n",
+    "tests": "negative_load_with_an_unknown_charge_is_no_reading"
+  },
+  {
+    "label": "token store: concurrent first loads share one dictionary",
+    "path": "custom_components/fronius_modbus/token_store.py",
+    "old": "        loaded = await self._store.async_load()\n        if self._cache is not None:\n",
+    "new": "        loaded = await self._store.async_load()\n        if False:\n",
+    "tests": "two_first_setups_at_once_keep_both_tokens"
   }
 ]

@@ -1185,10 +1185,10 @@ def test_assisted_setup_converts_an_existing_float_register_map():
     assert sent["payload"]["slave"]["sunspecMode"] == "int"
 
 
-def _float_map_client(sunspec_mode="float"):
+def _float_map_client(sunspec_mode="float", slave_mode="tcp"):
     client = FroniusWebClient("192.0.2.10")
     slave = {
-        "mode": "tcp",
+        "mode": slave_mode,
         "port": 502,
         "meterAddress": 200,
         "rtu_inverter_slave_id": 1,
@@ -1214,6 +1214,24 @@ def test_a_float_map_is_not_switched_without_consent():
 
     assert raised.value.current_mode == "float"
     assert sent == []
+
+
+@pytest.mark.parametrize("slave_mode", ["rtu", "both"])
+def test_a_float_map_served_over_rtu_waits_for_consent_too(slave_mode):
+    client, sent = _float_map_client(slave_mode=slave_mode)
+
+    with pytest.raises(froniuswebclient.SunSpecModeChangeNeeded):
+        client.ensure_modbus_enabled(502, 200, 1)
+
+    assert sent == []
+
+
+def test_a_float_map_nobody_is_served_needs_no_consent():
+    """With the Modbus slave off no device reads the float models: asking only alarms."""
+    client, sent = _float_map_client(slave_mode="off")
+
+    assert client.ensure_modbus_enabled(502, 200, 1) is True
+    assert sent[0]["slave"]["sunspecMode"] == "int"
 
 
 def test_a_map_without_a_model_type_needs_no_consent():

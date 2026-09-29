@@ -21,6 +21,10 @@
           "api_password": "Password"
         }
       },
+      "user_sunspec": {
+        "title": "Switch the SunSpec model type?",
+        "description": "The Modbus of {entry_title} ({host}) uses the **{mode}** SunSpec model type. This integration reads the int + SF models and switches the inverter to them. If an external device reads the inverter with the {mode} models, it may no longer work after the switch. Submit to switch; close this dialog to leave the inverter as it is."
+      },
       "reconfigure": {
         "title": "Review Fronius System",
         "description": "Review the host, the local Web API access role, the update intervals and the Modbus IP restriction. Minimum interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand. Switching an existing entry to it removes those entities; their history stays.",
@@ -39,6 +43,10 @@
           "api_password": "Password"
         }
       },
+      "reconfigure_sunspec": {
+        "title": "Switch the SunSpec model type?",
+        "description": "The Modbus of {entry_title} ({host}) uses the **{mode}** SunSpec model type. This integration reads the int + SF models and switches the inverter to them. If an external device reads the inverter with the {mode} models, it may no longer work after the switch. Submit to switch; close this dialog to leave the inverter as it is."
+      },
       "reauth_confirm": {
         "title": "Log in to the Fronius Web API again",
         "description": "The stored login of this entry is missing or was rejected, for example after the password was changed on the inverter. Choose the access role; the next step asks for its password. If you do not want to use the web API, choose Without the web API. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand. Switching an existing entry to it removes those entities; their history stays.",
@@ -52,6 +60,10 @@
         "data": {
           "api_password": "Password"
         }
+      },
+      "reauth_sunspec": {
+        "title": "Switch the SunSpec model type?",
+        "description": "The Modbus of {entry_title} ({host}) uses the **{mode}** SunSpec model type. This integration reads the int + SF models and switches the inverter to them. If an external device reads the inverter with the {mode} models, it may no longer work after the switch. Submit to switch; close this dialog to leave the inverter as it is."
       }
     },
     "abort": {
@@ -802,6 +814,10 @@
         "data": {
           "api_password": "Password"
         }
+      },
+      "sunspec": {
+        "title": "Switch the SunSpec model type?",
+        "description": "The Modbus of {entry_title} ({host}) uses the **{mode}** SunSpec model type. This integration reads the int + SF models and switches the inverter to them. If an external device reads the inverter with the {mode} models, it may no longer work after the switch. Submit to switch; close this dialog to leave the inverter as it is."
       }
     },
     "error": {

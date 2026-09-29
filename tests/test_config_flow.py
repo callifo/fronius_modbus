@@ -11,7 +11,7 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components import fronius_modbus
-from custom_components.fronius_modbus import config_flow, discovery
+from custom_components.fronius_modbus import config_flow, discovery, froniuswebclient
 from custom_components.fronius_modbus.const import DOMAIN, instance_key
 from custom_components.fronius_modbus.fronius_modbus_api.device import DeviceIdentity
 from custom_components.fronius_modbus.froniuswebclient import FroniusWebResponseError
@@ -709,7 +709,8 @@ async def test_turning_the_web_api_on_applies_the_saved_restriction(
     )
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert [args[-1] for args in written] == ["home_assistant"]
+    # port, meter address, inverter id, then the restriction
+    assert [args[3] for args in written] == ["home_assistant"]
 
 
 # -- discovery ---------------------------------------------------------------------
@@ -1323,3 +1324,208 @@ async def test_an_announcement_before_the_failed_poll_is_followed(hass):
     await discover(hass, discovered(host=MOVED_HOST))
 
     assert config_flow.entry_defaults(entry)["host"] == MOVED_HOST
+
+
+def _float_map(monkeypatch) -> list[tuple]:
+    """An inverter serving the float map: switching it waits for consent."""
+    applied: list[tuple] = []
+
+    def ensure(self, *args):
+        if not (len(args) > 4 and args[4]):
+            raise froniuswebclient.SunSpecModeChangeNeeded("float")
+        applied.append(args)
+        return True
+
+    monkeypatch.setattr(config_flow.FroniusWebClient, "ensure_modbus_enabled", ensure)
+    return applied
+
+
+async def test_a_float_map_is_switched_only_after_the_user_agrees(
+    hass, mock_modbus, monkeypatch
+):
+    """Another device may read the float map (a Bosch energy manager at SolarEdge #345).
+
+    The setup switched it to int + SF without a word; that device stopped.
+    """
+    applied = _float_map(monkeypatch)
+
+    result = await run_flow(hass)
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "user_sunspec"
+    assert result["description_placeholders"]["mode"] == "float"
+    assert applied == []
+    assert await async_get_token_store(hass).async_load_token(HOST, "customer") is None
+
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert [args[4] for args in applied] == [True]
+    stored = await async_get_token_store(hass).async_load_token(HOST, "customer")
+    assert stored == {"realm": "r", "token": "t"}
+
+
+async def test_leaving_the_model_type_question_changes_nothing(
+    hass, mock_modbus, monkeypatch
+):
+    applied = _float_map(monkeypatch)
+    result = await run_flow(hass)
+    assert result["step_id"] == "user_sunspec"
+
+    hass.config_entries.flow.async_abort(result["flow_id"])
+
+    assert applied == []
+    assert await async_get_token_store(hass).async_load_token(HOST, "customer") is None
+    assert hass.config_entries.async_entries(DOMAIN) == []
+
+
+async def test_a_stored_token_asks_before_switching_too(hass, mock_modbus, monkeypatch):
+    """With a stored token the settings step validates at once, without a password step."""
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+    applied = _float_map(monkeypatch)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT
+    )
+    assert result["step_id"] == "user_sunspec"
+    assert applied == []
+
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert [args[4] for args in applied] == [True]
+
+
+async def test_reauthentication_asks_before_switching(hass, mock_modbus, monkeypatch):
+    entry = make_entry(hass)
+    applied = _float_map(monkeypatch)
+
+    result = await entry.start_reauth_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_username": "customer"}
+    )
+    if result.get("step_id") == "reauth_password":
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"api_password": "secret"}
+        )
+    assert result["step_id"] == "reauth_sunspec"
+    assert applied == []
+
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+
+    assert result["reason"] == "reauth_successful"
+    assert [args[4] for args in applied] == [True]
+
+
+async def test_the_options_ask_before_switching(hass, mock_modbus, monkeypatch):
+    entry = make_entry(hass)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+    applied = _float_map(monkeypatch)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "host": HOST,
+            "scan_interval": 10,
+            "web_scan_interval": 60,
+            "modbus_restriction": "off",
+            "api_username": "customer",
+        },
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+    assert result["step_id"] == "sunspec"
+    assert applied == []
+
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert [args[4] for args in applied] == [True]
+
+
+async def test_a_host_taken_during_the_model_type_question_is_refused(
+    hass, mock_modbus, monkeypatch
+):
+    """Like the password step: another entry may take the host while the question is open.
+
+    The answer must not even log in to an inverter another entry serves.
+    """
+    contacted = _record_contact(monkeypatch)
+    applied = _float_map(monkeypatch)
+    result = await run_flow(hass)
+    assert result["step_id"] == "user_sunspec"
+    contacted_before = len(contacted)
+    make_entry(hass)
+
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+
+    assert result["reason"] == "already_configured"
+    assert len(contacted) == contacted_before
+    assert applied == []
+
+
+def _host_taken_during_the_probe(hass, monkeypatch, host: str) -> None:
+    """Another entry takes ``host`` while the flow probes the inverter: after every check."""
+    original_probe = config_flow.FroniusInverter.async_probe
+
+    async def probe(unit):
+        other = make_entry(hass)
+        hass.config_entries.async_update_entry(
+            other, data={**other.data, "host": host}, unique_id=host
+        )
+        return await original_probe(unit)
+
+    monkeypatch.setattr(config_flow.FroniusInverter, "async_probe", probe)
+
+
+async def test_a_host_taken_after_the_answer_shows_its_error(
+    hass, mock_modbus, monkeypatch
+):
+    """The finish found the duplicate; the form that showed it had lost its state."""
+    source = make_entry(hass)
+    target = "192.0.2.20"
+    _float_map(monkeypatch)
+    result = await hass.config_entries.options.async_init(source.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {"host": target, "modbus_restriction": "off", "api_username": "customer"},
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+    assert result["step_id"] == "sunspec"
+    _host_taken_during_the_probe(hass, monkeypatch, target)
+
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+
+    assert result["step_id"] == "sunspec"
+    assert result["errors"] == {"base": "already_configured"}
+    assert config_flow.entry_defaults(source)["host"] == HOST
+
+
+async def test_the_password_step_keeps_its_state_after_a_late_error(
+    hass, mock_modbus, monkeypatch
+):
+    """Its form came back without the entry it asked for, and the next try restarted."""
+    source = make_entry(hass)
+    target = "192.0.2.20"
+    result = await hass.config_entries.options.async_init(source.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {"host": target, "modbus_restriction": "off", "api_username": "customer"},
+    )
+    assert result["step_id"] == "password"
+    _host_taken_during_the_probe(hass, monkeypatch, target)
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+
+    assert result["step_id"] == "password"
+    assert result["errors"] == {"base": "already_configured"}
+    assert result["description_placeholders"]["host"] == target

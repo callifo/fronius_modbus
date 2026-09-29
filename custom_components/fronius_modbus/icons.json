@@ -217,6 +217,12 @@
       },
       "active_events": {
         "default": "mdi:counter"
+      },
+      "active_service_event": {
+        "default": "mdi:wrench-clock"
+      },
+      "active_service_events": {
+        "default": "mdi:counter"
       }
     },
     "switch": {
@@ -233,6 +239,9 @@
     "event": {
       "inverter_event": {
         "default": "mdi:bell-outline"
+      },
+      "service_event": {
+        "default": "mdi:wrench-outline"
       }
     }
   }

@@ -276,7 +276,7 @@
         "name": "Maximale Leistung"
       },
       "events2": {
-        "name": "Ereignisse"
+        "name": "Ereignisstufe"
       },
       "grid_status": {
         "name": "Netzstatus",
@@ -709,6 +709,12 @@
       },
       "active_events": {
         "name": "Aktive Ereignisse"
+      },
+      "active_service_event": {
+        "name": "Aktives Service-Ereignis"
+      },
+      "active_service_events": {
+        "name": "Aktive Service-Ereignisse"
       }
     },
     "switch": {
@@ -731,6 +737,19 @@
     "event": {
       "inverter_event": {
         "name": "Wechselrichter-Ereignis",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "error": "Fehler",
+              "warning": "Warnung",
+              "info": "Info",
+              "unclassified": "Nicht eingestuft"
+            }
+          }
+        }
+      },
+      "service_event": {
+        "name": "Service-Ereignis",
         "state_attributes": {
           "event_type": {
             "state": {

@@ -301,6 +301,7 @@ files = [
   "custom_components/fronius_modbus/flow_settings.py",
   "custom_components/fronius_modbus/flow_state.py",
   "custom_components/fronius_modbus/web_errors.py",
+  "custom_components/fronius_modbus/descriptions.py",
   "custom_components/fronius_modbus/entities.py",
   "custom_components/fronius_modbus/entity_base.py",
   "custom_components/fronius_modbus/event_entities.py",

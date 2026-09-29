@@ -276,7 +276,7 @@
         "name": "Maximum power"
       },
       "events2": {
-        "name": "Events"
+        "name": "Event severity"
       },
       "grid_status": {
         "name": "Grid status",
@@ -709,6 +709,12 @@
       },
       "active_events": {
         "name": "Active events"
+      },
+      "active_service_event": {
+        "name": "Active service event"
+      },
+      "active_service_events": {
+        "name": "Active service events"
       }
     },
     "switch": {
@@ -731,6 +737,19 @@
     "event": {
       "inverter_event": {
         "name": "Inverter event",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "error": "Error",
+              "warning": "Warning",
+              "info": "Info",
+              "unclassified": "Unclassified"
+            }
+          }
+        }
+      },
+      "service_event": {
+        "name": "Service event",
         "state_attributes": {
           "event_type": {
             "state": {

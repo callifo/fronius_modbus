@@ -22,6 +22,9 @@ _SOFT_HYPHEN = "­"
 # measurement an info; the service view holds what Modbus never reports.
 SEVERITIES: dict[int, str] = {1: "error", 2: "warning", 3: "info"}
 VIEWERS: dict[int, str] = {1: "customer", 2: "technician", 3: "service"}
+# The level the web interface shows its customer login: measured against its
+# event list, which holds the viewer 1 entries of the log and no other.
+CUSTOMER_LEVEL = VIEWERS[1]
 # The event type of a severity in no known form: an info would slip past an
 # automation that watches errors and warnings, and "unknown" is a state the
 # automation editor hides from its list of types.

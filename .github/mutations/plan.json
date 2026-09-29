@@ -1776,5 +1776,40 @@
     "old": "                result = await self._async_finish_with_token(\n                    on_success, state, info, token if minted else None\n",
     "new": "                self._pending_flow_state = None\n                result = await self._async_finish_with_token(\n                    on_success, state, info, token if minted else None\n",
     "tests": "keeps_its_state_after_a_late_error"
+  },
+  {
+    "label": "event entities: the customer sees the customer level alone",
+    "path": "custom_components/fronius_modbus/event_entities.py",
+    "old": "    return (event.visible_to == CUSTOMER_LEVEL) == (audience == CUSTOMER)\n",
+    "new": "    return True\n",
+    "tests": "service_event_alone_leaves_the_customer_sensors_ok"
+  },
+  {
+    "label": "event: an entry fires only for its audience",
+    "path": "custom_components/fronius_modbus/event.py",
+    "old": "        batch = tuple(event for event in new_events if for_audience(event, audience))\n",
+    "new": "        batch = new_events\n",
+    "tests": "service_events_reach_only_the_service_entities"
+  },
+  {
+    "label": "entities: the service sensors start disabled",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "                    value_fn=partial(leading_event_text, audience=audience),\n                    enabled=audience == CUSTOMER,\n",
+    "new": "                    value_fn=partial(leading_event_text, audience=audience),\n                    enabled=True,\n",
+    "tests": "service_entities_start_disabled"
+  },
+  {
+    "label": "entities: the service event starts disabled",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "            entity_registry_enabled_default=audience == CUSTOMER,\n",
+    "new": "            entity_registry_enabled_default=True,\n",
+    "tests": "service_entities_start_disabled"
+  },
+  {
+    "label": "event entities: the service sees the technician level and an unknown one",
+    "path": "custom_components/fronius_modbus/event_entities.py",
+    "old": "    return (event.visible_to == CUSTOMER_LEVEL) == (audience == CUSTOMER)\n",
+    "new": "    return event.visible_to == (CUSTOMER_LEVEL if audience == CUSTOMER else \"service\")\n",
+    "tests": "technician_and_unknown_level_events"
   }
 ]

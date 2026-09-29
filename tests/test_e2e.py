@@ -1300,7 +1300,8 @@ async def test_an_event_log_that_does_not_answer_leaves_the_event_unavailable(
     event_id = entity_id_for(hass, entry, "event", "inverter_event")
 
     assert hass.states.get(event_id).state == "unavailable"
-    assert state_of(hass, entry, "active_events") == "1"
+    # The active list answers: its service event counts for no customer.
+    assert state_of(hass, entry, "active_events") == "0"
 
     monkeypatch.setattr(_WebClientWithEvents, "log", [])
     await entry.runtime_data.web.async_refresh()
@@ -1319,8 +1320,9 @@ async def test_the_inverter_events_reach_home_assistant(hass, mock_modbus, monke
     await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
     await setup_entry(hass, entry)
 
-    assert state_of(hass, entry, "active_event") == "AFCI selftest failed"
-    assert state_of(hass, entry, "active_events") == "1"
+    # The active AFCI event is of the service level (#39).
+    assert state_of(hass, entry, "active_event") == "OK"
+    assert state_of(hass, entry, "active_events") == "0"
     event_id = entity_id_for(hass, entry, "event", "inverter_event")
     assert hass.states.get(event_id).attributes.get("event_type") is None
 
@@ -1339,3 +1341,35 @@ async def test_the_inverter_events_reach_home_assistant(hass, mock_modbus, monke
     entry.runtime_data.web.async_update_listeners()
     await hass.async_block_till_done()
     assert hass.states.get(event_id).state == fired.state
+
+
+async def test_service_events_reach_only_the_service_entities(
+    hass, mock_modbus, monkeypatch
+):
+    """#39: a customer finds no service event in the web interface; HA keeps them apart."""
+    mock_modbus.add_unit(201, like=METER_UNIT_ID)
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientWithEvents)
+    monkeypatch.setattr(_WebClientWithEvents, "log", list(_WebClientWithEvents.log))
+    monkeypatch.setattr(web_control, "EVENT_LOG_INTERVAL_SECONDS", 0)
+    entry = make_entry(hass)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+    await setup_entry(hass, entry)
+    registry = er.async_get(hass)
+    for domain, key in (("event", "service_event"), ("sensor", "active_service_event")):
+        registry.async_update_entity(
+            entity_id_for(hass, entry, domain, key), disabled_by=None
+        )
+    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    customer_id = entity_id_for(hass, entry, "event", "inverter_event")
+    service_id = entity_id_for(hass, entry, "event", "service_event")
+
+    assert state_of(hass, entry, "active_service_event") == "AFCI selftest failed"
+    _WebClientWithEvents.log.append(
+        _log_entry("c", "GEN24", 1186, "GatewayNotReachable", 2, 3, 1790500000)
+    )
+    await entry.runtime_data.web.async_refresh()
+    await hass.async_block_till_done()
+
+    assert hass.states.get(service_id).attributes["code"] == "GEN24-1186"
+    assert hass.states.get(customer_id).attributes.get("event_type") is None

@@ -11,21 +11,13 @@ rows, which only exist once the device reports them -- so a platform's
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from functools import partial
 from operator import attrgetter
-from typing import Any, Literal
+from typing import Any
 
-from homeassistant.components.button import ButtonEntityDescription
-from homeassistant.components.event import EventEntityDescription
-from homeassistant.components.number import NumberEntityDescription, NumberMode
-from homeassistant.components.select import SelectEntityDescription
-from homeassistant.components.sensor import (
-    SensorDeviceClass,
-    SensorEntityDescription,
-    SensorStateClass,
-)
-from homeassistant.components.switch import SwitchEntityDescription
+from homeassistant.components.number import NumberMode
+from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.helpers.entity import EntityCategory
 
 from .component_readings import (
@@ -60,7 +52,21 @@ from .const import (
     map_code,
 )
 from .coordinator import FroniusConfigEntry, FroniusRuntimeData, assume_present
+from .descriptions import (
+    DeviceKind,
+    FroniusButtonDescription,
+    FroniusEventDescription,
+    FroniusNumberDescription,
+    FroniusSelectDescription,
+    FroniusSensorDescription,
+    FroniusSwitchDescription,
+    Source,
+    WebClientKind,
+)
 from .event_entities import (
+    CUSTOMER,
+    EVENT_AUDIENCES,
+    SERVICE,
     active_event_count,
     leading_event_attributes,
     leading_event_text,
@@ -85,87 +91,8 @@ from .fronius_modbus_api.sunspec_models import MpptModule
 from .inverter_events import EVENT_TYPES
 from .web_control import WebData
 
-type Source = Literal["modbus", "web"]
-type WebClientKind = Literal["public", "customer", "technician"]
-type DeviceKind = Literal["inverter", "storage", "meter"]
-
 # 0.3's static fallback for the AC limit rate's max, kept when settings.w_max is unknown.
 AC_LIMIT_RATE_FALLBACK_MAX_W = 50_000
-
-
-@dataclass(frozen=True, kw_only=True)
-class FroniusDescriptionMixin:
-    """Fields every Fronius entity description carries, on top of the HA one."""
-
-    key: str
-    device: DeviceKind
-    source: Source = "modbus"
-    # The web login a web-sourced entity needs ("public": none); unavailable without it.
-    web_client: WebClientKind = "customer"
-    report_name: str | None = None
-    # Reads the web poll besides Modbus: follows it, and is up while either is fresh.
-    also_web: bool = False
-    # What the state alone cannot carry, such as the rest of the active events.
-    attributes_fn: Callable[[FroniusRuntimeData], dict[str, Any] | None] | None = None
-    meter_unit_id: int | None = None
-    value_fn: Callable[[FroniusRuntimeData], Any]
-    exists_fn: Callable[[FroniusRuntimeData], bool] = staticmethod(lambda runtime: True)
-    available_fn: Callable[[FroniusRuntimeData], bool] = staticmethod(
-        lambda runtime: True
-    )
-
-
-@dataclass(frozen=True, kw_only=True)
-class FroniusSensorDescription(SensorEntityDescription, FroniusDescriptionMixin):
-    """A sensor built from a value_fn."""
-
-
-@dataclass(frozen=True, kw_only=True)
-class FroniusEventDescription(EventEntityDescription, FroniusDescriptionMixin):
-    """An event entity the web poll feeds with the inverter's new log entries."""
-
-
-@dataclass(frozen=True, kw_only=True)
-class FroniusNumberDescription(NumberEntityDescription, FroniusDescriptionMixin):
-    """A number built from a value_fn and a set_fn."""
-
-    set_fn: Callable[[FroniusRuntimeData, float], Awaitable[None]]
-    max_fn: Callable[[FroniusRuntimeData], float | None] = staticmethod(
-        lambda runtime: None
-    )
-
-
-@dataclass(frozen=True, kw_only=True)
-class FroniusSelectDescription(SelectEntityDescription, FroniusDescriptionMixin):
-    """A select built from a code<->label map and a set_fn taking the code."""
-
-    options_map: dict[int, str]
-    set_fn: Callable[[FroniusRuntimeData, int], Awaitable[None]]
-
-
-@dataclass(frozen=True, kw_only=True)
-class FroniusSwitchDescription(SwitchEntityDescription, FroniusDescriptionMixin):
-    """A switch built from a value_fn and separate turn_on/turn_off actions."""
-
-    turn_on: Callable[[FroniusRuntimeData], Awaitable[None]]
-    turn_off: Callable[[FroniusRuntimeData], Awaitable[None]]
-
-
-@dataclass(frozen=True, kw_only=True)
-class FroniusButtonDescription(ButtonEntityDescription, FroniusDescriptionMixin):
-    """A button built from a press action."""
-
-    press: Callable[[FroniusRuntimeData], Awaitable[None]]
-
-
-type FroniusDescription = (
-    FroniusSensorDescription
-    | FroniusNumberDescription
-    | FroniusSelectDescription
-    | FroniusSwitchDescription
-    | FroniusButtonDescription
-    | FroniusEventDescription
-)
 
 
 # -- value helpers -----------------------------------------------------------------
@@ -861,11 +788,27 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         ),
         also_web=True,
     ),
-    replace(
-        _event_sensor("active_event", "active_event", value_fn=leading_event_text),
-        attributes_fn=leading_event_attributes,
+    *(
+        sensor
+        for audience, part in EVENT_AUDIENCES
+        for sensor in (
+            replace(
+                _event_sensor(
+                    f"active_{part}event",
+                    f"active_{part}event",
+                    value_fn=partial(leading_event_text, audience=audience),
+                    enabled=audience == CUSTOMER,
+                ),
+                attributes_fn=partial(leading_event_attributes, audience=audience),
+            ),
+            _event_sensor(
+                f"active_{part}events",
+                f"active_{part}events",
+                value_fn=partial(active_event_count, audience=audience),
+                enabled=audience == CUSTOMER,
+            ),
+        )
     ),
-    _event_sensor("active_events", "active_events", value_fn=active_event_count),
 )
 
 _SINGLE_PHASE_UNSUPPORTED_METER_KEYS = (
@@ -1146,14 +1089,17 @@ def event_descriptions(runtime: FroniusRuntimeData) -> list[FroniusEventDescript
         return []
     return [
         FroniusEventDescription(
-            key="inverter_event",
-            translation_key="inverter_event",
+            key=key,
+            translation_key=key,
             device="inverter",
             source="web",
             web_client="public",
             value_fn=lambda runtime: None,
             event_types=list(EVENT_TYPES),
+            audience=audience,
+            entity_registry_enabled_default=audience == CUSTOMER,
         )
+        for audience, key in ((CUSTOMER, "inverter_event"), (SERVICE, "service_event"))
     ]
 
 

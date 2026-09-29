@@ -9,7 +9,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .coordinator import FroniusConfigEntry, FroniusRuntimeData
 from .entities import FroniusEventDescription, event_descriptions
 from .entity_base import FroniusEntity
-from .event_entities import event_attributes
+from .event_entities import event_attributes, for_audience
 from .inverter_events import UNCLASSIFIED_SEVERITY
 
 # The coordinator polls; entities never fetch on their own.
@@ -41,7 +41,9 @@ class FroniusEvent(FroniusEntity, EventEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         web_data = self._runtime.web_data
-        batch = web_data.new_events if web_data is not None else ()
+        new_events = web_data.new_events if web_data is not None else ()
+        audience = self.entity_description.audience
+        batch = tuple(event for event in new_events if for_audience(event, audience))
         # event.received ignores a change away from unavailable, so the event
         # comes back before it fires: fired together, the entry ran nothing.
         if batch:

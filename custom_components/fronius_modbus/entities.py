@@ -64,6 +64,9 @@ from .descriptions import (
     WebClientKind,
 )
 from .event_entities import (
+    CUSTOMER,
+    EVENT_AUDIENCES,
+    SERVICE,
     active_event_count,
     leading_event_attributes,
     leading_event_text,
@@ -785,11 +788,27 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         ),
         also_web=True,
     ),
-    replace(
-        _event_sensor("active_event", "active_event", value_fn=leading_event_text),
-        attributes_fn=leading_event_attributes,
+    *(
+        sensor
+        for audience, part in EVENT_AUDIENCES
+        for sensor in (
+            replace(
+                _event_sensor(
+                    f"active_{part}event",
+                    f"active_{part}event",
+                    value_fn=partial(leading_event_text, audience=audience),
+                    enabled=audience == CUSTOMER,
+                ),
+                attributes_fn=partial(leading_event_attributes, audience=audience),
+            ),
+            _event_sensor(
+                f"active_{part}events",
+                f"active_{part}events",
+                value_fn=partial(active_event_count, audience=audience),
+                enabled=audience == CUSTOMER,
+            ),
+        )
     ),
-    _event_sensor("active_events", "active_events", value_fn=active_event_count),
 )
 
 _SINGLE_PHASE_UNSUPPORTED_METER_KEYS = (
@@ -1070,14 +1089,17 @@ def event_descriptions(runtime: FroniusRuntimeData) -> list[FroniusEventDescript
         return []
     return [
         FroniusEventDescription(
-            key="inverter_event",
-            translation_key="inverter_event",
+            key=key,
+            translation_key=key,
             device="inverter",
             source="web",
             web_client="public",
             value_fn=lambda runtime: None,
             event_types=list(EVENT_TYPES),
+            audience=audience,
+            entity_registry_enabled_default=audience == CUSTOMER,
         )
+        for audience, key in ((CUSTOMER, "inverter_event"), (SERVICE, "service_event"))
     ]
 
 

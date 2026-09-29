@@ -18,6 +18,7 @@ from homeassistant.components.sensor import SensorEntityDescription
 from homeassistant.components.switch import SwitchEntityDescription
 
 from .coordinator import FroniusRuntimeData
+from .event_entities import CUSTOMER, EventAudience
 
 type Source = Literal["modbus", "web"]
 type WebClientKind = Literal["public", "customer", "technician"]
@@ -54,6 +55,8 @@ class FroniusSensorDescription(SensorEntityDescription, FroniusDescriptionMixin)
 @dataclass(frozen=True, kw_only=True)
 class FroniusEventDescription(EventEntityDescription, FroniusDescriptionMixin):
     """An event entity the web poll feeds with the inverter's new log entries."""
+
+    audience: EventAudience = CUSTOMER
 
 
 @dataclass(frozen=True, kw_only=True)

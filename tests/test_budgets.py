@@ -46,7 +46,9 @@ LINE_BUDGETS = {
     # 1889 - the two web temperatures, now rows of that table
     # 1900 + a power module kept once registered (RE26-03)
     # 1625 - the base entity and the device info, now entity_base.py
-    "entities.py": 1680,  # + room for the inverter event entities
+    # 1680 + the inverter event entities
+    # 1625 - the description types, now descriptions.py; + the service event entities
+    "entities.py": 1625,
 }
 
 # SonarSource's own default. Above it, a function is one somebody has to

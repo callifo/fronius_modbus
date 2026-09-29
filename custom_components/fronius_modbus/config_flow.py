@@ -422,11 +422,14 @@ class TokenFlowMixin:
                     claim_host=lambda: claim_host(state.settings),
                     switch_sunspec_mode=True,
                 )
-                self._pending_flow_state = None
                 minted = state.login_token if state.token_minted else None
-                return await self._async_finish_with_token(
+                # Cleared once the finish went through: a late error shows on
+                # this form again, which needs the state.
+                result = await self._async_finish_with_token(
                     on_success, state, info, minted
                 )
+                self._pending_flow_state = None
+                return result
             except data_entry_flow.AbortFlow:
                 raise
             except Exception as err:  # pylint: disable=broad-except
@@ -560,10 +563,11 @@ class TokenFlowMixin:
                     return await self._async_ask_sunspec_switch(
                         needed, state, token, minted=minted, step_id=sunspec_step_id
                     )
-                self._pending_flow_state = None
-                return await self._async_finish_with_token(
+                result = await self._async_finish_with_token(
                     on_success, state, info, token if minted else None
                 )
+                self._pending_flow_state = None
+                return result
             except data_entry_flow.AbortFlow:
                 raise
             except Exception as err:  # pylint: disable=broad-except

@@ -1762,5 +1762,19 @@
     "old": "        served = slave.get(\"mode\") != SLAVE_OFF\n",
     "new": "        served = True\n",
     "tests": "float_map_nobody_is_served_needs_no_consent"
+  },
+  {
+    "label": "config flow: the model type question keeps its state until the finish",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "                result = await self._async_finish_with_token(\n                    on_success, state, info, minted\n",
+    "new": "                self._pending_flow_state = None\n                result = await self._async_finish_with_token(\n                    on_success, state, info, minted\n",
+    "tests": "host_taken_after_the_answer_shows_its_error"
+  },
+  {
+    "label": "config flow: the password step keeps its state until the finish",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "                result = await self._async_finish_with_token(\n                    on_success, state, info, token if minted else None\n",
+    "new": "                self._pending_flow_state = None\n                result = await self._async_finish_with_token(\n                    on_success, state, info, token if minted else None\n",
+    "tests": "keeps_its_state_after_a_late_error"
   }
 ]

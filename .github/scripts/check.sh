@@ -57,6 +57,26 @@ fi
 echo "gitleaks $GITLEAKS_FOUND"
 gitleaks detect --no-banner --redact --source . --log-opts="$FORK_BASE..HEAD"
 
+# The export tool in tools/ is PowerShell, which no Python gate reads.
+# Fail-closed like gitleaks: without pwsh this gate did not run.
+echo "== inverter dump tool =="
+if ! command -v pwsh >/dev/null 2>&1; then
+    echo "pwsh is not installed; install PowerShell 7 - the tool's gate cannot be skipped" >&2
+    exit 1
+fi
+pwsh -NoProfile -File tools/inverter_dump.tests.ps1
+# The .bat runs the tool on Windows PowerShell 5.1, which only Windows has:
+#
+#     WINDOWS_POWERSHELL=powershell.exe .github/scripts/check.sh
+WINDOWS_RUN="skipped"
+if [ -n "$WINDOWS_POWERSHELL" ]; then
+    WINDOWS_RUN="passed"
+    echo "== inverter dump tool (Windows PowerShell) =="
+    "$WINDOWS_POWERSHELL" -NoProfile -ExecutionPolicy Bypass -File tools/inverter_dump.tests.ps1
+else
+    echo "== inverter dump tool (Windows PowerShell): SKIPPED, set WINDOWS_POWERSHELL =="
+fi
+
 echo "== pytest =="
 # -m "" cancels the `-m "not e2e"` default from pyproject.toml, so the slow
 # end-to-end tests against a real Home Assistant run here too.
@@ -92,8 +112,11 @@ echo "== mutations =="
 "$PYTHON" .github/scripts/mutate.py .github/mutations/plan.json
 
 echo
-if [ "$MINIMUM_RUN" = "passed" ]; then
+SKIPPED=""
+[ "$MINIMUM_RUN" = "passed" ] || SKIPPED="the minimum Home Assistant run"
+[ "$WINDOWS_RUN" = "passed" ] || SKIPPED="${SKIPPED:+$SKIPPED and }the Windows PowerShell run"
+if [ -z "$SKIPPED" ]; then
     echo "all gates passed"
 else
-    echo "all gates passed EXCEPT the minimum Home Assistant run, which was skipped"
+    echo "all gates passed EXCEPT $SKIPPED, which was skipped"
 fi

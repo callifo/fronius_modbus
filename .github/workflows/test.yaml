@@ -85,6 +85,19 @@ jobs:
           # register table as a credential (six of them, first run 2026-09-04).
           GITLEAKS_CONFIG: ${{ github.workspace }}/.gitleaks.toml
 
+  powershell:
+    # The export tool in tools/ is PowerShell; the runner ships PowerShell 7.
+    # Windows PowerShell 5.1, which the .bat starts, runs in the local gate.
+    name: inverter dump tool
+    runs-on: "ubuntu-latest"
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test the inverter dump tool
+        run: pwsh -NoProfile -File tools/inverter_dump.tests.ps1
+
   mypy:
     name: mypy
     runs-on: "ubuntu-latest"

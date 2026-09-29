@@ -792,6 +792,9 @@ AFCI_EVENT = _event(
 POWER_LOW_EVENT = _event(
     "b", "GEN24-1175", "warning", "customer", 1790470000, "Zu wenig DC-Leistung"
 )
+NO_BATTERY_EVENT = _event(
+    "c", "GEN24-1240", "warning", "customer", 1790000000, "Keine Batterie erkannt"
+)
 
 
 def with_active_events(runtime, events) -> None:
@@ -804,7 +807,7 @@ async def test_the_leading_active_event_shows_its_text_and_the_rest_as_attribute
     hass, entry, connection
 ):
     runtime = await make_runtime(hass, entry, connection)
-    with_active_events(runtime, (AFCI_EVENT, POWER_LOW_EVENT))
+    with_active_events(runtime, (AFCI_EVENT, POWER_LOW_EVENT, NO_BATTERY_EVENT))
     descriptions = entities.sensor_descriptions(runtime)
     leading = _description(descriptions, "active_event")
     count = _description(descriptions, "active_events")
@@ -814,8 +817,48 @@ async def test_the_leading_active_event_shows_its_text_and_the_rest_as_attribute
     assert attributes["code"] == "GEN24-1175"
     assert (attributes["severity"], attributes["visible_to"]) == ("warning", "customer")
     assert attributes["since"].timestamp() == 1790470000
-    assert [other["code"] for other in attributes["other_events"]] == ["GEN24-1009"]
+    assert [other["code"] for other in attributes["other_events"]] == ["GEN24-1240"]
     assert count.value_fn(runtime) == 2
+
+
+async def test_a_service_event_alone_leaves_the_customer_sensors_ok(
+    hass, entry, connection
+):
+    """#39: the web interface shows its customer login no service event.
+
+    The sensor showed one active since August the owner found nowhere.
+    """
+    runtime = await make_runtime(hass, entry, connection)
+    with_active_events(runtime, (AFCI_EVENT,))
+    descriptions = entities.sensor_descriptions(runtime)
+
+    assert _description(descriptions, "active_event").value_fn(runtime) == "OK"
+    assert _description(descriptions, "active_events").value_fn(runtime) == 0
+
+
+async def test_the_service_sensors_show_the_rest(hass, entry, connection):
+    runtime = await make_runtime(hass, entry, connection)
+    with_active_events(runtime, (AFCI_EVENT, POWER_LOW_EVENT))
+    descriptions = entities.sensor_descriptions(runtime)
+    leading = _description(descriptions, "active_service_event")
+    count = _description(descriptions, "active_service_events")
+
+    assert leading.value_fn(runtime) == "AFCI-Selbsttest fehlgeschlagen"
+    assert leading.attributes_fn(runtime)["visible_to"] == "service"
+    assert leading.attributes_fn(runtime)["other_events"] == []
+    assert count.value_fn(runtime) == 1
+
+
+async def test_the_service_entities_start_disabled(hass, entry, connection):
+    runtime = await make_runtime(hass, entry, connection)
+    with_active_events(runtime, ())
+    sensors = entities.sensor_descriptions(runtime)
+    events = {d.key: d for d in entities.event_descriptions(runtime)}
+
+    for key in ("active_service_event", "active_service_events"):
+        assert _description(sensors, key).entity_registry_enabled_default is False
+    assert events["service_event"].entity_registry_enabled_default is False
+    assert events["inverter_event"].entity_registry_enabled_default is True
 
 
 async def test_no_active_event_reads_ok(hass, entry, connection):
@@ -833,8 +876,13 @@ async def test_an_unread_event_list_is_no_answer(hass, entry, connection):
     with_active_events(runtime, None)
     descriptions = entities.sensor_descriptions(runtime)
 
-    assert _description(descriptions, "active_event").value_fn(runtime) is None
-    assert _description(descriptions, "active_events").value_fn(runtime) is None
+    for key in (
+        "active_event",
+        "active_events",
+        "active_service_event",
+        "active_service_events",
+    ):
+        assert _description(descriptions, key).value_fn(runtime) is None
 
 
 async def test_without_the_web_poll_there_are_no_event_entities(
@@ -844,5 +892,13 @@ async def test_without_the_web_poll_there_are_no_event_entities(
 
     keys = {d.key for d in entities.sensor_descriptions(runtime)}
 
-    assert not {"active_event", "active_events"} & keys
+    assert (
+        not {
+            "active_event",
+            "active_events",
+            "active_service_event",
+            "active_service_events",
+        }
+        & keys
+    )
     assert entities.event_descriptions(runtime) == []

@@ -1724,7 +1724,7 @@
   {
     "label": "web client: the model type is switched only with consent",
     "path": "custom_components/fronius_modbus/froniuswebclient.py",
-    "old": "        if other_mode and not switch_sunspec_mode:\n",
+    "old": "        if other_mode and served and not switch_sunspec_mode:\n",
     "new": "        if False:\n",
     "tests": "float_map_is_not_switched_without_consent or switched_only_after_the_user_agrees"
   },
@@ -1755,5 +1755,12 @@
     "old": "        if user_input is not None:\n            try:\n                await claim_host(state.settings)\n                info = await _validate_input(",
     "new": "        if user_input is not None:\n            try:\n                info = await _validate_input(",
     "tests": "host_taken_during_the_model_type_question"
+  },
+  {
+    "label": "web client: a slave nobody is served needs no consent",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "        served = slave.get(\"mode\") != SLAVE_OFF\n",
+    "new": "        served = True\n",
+    "tests": "float_map_nobody_is_served_needs_no_consent"
   }
 ]

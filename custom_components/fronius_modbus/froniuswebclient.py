@@ -32,6 +32,8 @@ _LOGGER = logging.getLogger(__name__)
 MASTER_RTUIF = {"master": {"rtuif": [{"if": "rtu0"}, {"if": "rtu1"}]}}
 # Modes in which the Modbus TCP server answers; "both" also serves RTU clients.
 TCP_MODES = ("tcp", "both")
+# The slave mode in which no device is served over Modbus at all.
+SLAVE_OFF = "off"
 RESTRICTION_LIST_SEPARATOR = ","
 BATTERIES_PATH = "/api/config/batteries"
 MODBUS_PATH = "/api/config/modbus"
@@ -741,10 +743,12 @@ class FroniusWebClient:
         ):
             return False
 
-        # A firmware that names no model type has nothing to switch away from.
+        # A firmware that names no model type has nothing to switch away from,
+        # and with the slave off no device reads the other models.
         current_mode = slave.get("sunspecMode")
         other_mode = current_mode is not None and current_mode != SUNSPEC_MODE_INT
-        if other_mode and not switch_sunspec_mode:
+        served = slave.get("mode") != SLAVE_OFF
+        if other_mode and served and not switch_sunspec_mode:
             raise SunSpecModeChangeNeeded(str(current_mode))
 
         # Everything read is written back: the RS485 roles, serial settings and

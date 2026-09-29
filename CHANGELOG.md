@@ -13,7 +13,7 @@
 - The battery's `Current power limit` is `Current charge limit` ("Aktuelle Ladegrenze"): it fell to 0 W near a full battery while the discharge limit stayed, so it is the charge counterpart of `Current discharge limit`.
 
 ### Fixed
-- The setup switched the inverter's SunSpec model type from `float` to `int + SF` without asking; an external device reading the float models may no longer work after that. It now asks first; declining leaves the inverter as it is.
+- The setup switched the inverter's SunSpec model type from `float` to `int + SF` without asking; an external device reading the float models may no longer work after that. It now asks first while the inverter's Modbus is on; declining leaves the inverter as it is.
 - Two entries set up at the same time on a fresh installation kept only one Web API token; the other asked for its password again after a reload.
 - While the MPPT block did not answer, a negative household load during battery charging showed as 0 W; it is unknown now.
 

@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 1.2.0b6
+
+A beta on 1.2.0b5 that brings the inverter's own events into Home Assistant, reads the extra modules, fans and temperatures a larger inverter reports, names the module sensors as the inverter's web interface does, and asks before the setup switches the inverter's SunSpec model type. No migration; unique ids and entity ids do not change.
 
 ### Added
 - Sensors for the modules, fans and second ambient temperature a larger inverter reports: a Verto 30.0 Plus reports module temperatures 1–5 and 9, fans 1, 2, 3 and 5 and a second temperature. Module temperatures 1–10, fans 3–5 and the second temperature exist only where the inverter reports them.

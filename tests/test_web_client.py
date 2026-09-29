@@ -1181,8 +1181,47 @@ def test_assisted_setup_converts_an_existing_float_register_map():
     }
     sent = {}
     client._post = lambda path, payload=None: sent.update(payload=payload)
-    assert client.ensure_modbus_enabled(502, 200, 1) is True
+    assert client.ensure_modbus_enabled(502, 200, 1, ModbusRestriction.KEEP, True)
     assert sent["payload"]["slave"]["sunspecMode"] == "int"
+
+
+def _float_map_client(sunspec_mode="float"):
+    client = FroniusWebClient("192.0.2.10")
+    slave = {
+        "mode": "tcp",
+        "port": 502,
+        "meterAddress": 200,
+        "rtu_inverter_slave_id": 1,
+        "ctr": {"on": False, "restriction": {"on": False}},
+    }
+    if sunspec_mode is not None:
+        slave["sunspecMode"] = sunspec_mode
+    client.get_modbus_config = lambda: {"slave": slave}
+    sent = []
+    client._post = lambda path, payload=None: sent.append(payload)
+    return client, sent
+
+
+def test_a_float_map_is_not_switched_without_consent():
+    """Another device may read the float map (a Bosch energy manager at SolarEdge #345).
+
+    Switching it to int + SF stops that device; the setup did it silently.
+    """
+    client, sent = _float_map_client()
+
+    with pytest.raises(froniuswebclient.SunSpecModeChangeNeeded) as raised:
+        client.ensure_modbus_enabled(502, 200, 1)
+
+    assert raised.value.current_mode == "float"
+    assert sent == []
+
+
+def test_a_map_without_a_model_type_needs_no_consent():
+    """Firmware that does not name the model type has nothing to switch away from."""
+    client, sent = _float_map_client(sunspec_mode=None)
+
+    assert client.ensure_modbus_enabled(502, 200, 1) is True
+    assert sent[0]["slave"]["sunspecMode"] == "int"
 
 
 def test_the_soc_mode_is_written_alone(client, inverter):

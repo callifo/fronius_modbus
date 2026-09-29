@@ -18,6 +18,13 @@ from requests.utils import parse_dict_header
 from .component_readings import flag_value, json_object, take_readings
 from .const import API_USERNAME, ModbusRestriction
 from .fronius_modbus_api.exceptions import ControlRefused
+from .web_errors import (
+    ClientIpResolutionError,
+    FroniusWebUnreachable,
+    FroniusWebResponseError,
+    SunSpecModeChangeNeeded,
+    FroniusWebAuthError,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -29,6 +36,8 @@ RESTRICTION_LIST_SEPARATOR = ","
 BATTERIES_PATH = "/api/config/batteries"
 MODBUS_PATH = "/api/config/modbus"
 SOLAR_API_PATH = "/api/config/solar_api"
+# The inverter's name for the integer + scale factor models, the ones read here.
+SUNSPEC_MODE_INT = "int"
 # A component endpoint that answers 404: firmware without it, not a failed read.
 ENDPOINT_MISSING = object()
 # Lists in the answer to a config write that name the fields it did not take.
@@ -39,32 +48,6 @@ WRITE_REFUSALS = (
     "validationErrors",
     "writeFailure",
 )
-
-
-class ClientIpResolutionError(RuntimeError):
-    """Raised when the local IP for Modbus restriction cannot be resolved."""
-
-
-class FroniusWebUnreachable(OSError):
-    """No answer from the web server: the same switched-off device as on Modbus.
-
-    Carries the requests error type only. Requests puts the URL, and with it
-    the host, into its messages, and Home Assistant logs travel with bug
-    reports (audit E01).
-    """
-
-
-class FroniusWebResponseError(RuntimeError):
-    """The web server answered with an error status: a device that is up and refusing."""
-
-    def __init__(self, message: str, status_code: int) -> None:
-        """Keep the status, so a caller can tell a missing endpoint from a failure."""
-        super().__init__(message)
-        self.status_code = status_code
-
-
-class FroniusWebAuthError(RuntimeError):
-    """Raised when Fronius Web API authentication fails."""
 
 
 def _http(method: str, url: str, **options: Any) -> requests.Response:
@@ -725,6 +708,7 @@ class FroniusWebClient:
         meter_address: int,
         inverter_unit_id: int,
         restriction: ModbusRestriction = ModbusRestriction.KEEP,
+        switch_sunspec_mode: bool = False,
     ) -> bool:
         config = _config_object(self.get_modbus_config(), MODBUS_PATH)
         # Checked like the slave: it is written back as read (audit FA0FB-05).
@@ -745,7 +729,7 @@ class FroniusWebClient:
             serves_tcp
             # The integration reads the integer+SF models only; a float map
             # would pass every other check and then fail the probe (audit F13).
-            and slave.get("sunspecMode") == "int"
+            and slave.get("sunspecMode") == SUNSPEC_MODE_INT
             and is_enabled(ctr.get("on"))
             and _as_int(slave.get("port"), port) == int(port)
             and _as_int(slave.get("meterAddress"), meter_address) == int(meter_address)
@@ -757,6 +741,12 @@ class FroniusWebClient:
         ):
             return False
 
+        # A firmware that names no model type has nothing to switch away from.
+        current_mode = slave.get("sunspecMode")
+        other_mode = current_mode is not None and current_mode != SUNSPEC_MODE_INT
+        if other_mode and not switch_sunspec_mode:
+            raise SunSpecModeChangeNeeded(str(current_mode))
+
         # Everything read is written back: the RS485 roles, serial settings and
         # a "both" mode belong to other devices on the inverter.
         payload = {
@@ -766,7 +756,7 @@ class FroniusWebClient:
                 "rtuif": slave.get("rtuif", []),
                 "mode": slave["mode"] if serves_tcp else "tcp",
                 "port": port,
-                "sunspecMode": "int",
+                "sunspecMode": SUNSPEC_MODE_INT,
                 "meterAddress": meter_address,
                 "rtu_inverter_slave_id": inverter_unit_id,
                 "ctr": {**ctr, "on": True, "restriction": wanted},

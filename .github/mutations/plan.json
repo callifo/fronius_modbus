@@ -379,7 +379,7 @@
   },
   {
     "label": "web_client: a server error is not an outage",
-    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "path": "custom_components/fronius_modbus/web_errors.py",
     "old": "class FroniusWebResponseError(RuntimeError):",
     "new": "class FroniusWebResponseError(OSError):",
     "tests": "a_server_error_is_an_answer_not_an_outage or a_web_server_error_is_still_an_error"
@@ -807,8 +807,8 @@
   {
     "label": "config flow: a minted token is kept only after the check",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "                info = await _validate_input(\n                    self.hass,\n                    state.settings,\n",
-    "new": "                await _async_save_token(\n                    self.hass, state.settings[CONF_HOST], username, token\n                )\n                info = await _validate_input(\n                    self.hass,\n                    state.settings,\n",
+    "old": "                try:\n                    info = await _validate_input(\n                        self.hass,\n                        state.settings,\n",
+    "new": "                await _async_save_token(\n                    self.hass, state.settings[CONF_HOST], username, token\n                )\n                try:\n                    info = await _validate_input(\n                        self.hass,\n                        state.settings,\n",
     "tests": "a_token_whose_setup_fails_is_not_kept"
   },
   {
@@ -1003,8 +1003,8 @@
   {
     "label": "config flow: the password step rechecks the host",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "                await claim_host(state.settings)\n",
-    "new": "",
+    "old": "                # was open (audit RR770-01).\n                await claim_host(state.settings)\n",
+    "new": "                # was open (audit RR770-01).\n",
     "tests": "during_the_password_step"
   },
   {
@@ -1149,7 +1149,7 @@
   },
   {
     "label": "config flow: turning the web API on writes the saved Modbus settings",
-    "path": "custom_components/fronius_modbus/config_flow.py",
+    "path": "custom_components/fronius_modbus/flow_settings.py",
     "old": "    if previous_settings.get(CONF_API_USERNAME) == WEB_API_DISABLED:\n        return True\n",
     "new": "",
     "tests": "turning_the_web_api_on_applies_the_saved_restriction"
@@ -1720,5 +1720,40 @@
     "old": "        if batch:\n            self.async_write_ha_state()\n",
     "new": "",
     "tests": "entry_of_a_failed_poll_notifies_once"
+  },
+  {
+    "label": "web client: the model type is switched only with consent",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "        if other_mode and not switch_sunspec_mode:\n",
+    "new": "        if False:\n",
+    "tests": "float_map_is_not_switched_without_consent or switched_only_after_the_user_agrees"
+  },
+  {
+    "label": "config flow: the settings step asks before switching",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "                        minted=False,\n                        step_id=sunspec_step_id,\n",
+    "new": "                        minted=False,\n                        step_id=\"user\",\n",
+    "tests": "stored_token_asks_before_switching_too"
+  },
+  {
+    "label": "config flow: the answer switches the model type",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "                    switch_sunspec_mode=True,\n",
+    "new": "                    switch_sunspec_mode=False,\n",
+    "tests": "switched_only_after_the_user_agrees"
+  },
+  {
+    "label": "config flow: a token minted before the question is kept",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "                minted = state.login_token if state.token_minted else None\n",
+    "new": "                minted = None\n",
+    "tests": "switched_only_after_the_user_agrees"
+  },
+  {
+    "label": "config flow: the model type question rechecks the host",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "        if user_input is not None:\n            try:\n                await claim_host(state.settings)\n                info = await _validate_input(",
+    "new": "        if user_input is not None:\n            try:\n                info = await _validate_input(",
+    "tests": "host_taken_during_the_model_type_question"
   }
 ]

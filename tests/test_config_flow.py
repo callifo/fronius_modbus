@@ -709,7 +709,8 @@ async def test_turning_the_web_api_on_applies_the_saved_restriction(
     )
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert [args[-1] for args in written] == ["home_assistant"]
+    # port, meter address, inverter id, then the restriction
+    assert [args[3] for args in written] == ["home_assistant"]
 
 
 # -- discovery ---------------------------------------------------------------------
@@ -1445,3 +1446,24 @@ async def test_the_options_ask_before_switching(hass, mock_modbus, monkeypatch):
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert [args[4] for args in applied] == [True]
+
+
+async def test_a_host_taken_during_the_model_type_question_is_refused(
+    hass, mock_modbus, monkeypatch
+):
+    """Like the password step: another entry may take the host while the question is open.
+
+    The answer must not even log in to an inverter another entry serves.
+    """
+    contacted = _record_contact(monkeypatch)
+    applied = _float_map(monkeypatch)
+    result = await run_flow(hass)
+    assert result["step_id"] == "user_sunspec"
+    contacted_before = len(contacted)
+    make_entry(hass)
+
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+
+    assert result["reason"] == "already_configured"
+    assert len(contacted) == contacted_before
+    assert applied == []

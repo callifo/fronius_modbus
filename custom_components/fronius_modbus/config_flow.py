@@ -2,15 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
 from modbus_connection import ModbusError, ModbusTcpParams
 import voluptuous as vol
 
-from homeassistant import config_entries, data_entry_flow, exceptions
+from homeassistant import config_entries, data_entry_flow
 from homeassistant.components.modbus import async_get_temporary_unit
-from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL
+from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
@@ -20,24 +19,15 @@ from .const import (
     CONF_API_USERNAME,
     CONF_AUTO_ENABLE_MODBUS,
     CONF_INVERTER_UNIT_ID,
-    CONF_RECONFIGURE_REQUIRED,
     CONF_MODBUS_RESTRICTION,
-    CONF_WEB_SCAN_INTERVAL,
     DEFAULT_AUTO_ENABLE_MODBUS,
-    DEFAULT_INVERTER_UNIT_ID,
     DEFAULT_METER_UNIT_ID,
-    DEFAULT_NAME,
-    DEFAULT_PORT,
-    DEFAULT_SCAN_INTERVAL,
-    DEFAULT_WEB_SCAN_INTERVAL,
     DOMAIN,
     MINIMUM_SCAN_INTERVAL,
     API_USERNAME,
-    API_USERNAMES,
     SUPPORTED_MANUFACTURERS,
     SUPPORTED_MODELS,
     WEB_API_DISABLED,
-    ModbusRestriction,
     entry_title,
     entry_unique_id,
 )
@@ -48,11 +38,34 @@ from .discovery import (
     entry_for_serial,
 )
 from .flow_forms import password_schema, role_schema, settings_schema
+from .flow_settings import (
+    _default_payload,
+    _entry_payload,
+    _expand_settings_input,
+    _should_apply_modbus_config,
+    entry_defaults,
+)
+from .flow_state import (
+    _AddressesNotUnique,
+    _AlreadyConfigured,
+    _CannotConnect,
+    _CannotConnectModbus,
+    _CannotResolveLocalIp,
+    _InvalidApiCredentials,
+    _InvalidHost,
+    _InvalidPort,
+    _MissingApiPassword,
+    _PendingFlowState,
+    _ScanIntervalTooShort,
+    _SunSpecSwitchNeeded,
+    _UnsupportedHardware,
+)
 from .fronius_modbus_api.device import FroniusInverter
 from .froniuswebclient import (
     ClientIpResolutionError,
     FroniusWebClient,
     FroniusWebResponseError,
+    SunSpecModeChangeNeeded,
     mint_token,
 )
 from .token_store import (
@@ -67,128 +80,12 @@ type _FlowFinishCallback = Callable[
     [dict[str, Any], dict[str, Any], str | None],
     Awaitable[Any],
 ]
+
+
 type _FlowRestartCallback = Callable[[], Awaitable[Any]]
+
+
 type _HostClaim = Callable[[dict[str, Any]], Awaitable[None]]
-
-
-@dataclass(slots=True)
-class _PendingFlowState:
-    settings: dict[str, Any]
-    previous_host: str | None
-    apply_modbus_config: bool
-    # Set when the password step is shown although a token exists (Configure):
-    # an empty password then keeps this token (audit F11).
-    existing_token: dict[str, str] | None = None
-
-
-class _CannotConnect(exceptions.HomeAssistantError):
-    """Error to indicate we cannot connect."""
-
-
-class _CannotConnectModbus(exceptions.HomeAssistantError):
-    """Modbus did not answer, and without the web API nothing switched it on."""
-
-
-class _InvalidHost(exceptions.HomeAssistantError):
-    """Error to indicate there is an invalid hostname."""
-
-
-class _InvalidPort(exceptions.HomeAssistantError):
-    """Error to indicate there is an invalid port."""
-
-
-class _UnsupportedHardware(exceptions.HomeAssistantError):
-    """Error to indicate there is unsupported hardware."""
-
-
-class _AddressesNotUnique(exceptions.HomeAssistantError):
-    """Error to indicate that the modbus addresses are not unique."""
-
-
-class _AlreadyConfigured(exceptions.HomeAssistantError):
-    """Another entry already serves the host being configured."""
-
-
-class _ScanIntervalTooShort(exceptions.HomeAssistantError):
-    """Error to indicate the scan interval is too short."""
-
-
-class _MissingApiPassword(exceptions.HomeAssistantError):
-    """Error to indicate the Web API password is required."""
-
-
-class _InvalidApiCredentials(exceptions.HomeAssistantError):
-    """Error to indicate Fronius web API credentials are invalid."""
-
-
-class _CannotResolveLocalIp(exceptions.HomeAssistantError):
-    """Error to indicate the local IP for Modbus restriction cannot be resolved."""
-
-
-def _default_payload() -> dict[str, Any]:
-    return {
-        CONF_NAME: DEFAULT_NAME,
-        CONF_HOST: "",
-        CONF_PORT: DEFAULT_PORT,
-        CONF_INVERTER_UNIT_ID: DEFAULT_INVERTER_UNIT_ID,
-        CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL,
-        CONF_WEB_SCAN_INTERVAL: DEFAULT_WEB_SCAN_INTERVAL,
-        CONF_API_USERNAME: API_USERNAME,
-        CONF_AUTO_ENABLE_MODBUS: DEFAULT_AUTO_ENABLE_MODBUS,
-        CONF_MODBUS_RESTRICTION: ModbusRestriction.KEEP,
-    }
-
-
-def _expand_settings_input(
-    user_input: dict[str, Any],
-    defaults: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    payload = _default_payload()
-    if defaults:
-        payload.update(defaults)
-    payload[CONF_HOST] = str(user_input.get(CONF_HOST, payload[CONF_HOST])).strip()
-    payload[CONF_SCAN_INTERVAL] = int(
-        user_input.get(CONF_SCAN_INTERVAL, payload[CONF_SCAN_INTERVAL])
-    )
-    payload[CONF_MODBUS_RESTRICTION] = ModbusRestriction(
-        user_input.get(CONF_MODBUS_RESTRICTION, payload[CONF_MODBUS_RESTRICTION])
-    )
-    payload[CONF_WEB_SCAN_INTERVAL] = int(
-        user_input.get(CONF_WEB_SCAN_INTERVAL, payload[CONF_WEB_SCAN_INTERVAL])
-    )
-    username = (
-        str(user_input.get(CONF_API_USERNAME, payload[CONF_API_USERNAME]))
-        .strip()
-        .lower()
-    )
-    choices = (*API_USERNAMES, WEB_API_DISABLED)
-    payload[CONF_API_USERNAME] = username if username in choices else API_USERNAME
-    payload.pop(CONF_API_PASSWORD, None)
-    payload.pop("meter_modbus_unit_id", None)
-    payload.pop("meter_modbus_unit_ids", None)
-    return payload
-
-
-def _entry_payload(
-    data: dict[str, Any], *, reconfigure_required: bool
-) -> dict[str, Any]:
-    payload = dict(data)
-    payload.pop(CONF_API_PASSWORD, None)
-    payload.pop("meter_modbus_unit_id", None)
-    payload.pop("meter_modbus_unit_ids", None)
-    payload[CONF_RECONFIGURE_REQUIRED] = reconfigure_required
-    return payload
-
-
-def entry_defaults(entry: config_entries.ConfigEntry) -> dict[str, Any]:
-    defaults = {**entry.data, **entry.options}
-    try:
-        defaults[CONF_SCAN_INTERVAL] = int(
-            defaults.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
-        )
-    except TypeError, ValueError:
-        defaults[CONF_SCAN_INTERVAL] = DEFAULT_SCAN_INTERVAL
-    return _expand_settings_input({}, defaults)
 
 
 _FORM_ERRORS: dict[type[Exception], tuple[str, str]] = {
@@ -225,30 +122,6 @@ def _validate_static_input(data: dict[str, Any]) -> None:
     if len(all_addresses) > len(set(all_addresses)):
         _LOGGER.error("Modbus addresses are not unique %s", all_addresses)
         raise _AddressesNotUnique
-
-
-def _should_apply_modbus_config(
-    settings: dict[str, Any],
-    previous_settings: dict[str, Any] | None,
-) -> bool:
-    if previous_settings is None:
-        return True
-    # Without a login nothing was written, so the saved choices were never
-    # applied to the inverter (audit R6D-01).
-    if previous_settings.get(CONF_API_USERNAME) == WEB_API_DISABLED:
-        return True
-
-    return (
-        settings[CONF_HOST] != previous_settings.get(CONF_HOST, "")
-        or settings[CONF_PORT] != previous_settings.get(CONF_PORT, DEFAULT_PORT)
-        or settings[CONF_INVERTER_UNIT_ID]
-        != previous_settings.get(CONF_INVERTER_UNIT_ID, DEFAULT_INVERTER_UNIT_ID)
-        or settings[CONF_MODBUS_RESTRICTION]
-        != previous_settings.get(
-            CONF_MODBUS_RESTRICTION,
-            ModbusRestriction.KEEP,
-        )
-    )
 
 
 async def _async_load_token(
@@ -300,6 +173,7 @@ async def _async_prepare_web_api(
     api_token: dict[str, str] | None,
     apply_modbus_config: bool,
     claim_host: Callable[[], Awaitable[None]] | None,
+    switch_sunspec_mode: bool,
 ) -> None:
     """Log in, and switch Modbus on where the flow asks for it.
 
@@ -321,13 +195,17 @@ async def _async_prepare_web_api(
         return
     if claim_host is not None:
         await claim_host()
-    await hass.async_add_executor_job(
-        client.ensure_modbus_enabled,
-        data[CONF_PORT],
-        DEFAULT_METER_UNIT_ID,
-        data[CONF_INVERTER_UNIT_ID],
-        data[CONF_MODBUS_RESTRICTION],
-    )
+    try:
+        await hass.async_add_executor_job(
+            client.ensure_modbus_enabled,
+            data[CONF_PORT],
+            DEFAULT_METER_UNIT_ID,
+            data[CONF_INVERTER_UNIT_ID],
+            data[CONF_MODBUS_RESTRICTION],
+            switch_sunspec_mode,
+        )
+    except SunSpecModeChangeNeeded as err:
+        raise _SunSpecSwitchNeeded(err.current_mode) from err
     # The inverter restarts its Modbus server after the settings write.
     await asyncio.sleep(1.0)
 
@@ -340,6 +218,7 @@ async def _validate_input(
     api_token: dict[str, str] | None = None,
     apply_modbus_config: bool = False,
     claim_host: Callable[[], Awaitable[None]] | None = None,
+    switch_sunspec_mode: bool = False,
 ) -> dict[str, Any]:
     """Validate the user input allows us to connect."""
     _validate_static_input(data)
@@ -351,7 +230,13 @@ async def _validate_input(
     try:
         if web_api:
             await _async_prepare_web_api(
-                hass, data, api_password, api_token, apply_modbus_config, claim_host
+                hass,
+                data,
+                api_password,
+                api_token,
+                apply_modbus_config,
+                claim_host,
+                switch_sunspec_mode,
             )
         async with async_get_temporary_unit(
             hass,
@@ -361,7 +246,12 @@ async def _validate_input(
             identity = await FroniusInverter.async_probe(unit)
     except ClientIpResolutionError as err:
         raise _CannotResolveLocalIp from err
-    except _InvalidApiCredentials, _AlreadyConfigured, data_entry_flow.AbortFlow:
+    except (
+        _InvalidApiCredentials,
+        _AlreadyConfigured,
+        _SunSpecSwitchNeeded,
+        data_entry_flow.AbortFlow,
+    ):
         raise
     except (
         ModbusError,
@@ -467,12 +357,90 @@ class TokenFlowMixin:
             description_placeholders=placeholders,
         )
 
+    async def _async_show_sunspec_step(
+        self,
+        *,
+        step_id: str,
+        errors: dict[str, str] | None = None,
+    ):
+        state = self._pending_flow_state
+        assert state is not None
+        return self.async_show_form(
+            step_id=step_id,
+            data_schema=vol.Schema({}),
+            errors=errors or {},
+            description_placeholders={
+                "entry_title": entry_title(state.settings),
+                "host": str(state.settings.get(CONF_HOST, "")),
+                "mode": str(state.sunspec_mode),
+            },
+        )
+
+    async def _async_ask_sunspec_switch(
+        self,
+        needed: _SunSpecSwitchNeeded,
+        state: _PendingFlowState,
+        token: dict[str, str] | None,
+        *,
+        minted: bool,
+        step_id: str,
+    ):
+        """Hold the flow where it stopped and ask before switching the model type."""
+        state.login_token = token
+        state.token_minted = minted
+        state.sunspec_mode = needed.mode
+        self._pending_flow_state = state
+        return await self._async_show_sunspec_step(step_id=step_id)
+
+    async def _async_handle_sunspec_step(
+        self,
+        *,
+        user_input: dict[str, Any] | None,
+        step_id: str,
+        restart_step: _FlowRestartCallback,
+        claim_host: _HostClaim,
+        on_success: _FlowFinishCallback,
+    ):
+        """Switch the model type once the owner agreed, then finish as asked.
+
+        Nothing was written before the question, and a flow left here writes
+        nothing: a minted token is kept only when the flow finishes.
+        """
+        errors: dict[str, str] = {}
+        state = self._pending_flow_state
+        if state is None or state.sunspec_mode is None:
+            return await restart_step()
+
+        if user_input is not None:
+            try:
+                await claim_host(state.settings)
+                info = await _validate_input(
+                    self.hass,
+                    state.settings,
+                    api_token=state.login_token,
+                    apply_modbus_config=state.apply_modbus_config,
+                    claim_host=lambda: claim_host(state.settings),
+                    switch_sunspec_mode=True,
+                )
+                self._pending_flow_state = None
+                minted = state.login_token if state.token_minted else None
+                return await self._async_finish_with_token(
+                    on_success, state, info, minted
+                )
+            except data_entry_flow.AbortFlow:
+                raise
+            except Exception as err:  # pylint: disable=broad-except
+                _set_form_error(errors, err)
+
+        return await self._async_show_sunspec_step(step_id=step_id, errors=errors)
+
     async def _async_handle_settings_step(
         self,
         *,
         user_input: dict[str, Any] | None,
         step_id: str,
         password_step_id: str,
+        sunspec_step_id: str,
         defaults: dict[str, Any],
         previous_host: str | None,
         previous_settings: dict[str, Any] | None,
@@ -516,13 +484,22 @@ class TokenFlowMixin:
                         step_id=password_step_id
                     )
 
-                info = await _validate_input(
-                    self.hass,
-                    settings,
-                    api_token=token,
-                    apply_modbus_config=apply_modbus_config,
-                    claim_host=lambda: claim_host(settings),
-                )
+                try:
+                    info = await _validate_input(
+                        self.hass,
+                        settings,
+                        api_token=token,
+                        apply_modbus_config=apply_modbus_config,
+                        claim_host=lambda: claim_host(settings),
+                    )
+                except _SunSpecSwitchNeeded as needed:
+                    return await self._async_ask_sunspec_switch(
+                        needed,
+                        _PendingFlowState(settings, previous_host, apply_modbus_config),
+                        token,
+                        minted=False,
+                        step_id=sunspec_step_id,
+                    )
                 self._pending_flow_state = None
                 return await on_success(settings, info, previous_host)
             except data_entry_flow.AbortFlow:
@@ -548,6 +525,7 @@ class TokenFlowMixin:
         *,
         user_input: dict[str, Any] | None,
         step_id: str,
+        sunspec_step_id: str,
         restart_step: _FlowRestartCallback,
         claim_host: _HostClaim,
         on_success: _FlowFinishCallback,
@@ -570,13 +548,18 @@ class TokenFlowMixin:
                     token = await _async_mint_token(
                         self.hass, state.settings[CONF_HOST], password, username
                     )
-                info = await _validate_input(
-                    self.hass,
-                    state.settings,
-                    api_token=token,
-                    apply_modbus_config=state.apply_modbus_config,
-                    claim_host=lambda: claim_host(state.settings),
-                )
+                try:
+                    info = await _validate_input(
+                        self.hass,
+                        state.settings,
+                        api_token=token,
+                        apply_modbus_config=state.apply_modbus_config,
+                        claim_host=lambda: claim_host(state.settings),
+                    )
+                except _SunSpecSwitchNeeded as needed:
+                    return await self._async_ask_sunspec_switch(
+                        needed, state, token, minted=minted, step_id=sunspec_step_id
+                    )
                 self._pending_flow_state = None
                 return await self._async_finish_with_token(
                     on_success, state, info, token if minted else None
@@ -724,6 +707,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
             user_input=user_input,
             step_id="user",
             password_step_id="user_password",
+            sunspec_step_id="user_sunspec",
             defaults={**_default_payload(), CONF_HOST: self._discovered_host},
             previous_host=None,
             previous_settings=None,
@@ -736,6 +720,16 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
         return await self._async_handle_password_step(
             user_input=user_input,
             step_id="user_password",
+            sunspec_step_id="user_sunspec",
+            restart_step=self.async_step_user,
+            claim_host=self._async_claim_new_host,
+            on_success=self._async_finish_user,
+        )
+
+    async def async_step_user_sunspec(self, user_input=None):
+        return await self._async_handle_sunspec_step(
+            user_input=user_input,
+            step_id="user_sunspec",
             restart_step=self.async_step_user,
             claim_host=self._async_claim_new_host,
             on_success=self._async_finish_user,
@@ -748,6 +742,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
             user_input=user_input,
             step_id="reconfigure",
             password_step_id="reconfigure_password",
+            sunspec_step_id="reconfigure_sunspec",
             defaults=defaults,
             previous_host=defaults[CONF_HOST],
             previous_settings=defaults,
@@ -760,6 +755,16 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
         return await self._async_handle_password_step(
             user_input=user_input,
             step_id="reconfigure_password",
+            sunspec_step_id="reconfigure_sunspec",
+            restart_step=self.async_step_reconfigure,
+            claim_host=self._async_claim_reconfigured_host,
+            on_success=self._async_finish_reconfigure,
+        )
+
+    async def async_step_reconfigure_sunspec(self, user_input=None):
+        return await self._async_handle_sunspec_step(
+            user_input=user_input,
+            step_id="reconfigure_sunspec",
             restart_step=self.async_step_reconfigure,
             claim_host=self._async_claim_reconfigured_host,
             on_success=self._async_finish_reconfigure,
@@ -797,6 +802,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
             user_input=user_input,
             step_id="reauth_confirm",
             password_step_id="reauth_password",
+            sunspec_step_id="reauth_sunspec",
             defaults=defaults,
             previous_host=defaults[CONF_HOST],
             previous_settings=defaults,
@@ -810,6 +816,16 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
         return await self._async_handle_password_step(
             user_input=user_input,
             step_id="reauth_password",
+            sunspec_step_id="reauth_sunspec",
+            restart_step=self.async_step_reauth_confirm,
+            claim_host=self._async_claim_reauth_host,
+            on_success=self._async_finish_reauth,
+        )
+
+    async def async_step_reauth_sunspec(self, user_input=None):
+        return await self._async_handle_sunspec_step(
+            user_input=user_input,
+            step_id="reauth_sunspec",
             restart_step=self.async_step_reauth_confirm,
             claim_host=self._async_claim_reauth_host,
             on_success=self._async_finish_reauth,
@@ -846,6 +862,7 @@ class FroniusModbusOptionsFlow(TokenFlowMixin, config_entries.OptionsFlow):
             user_input=user_input,
             step_id="init",
             password_step_id="password",
+            sunspec_step_id="sunspec",
             defaults=defaults,
             previous_host=defaults[CONF_HOST],
             previous_settings=defaults,
@@ -860,6 +877,16 @@ class FroniusModbusOptionsFlow(TokenFlowMixin, config_entries.OptionsFlow):
         return await self._async_handle_password_step(
             user_input=user_input,
             step_id="password",
+            sunspec_step_id="sunspec",
+            restart_step=self.async_step_init,
+            claim_host=self._async_claim_host,
+            on_success=self._async_finish_options,
+        )
+
+    async def async_step_sunspec(self, user_input=None):
+        return await self._async_handle_sunspec_step(
+            user_input=user_input,
+            step_id="sunspec",
             restart_step=self.async_step_init,
             claim_host=self._async_claim_host,
             on_success=self._async_finish_options,

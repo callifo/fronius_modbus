@@ -10,3 +10,5 @@ __pycache__/**
 .ruff_cache/
 .mypy_cache/
 .coverage
+# Output of tools/inverter_dump.ps1: the inverter's data, never part of the repository.
+tools/fronius-dump-*.json

@@ -52,6 +52,14 @@ Assert-True ((Protect-One '{"dns":[["192.168.1.1"]],"other":true}').Contains('"o
 
 # -- what JSON is, on both PowerShell versions -----------------------------------
 
+# JSON numbers are ASCII digits only; .NET's \d also takes other scripts' digits.
+$arabicOne = [string][char]0x0661
+foreach ($foreignDigits in @("[1$arabicOne]", "[1e$arabicOne]")) {
+    $out = Protect-One $foreignDigits
+    Assert-True ($out.StartsWith('"')) "$foreignDigits is kept as a string"
+    Assert-True (Test-ValidJson $out) "$foreignDigits as a string is valid JSON"
+}
+
 foreach ($notJson in @('{foo:1}', "{'foo':'bar'}", '{"a":01}', '[1,]', '{"a" "b"}', '"', 'True', '[-]', ('[1' + [char]0xA0 + ']'), '{"a":1}}', '')) {
     $out = Protect-One $notJson
     Assert-True ($out.StartsWith('"')) "$notJson is kept as a string"
@@ -70,6 +78,13 @@ Assert-True (-not $bodies[0].Contains('ABCD1234')) "a value found in a later ans
 
 $errorText = Protect-One 'No such host is known. (inverter.example:80)' 'inverter.example'
 Assert-True (-not $errorText.Contains('inverter.example')) "the host in an error text is redacted: $errorText"
+
+$upper = Protect-One 'No such host is known. (inverter.example:80)' 'INVERTER.EXAMPLE'
+Assert-True (-not $upper.Contains('inverter.example')) "the host is redacted in another spelling: $upper"
+
+$short = Protect-One '{"pv_power":1,"note":"host pv down"}' 'pv'
+Assert-True ($short.Contains('"pv_power"')) "a short host does not cut field names: $short"
+Assert-True (-not $short.Contains('host pv down')) "a short host is redacted as a word: $short"
 
 $network = Protect-One '{"gateway":"192.168.250.1","ipAddress":"192.168.250.181","other":"192.168.250.10"}'
 Assert-True (-not ($network -match '<redacted>\d')) "an address is not cut to a remainder: $network"

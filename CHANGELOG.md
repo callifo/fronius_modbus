@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- `Active event`, `Active events` and `Inverter event` show the events the web interface shows a customer login, whatever login the entry uses: an event of the technician or service level could stay active for weeks there without the owner finding it anywhere (#39).
+- The Modbus sensor `Events` is `Event severity` ("Ereignisstufe"), so it no longer reads like the active events next to it. Its entity id does not change.
+
+### Added
+- `Active service event`, `Active service events` and `Service event`, disabled by default: the technician and service level events the web interface hides from a customer login.
+
 ## 1.2.0b6
 
 A beta on 1.2.0b5 that brings the inverter's own events into Home Assistant, reads the extra modules, fans and temperatures a larger inverter reports, names the module sensors as the inverter's web interface does, and asks before the setup switches the inverter's SunSpec model type. No migration; unique ids and entity ids do not change.

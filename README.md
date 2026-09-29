@@ -252,18 +252,21 @@ Where the states come from, measured on a GEN24 and a Verto:
 
 ### Inverter events
 
-Modbus reports events only as severity bits, and none that only the service level sees. The inverter's own web interface lists every event with its code, its time and a text; the integration reads that list without a login, so an entry without the web API has it too.
+Modbus reports events only as severity bits (`Event severity`), and none that only the service level sees. The inverter's own web interface lists every event with its code, its time and a text; the integration reads that list without a login, so an entry without the web API has it too.
+
+The inverter keeps events of three levels: the customer's, the technician's and the service's. Its web interface shows a customer login the customer level alone, and so do these entities, whatever login the entry uses. An event of the other levels can stay active for weeks without a visible effect, such as a failed arc-fault self test or an unreachable network gateway. The service entities show them; they start disabled.
 
 | Entity | Type | What it shows |
 | ------ | ---- | ------------- |
-| Active event | sensor, diagnostic | The text of the leading active event: an error before a warning before an info, the newest among equals. `OK` while none is active; unknown while the list could not be read. The attributes carry its `code` (such as `GEN24-1009`), `text`, `severity`, `visible_to` (`customer`, `technician` or `service`), `since` and `confirmable`, and the other active events under `other_events`. |
-| Active events | sensor, diagnostic | How many events are active. |
-| Inverter event | event | Fires once for every new entry of the inverter's event log, with the severity as its event type (`error`, `warning`, `info`, or `unclassified` for a severity in no known form) and the same attributes. It catches entries that last no time at all and never show as active, such as a short battery fault. Unavailable while the log does not answer. |
+| Active event | sensor, diagnostic | The text of the leading active customer event: an error before a warning before an info, the newest among equals. `OK` while none is active; unknown while the list could not be read. The attributes carry its `code` (such as `GEN24-1175`), `text`, `severity`, `visible_to`, `since` and `confirmable`, and the other active customer events under `other_events`. |
+| Active events | sensor, diagnostic | How many customer events are active. |
+| Inverter event | event | Fires once for every new customer entry of the inverter's event log, with the severity as its event type (`error`, `warning`, `info`, or `unclassified` for a severity in no known form) and the same attributes. It catches entries that last no time at all and never show as active, such as a short battery fault. Unavailable while the log does not answer. |
+| Active service event, Active service events, Service event | sensor, sensor, event; disabled by default | The same for the technician and service levels, which the web interface hides from a customer login. `visible_to` tells the level (`technician` or `service`). |
 
 - The texts come from the inverter itself, in Home Assistant's language, and in English where the inverter has none in that language; a code without a text shows its short name. They are read once: after changing Home Assistant's language, reload the entry.
 - The active events are read with every web poll; the log (about 60 KB) at the first web poll after 5 minutes have passed, and again at the next poll when it did not answer. An entry therefore arrives up to 5 minutes plus one web interval late (longer while the web API fails), with its own time in `since`.
 - The log is read once at start without firing: entries from before, and from while Home Assistant was off, do not fire. When the web API fails before that first read, the first read that succeeds fires the entries that started after the failure, by the inverter's clock.
-- `severity` and `visible_to` are read from the inverter's log, not documented by Fronius: the nightly "not enough DC power" is a warning a customer sees, the daily isolation measurement an info. Events of the service level show too; the web interface shows them to its service login only.
+- `severity` and `visible_to` are read from the inverter's log, not documented by Fronius: the nightly "not enough DC power" is a warning a customer sees, the daily isolation measurement an info of the technician level. Compared with the web interface's event list, a customer login is shown the customer level alone.
 - The integration does not confirm events. The few that need it (such as too many shutdowns in backup mode) are meant to bring someone to the system; confirm them in the inverter's web interface.
 
 ### Inverter controls

@@ -533,8 +533,6 @@ automation:
 ## References
 
 - https://www.fronius.com/~/downloads/Solar%20Energy/Operating%20Instructions/42,0410,2649.pdf
-- https://github.com/binsentsu/home-assistant-solaredge-modbus/
-- https://github.com/bigramonk/byd_charging
 
 ## Development
 

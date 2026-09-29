@@ -8,7 +8,18 @@ gate noticed, since Python and ruff read either ending.
 import pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-TEXT_SUFFIXES = {".py", ".md", ".json", ".toml", ".yaml", ".yml", ".txt", ".sh"}
+TEXT_SUFFIXES = {
+    ".py",
+    ".md",
+    ".json",
+    ".toml",
+    ".yaml",
+    ".yml",
+    ".txt",
+    ".sh",
+    ".ps1",
+    ".bat",
+}
 SKIPPED_DIRECTORIES = {
     ".git",
     "__pycache__",

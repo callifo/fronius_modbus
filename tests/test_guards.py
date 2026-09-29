@@ -243,6 +243,10 @@ TOOL_INVOCATIONS = {
         "check_min_ha.py",
     ),
     "mutate.py": ("mutate.py .github/mutations", "mutate.py .github/mutations"),
+    "inverter_dump.tests.ps1": (
+        "run: pwsh -NoProfile -File tools/inverter_dump.tests.ps1",
+        "pwsh -NoProfile -File tools/inverter_dump.tests.ps1",
+    ),
 }
 
 WORKFLOW = REPO / ".github" / "workflows" / "test.yaml"

@@ -159,6 +159,8 @@ Set during setup; change them later with **Configure** or **Reconfigure** on the
 
 ## Entities
 
+The entities are grouped into devices: the inverter, the battery storage, and each smart meter.
+
 ### Inverter sensors
 
 | Entity                  | Description                                                                                                 |
@@ -527,19 +529,6 @@ automation:
 2. The stored Web API token for the entry's host and role is deleted with it, unless another entry still uses them.
 3. The Modbus settings the integration enabled on the inverter (Modbus TCP, SunSpec mode, IP restriction) stay as they are; change them in the inverter's web UI if you no longer need them.
 4. For a HACS installation, remove the integration in HACS as well.
-
-## Example devices
-
-The entities are grouped into devices: the inverter, the battery storage, and each smart meter.
-
-Battery Storage
-![battery storage](images/example_batterystorage.jpg?raw=true "storage")
-
-Smart Meter
-![smart meter](images/example_meter.jpg?raw=true "meter")
-
-Inverter
-![inverter](images/example_inverter.jpg?raw=true "inverter")
 
 ## References
 

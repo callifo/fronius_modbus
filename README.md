@@ -108,6 +108,7 @@ The integration stores a derived digest token in Home Assistant storage, readabl
 With the Web API login, the integration can:
 
 - enable Modbus TCP during setup and relevant configuration changes
+- switch the SunSpec model type to `int + SF`, the one the integration reads. When the inverter uses `float`, the setup asks first: an external device that reads the float models may no longer work after the switch. Declining leaves the inverter as it is and ends the setup.
 - handle the Modbus IP restriction of auto-enabled Modbus TCP by choice (see [Configuration](#configuration))
 - leave the rest of the inverter's Modbus settings alone: the RS485 ports keep their master or slave role, and the `TCP & RTU` mode stays as it is
 - derive configured smart meter addresses from `/api/components/PowerMeter/readable`

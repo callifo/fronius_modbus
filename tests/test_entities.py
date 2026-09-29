@@ -849,6 +849,20 @@ async def test_the_service_sensors_show_the_rest(hass, entry, connection):
     assert count.value_fn(runtime) == 1
 
 
+async def test_technician_and_unknown_level_events_go_to_the_service_sensors(
+    hass, entry, connection
+):
+    """The web interface shows its customer login the customer level alone."""
+    runtime = await make_runtime(hass, entry, connection)
+    isolation = _event("d", "GEN24-1001", "info", "technician", 1790480000, "Iso")
+    unknown = _event("e", "GEN24-9999", "warning", None, 1790490000, "Neu")
+    with_active_events(runtime, (isolation, unknown))
+    descriptions = entities.sensor_descriptions(runtime)
+
+    assert _description(descriptions, "active_events").value_fn(runtime) == 0
+    assert _description(descriptions, "active_service_events").value_fn(runtime) == 2
+
+
 async def test_the_service_entities_start_disabled(hass, entry, connection):
     runtime = await make_runtime(hass, entry, connection)
     with_active_events(runtime, ())

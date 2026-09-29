@@ -1804,5 +1804,12 @@
     "old": "            entity_registry_enabled_default=audience == CUSTOMER,\n",
     "new": "            entity_registry_enabled_default=True,\n",
     "tests": "service_entities_start_disabled"
+  },
+  {
+    "label": "event entities: the service sees the technician level and an unknown one",
+    "path": "custom_components/fronius_modbus/event_entities.py",
+    "old": "    return (event.visible_to == CUSTOMER_LEVEL) == (audience == CUSTOMER)\n",
+    "new": "    return event.visible_to == (CUSTOMER_LEVEL if audience == CUSTOMER else \"service\")\n",
+    "tests": "technician_and_unknown_level_events"
   }
 ]

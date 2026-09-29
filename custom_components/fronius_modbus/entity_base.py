@@ -23,7 +23,7 @@ from .coordinator import (
     assume_present,
 )
 from .derived import TotalGuard
-from .entities import DeviceKind, FroniusDescription, WebClientKind
+from .descriptions import DeviceKind, FroniusDescription, WebClientKind
 from .fronius_modbus_api.exceptions import ControlRefused, ControlUnavailable
 from .froniuswebclient import FroniusWebUnreachable
 

@@ -1467,3 +1467,65 @@ async def test_a_host_taken_during_the_model_type_question_is_refused(
     assert result["reason"] == "already_configured"
     assert len(contacted) == contacted_before
     assert applied == []
+
+
+def _host_taken_during_the_probe(hass, monkeypatch, host: str) -> None:
+    """Another entry takes ``host`` while the flow probes the inverter: after every check."""
+    original_probe = config_flow.FroniusInverter.async_probe
+
+    async def probe(unit):
+        other = make_entry(hass)
+        hass.config_entries.async_update_entry(
+            other, data={**other.data, "host": host}, unique_id=host
+        )
+        return await original_probe(unit)
+
+    monkeypatch.setattr(config_flow.FroniusInverter, "async_probe", probe)
+
+
+async def test_a_host_taken_after_the_answer_shows_its_error(
+    hass, mock_modbus, monkeypatch
+):
+    """The finish found the duplicate; the form that showed it had lost its state."""
+    source = make_entry(hass)
+    target = "192.0.2.20"
+    _float_map(monkeypatch)
+    result = await hass.config_entries.options.async_init(source.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {"host": target, "modbus_restriction": "off", "api_username": "customer"},
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+    assert result["step_id"] == "sunspec"
+    _host_taken_during_the_probe(hass, monkeypatch, target)
+
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+
+    assert result["step_id"] == "sunspec"
+    assert result["errors"] == {"base": "already_configured"}
+    assert config_flow.entry_defaults(source)["host"] == HOST
+
+
+async def test_the_password_step_keeps_its_state_after_a_late_error(
+    hass, mock_modbus, monkeypatch
+):
+    """Its form came back without the entry it asked for, and the next try restarted."""
+    source = make_entry(hass)
+    target = "192.0.2.20"
+    result = await hass.config_entries.options.async_init(source.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {"host": target, "modbus_restriction": "off", "api_username": "customer"},
+    )
+    assert result["step_id"] == "password"
+    _host_taken_during_the_probe(hass, monkeypatch, target)
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+
+    assert result["step_id"] == "password"
+    assert result["errors"] == {"base": "already_configured"}
+    assert result["description_placeholders"]["host"] == target

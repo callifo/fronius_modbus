@@ -87,7 +87,8 @@ $LongNumber = '^-?\d{12,}$'
 $MinKnownLength = 4
 $IPv4 = '^\d{1,3}(\.\d{1,3}){3}$'
 # One JSON token each; the last alternative catches what JSON does not allow.
-$JsonToken = '"(?:[^"\\\x00-\x1f]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*"|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null|[{}\[\]:,]|[ \t\r\n]+|.'
+# [0-9], not \d: .NET's \d takes the digits of every script, JSON only ASCII.
+$JsonToken = '"(?:[^"\\\x00-\x1f]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*"|-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?|true|false|null|[{}\[\]:,]|[ \t\r\n]+|.'
 $JsonEscape = @{ '"' = '"'; '\' = '\'; '/' = '/'; 'b' = [string][char]8; 'f' = [string][char]12; 'n' = "`n"; 'r' = "`r"; 't' = "`t" }
 
 # SunSpec starts at 40000 with "SunS"; the inverter answers as unit 1. A read
@@ -203,11 +204,19 @@ function Protect-Text([string]$Value) {
     return $script:PatternExpression.Replace($Value, $Redacted)
 }
 
+function Get-HostPattern([string]$HostName) {
+    # A word of its own: a host named "pv" took "pv_power" apart.
+    if ($HostName -match $IPv4) { return Get-KnownPattern $HostName }
+    return '(?<![\w-])' + [regex]::Escape($HostName) + '(?![\w-])'
+}
+
 function Set-KnownValues {
     # The longest first, so that a value inside another does not cut it.
     $patterns = @($script:Known | Sort-Object Length -Descending | ForEach-Object { Get-KnownPattern $_ })
+    if ($script:HostName) { $patterns = @(Get-HostPattern $script:HostName) + $patterns }
     $script:KnownExpression = $null
-    if ($patterns) { $script:KnownExpression = New-Object regex (($patterns -join '|'), 'Compiled') }
+    # Any spelling: .NET writes the host in lower case into its error texts.
+    if ($patterns) { $script:KnownExpression = New-Object regex (($patterns -join '|'), 'Compiled, IgnoreCase') }
     $script:PatternExpression = New-Object regex (($SensitivePattern -join '|'), 'Compiled')
 }
 
@@ -357,7 +366,7 @@ function ConvertTo-ExportBodies([string[]]$Bodies, [bool]$Redact, [string]$HostN
     Redacting reads all bodies twice: a serial number found under its key in
     one answer is replaced in every answer, also in those read before it. #>
     $script:Known = New-Object 'System.Collections.Generic.HashSet[string]'
-    if ($HostName) { [void]$script:Known.Add($HostName) }
+    $script:HostName = $HostName
     $script:Redacting = $Redact
     $script:Collecting = $true
     if ($Redact) {

@@ -36,7 +36,7 @@ jobs:
       # a build nobody changed. Raise it deliberately, together with the local
       # run.
       - name: Install Ruff
-        run: pip install "ruff==0.16.5"
+        run: pip install "ruff==0.16.9"
       - name: Lint
         run: ruff check .
       # The formatting only stays put if something checks it.

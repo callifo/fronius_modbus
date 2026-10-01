@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 1.2.0
+
+First stable release of 1.2. It contains everything from the six 1.2.0 pre-releases below, and the changes here on 1.2.0b6. Entries from 1.1.x migrate on their own to minor version 14; unique ids and entity ids do not change. Automations that wait for the throttle states `export_limit` or `active_power_control` need the new states: neither is reported any more (see 1.2.0b5).
 
 ### Changed
 - `Active event`, `Active events` and `Inverter event` show the events the web interface shows a customer login, whatever login the entry uses: an event of the technician or service level could stay active for weeks there without the owner finding it anywhere (#39).

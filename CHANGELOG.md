@@ -7,7 +7,7 @@
 - The Modbus sensor `Events` is `Event severity` ("Ereignisstufe"), so it no longer reads like the active events next to it. Its entity id does not change.
 
 ### Added
-- `Active service event`, `Active service events` and `Service event`, disabled by default: the technician and service level events the web interface hides from a customer login.
+- `Active service event`, `Active service events` and `Service event`, disabled by default: the technician and service level events, and those of a level in no known form, which the web interface hides from a customer login.
 
 ## 1.2.0b6
 

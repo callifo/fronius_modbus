@@ -331,6 +331,15 @@
       "inverter_temperature": {
         "name": "Temperature"
       },
+      "ac_mod_temperature": {
+        "name": "AC Module Temperature"
+      },
+      "dc_mod_temperature": {
+        "name": "DC Module Temperature"
+      },
+      "batt_mod_temperature": {
+        "name": "Battery Module Temperature"
+      },
       "api_modbus_mode": {
         "name": "Web API Modbus mode"
       },

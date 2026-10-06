@@ -118,7 +118,7 @@ def _parse_storage_readable(payload: Any) -> dict[str, Any]:
 
 
 def _parse_inverter_readable(payload: Any) -> dict[str, Any]:
-    info: dict[str, Any] = {"temperature": None}
+    info: dict[str, Any] = {"temperature": None, "ac_mod_temperature": None, "dc_mod_temperature": None, "batt_mod_temperature": None}
     nodes, _ = _body_data(payload, "Body", "Data")
     if not isinstance(nodes, dict):
         return info
@@ -134,6 +134,15 @@ def _parse_inverter_readable(payload: Any) -> dict[str, Any]:
     value = channels.get("DEVICE_TEMPERATURE_AMBIENTMEAN_01_F32")
     if isinstance(value, (int, float)):
         info["temperature"] = float(value)
+    value = channels.get("MODULE_TEMPERATURE_MEAN_01_F32")
+    if isinstance(value, (int, float)):
+        info["ac_mod_temperature"] = float(value)
+    value = channels.get("MODULE_TEMPERATURE_MEAN_03_F32")
+    if isinstance(value, (int, float)):
+        info["dc_mod_temperature"] = float(value)
+    value = channels.get("MODULE_TEMPERATURE_MEAN_04_F32")
+    if isinstance(value, (int, float)):
+        info["batt_mod_temperature"] = float(value)
     return info
 
 

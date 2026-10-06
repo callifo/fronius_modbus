@@ -149,6 +149,9 @@ INVERTER_SENSOR_TYPES = {
 
 INVERTER_WEB_SENSOR_TYPES = {
     'inverter_temperature': ['inverter_temperature', 'inverter_temperature', SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, '°C', 'mdi:thermometer', None],
+    'ac_mod_temperature': ['ac_mod_temperature', 'ac_mod_temperature', SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, '°C', 'mdi:thermometer', None],
+    'dc_mod_temperature': ['dc_mod_temperature', 'dc_mod_temperature', SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, '°C', 'mdi:thermometer', None],
+    'batt_mod_temperature': ['batt_mod_temperature', 'batt_mod_temperature', SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, '°C', 'mdi:thermometer', None],
     'export_soft_limit': ['export_soft_limit', 'export_soft_limit', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:transmission-tower-export', None],
     'api_modbus_mode': ['api_modbus_mode', 'api_modbus_mode', None, None, None, None, EntityCategory.DIAGNOSTIC],
     'api_modbus_control': ['api_modbus_control', 'api_modbus_control', None, None, None, None, EntityCategory.DIAGNOSTIC],

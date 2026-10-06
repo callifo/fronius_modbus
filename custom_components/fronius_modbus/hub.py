@@ -83,6 +83,9 @@ def _export_limit_summary(config: dict[str, Any] | None) -> dict[str, Any]:
 
 WEB_API_DATA_KEYS = (
     "inverter_temperature",
+    "ac_mod_temperature",
+    "dc_mod_temperature",
+    "batt_mod_temperature",
     "api_modbus_mode",
     "api_modbus_control",
     "api_modbus_sunspec_mode",
@@ -858,8 +861,14 @@ class Hub:
         inverter_info = await self._async_web_job(self._webclient.get_inverter_info)
         if isinstance(inverter_info, dict):
             self.data["inverter_temperature"] = inverter_info.get("temperature")
+            self.data["ac_mod_temperature"] = inverter_info.get("ac_mod_temperature")
+            self.data["dc_mod_temperature"] = inverter_info.get("dc_mod_temperature")
+            self.data["batt_mod_temperature"] = inverter_info.get("batt_mod_temperature")
         else:
             self.data["inverter_temperature"] = None
+            self.data["ac_mod_temperature"] = None
+            self.data["dc_mod_temperature"] = None
+            self.data["batt_mod_temperature"] = None
 
         modbus_config = await self._async_web_job(self._webclient.get_modbus_config)
         if isinstance(modbus_config, dict):

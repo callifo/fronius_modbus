@@ -1540,3 +1540,26 @@ async def test_an_outage_names_no_host_in_logs_or_diagnostics(
     assert diagnostics["failed"]
     assert HOST not in repr(diagnostics["failed"])
     assert HOST not in caplog.text
+
+
+async def test_the_owner_can_delete_a_device_the_inverter_no_longer_reports(
+    hass, mock_modbus
+):
+    """Audit F32: an empty device of a removed meter stayed, with no Delete button."""
+    entry = make_entry(hass)
+    await setup_entry(hass, entry)
+    registry = dr.async_get(hass)
+    key = instance_key(entry.entry_id)
+    gone = registry.async_get_or_create(
+        config_entry_id=entry.entry_id, identifiers={(DOMAIN, f"{key}_meter_205")}
+    )
+    inverter = next(
+        device
+        for device in dr.async_entries_for_config_entry(registry, entry.entry_id)
+        if (DOMAIN, f"{key}_inverter") in device.identifiers
+    )
+
+    assert await fronius_modbus.async_remove_config_entry_device(hass, entry, gone)
+    assert not await fronius_modbus.async_remove_config_entry_device(
+        hass, entry, inverter
+    )

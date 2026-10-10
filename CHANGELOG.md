@@ -19,6 +19,7 @@
 - Configure, Reconfigure and a new login put the generated title back over a title the owner had given the entry. Only a generated title now follows the settings, as it already did when the inverter moved to a new address.
 - A second setup of an inverter whose setup was still open aborted with the raw key `already_in_progress`; it now has a text.
 - An enum sensor whose device value no option names failed its state write on every poll; it reads unknown now. The inverter's active controls (`StActCtl`) sent such a value for a control beyond the first three.
+- The inverter's address still reached the log and the diagnostics: through the pollers' names, which were the entry title, and through the Modbus library's connection error. Both now name no host, as 1.0.0b3 promised.
 
 ## 1.2.0
 

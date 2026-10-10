@@ -429,8 +429,8 @@
   {
     "label": "coordinator: a quiet sub-system is logged at info",
     "path": "custom_components/fronius_modbus/coordinator.py",
-    "old": "            if isinstance(err, NO_ANSWER):\n                _LOGGER.info(\"%s does not answer: %s\", name, err)",
-    "new": "            if isinstance(err, NO_ANSWER):\n                _LOGGER.warning(\"%s does not answer: %s\", name, err)",
+    "old": "            if isinstance(err, NO_ANSWER):\n                _LOGGER.info(\"%s does not answer: %s\", name, error_text(err))",
+    "new": "            if isinstance(err, NO_ANSWER):\n                _LOGGER.warning(\"%s does not answer: %s\", name, error_text(err))",
     "tests": "a_meter_that_stops_answering_is_logged_once_at_info_and_on_return"
   },
   {
@@ -1444,8 +1444,8 @@
   {
     "label": "coordinator: a tolerated outage is no warning",
     "path": "custom_components/fronius_modbus/coordinator.py",
-    "old": "            _LOGGER.debug(\"Modbus outage tolerated after a web write: %s\", err)\n",
-    "new": "            _LOGGER.warning(\"Modbus outage tolerated after a web write: %s\", err)\n",
+    "old": "            _LOGGER.debug(\n                \"Modbus outage tolerated after a web write: %s\", error_text(err)\n            )\n",
+    "new": "            _LOGGER.warning(\n                \"Modbus outage tolerated after a web write: %s\", error_text(err)\n            )\n",
     "tests": "tolerated_outage_is_no_warning"
   },
   {
@@ -1881,5 +1881,26 @@
     "old": "        if options is None or value is None or value in options:\n",
     "new": "        if True:\n",
     "tests": "enum_value_outside_its_options_reads_unknown"
+  },
+  {
+    "label": "exceptions: a transport error shows by its kind alone",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/exceptions.py",
+    "old": "    if isinstance(err, (ModbusConnectionError, ModbusTimeoutError)):\n",
+    "new": "    if False:\n",
+    "tests": "names_no_host_in_logs_or_diagnostics"
+  },
+  {
+    "label": "coordinator: a cut cause stays out of the traceback",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "        cause = err if text == str(err) else None\n",
+    "new": "        cause = err\n",
+    "tests": "names_no_host_in_logs_or_diagnostics"
+  },
+  {
+    "label": "coordinator: the coordinator's name holds no host",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "            name=f\"{entry.entry_id} Modbus\",\n",
+    "new": "            name=f\"{entry.title} Modbus\",\n",
+    "tests": "names_no_host_in_logs_or_diagnostics"
   }
 ]

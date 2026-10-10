@@ -28,6 +28,7 @@ from .const import (
     instance_key,
 )
 from .fronius_modbus_api.device import FroniusInverter
+from .fronius_modbus_api.exceptions import error_text
 from .token_store import async_get_token_store, canonical_host
 
 _LOGGER = logging.getLogger(__name__)
@@ -79,7 +80,7 @@ async def async_serial_at(
         ) as unit:
             identity = await FroniusInverter.async_probe(unit)
     except (ModbusError, HomeAssistantError, OSError, TimeoutError) as err:
-        _LOGGER.debug("No inverter read for an announced move: %s", err)
+        _LOGGER.debug("No inverter read for an announced move: %s", error_text(err))
         return None
     return identity.serial
 

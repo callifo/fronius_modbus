@@ -24,7 +24,11 @@ from .coordinator import (
 )
 from .derived import TotalGuard
 from .descriptions import DeviceKind, FroniusDescription, WebClientKind
-from .fronius_modbus_api.exceptions import ControlRefused, ControlUnavailable
+from .fronius_modbus_api.exceptions import (
+    ControlRefused,
+    ControlUnavailable,
+    error_text,
+)
 from .froniuswebclient import FroniusWebUnreachable
 
 _LOGGER = logging.getLogger(__name__)
@@ -214,7 +218,7 @@ class FroniusEntity(
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="write_failed",
-                translation_placeholders={"error": str(err)},
+                translation_placeholders={"error": error_text(err)},
             ) from err
 
 

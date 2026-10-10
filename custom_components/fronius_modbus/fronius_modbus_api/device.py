@@ -22,7 +22,7 @@ from modbus_connection.model.sunspec import (
     scan,
 )
 
-from .exceptions import IncompleteChainError, NotAFroniusInverter
+from .exceptions import IncompleteChainError, NotAFroniusInverter, error_text
 from .sunspec_models import (
     COMMON_MODEL_ID,
     COMMON_SERIAL_WORDS,
@@ -339,7 +339,9 @@ class FroniusInverter:
             # Only "no such device" is an absence. A timeout, a busy meter or a
             # device failure leave the question open (audit F03/C03): try again
             # on every poll, and say so in the report.
-            _LOGGER.debug("Meter on unit %s did not answer yet: %s", unit_id, err)
+            _LOGGER.debug(
+                "Meter on unit %s did not answer yet: %s", unit_id, error_text(err)
+            )
             undecided[unit_id] = meter_unit
             return
         undecided.pop(unit_id, None)
@@ -418,7 +420,7 @@ class FroniusInverter:
         except ModbusConnectionError:
             raise
         except (ModbusError, NotAFroniusInverter) as err:
-            _LOGGER.debug("Discovery is still incomplete: %s", err)
+            _LOGGER.debug("Discovery is still incomplete: %s", error_text(err))
 
     async def _async_update_component(self, name: str, report: UpdateReport) -> None:
         """Refresh one component and file the outcome under its report name.

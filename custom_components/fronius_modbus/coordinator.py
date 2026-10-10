@@ -31,7 +31,7 @@ from .fronius_modbus_api.device import (
     UpdateReport,
     meter_report_name,
 )
-from .fronius_modbus_api.exceptions import ControlUnavailable
+from .fronius_modbus_api.exceptions import ControlUnavailable, error_text
 from .fronius_modbus_api.storage import ExtendedMode, StorageControl
 from .fronius_modbus_api.sunspec_models import AcMeter
 from .froniuswebclient import FroniusWebUnreachable
@@ -222,7 +222,8 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
             hass,
             _LOGGER,
             config_entry=entry,
-            name=f"{entry.title} Modbus",
+            # The title holds the host, and the coordinator logs its name.
+            name=f"{entry.entry_id} Modbus",
             update_interval=interval,
         )
         self.device = device
@@ -279,7 +280,9 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
         if self.data is not None and time.monotonic() < self._tolerate_until:
             # Expected: the inverter restarts its Modbus server after a web write.
             # An outage outliving the window fails the update below instead.
-            _LOGGER.debug("Modbus outage tolerated after a web write: %s", err)
+            _LOGGER.debug(
+                "Modbus outage tolerated after a web write: %s", error_text(err)
+            )
             self._tolerated_failures += 1
             return replace(self.data, retained=True)
         if self._tolerated_failures:
@@ -291,7 +294,11 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
             self._tolerate_until = 0.0
             await self.device.unit.disconnect()
         failure = DeviceUnreachable if isinstance(err, NO_ANSWER) else UpdateFailed
-        raise failure(f"Modbus communication failure: {err}") from err
+        text = error_text(err)
+        # A cause whose text was cut would bring it back in the coordinator's
+        # debug traceback.
+        cause = err if text == str(err) else None
+        raise failure(f"Modbus communication failure: {text}") from cause
 
     def _log_sub_system_changes(self, report: UpdateReport) -> None:
         """Log each sub-system once when it drops out and once when it is back.
@@ -303,9 +310,9 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
         for name in sorted(report.failed.keys() - self._failed):
             err = report.failed[name]
             if isinstance(err, NO_ANSWER):
-                _LOGGER.info("%s does not answer: %s", name, err)
+                _LOGGER.info("%s does not answer: %s", name, error_text(err))
             else:
-                _LOGGER.warning("%s refused the read: %s", name, err)
+                _LOGGER.warning("%s refused the read: %s", name, error_text(err))
         for name in sorted(self._failed & set(report.updated)):
             _LOGGER.info("%s answers again", name)
         self._failed = frozenset(report.failed)
@@ -434,7 +441,7 @@ class FroniusWebCoordinator(DataUpdateCoordinator["WebData"]):
             hass,
             _LOGGER,
             config_entry=entry,
-            name=f"{entry.title} web API",
+            name=f"{entry.entry_id} web API",
             update_interval=interval,
         )
         self.web_control = web_control

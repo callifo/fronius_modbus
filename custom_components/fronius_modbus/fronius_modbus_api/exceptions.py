@@ -1,6 +1,18 @@
 """Errors the device library raises on its own account."""
 
-from modbus_connection import ModbusError
+from modbus_connection import ModbusConnectionError, ModbusError, ModbusTimeoutError
+
+
+def error_text(err: BaseException) -> str:
+    """An error as logs and reports show it: a transport error by its kind alone.
+
+    The library writes the target, host and port, into a connect error's text,
+    and Home Assistant logs and diagnostics travel with public bug reports
+    (audit F07).
+    """
+    if isinstance(err, (ModbusConnectionError, ModbusTimeoutError)):
+        return type(err).__name__
+    return str(err)
 
 
 class NotAFroniusInverter(ModbusError):

@@ -67,6 +67,7 @@ from .flow_state import (
     _UnsupportedHardware,
 )
 from .fronius_modbus_api.device import FroniusInverter
+from .fronius_modbus_api.exceptions import error_text
 from .froniuswebclient import (
     ClientIpResolutionError,
     FroniusWebClient,
@@ -266,7 +267,7 @@ async def _validate_input(
         OSError,
         TimeoutError,
     ) as err:
-        _LOGGER.error("Cannot reach inverter: %s", err)
+        _LOGGER.error("Cannot reach inverter: %s", error_text(err))
         if not web_api:
             raise _CannotConnectModbus from err
         raise _CannotConnect from err

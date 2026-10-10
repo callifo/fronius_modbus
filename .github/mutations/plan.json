@@ -1846,5 +1846,12 @@
     "old": "            or (entity_entry.domain, new_unique_id) in taken\n",
     "new": "            or any(taken_id == new_unique_id for _, taken_id in taken)\n",
     "tests": "both_twins_of_a_legacy_unique_id"
+  },
+  {
+    "label": "device: the incomplete chain's note hides no outage",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "            failed = report.failed.keys() - {REPORT_DISCOVERY}\n",
+    "new": "            failed = report.failed.keys()\n",
+    "tests": "silent_link_behind_an_incomplete_chain"
   }
 ]

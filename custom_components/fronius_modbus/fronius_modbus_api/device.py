@@ -431,7 +431,11 @@ class FroniusInverter:
         except ModbusConnectionError:
             raise
         except ModbusTimeoutError as err:
-            if not report.updated and not report.failed:
+            # The first sub-system to time out with nothing answered yet means
+            # the link is down. The incomplete chain's note is no answer; it
+            # stood in every report and hid every outage (audit F06).
+            failed = report.failed.keys() - {REPORT_DISCOVERY}
+            if not report.updated and not failed:
                 raise
             report.failed[name] = err
         except ModbusError as err:

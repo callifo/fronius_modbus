@@ -1598,8 +1598,8 @@
   {
     "label": "web control: event texts fall back to English",
     "path": "custom_components/fronius_modbus/web_control.py",
-    "old": "            for candidate in dict.fromkeys((EVENT_TEXTS_FALLBACK_LANGUAGE, language)):\n",
-    "new": "            for candidate in (language,):\n",
+    "old": "        for candidate in dict.fromkeys((EVENT_TEXTS_FALLBACK_LANGUAGE, language)):\n",
+    "new": "        for candidate in (language,):\n",
     "tests": "event_texts_missing_in_a_language_fall_back_to_english or english_one"
   },
   {
@@ -1626,8 +1626,8 @@
   {
     "label": "web control: the language's text wins over the English one",
     "path": "custom_components/fronius_modbus/web_control.py",
-    "old": "            for candidate in dict.fromkeys((EVENT_TEXTS_FALLBACK_LANGUAGE, language)):\n",
-    "new": "            for candidate in dict.fromkeys((language, EVENT_TEXTS_FALLBACK_LANGUAGE)):\n",
+    "old": "        for candidate in dict.fromkeys((EVENT_TEXTS_FALLBACK_LANGUAGE, language)):\n",
+    "new": "        for candidate in dict.fromkeys((language, EVENT_TEXTS_FALLBACK_LANGUAGE)):\n",
     "tests": "names_the_active_events_in_the_language_of_home_assistant"
   },
   {
@@ -1923,5 +1923,12 @@
     "old": "        self.data = WebData(\n            **{field: getattr(self.data, field) for field in _PUBLIC_FIELDS}\n        )\n",
     "new": "        self.data = WebData()\n",
     "tests": "keeps_the_public_readings_of_its_poll"
+  },
+  {
+    "label": "web control: a failed text file is asked again",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "            answered = answered and answer is not None\n",
+    "new": "",
+    "tests": "failed_once_is_read_again"
   }
 ]

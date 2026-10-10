@@ -593,14 +593,22 @@ class FroniusWebControl:
         A language file lacks some codes (the German one 200 of 944); those
         read in English rather than as a bare short name.
         """
-        if self._event_texts is None:
-            language = self._hass.config.language.split("-")[0].lower()
-            merged: dict[str, str] = {}
-            for candidate in dict.fromkeys((EVENT_TEXTS_FALLBACK_LANGUAGE, language)):
-                path = EVENT_TEXTS_PATH.format(language=candidate)
-                merged |= event_texts(await self._async_public_read(path))
-            self._event_texts = merged or None
-        return self._event_texts or {}
+        if self._event_texts is not None:
+            return self._event_texts
+        language = self._hass.config.language.split("-")[0].lower()
+        merged: dict[str, str] = {}
+        answered = True
+        for candidate in dict.fromkeys((EVENT_TEXTS_FALLBACK_LANGUAGE, language)):
+            answer = await self._async_public_read(
+                EVENT_TEXTS_PATH.format(language=candidate)
+            )
+            # A file that failed is asked again; one the firmware lacks is not
+            # (audit F15).
+            answered = answered and answer is not None
+            merged |= event_texts(answer)
+        if answered:
+            self._event_texts = merged
+        return merged
 
     async def _async_public_read(self, path: str) -> Any:
         return await self._async_client_job("get_optional_json", path, public=True)

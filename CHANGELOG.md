@@ -23,6 +23,7 @@
 - The web login's hash (md5 or sha256), learned once per inverter, outlived a device that changed it, for example a replaced unit at the same address: every login failed until Home Assistant restarted. A refused login now asks the device again.
 - A battery setting written while its entry was reloaded or removed started a web refresh of the unloaded entry ten seconds later.
 - A web login lost in the middle of a poll threw away what that poll had already read without a login: the component sensors and the active events were unknown until the next poll.
+- A language file of the event texts that failed to load once kept the events in English, or as bare short names, until the entry was reloaded. A file that failed is now read again at the next poll.
 
 ## 1.2.0
 

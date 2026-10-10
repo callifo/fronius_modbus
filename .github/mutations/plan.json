@@ -823,7 +823,7 @@
     "path": "custom_components/fronius_modbus/flow_entry.py",
     "old": "    if changed and loaded:\n        return\n",
     "new": "",
-    "tests": "a_reconfigure_reloads_the_entry_once"
+    "tests": "a_reconfigure_reloads_the_entry_once or reloads_a_loaded_entry_once_per_run"
   },
   {
     "label": "migrations: the dropped role takes its token with it",
@@ -1838,7 +1838,7 @@
     "path": "custom_components/fronius_modbus/config_flow.py",
     "old": "        await _async_reload_unless_listened(\n            self.hass, self.config_entry, changed=changed, loaded=loaded\n        )\n",
     "new": "",
-    "tests": "reloads_what_no_listener_reloads"
+    "tests": "reloads_what_no_listener_reloads or reloads_a_loaded_entry_once_per_run"
   },
   {
     "label": "migrations: a legacy twin is migrated per platform",

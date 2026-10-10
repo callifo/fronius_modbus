@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 from modbus_connection import (
     IllegalDataAddressError,
@@ -1459,3 +1460,54 @@ async def test_a_dark_mppt_at_a_restart_keeps_its_sensors(
     assert (
         entity_id_for(hass, entry, "sensor", f"mppt_module_0_{suffix}") == original_id
     )
+
+
+async def test_configure_reloads_a_loaded_entry_once_per_run(
+    hass, mock_modbus, monkeypatch
+):
+    """Audit F04: a new password alone reloaded nothing; a change must not reload twice."""
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    entry = make_entry(hass)
+    await setup_entry(hass, entry)
+    monkeypatch.setattr(
+        config_flow, "_validate_input", AsyncMock(return_value={"title": "Fronius"})
+    )
+    monkeypatch.setattr(
+        config_flow,
+        "_async_mint_token",
+        AsyncMock(return_value={"realm": "r", "token": "new"}),
+    )
+    setups = []
+    setup = hass.config_entries.async_setup
+
+    async def counted_setup(entry_id, *args, **kwargs):
+        setups.append(entry_id)
+        return await setup(entry_id, *args, **kwargs)
+
+    monkeypatch.setattr(hass.config_entries, "async_setup", counted_setup)
+    defaults = config_flow.entry_defaults(entry)
+    settings = {
+        key: defaults[key]
+        for key in (
+            "host",
+            "scan_interval",
+            "web_scan_interval",
+            "modbus_restriction",
+            "api_username",
+        )
+    }
+
+    # The first run writes the options; the second changes nothing but the token.
+    for runs in (1, 2):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], settings
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"api_password": "secret"}
+        )
+        await hass.async_block_till_done()
+
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert entry.state is ConfigEntryState.LOADED
+        assert len(setups) == runs

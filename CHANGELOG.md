@@ -22,11 +22,16 @@
 - Configure, Reconfigure and a new login put the generated title back over a title the owner had given the entry. Only a generated title now follows the settings, as it already did when the inverter moved to a new address.
 - A second setup of an inverter whose setup was still open aborted with the raw key `already_in_progress`; it now has a text.
 - An enum sensor whose device value no option names failed its state write on every poll; it reads unknown now. The inverter's active controls (`StActCtl`) sent such a value for a control beyond the first three.
-- The inverter's address still reached the log and the diagnostics: through the pollers' names, which were the entry title, and through the Modbus library's connection error. Both now name no host, as 1.0.0b3 promised.
+- The inverter's address still reached the log and the diagnostics: through the pollers' names, which were the entry title, through the Modbus library's connection error, and through the error of a control that could not be switched back on. The integration's own log lines and the diagnostics now name no host, as 1.0.0b3 promised. Home Assistant's own setup messages still name the entry by its title, which holds the address unless the owner renamed it.
 - The web login's hash (md5 or sha256), learned once per inverter, outlived a device that changed it, for example a replaced unit at the same address: every login failed until Home Assistant restarted. A refused login now asks the device again.
 - A battery setting written while its entry was reloaded or removed started a web refresh of the unloaded entry ten seconds later.
 - A web login lost in the middle of a poll threw away what that poll had already read without a login: the component sensors and the active events were unknown until the next poll.
 - A language file of the event texts that failed to load once kept the events in English, or as bare short names, until the entry was reloaded. A file that failed is now read again at the next poll.
+- Selecting `Charge from Grid` or `Discharge to Grid` again before the next poll set the grid power back to what that poll had read, so an automation that re-asserts its mode undid the power it had just set; entering one of them could also bring back the power of an earlier visit. Entering a grid mode now starts at 0 W, as documented, and selecting it again keeps the power.
+- Updating from callifo 0.3.0 or older, or from 0.1.9, while an MPPT string was dark deleted that string's sensors with the names the owner had given them. They are now migrated like the others.
+- Updating from callifo 0.3.0 or older replaced a title the owner had given the entry with the generated one.
+- A charge limit of 0 W in `Block discharging`, or a discharge limit of 0 W in `Block charging`, blocks both directions, which the inverter refuses; the owner got a bare Modbus error. Such a value is now refused with a reason.
+- An entry set up while the MPPT strings were dark, for example at night, got their current, voltage and power sensors only at the next restart. It now reloads once a string sends a value.
 
 ## 1.2.0
 

@@ -79,7 +79,7 @@ because the thing it prevents happened, here or in a sibling project.
 | `test_icon_translations.py` | No entity sets its icon in code; every `icons.json` entry names a translation key an entity carries and has an `mdi:` default |
 | `test_parallel_updates.py` | Every platform declares `PARALLEL_UPDATES`: 0 for the readers and the numbers (their write paths serialise themselves, and a burst must reach them together), 1 for the other writers |
 | `test_step_texts.py` | No repair step shows a text copied from another flow, and the steps rendered by the settings form use no placeholder it cannot fill |
-| `test_secret_scan.py` | The gitleaks allowlist for translation keys does not hide a token on the same line (needs the gitleaks binary; skips without it) |
+| `test_secret_scan.py` | The gitleaks allowlist for translation keys does not hide a token on the same line (needs the gitleaks binary: without it the tests skip locally and fail in CI, where the pytest job installs a pinned one) |
 
 ### test_log_hygiene.py
 

@@ -42,7 +42,7 @@ class ExtendedMode(IntEnum):
     BLOCK_CHARGING = 7
 
 
-# extended mode -> (StorCtl_Mod, InWRte %, OutWRte %); grid modes keep the rate the user set.
+# extended mode -> (StorCtl_Mod, InWRte %, OutWRte %); a grid mode is entered at 0 W.
 _MODE_TABLE: dict[ExtendedMode, tuple[int, float, float]] = {
     ExtendedMode.AUTO: (MODE_AUTO, FULL_RATE_PCT, FULL_RATE_PCT),
     ExtendedMode.PV_CHARGE_LIMIT: (MODE_CHARGE, FULL_RATE_PCT, FULL_RATE_PCT),
@@ -66,6 +66,11 @@ DISCHARGE_LIMIT_MODES = {
     ExtendedMode.DISCHARGE_LIMIT,
     ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT,
     ExtendedMode.BLOCK_CHARGING,
+}
+# The rate each grid mode leaves to the user, as its grid power.
+_GRID_POWER_FIELDS = {
+    ExtendedMode.CHARGE_FROM_GRID: "out_w_rte",
+    ExtendedMode.DISCHARGE_TO_GRID: "in_w_rte",
 }
 
 
@@ -245,10 +250,6 @@ class StorageControl:
         """Write the mode/rate combination behind the extended mode, then own it."""
         async with self._write_lock:
             sunspec_mode, in_rate, out_rate = _MODE_TABLE[mode]
-            if mode is ExtendedMode.CHARGE_FROM_GRID:
-                out_rate = -(self.grid_charge_power_pct or 0.0)
-            if mode is ExtendedMode.DISCHARGE_TO_GRID:
-                in_rate = -(self.grid_discharge_power_pct or 0.0)
             # The device refuses a read for a moment right after a write (real
             # GEN24, fw 1.38.6-1: exception 4 on the block read that follows).
             # The coordinator's next poll picks the new values up instead.
@@ -261,6 +262,12 @@ class StorageControl:
                 [("in_w_rte", in_rate), ("out_w_rte", out_rate)],
                 key=lambda write: -write[1],
             )
+            # Entering a grid mode starts its power at 0 W; selecting it again
+            # leaves the power as set. The last poll may not hold the power
+            # written since, nor the one of a mode left since (reaudit RC-01).
+            if mode is self._extended_mode:
+                kept = _GRID_POWER_FIELDS.get(mode)
+                rate_writes = [write for write in rate_writes if write[0] != kept]
             writes = [("stor_ctl_mod", sunspec_mode), *rate_writes]
             holding = await registers_holding(self._storage, dict(writes))
             for field_name, value in writes:

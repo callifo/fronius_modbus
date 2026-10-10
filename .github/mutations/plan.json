@@ -2049,5 +2049,12 @@
     "old": "        await self.async_run_write(lambda: self.entity_description.press(self._runtime))\n",
     "new": "        pass\n",
     "tests": "run_their_own_action"
+  },
+  {
+    "label": "storage: selecting a grid mode again keeps its power",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            if mode is self._extended_mode:\n                kept = _GRID_POWER_FIELDS.get(mode)\n",
+    "new": "            if False:\n                kept = _GRID_POWER_FIELDS.get(mode)\n",
+    "tests": "keeps_the_power_just_written"
   }
 ]

@@ -8,6 +8,7 @@ from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from .const import UNKNOWN_STATE
 from .coordinator import FroniusConfigEntry
 from .entities import FroniusSensorDescription, sensor_descriptions
 from .entity_base import FroniusEntity, FroniusTotalSensor
@@ -52,8 +53,17 @@ class FroniusSensor(FroniusEntity, SensorEntity):
 
     @property
     def native_value(self):
-        """The description's value for the current runtime."""
-        return self.entity_description.value_fn(self._runtime)
+        """The description's value; for an enum, one of its options or unknown.
+
+        A state outside the options fails every state write. A flag or code
+        the device sends that no option names reads as unknown, as an
+        unmapped code does (audit F21).
+        """
+        value = self.entity_description.value_fn(self._runtime)
+        options = self.entity_description.options
+        if options is None or value is None or value in options:
+            return value
+        return UNKNOWN_STATE if UNKNOWN_STATE in options else None
 
 
 async def async_setup_entry(

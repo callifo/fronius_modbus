@@ -310,7 +310,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
     ),
     _sensor(
         "inverter_controls",
-        "control_mode",
+        "inverter_controls",
         report_name=REPORT_STATUS,
         value_fn=lambda r: bitmask_to_string(
             assume_present(r.device.status).st_act_ctl, INVERTER_CONTROLS, "normal"

@@ -265,7 +265,17 @@
         "name": "Netzfrequenz"
       },
       "inverter_controls": {
-        "name": "Steuermodus"
+        "name": "Steuermodus",
+        "state": {
+          "normal": "Normal",
+          "power_reduction": "Leistungsreduzierung",
+          "constant_reactive_power": "Konstante Blindleistung",
+          "constant_power_factor": "Konstanter Leistungsfaktor",
+          "power_reduction_constant_reactive_power": "Leistungsreduzierung,Konstante Blindleistung",
+          "power_reduction_constant_power_factor": "Leistungsreduzierung,Konstanter Leistungsfaktor",
+          "constant_reactive_power_constant_power_factor": "Konstante Blindleistung,Konstanter Leistungsfaktor",
+          "power_reduction_constant_reactive_power_constant_power_factor": "Leistungsreduzierung,Konstante Blindleistung,Konstanter Leistungsfaktor"
+        }
       },
       "vref": {
         "name": "Referenzspannung"
@@ -398,15 +408,7 @@
           "auto": "Automatisch",
           "charge": "Ladebetrieb",
           "discharge": "Entladebetrieb",
-          "charge_and_discharge": "Lade-/Entladebetrieb",
-          "normal": "Normal",
-          "power_reduction": "Leistungsreduzierung",
-          "constant_reactive_power": "Konstante Blindleistung",
-          "constant_power_factor": "Konstanter Leistungsfaktor",
-          "power_reduction_constant_reactive_power": "Leistungsreduzierung,Konstante Blindleistung",
-          "power_reduction_constant_power_factor": "Leistungsreduzierung,Konstanter Leistungsfaktor",
-          "constant_reactive_power_constant_power_factor": "Konstante Blindleistung,Konstanter Leistungsfaktor",
-          "power_reduction_constant_reactive_power_constant_power_factor": "Leistungsreduzierung,Konstante Blindleistung,Konstanter Leistungsfaktor"
+          "charge_and_discharge": "Lade-/Entladebetrieb"
         }
       },
       "charge_status": {

@@ -265,7 +265,17 @@
         "name": "Line frequency"
       },
       "inverter_controls": {
-        "name": "Control mode"
+        "name": "Control mode",
+        "state": {
+          "normal": "Normal",
+          "power_reduction": "Power reduction",
+          "constant_reactive_power": "Constant reactive power",
+          "constant_power_factor": "Constant power factor",
+          "power_reduction_constant_reactive_power": "Power reduction,Constant reactive power",
+          "power_reduction_constant_power_factor": "Power reduction,Constant power factor",
+          "constant_reactive_power_constant_power_factor": "Constant reactive power,Constant power factor",
+          "power_reduction_constant_reactive_power_constant_power_factor": "Power reduction,Constant reactive power,Constant power factor"
+        }
       },
       "vref": {
         "name": "Reference voltage"
@@ -398,15 +408,7 @@
           "auto": "Auto",
           "charge": "Charge",
           "discharge": "Discharge",
-          "charge_and_discharge": "Charge and Discharge",
-          "normal": "Normal",
-          "power_reduction": "Power reduction",
-          "constant_reactive_power": "Constant reactive power",
-          "constant_power_factor": "Constant power factor",
-          "power_reduction_constant_reactive_power": "Power reduction,Constant reactive power",
-          "power_reduction_constant_power_factor": "Power reduction,Constant power factor",
-          "constant_reactive_power_constant_power_factor": "Constant reactive power,Constant power factor",
-          "power_reduction_constant_reactive_power_constant_power_factor": "Power reduction,Constant reactive power,Constant power factor"
+          "charge_and_discharge": "Charge and Discharge"
         }
       },
       "charge_status": {

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Changed
+- The inverter's active controls sensor (`StActCtl`: power reduction, constant reactive power, constant power factor) is `Control mode` ("Steuermodus"), not `Core storage control mode`, the name of the storage sensor beside it. Its entity id does not change.
+
 ### Fixed
 - Enabling Modbus TCP on an inverter whose Modbus server served RTU alone switched it to TCP alone and cut off the device reading it over RS485. It now becomes `TCP & RTU`.
 - A second storage mode change before the next poll could pass through a rate window the inverter refuses (both rates at or below zero), for example Charge from Grid followed quickly by Block Charging; the inverter stayed in the old mode. The rates are now ordered by the target, not by the last poll (upstream #126).
@@ -14,6 +17,7 @@
 - `tools/inverter_dump.bat` learned harmless words from a field description (`_psk_meta`: "String", "Password") and from a sensitive object's settings (an address mode "manual"), then cut them out of every answer, keys included: channel names broke apart and option lists lost entries. It now learns only the values right under a sensitive key; everything beneath one is still replaced.
 - Configure, Reconfigure and a new login put the generated title back over a title the owner had given the entry. Only a generated title now follows the settings, as it already did when the inverter moved to a new address.
 - A second setup of an inverter whose setup was still open aborted with the raw key `already_in_progress`; it now has a text.
+- An enum sensor whose device value no option names failed its state write on every poll; it reads unknown now. The inverter's active controls (`StActCtl`) sent such a value for a control beyond the first three.
 
 ## 1.2.0
 

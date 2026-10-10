@@ -1874,5 +1874,12 @@
     "old": "        if value is None and key not in runtime.registered_keys:\n",
     "new": "        if value is None:\n",
     "tests": "dark_mppt_at_a_restart_keeps_its_sensors"
+  },
+  {
+    "label": "sensor: an enum value outside its options reads unknown",
+    "path": "custom_components/fronius_modbus/sensor.py",
+    "old": "        if options is None or value is None or value in options:\n",
+    "new": "        if True:\n",
+    "tests": "enum_value_outside_its_options_reads_unknown"
   }
 ]

@@ -85,6 +85,8 @@ echo "== pytest =="
 # web client and the repair flows were covered - the config flow is what is
 # left. It is a floor, not a target: raise it when coverage rises, never lower
 # it to get past a red run.
+# The Modbus libraries an installation runs: the ones core's modbus pins.
+"$PYTHON" .github/scripts/core_modbus_pins.py --check
 "$PYTHON" -m pytest tests/ -q -m "" --cov=custom_components/fronius_modbus --cov-report=term:skip-covered --cov-fail-under=90
 
 # The second Home Assistant version is optional because its interpreter
@@ -101,6 +103,7 @@ if [ -n "$MIN_HA_PYTHON" ]; then
     # full suite on it: a local venv is pinned by hand and ages quietly.
     echo "== minimum Home Assistant version =="
     "$MIN_HA_PYTHON" .github/scripts/check_min_ha.py
+    "$MIN_HA_PYTHON" .github/scripts/core_modbus_pins.py --check
 
     echo "== pytest (minimum Home Assistant) =="
     "$MIN_HA_PYTHON" -m pytest tests/ -q -m ""

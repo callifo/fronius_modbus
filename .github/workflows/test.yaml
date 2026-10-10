@@ -177,8 +177,13 @@ jobs:
           # the timeout that stops a hung run is exactly what must not depend
           # on some other package still happening to pull it in.
           pip install "$PHCC_SPEC" pytest-timeout -r requirements.txt
+          # The Modbus libraries core pins, not the newest: an installation
+          # shares core's connection and runs these (audit F29).
+          pip install $(python .github/scripts/core_modbus_pins.py)
       - name: Show the Home Assistant version under test
         run: python -c "from homeassistant.const import __version__; print(__version__)"
+      - name: The Modbus libraries must be the ones core pins
+        run: python .github/scripts/core_modbus_pins.py --check
       - name: The minimum job must run the version hacs.json declares
         if: matrix.check-declared-minimum
         run: python .github/scripts/check_min_ha.py

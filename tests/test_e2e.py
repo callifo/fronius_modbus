@@ -1373,3 +1373,42 @@ async def test_service_events_reach_only_the_service_entities(
 
     assert hass.states.get(service_id).attributes["code"] == "GEN24-1186"
     assert hass.states.get(customer_id).attributes.get("event_type") is None
+
+
+# Keys that 0.3.0 and earlier registered on two platforms under one unique id.
+LEGACY_TWINS = [
+    ("sensor", "Conn"),
+    ("select", "Conn"),
+    ("sensor", "ac_limit_enable"),
+    ("select", "ac_limit_enable"),
+    ("sensor", "ac_limit_rate"),
+    ("number", "ac_limit_rate"),
+    ("sensor", "soc_minimum"),
+    ("number", "soc_minimum"),
+    ("sensor", "export_soft_limit"),
+    ("number", "export_soft_limit"),
+]
+
+
+async def test_both_twins_of_a_legacy_unique_id_keep_their_entity_ids(
+    hass, mock_modbus, monkeypatch
+):
+    """Audit F05: only one twin per key was migrated; the other was deleted."""
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    entry = make_entry(hass)
+    registry = er.async_get(hass)
+    originals = {
+        (domain, key): registry.async_get_or_create(
+            domain,
+            DOMAIN,
+            f"fm_fronius__{key}",
+            config_entry=entry,
+            suggested_object_id=f"legacy_{key}",
+        ).entity_id
+        for domain, key in LEGACY_TWINS
+    }
+
+    await setup_entry(hass, entry)
+
+    for (domain, key), entity_id in originals.items():
+        assert entity_id_for(hass, entry, domain, key) == entity_id

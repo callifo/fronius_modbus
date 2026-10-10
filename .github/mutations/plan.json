@@ -1871,8 +1871,8 @@
   {
     "label": "mppt: a registered sensor survives a missing value",
     "path": "custom_components/fronius_modbus/mppt_entities.py",
-    "old": "        if value is None and key not in runtime.registered_keys:\n",
-    "new": "        if value is None:\n",
+    "old": "    return value is None and key not in runtime.registered_keys\n",
+    "new": "    return value is None\n",
     "tests": "dark_mppt_at_a_restart_keeps_its_sensors"
   },
   {
@@ -2098,5 +2098,19 @@
     "old": "            other_rate = out_rate if field_name == \"in_w_rte\" else in_rate\n",
     "new": "            other_rate = in_rate if field_name == \"in_w_rte\" else out_rate\n",
     "tests": "blocks_both_ways_is_refused"
+  },
+  {
+    "label": "setup: a string lit after setup reloads the entry",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "        scheduled = True\n        hass.config_entries.async_schedule_reload(entry.entry_id)\n",
+    "new": "        scheduled = True\n",
+    "tests": "gets_its_sensor_once_lit"
+  },
+  {
+    "label": "setup: only a string that sends a value reloads",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "        if scheduled or not left_out - left_out_mppt_keys(runtime):\n",
+    "new": "        if scheduled:\n",
+    "tests": "gets_its_sensor_once_lit"
   }
 ]

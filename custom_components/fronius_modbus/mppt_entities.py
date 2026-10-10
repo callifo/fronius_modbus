@@ -51,6 +51,28 @@ _MPPT_MODULE_SENSOR_SPECS = (
 )
 
 
+def _left_out(
+    runtime: FroniusRuntimeData, index: int, key: str, attribute: str
+) -> bool:
+    """Whether a sensor waits for its first value.
+
+    A string in the dark sends no value; a restart then deleted the sensor the
+    owner had (Codex C-03), so a registered one stays.
+    """
+    value = getattr(runtime.device.mppt_module(index), attribute, None)
+    return value is None and key not in runtime.registered_keys
+
+
+def left_out_mppt_keys(runtime: FroniusRuntimeData) -> frozenset[str]:
+    """The keys of the MPPT sensors left out until their string sends a value."""
+    return frozenset(
+        key
+        for index in runtime.device.mppt_channels.pv
+        for suffix, attribute, *_ in _MPPT_MODULE_SENSOR_SPECS
+        if _left_out(runtime, index, key := f"mppt_module_{index}_{suffix}", attribute)
+    )
+
+
 def _mppt_sensor_descriptions(
     index: int, runtime: FroniusRuntimeData
 ) -> list[FroniusSensorDescription]:
@@ -63,10 +85,7 @@ def _mppt_sensor_descriptions(
         unit,
     ) in _MPPT_MODULE_SENSOR_SPECS:
         key = f"mppt_module_{index}_{suffix}"
-        # A string in the dark sends no value; a restart then deleted the
-        # sensor the owner had (Codex C-03), so a registered one stays.
-        value = getattr(runtime.device.mppt_module(index), attribute, None)
-        if value is None and key not in runtime.registered_keys:
+        if _left_out(runtime, index, key, attribute):
             continue
         descriptions.append(
             FroniusSensorDescription(

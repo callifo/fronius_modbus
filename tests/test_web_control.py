@@ -425,6 +425,24 @@ async def test_a_log_entry_survives_an_auth_failure_in_the_same_poll(hass, monke
     assert [event.code for event in data.new_events] == ["BYD2-44"]
 
 
+async def test_a_lost_login_keeps_the_public_readings_of_its_poll(hass):
+    """Audit F14: the auth failure reset the data the public reads had just filled."""
+    client = FakeClientWithEvents()
+    control = make_control(hass, client=client)
+
+    def login_rejected():
+        raise FroniusWebAuthError("token rejected")
+
+    client.get_modbus_config = login_rejected
+    try:
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert data.inverter_readings == {"DEVICE_TEMPERATURE_AMBIENTMEAN_01_F32": 41.5}
+    assert data.active_events is not None
+
+
 async def test_a_log_entry_after_a_failed_first_read_is_news(hass):
     """The first read failed, and the next waited five minutes.
 

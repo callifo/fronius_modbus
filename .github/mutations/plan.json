@@ -1902,5 +1902,12 @@
     "old": "            name=f\"{entry.entry_id} Modbus\",\n",
     "new": "            name=f\"{entry.title} Modbus\",\n",
     "tests": "names_no_host_in_logs_or_diagnostics"
+  },
+  {
+    "label": "web client: a refused login forgets the hash mode",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "            _HASH_MODES.pop((self.base_url or \"\", self.username), None)\n",
+    "new": "",
+    "tests": "refused_login_reads_the_hash_mode_again"
   }
 ]

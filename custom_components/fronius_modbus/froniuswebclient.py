@@ -326,7 +326,7 @@ _HASH_MODES: dict[tuple[str, str], str] = {}
 
 
 def _forget_hash_modes() -> None:
-    """Drop what was learned about the devices; for tests and reconfiguration."""
+    """Drop what was learned about the devices; for tests."""
     _HASH_MODES.clear()
 
 
@@ -412,9 +412,12 @@ class XHeaderDigestAuth(AuthBase):
         retried.request = prepared
         if retried.status_code == 401:
             # Refused: the client lives on for the public reads, and would send
-            # the same refused login on every poll (audit E2-02).
+            # the same refused login on every poll (audit E2-02). The device may
+            # have changed its hash too; the next login asks it again (audit F11).
             self.password = ""
             self.token = None
+            _HASH_MODES.pop((self.base_url or "", self.username), None)
+            self.mode = None
             return retried
         if self.password:
             self.saved_token = {

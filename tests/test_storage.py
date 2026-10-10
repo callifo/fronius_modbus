@@ -114,6 +114,51 @@ async def test_block_charging_after_grid_charging_raises_the_discharge_rate_firs
     assert _words(writes, IN_W_RTE) == [0]
 
 
+def _signed(word):
+    return word - 0x10000 if word & 0x8000 else word
+
+
+def _refused_windows(inverter_unit):
+    """Every register image the firmware refuses (exception 3), as the writes pass it."""
+    image = {
+        address: inverter_unit.holding[address]
+        for address in (STOR_CTL_MOD, IN_W_RTE, OUT_W_RTE)
+    }
+    refused = []
+
+    def track(event):
+        for offset, word in enumerate(event.values):
+            image[event.address + offset] = word
+        mode = image[STOR_CTL_MOD]
+        in_rate, out_rate = _signed(image[IN_W_RTE]), _signed(image[OUT_W_RTE])
+        if (in_rate <= 0 and out_rate <= 0) or (mode == 3 and -in_rate > out_rate):
+            refused.append((mode, in_rate, out_rate))
+
+    inverter_unit.on_write(track)
+    return refused
+
+
+@pytest.mark.parametrize(
+    ("grid_mode", "set_power"),
+    [
+        (ExtendedMode.CHARGE_FROM_GRID, "set_grid_charge_power_w"),
+        (ExtendedMode.DISCHARGE_TO_GRID, "set_grid_discharge_power_w"),
+    ],
+)
+@pytest.mark.parametrize("then", list(ExtendedMode))
+async def test_a_mode_change_before_the_next_poll_passes_no_refused_window(
+    control, inverter_unit, grid_mode, set_power, then
+):
+    """Upstream #126 again: the order came from the last poll, which a second change outran."""
+    refused = _refused_windows(inverter_unit)
+
+    await control.set_mode(grid_mode)
+    await getattr(control, set_power)(3000)
+    await control.set_mode(then)
+
+    assert refused == []
+
+
 async def test_grid_charge_power_is_a_negative_discharge_rate(control, writes):
     await control.set_mode(ExtendedMode.CHARGE_FROM_GRID)
     await control.set_grid_charge_power_w(2560)

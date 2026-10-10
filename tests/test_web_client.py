@@ -703,14 +703,19 @@ def test_tcp_and_rtu_together_already_serve_modbus_tcp(client, inverter):
     assert client.ensure_modbus_enabled(502, 200, 1) is False
 
 
-def test_a_rewrite_for_another_reason_keeps_mode_both(client, inverter):
-    inverter.bodies["/api/config/modbus"] = modbus_config_as_read(
-        mode="both", port=1502
-    )
+@pytest.mark.parametrize(
+    ("read", "written"),
+    [("off", "tcp"), ("rtu", "both"), ("tcp", "tcp"), ("both", "both")],
+)
+def test_enabling_tcp_keeps_every_transport_already_served(
+    client, inverter, read, written
+):
+    """An RTU-only slave was written "tcp" and cut off the RS485 client it served."""
+    inverter.bodies["/api/config/modbus"] = modbus_config_as_read(mode=read, port=1502)
 
     assert client.ensure_modbus_enabled(502, 200, 1) is True
 
-    assert modbus_write(inverter)["slave"]["mode"] == "both"
+    assert modbus_write(inverter)["slave"]["mode"] == written
 
 
 def test_the_field_descriptions_are_not_written_back(client, inverter):

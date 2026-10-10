@@ -480,7 +480,7 @@
     "path": "custom_components/fronius_modbus/froniuswebclient.py",
     "old": "TCP_MODES = (\"tcp\", \"both\")",
     "new": "TCP_MODES = (\"tcp\",)",
-    "tests": "tcp_and_rtu_together_already_serve_modbus_tcp or a_rewrite_for_another_reason_keeps_mode_both"
+    "tests": "tcp_and_rtu_together_already_serve_modbus_tcp"
   },
   {
     "label": "web client: field descriptions are not written back",

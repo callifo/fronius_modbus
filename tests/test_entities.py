@@ -16,7 +16,13 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.fronius_modbus import entities, entity_base
-from custom_components.fronius_modbus.const import DOMAIN
+from custom_components.fronius_modbus.const import (
+    DOMAIN,
+    INVERTER_CONTROL_STATE_VALUES,
+    INVERTER_CONTROLS,
+    UNKNOWN_STATE,
+    bitmask_to_string,
+)
 from custom_components.fronius_modbus.coordinator import (
     FroniusModbusCoordinator,
     FroniusRuntimeData,
@@ -325,6 +331,29 @@ async def test_an_absent_first_meter_does_not_renumber_the_second(
     info = entity_base.device_info(runtime, entry, "meter", METER_UNIT_ID)
 
     assert info["name"].endswith("Meter 2")
+
+
+async def test_an_enum_value_outside_its_options_reads_unknown(runtime, entry):
+    """Audit F21: StActCtl bit 3 read "bit 3 undefined", and every state write failed."""
+    description = replace(
+        _description(entities.sensor_descriptions(runtime), "inverter_controls"),
+        value_fn=lambda r: bitmask_to_string(1 << 3, INVERTER_CONTROLS, "normal"),
+    )
+
+    sensor = FroniusSensor.create(runtime, entry, description)
+
+    assert sensor.native_value == UNKNOWN_STATE
+
+
+async def test_the_inverter_controls_are_no_storage_mode(runtime):
+    """Audit F20: the inverter's StActCtl showed as "Core storage control mode"."""
+    descriptions = entities.sensor_descriptions(runtime)
+    inverter = _description(descriptions, "inverter_controls")
+    storage = _description(descriptions, "control_mode")
+
+    assert inverter.translation_key == "inverter_controls"
+    assert inverter.options == [*INVERTER_CONTROL_STATE_VALUES, UNKNOWN_STATE]
+    assert not set(INVERTER_CONTROL_STATE_VALUES) & set(storage.options)
 
 
 async def test_every_enum_sensor_value_is_one_of_its_options(runtime):

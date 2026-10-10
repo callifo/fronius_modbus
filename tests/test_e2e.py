@@ -277,6 +277,50 @@ async def test_minor_version_9_entries_migrate_to_the_current_shape(hass, mock_m
     assert entry.state is ConfigEntryState.LOADED
 
 
+# An MPPT sensor under each unique id an upgrade still finds: (old id, key, the
+# field that goes dark, the words it then sends).
+LEGACY_MPPT_IDS = [
+    ("fm_fronius__mppt_module_0_dc_power", "mppt_module_0_dc_power", "dcw", [0xFFFF]),
+    (
+        "fm_fronius__mppt_module_0_lifetime_energy",
+        "mppt_module_0_lifetime_energy",
+        "dcwh",
+        [0, 0],
+    ),
+    ("fm_mppt1_power", "mppt_module_0_dc_power", "dcw", [0xFFFF]),
+    ("fm_mppt1_lfte", "mppt_module_0_lifetime_energy", "dcwh", [0, 0]),
+]
+
+
+@pytest.mark.parametrize(("legacy_id", "key", "field", "missing"), LEGACY_MPPT_IDS)
+async def test_a_dark_mppt_at_the_upgrade_keeps_its_legacy_sensors(
+    hass, mock_modbus, monkeypatch, symo_gen24, legacy_id, key, field, missing
+):
+    """Reaudit RC-02: a sensor still under a legacy id counted as never registered.
+
+    Dark at the first start after the upgrade, it was neither migrated nor
+    kept, and the cleanup deleted it with the name the owner had given it.
+    """
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    entry = make_entry(hass)
+    await setup_entry(hass, entry)
+    entity_id = entity_id_for(hass, entry, "sensor", key)
+    module = entry.runtime_data.device.mppt_module(0)
+    address = module.resolved_fields[field].address
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    registry = er.async_get(hass)
+    registry.async_update_entity(entity_id, new_unique_id=legacy_id)
+    for offset, word in enumerate(missing):
+        symo_gen24[INVERTER_UNIT_ID]["holding"][address + offset] = word
+
+    await setup_entry(hass, entry)
+
+    # The v0.1.9 migration also renames the entity id; the entry itself stays.
+    current_id = f"{entity_prefix(entry.entry_id)}_{key}"
+    assert registry.async_get_entity_id("sensor", DOMAIN, current_id) is not None
+
+
 # The device identifiers 0.3.0 and older registered, built from the entry's name.
 LEGACY_DEVICE_IDENTIFIERS = (
     "Fronius_inverter",

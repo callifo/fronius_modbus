@@ -1930,5 +1930,12 @@
     "old": "            answered = answered and answer is not None\n",
     "new": "",
     "tests": "failed_once_is_read_again"
+  },
+  {
+    "label": "setup: a reported device cannot be deleted",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "        domain == DOMAIN and identifier in expected\n",
+    "new": "        False\n",
+    "tests": "no_longer_reports"
   }
 ]

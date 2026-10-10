@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- A device the inverter no longer reports, such as a removed meter or battery, can be deleted on its device page. The integration still deletes none on its own: one short answer must not take a device with its history.
+
 ### Changed
 - The inverter's active controls sensor (`StActCtl`: power reduction, constant reactive power, constant power factor) is `Control mode` ("Steuermodus"), not `Core storage control mode`, the name of the storage sensor beside it. Its entity id does not change.
 

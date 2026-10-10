@@ -10,9 +10,10 @@ import time
 from modbus_connection import ModbusTcpParams
 
 from homeassistant.components.modbus import async_get_unit
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL, Platform
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr
 
 from . import migrations
 from .component_readings import reported_rows
@@ -26,6 +27,7 @@ from .const import (
     DEFAULT_PORT,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_WEB_SCAN_INTERVAL,
+    DOMAIN,
 )
 from .coordinator import (
     FroniusConfigEntry,
@@ -33,6 +35,7 @@ from .coordinator import (
     FroniusRuntimeData,
     FroniusWebCoordinator,
 )
+from .entity_base import expected_device_identifiers
 from .fronius_modbus_api.device import FroniusInverter
 from .froniuswebclient import FroniusWebClient
 from .meter_topology import MeterTopology, parse_meter_topology
@@ -208,3 +211,21 @@ async def async_unload_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> 
 async def async_remove_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> None:
     """Delete the entry's web token unless another entry still logs in with it."""
     await async_forget_unused_tokens(hass, str(_entry_value(entry, CONF_HOST, "")))
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, entry: FroniusConfigEntry, device_entry: dr.DeviceEntry
+) -> bool:
+    """Let the owner delete a device the inverter no longer reports.
+
+    Cleanup never deletes a device on doubt, so one short answer cannot take a
+    meter with its history; the owner decides instead (audit F32).
+    """
+    del hass
+    if entry.state is not ConfigEntryState.LOADED:
+        return False
+    expected = expected_device_identifiers(entry.runtime_data, entry)
+    return not any(
+        domain == DOMAIN and identifier in expected
+        for domain, identifier in device_entry.identifiers
+    )

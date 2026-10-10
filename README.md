@@ -514,7 +514,7 @@ automation:
 - A module temperature or a limit sensor that appears later, for example after a firmware update, gets its entity at the next reload of the entry.
 - The Web API cannot be reached through an IPv6 address; set the entry up with an IPv4 address or a host name.
 - A module temperature entity that stays unknown for good, because the module is gone or because a development build created it as a placeholder, can be disabled in Home Assistant. It cannot be deleted: the integration keeps every module the inverter once reported, so one incomplete answer cannot take a real module with its history.
-- When the last smart meter is removed, its entities stay unavailable; delete them in Home Assistant, where they show as no longer provided. An empty meter list from the inverter is not taken as proof that no meter exists, so one short answer cannot delete meter entities and their history.
+- When the last smart meter is removed, its entities stay unavailable; delete them in Home Assistant, where they show as no longer provided. A device the inverter no longer reports, such as a removed meter or battery, can then be deleted on its device page. An empty meter list from the inverter is not taken as proof that no meter exists, so one short answer cannot delete meter entities and their history.
 - While the SoC mode is `Manual`, the `Modbus storage reserve` cannot be changed while the Web API does not answer (see [Two minimum SoC values](#two-minimum-soc-values)).
 - Scheduled (dis)charging in the inverter's web UI and the Modbus storage modes get in each other's way; turn the schedule off when using the modes.
 

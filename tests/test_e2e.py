@@ -364,6 +364,16 @@ async def test_a_pre_web_api_entry_is_upgraded_and_loses_its_legacy_devices(
     assert identifiers.isdisjoint(LEGACY_DEVICE_IDENTIFIERS)
 
 
+async def test_a_pre_web_api_entry_keeps_a_title_the_owner_gave(hass):
+    """Reaudit RC-03: the upgrade put the generated title over the owner's."""
+    entry = make_entry(hass, minor_version=8)
+    hass.config_entries.async_update_entry(entry, title="Garage roof")
+
+    assert await migrations.async_migrate_entry(hass, entry)
+
+    assert entry.title == "Garage roof"
+
+
 async def test_v019_mppt_entities_are_renamed(hass, mock_modbus):
     entry = make_entry(hass)
     registry = er.async_get(hass)

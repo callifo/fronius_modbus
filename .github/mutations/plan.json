@@ -1839,5 +1839,12 @@
     "old": "        await _async_reload_unless_listened(\n            self.hass, self.config_entry, changed=changed, loaded=loaded\n        )\n",
     "new": "",
     "tests": "reloads_what_no_listener_reloads"
+  },
+  {
+    "label": "migrations: a legacy twin is migrated per platform",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "            or (entity_entry.domain, new_unique_id) in taken\n",
+    "new": "            or any(taken_id == new_unique_id for _, taken_id in taken)\n",
+    "tests": "both_twins_of_a_legacy_unique_id"
   }
 ]

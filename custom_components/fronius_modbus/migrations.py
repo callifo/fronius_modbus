@@ -456,41 +456,34 @@ async def async_migrate_name_based_unique_ids(
     hass: HomeAssistant,
     entry: ConfigEntry,
 ) -> None:
-    """Move old name-based unique ids to stable per-entry ids."""
+    """Move old name-based unique ids to stable per-entry ids.
+
+    Per registry entry, not per id: up to 0.3.0 a sensor and a control shared
+    one unique id, and moving the first left its twin to be deleted (audit F05).
+    """
     registry = er.async_get(hass)
     entity_entries = _entity_entries_for_config_entry(registry, entry)
-    current_unique_ids = {candidate.unique_id or "" for candidate in entity_entries}
+    taken = {(candidate.domain, candidate.unique_id) for candidate in entity_entries}
     expected = expected_unique_ids(entry, entry.runtime_data)
+    legacy_prefix = _legacy_entity_unique_id(entry, "")
     migrated = 0
 
-    for new_unique_id in expected:
-        key = new_unique_id.removeprefix(f"{entity_prefix(entry.entry_id)}_")
-        if key == new_unique_id:
+    for entity_entry in entity_entries:
+        old_unique_id = entity_entry.unique_id or ""
+        if not old_unique_id.startswith(legacy_prefix):
             continue
-
-        old_unique_id = _legacy_entity_unique_id(entry, key)
+        key = old_unique_id.removeprefix(legacy_prefix)
+        new_unique_id = f"{entity_prefix(entry.entry_id)}_{key}"
         if (
-            old_unique_id not in current_unique_ids
-            or new_unique_id in current_unique_ids
+            new_unique_id not in expected
+            or (entity_entry.domain, new_unique_id) in taken
         ):
-            continue
-
-        entity_entry = next(
-            (
-                candidate
-                for candidate in entity_entries
-                if (candidate.unique_id or "") == old_unique_id
-            ),
-            None,
-        )
-        if entity_entry is None:
             continue
 
         registry.async_update_entity(
             entity_entry.entity_id, new_unique_id=new_unique_id
         )
-        current_unique_ids.discard(old_unique_id)
-        current_unique_ids.add(new_unique_id)
+        taken.add((entity_entry.domain, new_unique_id))
         migrated += 1
 
     if migrated:

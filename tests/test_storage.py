@@ -169,6 +169,49 @@ async def test_grid_charge_power_is_a_negative_discharge_rate(control, writes):
     assert control.grid_charge_power_pct == 25.0
 
 
+# Each grid mode, the setter of the power it leaves to the user, and its register.
+GRID_POWERS = [
+    (ExtendedMode.CHARGE_FROM_GRID, "set_grid_charge_power_w", OUT_W_RTE),
+    (ExtendedMode.DISCHARGE_TO_GRID, "set_grid_discharge_power_w", IN_W_RTE),
+]
+
+
+@pytest.mark.parametrize(("mode", "setter", "address"), GRID_POWERS)
+async def test_reselecting_a_grid_mode_keeps_the_power_just_written(
+    control, mode, setter, address
+):
+    """Reaudit RC-01: the power came from the last poll.
+
+    An automation that selected its grid mode again before the next poll put
+    the power back to what that poll had seen.
+    """
+    await control.set_mode(mode)
+    await getattr(control, setter)(2560)
+
+    await control.set_mode(mode)
+
+    assert control._storage.modbus_unit.holding[address] == (-2500) & 0xFFFF
+
+
+@pytest.mark.parametrize(("mode", "setter", "address"), GRID_POWERS)
+async def test_entering_a_grid_mode_starts_at_zero_watts(
+    control, mode, setter, address
+):
+    """Reaudit RC-01: a power set in a mode left since came back.
+
+    The README promises 0 W after the change; the last poll still held it.
+    """
+    await control.set_mode(mode)
+    await getattr(control, setter)(2560)
+    await control._storage.async_update()
+    control.sync_from_device()
+    await control.set_mode(ExtendedMode.AUTO)
+
+    await control.set_mode(mode)
+
+    assert control._storage.modbus_unit.holding[address] == 0
+
+
 @pytest.mark.parametrize("mode", list(ExtendedMode))
 async def test_a_mode_already_in_place_writes_nothing(control, writes, mode):
     """Picking the current mode again wrote StorCtl_Mod and both rates."""

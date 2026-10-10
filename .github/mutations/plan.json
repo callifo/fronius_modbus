@@ -1811,5 +1811,12 @@
     "old": "    return (event.visible_to == CUSTOMER_LEVEL) == (audience == CUSTOMER)\n",
     "new": "    return event.visible_to == (CUSTOMER_LEVEL if audience == CUSTOMER else \"service\")\n",
     "tests": "technician_and_unknown_level_events"
+  },
+  {
+    "label": "web client: enabling TCP keeps an RTU client served",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "_MODE_WITH_TCP = {SLAVE_OFF: \"tcp\", \"rtu\": \"both\", \"tcp\": \"tcp\", \"both\": \"both\"}\n",
+    "new": "_MODE_WITH_TCP = {SLAVE_OFF: \"tcp\", \"rtu\": \"tcp\", \"tcp\": \"tcp\", \"both\": \"both\"}\n",
+    "tests": "keeps_every_transport_already_served"
   }
 ]

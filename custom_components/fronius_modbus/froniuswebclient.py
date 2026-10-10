@@ -34,6 +34,9 @@ MASTER_RTUIF = {"master": {"rtuif": [{"if": "rtu0"}, {"if": "rtu1"}]}}
 TCP_MODES = ("tcp", "both")
 # The slave mode in which no device is served over Modbus at all.
 SLAVE_OFF = "off"
+# The mode that adds Modbus TCP to what a slave serves: "tcp" alone would end
+# the RS485 side an RTU client reads.
+_MODE_WITH_TCP = {SLAVE_OFF: "tcp", "rtu": "both", "tcp": "tcp", "both": "both"}
 RESTRICTION_LIST_SEPARATOR = ","
 BATTERIES_PATH = "/api/config/batteries"
 MODBUS_PATH = "/api/config/modbus"
@@ -758,7 +761,7 @@ class FroniusWebClient:
             "slave": {
                 **slave,
                 "rtuif": slave.get("rtuif", []),
-                "mode": slave["mode"] if serves_tcp else "tcp",
+                "mode": _MODE_WITH_TCP.get(slave.get("mode"), "tcp"),
                 "port": port,
                 "sunspecMode": SUNSPEC_MODE_INT,
                 "meterAddress": meter_address,

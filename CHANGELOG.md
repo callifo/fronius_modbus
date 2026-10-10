@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- Enabling Modbus TCP on an inverter whose Modbus server served RTU alone switched it to TCP alone and cut off the device reading it over RS485. It now becomes `TCP & RTU`.
+
 ## 1.2.0
 
 First stable release of 1.2. It contains everything from the six 1.2.0 pre-releases below, and the changes here on 1.2.0b6. Entries from 1.1.x migrate on their own to minor version 14; unique ids and entity ids do not change. Automations that wait for the throttle states `export_limit` or `active_power_control` need the new states: neither is reported any more (see 1.2.0b5).

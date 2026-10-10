@@ -650,8 +650,10 @@ class _WebClientLosingItsLogin(_FakeWebClientWithTopology):
         return super().__getattr__(name)
 
     def get_power_meter_info(self, *_args, **_kwargs):
+        # Like the real client: the public topology read never raises, an
+        # unanswered one is None (audit F13).
         if self.lost_at == "get_power_meter_info":
-            raise FroniusWebAuthError("token rejected")
+            return None
         return self.topology
 
 
@@ -699,9 +701,10 @@ async def test_a_rejected_technician_token_is_the_one_deleted(
     """The topology read deleted the customer token whatever role had been rejected.
 
     The rejected technician token survived and was offered again on every start.
+    The first protected read is where a rejected login shows (audit F13).
     """
     monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientLosingItsLogin)
-    monkeypatch.setattr(_WebClientLosingItsLogin, "lost_at", "get_power_meter_info")
+    monkeypatch.setattr(_WebClientLosingItsLogin, "lost_at", "get_modbus_config")
     entry = make_entry(hass)
     store = async_get_token_store(hass)
     await store.async_save_token(HOST, realm="r", token="t", user="technician")

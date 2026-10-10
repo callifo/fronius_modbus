@@ -68,6 +68,7 @@
     },
     "abort": {
       "already_configured": "Device is already configured",
+      "already_in_progress": "Setting up this inverter is already in progress.",
       "reconfigure_successful": "Configuration updated successfully.",
       "not_ipv4_address": "Only an inverter announced with an IPv4 address can be added from discovery.",
       "reauth_successful": "Logged in again.",

@@ -13,6 +13,7 @@
 - A restart while an MPPT string was dark (at night it reports no current, voltage or power) deleted that string's sensors, with the names and entity ids the owner had given them, until a later reload created them anew. A sensor once registered now stays and reads unknown.
 - `tools/inverter_dump.bat` learned harmless words from a field description (`_psk_meta`: "String", "Password") and from a sensitive object's settings (an address mode "manual"), then cut them out of every answer, keys included: channel names broke apart and option lists lost entries. It now learns only the values right under a sensitive key; everything beneath one is still replaced.
 - Configure, Reconfigure and a new login put the generated title back over a title the owner had given the entry. Only a generated title now follows the settings, as it already did when the inverter moved to a new address.
+- A second setup of an inverter whose setup was still open aborted with the raw key `already_in_progress`; it now has a text.
 
 ## 1.2.0
 

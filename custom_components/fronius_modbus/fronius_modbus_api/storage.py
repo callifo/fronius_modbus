@@ -354,7 +354,19 @@ class StorageControl:
         async with self._write_lock:
             if not allowed():
                 raise refusal
-            await self._write_changed(field_name, percent())
+            value = percent()
+            _, in_rate, out_rate = _MODE_TABLE[self.extended_mode]
+            other_rate = out_rate if field_name == "in_w_rte" else in_rate
+            # The rate the mode holds fixed on the other side: with both at or
+            # below 0 the firmware refuses the write (exception 3, upstream
+            # #126), so say why instead (reaudit W-02).
+            if value <= 0 and other_rate <= 0:
+                raise ControlRefused(
+                    "limit_blocks_both_ways",
+                    "A limit of 0 W would block charging and discharging at once, "
+                    "which the inverter refuses",
+                )
+            await self._write_changed(field_name, value)
 
     async def _write_changed(self, field_name: str, value: float) -> None:
         if not await registers_holding(self._storage, {field_name: value}):

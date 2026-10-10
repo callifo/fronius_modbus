@@ -877,6 +877,9 @@
     "charge_limit_not_in_mode": {
       "message": "Die Ladegrenze kann im aktuellen Speichermodus nicht geändert werden."
     },
+    "limit_blocks_both_ways": {
+      "message": "Eine Grenze von 0 W würde Laden und Entladen zugleich sperren; das lehnt der Wechselrichter ab."
+    },
     "discharge_limit_not_in_mode": {
       "message": "Die Entladegrenze kann im aktuellen Speichermodus nicht geändert werden."
     },

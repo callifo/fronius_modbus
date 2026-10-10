@@ -114,8 +114,8 @@
   {
     "label": "storage: a rate write reads back inside the write lock",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "            await self._write_changed(field_name, percent())\n",
-    "new": "            await self._write_changed(field_name, percent())\n            await self._storage.async_update()\n",
+    "old": "            await self._write_changed(field_name, value)\n",
+    "new": "            await self._write_changed(field_name, value)\n            await self._storage.async_update()\n",
     "tests": "a_rate_write_succeeds_when_the_read_right_after_it_is_refused"
   },
   {
@@ -2084,5 +2084,19 @@
     "old": "                f\"{error_text(restore_error)}\"\n",
     "new": "                f\"{restore_error}\"\n",
     "tests": "left_disabled_names_no_host"
+  },
+  {
+    "label": "storage: a zero limit blocking both ways is refused",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            if value <= 0 and other_rate <= 0:\n",
+    "new": "            if False:\n",
+    "tests": "blocks_both_ways_is_refused"
+  },
+  {
+    "label": "storage: the other side is the mode's fixed rate",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            other_rate = out_rate if field_name == \"in_w_rte\" else in_rate\n",
+    "new": "            other_rate = in_rate if field_name == \"in_w_rte\" else out_rate\n",
+    "tests": "blocks_both_ways_is_refused"
   }
 ]

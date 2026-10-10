@@ -877,6 +877,9 @@
     "charge_limit_not_in_mode": {
       "message": "The charge limit cannot be changed in the current storage mode."
     },
+    "limit_blocks_both_ways": {
+      "message": "A limit of 0 W would block charging and discharging at once, which the inverter refuses."
+    },
     "discharge_limit_not_in_mode": {
       "message": "The discharge limit cannot be changed in the current storage mode."
     },

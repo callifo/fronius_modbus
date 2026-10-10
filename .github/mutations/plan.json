@@ -1818,5 +1818,12 @@
     "old": "_MODE_WITH_TCP = {SLAVE_OFF: \"tcp\", \"rtu\": \"both\", \"tcp\": \"tcp\", \"both\": \"both\"}\n",
     "new": "_MODE_WITH_TCP = {SLAVE_OFF: \"tcp\", \"rtu\": \"tcp\", \"tcp\": \"tcp\", \"both\": \"both\"}\n",
     "tests": "keeps_every_transport_already_served"
+  },
+  {
+    "label": "storage: the higher target rate is written first",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "                key=lambda write: -write[1],\n",
+    "new": "                key=lambda write: write[1],\n",
+    "tests": "passes_no_refused_window or raises_the_discharge_rate_first"
   }
 ]

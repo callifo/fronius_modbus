@@ -243,22 +243,25 @@ class StorageControl:
 
     async def set_mode(self, mode: ExtendedMode) -> None:
         """Write the mode/rate combination behind the extended mode, then own it."""
-        sunspec_mode, in_rate, out_rate = _MODE_TABLE[mode]
-        if mode is ExtendedMode.CHARGE_FROM_GRID:
-            out_rate = -(self.grid_charge_power_pct or 0.0)
-        if mode is ExtendedMode.DISCHARGE_TO_GRID:
-            in_rate = -(self.grid_discharge_power_pct or 0.0)
-        # The device refuses a read for a moment right after a write (real
-        # GEN24, fw 1.38.6-1: exception 4 on the block read that follows).
-        # The coordinator's next poll picks the new values up instead.
-        # The rate that rises goes first: with both rates at or below zero for
-        # an instant the firmware refuses the second write (exception 3, seen
-        # on Charge from Grid -> Block Charging, upstream #126).
-        rate_writes = [("in_w_rte", in_rate), ("out_w_rte", out_rate)]
-        if (self._storage.out_w_rte or 0.0) < out_rate:
-            rate_writes.reverse()
-        writes = [("stor_ctl_mod", sunspec_mode), *rate_writes]
         async with self._write_lock:
+            sunspec_mode, in_rate, out_rate = _MODE_TABLE[mode]
+            if mode is ExtendedMode.CHARGE_FROM_GRID:
+                out_rate = -(self.grid_charge_power_pct or 0.0)
+            if mode is ExtendedMode.DISCHARGE_TO_GRID:
+                in_rate = -(self.grid_discharge_power_pct or 0.0)
+            # The device refuses a read for a moment right after a write (real
+            # GEN24, fw 1.38.6-1: exception 4 on the block read that follows).
+            # The coordinator's next poll picks the new values up instead.
+            # The higher rate goes first: every mode has one at full, which
+            # keeps the window valid whatever the other still holds. With both
+            # at or below zero for an instant the firmware refuses the second
+            # write (exception 3, upstream #126). Ordered by the target alone:
+            # the last poll may not hold what the previous write left.
+            rate_writes = sorted(
+                [("in_w_rte", in_rate), ("out_w_rte", out_rate)],
+                key=lambda write: -write[1],
+            )
+            writes = [("stor_ctl_mod", sunspec_mode), *rate_writes]
             holding = await registers_holding(self._storage, dict(writes))
             for field_name, value in writes:
                 if field_name not in holding:

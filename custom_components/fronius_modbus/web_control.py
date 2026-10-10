@@ -277,6 +277,9 @@ class FroniusWebControl:
         self.data = WebData()
         self._coordinator: Any = None
         self._delayed_refresh_task: asyncio.Task | None = None
+        # A write still in flight at unload must not start a refresh of the
+        # unloaded entry once it returns (audit F12).
+        self._shut_down = False
         self._event_tracker = EventTracker()
         self._event_texts: dict[str, str] | None = None
         self._next_event_log_read = 0.0
@@ -319,6 +322,7 @@ class FroniusWebControl:
 
     def shutdown(self) -> None:
         """Cancel the delayed post-write refresh; called from entry.async_on_unload."""
+        self._shut_down = True
         if self._delayed_refresh_task and not self._delayed_refresh_task.done():
             self._delayed_refresh_task.cancel()
 
@@ -589,6 +593,8 @@ class FroniusWebControl:
     # -- battery write transition -------------------------------------------------
 
     def _schedule_delayed_web_refresh(self) -> None:
+        if self._shut_down:
+            return
         if self._delayed_refresh_task and not self._delayed_refresh_task.done():
             self._delayed_refresh_task.cancel()
 

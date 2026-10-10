@@ -1909,5 +1909,12 @@
     "old": "            _HASH_MODES.pop((self.base_url or \"\", self.username), None)\n",
     "new": "",
     "tests": "refused_login_reads_the_hash_mode_again"
+  },
+  {
+    "label": "web control: no refresh is scheduled after unload",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        if self._shut_down:\n            return\n",
+    "new": "",
+    "tests": "ends_after_unload_schedules_no_refresh"
   }
 ]

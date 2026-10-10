@@ -21,6 +21,7 @@
 - An enum sensor whose device value no option names failed its state write on every poll; it reads unknown now. The inverter's active controls (`StActCtl`) sent such a value for a control beyond the first three.
 - The inverter's address still reached the log and the diagnostics: through the pollers' names, which were the entry title, and through the Modbus library's connection error. Both now name no host, as 1.0.0b3 promised.
 - The web login's hash (md5 or sha256), learned once per inverter, outlived a device that changed it, for example a replaced unit at the same address: every login failed until Home Assistant restarted. A refused login now asks the device again.
+- A battery setting written while its entry was reloaded or removed started a web refresh of the unloaded entry ten seconds later.
 
 ## 1.2.0
 

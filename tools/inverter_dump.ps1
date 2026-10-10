@@ -72,7 +72,7 @@ $Redacted = '<redacted>'
 # Everything beneath these keys is replaced; a value right under one is also
 # replaced wherever else it appears. A field's description (_psk_meta) names
 # its type, not its value, and stays.
-$SensitiveKey = '^(?!_\w*_meta$)(serial|serialNumber|UniqueID|systemName|CustomName|hostname|hw_address|mac|ssid|ip|ipAddress|dns|nameservers|gateway|e-?mail|latitude|longitude|street|city|zip|postalCode|\w*(passw|secret|apikey|privatekey|psk)\w*|\w*token)$'
+$SensitiveKey = '^(?!_\w*_meta$)(serial|serialNumber|UniqueID|UniqueIdentifier|systemName|CustomName|hostname|hw_address|mac|ssid|ip|ipAddress|dns|nameservers|gateway|e-?mail|latitude|longitude|street|city|zip|postalCode|\w*(passw|secret|apikey|privatekey|psk)\w*|\w*token)$'
 $SensitivePattern = @(
     '\b(?:(?:10|127)(?:\.\d{1,3}){3}|(?:192\.168|169\.254|172\.(?:1[6-9]|2\d|3[01]))(?:\.\d{1,3}){2})\b',
     '\b[0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5}\b',

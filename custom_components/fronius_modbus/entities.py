@@ -89,6 +89,7 @@ from .fronius_modbus_api.storage import (
 )
 from .fronius_modbus_api.sunspec_models import MpptModule
 from .inverter_events import EVENT_TYPES
+from .mppt_entities import _mppt_sensor_descriptions
 from .web_control import WebData
 
 # The rated power while settings.w_max is unknown: 0.3's static AC limit maximum.
@@ -931,13 +932,6 @@ def _meter_value(
     return lambda runtime: getter(runtime.device.meters[unit_id].meter)
 
 
-def _mppt_module_value(
-    index: int, attribute: str
-) -> Callable[[FroniusRuntimeData], Any]:
-    """A value_fn reading one field off an MPPT module, bound to that module."""
-    return lambda runtime: getattr(runtime.device.mppt_module(index), attribute)
-
-
 def _meter_phase_energy_descriptions(
     runtime: FroniusRuntimeData, unit_id: int, info: MeterInfo
 ) -> list[FroniusSensorDescription]:
@@ -995,67 +989,6 @@ def _meter_sensor_descriptions(
             entity_category=EntityCategory.DIAGNOSTIC,
         )
     )
-    return descriptions
-
-
-_MPPT_MODULE_SENSOR_SPECS = (
-    (
-        "dc_current",
-        "dca",
-        SensorDeviceClass.CURRENT,
-        SensorStateClass.MEASUREMENT,
-        "A",
-    ),
-    (
-        "dc_voltage",
-        "dcv",
-        SensorDeviceClass.VOLTAGE,
-        SensorStateClass.MEASUREMENT,
-        "V",
-    ),
-    (
-        "dc_power",
-        "dcw",
-        SensorDeviceClass.POWER,
-        SensorStateClass.MEASUREMENT,
-        "W",
-    ),
-    (
-        "lifetime_energy",
-        "dcwh",
-        SensorDeviceClass.ENERGY,
-        SensorStateClass.TOTAL_INCREASING,
-        "Wh",
-    ),
-)
-
-
-def _mppt_sensor_descriptions(
-    index: int, runtime: FroniusRuntimeData
-) -> list[FroniusSensorDescription]:
-    descriptions = []
-    for (
-        suffix,
-        attribute,
-        device_class,
-        state_class,
-        unit,
-    ) in _MPPT_MODULE_SENSOR_SPECS:
-        if getattr(runtime.device.mppt_module(index), attribute, None) is None:
-            continue
-        descriptions.append(
-            FroniusSensorDescription(
-                key=f"mppt_module_{index}_{suffix}",
-                translation_key=f"mppt_module_{suffix}",
-                translation_placeholders={"module": str(index)},
-                device="inverter",
-                report_name=REPORT_MPPT,
-                value_fn=_mppt_module_value(index, attribute),
-                device_class=device_class,
-                state_class=state_class,
-                native_unit_of_measurement=unit,
-            )
-        )
     return descriptions
 
 

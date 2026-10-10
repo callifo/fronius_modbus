@@ -1,6 +1,7 @@
 """End-to-end: a real Home Assistant sets the entry up on the mocked shared connection."""
 
 from dataclasses import replace
+import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -1511,3 +1512,28 @@ async def test_configure_reloads_a_loaded_entry_once_per_run(
         assert result["type"] is FlowResultType.CREATE_ENTRY
         assert entry.state is ConfigEntryState.LOADED
         assert len(setups) == runs
+
+
+async def test_an_outage_names_no_host_in_logs_or_diagnostics(
+    hass, mock_modbus, caplog
+):
+    """Audit F07: the coordinator's name and the library's connect error carried the host."""
+    caplog.set_level(logging.DEBUG, "custom_components.fronius_modbus")
+    entry = make_entry(hass)
+    await setup_entry(hass, entry)
+    caplog.clear()
+    connect_error = f"could not connect to {HOST}:502"
+    coordinator = entry.runtime_data.modbus
+
+    # A meter drops out while the inverter answers: the poll keeps its error.
+    mock_modbus.fail_requests(METER_UNIT_ID, ModbusTimeoutError(connect_error))
+    await coordinator.async_refresh()
+    diagnostics = await async_get_config_entry_diagnostics(hass, entry)
+    # Then the whole link.
+    mock_modbus.fail_requests(INVERTER_UNIT_ID, ModbusConnectionError(connect_error))
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert diagnostics["failed"]
+    assert HOST not in repr(diagnostics["failed"])
+    assert HOST not in caplog.text

@@ -35,13 +35,9 @@ from .coordinator import (
 )
 from .fronius_modbus_api.device import FroniusInverter
 from .froniuswebclient import FroniusWebAuthError, FroniusWebClient
+from .meter_topology import MeterTopology, parse_meter_topology
 from .token_store import async_forget_unused_tokens, async_get_token_store
-from .web_control import (
-    BATTERY_WRITE_MODBUS_RECOVERY_SECONDS,
-    FroniusWebControl,
-    MeterTopology,
-    parse_meter_topology,
-)
+from .web_control import BATTERY_WRITE_MODBUS_RECOVERY_SECONDS, FroniusWebControl
 
 _LOGGER = logging.getLogger(__name__)
 

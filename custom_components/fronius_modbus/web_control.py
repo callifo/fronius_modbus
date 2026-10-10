@@ -36,6 +36,7 @@ from .inverter_events import (
     event_texts,
     parse_events,
 )
+from .meter_topology import MeterTopology, parse_meter_topology
 from .token_store import async_get_token_store
 
 _LOGGER = logging.getLogger(__name__)
@@ -220,20 +221,6 @@ def _derive_api_battery_mode(raw_mode: int | None) -> int | None:
     return None
 
 
-@dataclass(slots=True)
-class MeterTopology:
-    """Which meters the web API reports, and whether it actually answered.
-
-    `confirmed` is the difference between "this device has one meter" and "the
-    question could not be asked": only the former may retire entities (audit A04).
-    """
-
-    unit_ids: list[int]
-    primary_unit_id: int
-    locations: dict[int, int]
-    confirmed: bool
-
-
 def _config_part(config: dict[str, Any] | None, key: str) -> dict[str, Any] | None:
     """A nested part; None when it, or what holds it, has the wrong shape."""
     if config is None:
@@ -253,25 +240,6 @@ def _flag_state(part: dict[str, Any] | None) -> str | None:
     if flag is None:
         return None
     return _enabled_state(flag)
-
-
-def parse_meter_topology(info: dict | None) -> MeterTopology:
-    """The topology an answer describes, or the unconfirmed single-meter default."""
-    default = MeterTopology([DEFAULT_METER_UNIT_ID], DEFAULT_METER_UNIT_ID, {}, False)
-    if not info or not info.get("unit_ids"):
-        return default
-    unit_ids = [int(unit) for unit in info["unit_ids"] if int(unit) > 0]
-    if not unit_ids:
-        return default
-    return MeterTopology(
-        unit_ids=unit_ids,
-        primary_unit_id=int(info.get("primary_unit_id") or unit_ids[0]),
-        locations={
-            int(unit_id): int(location)
-            for unit_id, location in (info.get("locations_by_unit_id") or {}).items()
-        },
-        confirmed=True,
-    )
 
 
 class FroniusWebControl:

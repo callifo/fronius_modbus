@@ -162,6 +162,13 @@ function Get-SecretHasher([string]$CommonBody, [string]$Role) {
     return [System.Security.Cryptography.SHA256]::Create()
 }
 
+function Invoke-Login($Common) {
+    # Logs in as $script:Role with the hashing $Common (the answer of
+    # /api/status/common) names; returns the HTTP status of the login.
+    $script:SecretHasher = Get-SecretHasher $Common.body $script:Role
+    return (Read-Endpoint "/api/commands/Login?user=$($script:Role)" $true).status
+}
+
 function Read-Endpoint([string]$Path, [bool]$WithLogin) {
     try {
         $response = Send-Get $Path
@@ -566,13 +573,12 @@ function Invoke-Dump {
         $secure = Read-Host "Password of $($script:Role)" -AsSecureString
         $script:Password = [Runtime.InteropServices.Marshal]::PtrToStringBSTR(
             [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
-        $script:SecretHasher = Get-SecretHasher $common.body $script:Role
-        $login = Read-Endpoint "/api/commands/Login?user=$($script:Role)" $true
-        if ($login.status -eq 200) {
+        $loginStatus = Invoke-Login $common
+        if ($loginStatus -eq 200) {
             $loginRole = $script:Role
             foreach ($path in $LoginPaths) { $paths[$path] = $true }
         } else {
-            Write-Host "The inverter refused the login (HTTP $($login.status)); reading without it."
+            Write-Host "The inverter refused the login (HTTP $loginStatus); reading without it."
         }
     }
     $readModbus = -not ((Read-Host 'Also read the SunSpec registers over Modbus TCP (Modbus must be on)? [Y/n]') -match '^[nN]')

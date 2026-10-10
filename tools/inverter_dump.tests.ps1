@@ -260,7 +260,6 @@ function Get-TestHex($Hasher, [string]$Text) {
 
 $script:Role = 'technician'
 $script:Password = 'synthetic-password'
-$script:SecretHasher = [System.Security.Cryptography.MD5]::Create()
 $script:Requests = New-Object System.Collections.Generic.List[object]
 & {
     function Send-Get([string]$Path, [string]$Authorization) {
@@ -273,7 +272,8 @@ $script:Requests = New-Object System.Collections.Generic.List[object]
         $response.Content = New-Object System.Net.Http.StringContent ''
         return $response
     }
-    $null = Read-Endpoint '/api/commands/Login?user=technician' $true
+    # The answer of /api/status/common decides the hashing (reaudit W-06).
+    $script:LoginStatus = Invoke-Login @{ status = 200; body = $versions }
 }
 $header = [string]$script:Requests[$script:Requests.Count - 1][1]
 $field = @{}
@@ -283,6 +283,7 @@ $secret = Get-TestHex ([System.Security.Cryptography.MD5]::Create()) 'technician
 $expected = Get-TestHex $sha256 "${secret}:synthetic-nonce:$($field.nc):$($field.cnonce):auth:$(Get-TestHex $sha256 'GET:/api/commands/Login')"
 Assert-True ($field.uri -eq '/api/commands/Login') "the login signs its path without the query: $header"
 Assert-True ($field.response -eq $expected) "the digest answers the challenge: $header"
+Assert-True ($script:LoginStatus -eq 200) "the login reports its status: $($script:LoginStatus)"
 
 # -- read only (Codex C-04) -------------------------------------------------------------
 

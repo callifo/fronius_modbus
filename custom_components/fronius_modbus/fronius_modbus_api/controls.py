@@ -13,7 +13,7 @@ import time
 
 from modbus_connection import ModbusError
 
-from .exceptions import ControlLeftDisabledError, ControlRefused
+from .exceptions import ControlLeftDisabledError, ControlRefused, error_text
 from .sunspec_models import Controls
 from .writes import registers_holding
 
@@ -136,7 +136,7 @@ class InverterControls:
         if restore_error is not None:
             raise ControlLeftDisabledError(
                 f"{enable_field} could not be re-enabled after a failed write: "
-                f"{restore_error}"
+                f"{error_text(restore_error)}"
             ) from cause
 
     async def set_ac_limit_w(self, watts: float) -> None:

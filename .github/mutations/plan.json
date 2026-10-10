@@ -2077,5 +2077,12 @@
     "old": "        if title == str(_entry_value(entry, CONF_NAME, \"\")):\n",
     "new": "        if True:\n",
     "tests": "keeps_a_title_the_owner_gave"
+  },
+  {
+    "label": "controls: a control left disabled names no host",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/controls.py",
+    "old": "                f\"{error_text(restore_error)}\"\n",
+    "new": "                f\"{restore_error}\"\n",
+    "tests": "left_disabled_names_no_host"
   }
 ]

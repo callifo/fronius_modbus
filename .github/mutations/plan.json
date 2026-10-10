@@ -2070,5 +2070,12 @@
     "old": "            keys.add(v019_keys[unique_id])\n",
     "new": "            pass\n",
     "tests": "upgrade_keeps_its_legacy_sensors"
+  },
+  {
+    "label": "migrations: only the generated pre-web-API title is replaced",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "        if title == str(_entry_value(entry, CONF_NAME, \"\")):\n",
+    "new": "        if True:\n",
+    "tests": "keeps_a_title_the_owner_gave"
   }
 ]

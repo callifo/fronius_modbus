@@ -298,7 +298,10 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         new_options.pop(CONF_METER_UNIT_IDS, None)
         new_data[CONF_RECONFIGURE_REQUIRED] = True
         new_options[CONF_RECONFIGURE_REQUIRED] = True
-        title = entry_title({**entry.data, **entry.options})
+        # Up to 0.3.0 the generated title was the name alone; any other title
+        # is the owner's (reaudit RC-03).
+        if title == str(_entry_value(entry, CONF_NAME, "")):
+            title = entry_title({**entry.data, **entry.options})
 
     if entry.minor_version < _SINGLE_ROLE_MINOR_VERSION:
         api_username = await _async_stored_role(hass, entry)

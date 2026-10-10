@@ -2014,5 +2014,40 @@
     "old": "        registry.async_update_entity(\n            entity_entry.entity_id, new_unique_id=new_unique_id\n        )\n",
     "new": "        pass\n",
     "tests": "twins_of_a_legacy_unique_id"
+  },
+  {
+    "label": "entities: the grid connection select connects on enabled",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "        set_fn=lambda r, code: assume_present(r.inverter_controls).set_connected(\n            bool(code)\n",
+    "new": "        set_fn=lambda r, code: assume_present(r.inverter_controls).set_connected(\n            not code\n",
+    "tests": "writes_through_the_right_call"
+  },
+  {
+    "label": "entities: the Solar API switch turns the API on, not off",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "        turn_on=lambda r: assume_present(r.web_control).set_solar_api_enabled(True),\n",
+    "new": "        turn_on=lambda r: assume_present(r.web_control).set_solar_api_enabled(False),\n",
+    "tests": "writes_through_the_right_call"
+  },
+  {
+    "label": "entities: turning off grid charging leaves AC charging alone",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "        turn_off=lambda r: assume_present(r.web_control).set_charge_sources(\n            charge_from_grid=False\n        ),\n",
+    "new": "        turn_off=lambda r: assume_present(r.web_control).set_charge_sources(\n            charge_from_grid=False, charge_from_ac=False\n        ),\n",
+    "tests": "writes_through_the_right_call"
+  },
+  {
+    "label": "switch: turning on runs the turn-on action",
+    "path": "custom_components/fronius_modbus/switch.py",
+    "old": "        await self._async_write(self.entity_description.turn_on)\n",
+    "new": "        await self._async_write(self.entity_description.turn_off)\n",
+    "tests": "run_their_own_action"
+  },
+  {
+    "label": "button: pressing runs the press action",
+    "path": "custom_components/fronius_modbus/button.py",
+    "old": "        await self.async_run_write(lambda: self.entity_description.press(self._runtime))\n",
+    "new": "        pass\n",
+    "tests": "run_their_own_action"
   }
 ]

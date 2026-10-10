@@ -152,10 +152,11 @@ what it holds, and a row to [the guard table](#the-guards) above.
 Tests move with their subject: `test_device.py`, `test_storage.py`,
 `test_controls.py` and `test_sunspec_models.py` cover the device library
 against the library's in-memory mock unit, `test_coordinator.py` and
-`test_derived.py` the polling and the derived values, `test_entities.py` and
-`test_entity_table.py` the entity layer, `test_web_control.py` the web side,
-and `test_config_flow.py` and `test_e2e.py` the parts that only exist once
-Home Assistant is driving the integration (`test_e2e.py` is marked `e2e`).
+`test_derived.py` the polling and the derived values, `test_entities.py`,
+`test_entity_table.py` and `test_entity_writes.py` the entity layer,
+`test_web_control.py` the web side, and `test_config_flow.py` and
+`test_e2e.py` the parts that only exist once Home Assistant is driving the
+integration (`test_e2e.py` is marked `e2e`).
 The `mock_modbus` fixture in `conftest.py` stands in for the connection Home
 Assistant's `modbus` integration shares - a fresh in-memory connection per
 (re)load, seeded from the captured Symo GEN24 in `tests/fixtures/`.

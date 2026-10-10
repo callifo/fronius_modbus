@@ -610,6 +610,50 @@ class _FakeWebClientWithTopology:
         return _quiet
 
 
+class _RecordingWebClient(_FakeWebClientWithTopology):
+    """The topology fake, with every call it answers written to `calls`."""
+
+    calls: list[tuple] = []
+
+    def __getattr__(self, name: str):
+        answer = super().__getattr__(name)
+
+        def _record(*args, **kwargs):
+            self.calls.append((name, *args))
+            return answer(*args, **kwargs)
+
+        return _record
+
+
+async def test_a_switch_and_a_button_run_their_own_action(
+    hass, mock_modbus, monkeypatch
+):
+    """Audit F10: no test turned a switch on or off or pressed a button."""
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _RecordingWebClient)
+    monkeypatch.setattr(_RecordingWebClient, "calls", [])
+    entry = make_entry(hass)
+    await setup_entry(hass, entry)
+    switch = entity_id_for(hass, entry, "switch", "api_solar_api_enabled")
+    button = entity_id_for(hass, entry, "button", "reset_modbus_control")
+
+    for domain, service, entity_id in (
+        ("switch", "turn_on", switch),
+        ("switch", "turn_off", switch),
+        ("button", "press", button),
+    ):
+        await hass.services.async_call(
+            domain, service, {"entity_id": entity_id}, blocking=True
+        )
+
+    writes = {"set_solar_api_enabled", "reset_modbus_control"}
+    assert [call for call in _RecordingWebClient.calls if call[0] in writes] == [
+        ("set_solar_api_enabled", True),
+        ("set_solar_api_enabled", False),
+        ("reset_modbus_control",),
+    ]
+
+
 async def test_a_topology_outage_keeps_the_second_meters_entities(
     hass, mock_modbus, monkeypatch
 ):

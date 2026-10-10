@@ -11,6 +11,7 @@
 - On an inverter whose SunSpec map ends in a refused read (upstream #105), a link that stopped answering was never recognised as down: every poll waited out a timeout per sub-system, the stale connection was never replaced, the bridge after a web write did not hold, and the outage was logged as an error instead of once at info.
 - The export soft limit stopped at 15 kW and `Target Feed In` at ±20 kW, whatever the inverter: a Verto or a Tauro could not set a realistic export limit. Both now span the inverter's rated power (`WMax`), as `AC limit rate` already did.
 - A restart while an MPPT string was dark (at night it reports no current, voltage or power) deleted that string's sensors, with the names and entity ids the owner had given them, until a later reload created them anew. A sensor once registered now stays and reads unknown.
+- `tools/inverter_dump.bat` learned harmless words from a field description (`_psk_meta`: "String", "Password") and from a sensitive object's settings (an address mode "manual"), then cut them out of every answer, keys included: channel names broke apart and option lists lost entries. It now learns only the values right under a sensitive key; everything beneath one is still replaced.
 
 ## 1.2.0
 

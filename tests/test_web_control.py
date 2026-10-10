@@ -290,6 +290,22 @@ async def test_the_refresh_names_the_active_events_in_the_language_of_home_assis
     assert (event.code, event.text) == ("GEN24-1009", "AFCI-Selbsttest fehlgeschlagen")
 
 
+async def test_a_text_file_that_failed_once_is_read_again(hass):
+    """Audit F15: one failed read of the language file kept English texts until reload."""
+    hass.config.language = "de"
+    client = FakeClientWithEvents()
+    german = client.texts.pop("de")
+    control = make_control(hass, client=client)
+    try:
+        await control.async_refresh()
+        client.texts["de"] = german
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert data.active_events[0].text == "AFCI-Selbsttest fehlgeschlagen"
+
+
 async def test_event_texts_missing_in_a_language_fall_back_to_english(hass):
     hass.config.language = "pt-BR"
     control = make_control(hass, client=FakeClientWithEvents())

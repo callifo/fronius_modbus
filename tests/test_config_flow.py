@@ -12,7 +12,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components import fronius_modbus
 from custom_components.fronius_modbus import config_flow, discovery, froniuswebclient
-from custom_components.fronius_modbus.const import DOMAIN, instance_key
+from custom_components.fronius_modbus.const import DOMAIN, entry_title, instance_key
 from custom_components.fronius_modbus.fronius_modbus_api.device import DeviceIdentity
 from custom_components.fronius_modbus.froniuswebclient import FroniusWebResponseError
 from custom_components.fronius_modbus.token_store import async_get_token_store
@@ -243,6 +243,40 @@ async def test_configure_reloads_what_no_listener_reloads(
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert reload.await_count == reloads
+
+
+async def test_a_title_the_owner_gave_survives_every_settings_flow(hass, monkeypatch):
+    """Audit F18: Configure, Reconfigure and Reauth put the generated title back."""
+    entry = make_entry(hass)
+    hass.config_entries.async_update_entry(entry, title="Garage roof")
+    monkeypatch.setattr(
+        config_flow, "_validate_input", AsyncMock(return_value={"title": "Fronius"})
+    )
+    monkeypatch.setattr(
+        hass.config_entries, "async_reload", AsyncMock(return_value=True)
+    )
+
+    await _configure(hass, entry, scan_interval=20)
+    assert entry.title == "Garage roof"
+    await config_flow.async_update_entry_from_input(
+        hass, entry, config_flow.entry_defaults(entry) | {"scan_interval": 30}
+    )
+    assert entry.title == "Garage roof"
+
+
+async def test_a_generated_title_follows_the_host(hass, monkeypatch):
+    entry = make_entry(hass)
+    hass.config_entries.async_update_entry(
+        entry, title=entry_title(config_flow.entry_defaults(entry))
+    )
+    monkeypatch.setattr(
+        hass.config_entries, "async_reload", AsyncMock(return_value=True)
+    )
+    settings = config_flow.entry_defaults(entry) | {"host": "192.0.2.99"}
+
+    await config_flow.async_update_entry_from_input(hass, entry, settings)
+
+    assert entry.title == entry_title(settings)
 
 
 async def test_changing_only_the_host_spelling_keeps_the_stored_token(

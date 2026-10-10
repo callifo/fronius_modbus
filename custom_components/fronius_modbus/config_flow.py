@@ -29,6 +29,7 @@ from .const import (
     SUPPORTED_MODELS,
     WEB_API_DISABLED,
     entry_title,
+    entry_title_after,
     entry_unique_id,
 )
 from .discovery import (
@@ -809,7 +810,11 @@ class FroniusModbusOptionsFlow(TokenFlowMixin, config_entries.OptionsFlow):
         changed = self.hass.config_entries.async_update_entry(
             self.config_entry,
             unique_id=unique_id,
-            title=entry_title(settings),
+            title=entry_title_after(
+                self.config_entry.title,
+                {**self.config_entry.data, **self.config_entry.options},
+                settings,
+            ),
             options=options,
         )
         await async_forget_unused_tokens(self.hass, previous_host)

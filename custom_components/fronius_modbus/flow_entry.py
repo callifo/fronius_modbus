@@ -7,7 +7,7 @@ from typing import Any
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_API_PASSWORD, DOMAIN, entry_title, entry_unique_id
+from .const import CONF_API_PASSWORD, DOMAIN, entry_title_after, entry_unique_id
 from .flow_settings import _entry_payload
 from .flow_state import _AlreadyConfigured
 from .token_store import async_forget_unused_tokens
@@ -53,7 +53,9 @@ async def async_update_entry_from_input(
         entry,
         data=new_data,
         options=new_options,
-        title=entry_title(validated_input),
+        title=entry_title_after(
+            entry.title, {**entry.data, **entry.options}, validated_input
+        ),
         unique_id=unique_id,
     )
     if previous_host:

@@ -244,6 +244,16 @@ def entry_title(data: Mapping[str, Any]) -> str:
     return f"{name} {host}" if host else name
 
 
+def entry_title_after(
+    title: str, before: Mapping[str, Any], after: Mapping[str, Any]
+) -> str:
+    """The title for changed settings: only a generated one follows them.
+
+    A title the owner gave is theirs (reaudit Z-02, audit F18).
+    """
+    return entry_title(after) if title == entry_title(before) else title
+
+
 def entry_unique_id(data: Mapping[str, Any]) -> str:
     """The entry's unique id: its host, spelled one way."""
     return str(data.get(CONF_HOST, "")).strip().lower()

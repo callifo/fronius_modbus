@@ -1260,11 +1260,11 @@
     "tests": "manual_setup_is_not_blocked_by_an_open_card"
   },
   {
-    "label": "discovery: a title the owner gave stays",
-    "path": "custom_components/fronius_modbus/discovery.py",
-    "old": "    if title == entry_title(values):\n",
-    "new": "    if True:\n",
-    "tests": "moved_inverter_keeps_the_title_its_owner_gave"
+    "label": "flows: a title the owner gave stays",
+    "path": "custom_components/fronius_modbus/const.py",
+    "old": "    return entry_title(after) if title == entry_title(before) else title\n",
+    "new": "    return entry_title(after)\n",
+    "tests": "moved_inverter_keeps_the_title_its_owner_gave or owner_gave_survives_every_settings_flow"
   },
   {
     "label": "discovery: an IPv6-only announcement is not offered",

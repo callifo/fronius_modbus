@@ -207,6 +207,33 @@ async def test_a_limit_is_refused_outside_its_mode(control):
         await control.set_charge_limit_w(5000)
 
 
+async def test_a_discharge_limit_writes_the_discharge_rate_from_its_own_maximum(
+    control, writes
+):
+    """Audit F25: no test set a discharge limit, so a write to InWRte passed."""
+    control.max_discharge_rate_w = 5120
+    await control.set_mode(ExtendedMode.DISCHARGE_LIMIT)
+    del writes[:]
+
+    await control.set_discharge_limit_w(2560)
+
+    assert [(event.address, event.values[0]) for event in writes] == [(OUT_W_RTE, 5000)]
+
+
+async def test_a_discharge_limit_cannot_overwrite_the_grid_charge_power(
+    control, writes
+):
+    """Audit F25: in Charge from Grid the negative OutWRte is the grid charge power."""
+    await control.set_mode(ExtendedMode.CHARGE_FROM_GRID)
+    await control.set_grid_charge_power_w(2560)
+    del writes[:]
+
+    with pytest.raises(ValueError, match="Discharge limit cannot be changed"):
+        await control.set_discharge_limit_w(5000)
+
+    assert writes == []
+
+
 async def test_a_rate_above_the_maximum_is_clamped_to_100_percent(
     control, writes, inverter_unit
 ):
@@ -428,13 +455,33 @@ async def test_a_mode_the_inverter_refuses_is_given_up_after_the_grace_polls(con
     assert control.extended_mode is ExtendedMode.AUTO
 
 
-async def test_charge_from_grid_at_zero_watts_keeps_its_mode_across_polls(control):
-    """The registers of Charge from Grid at 0 W equal Block Discharging; the choice must survive."""
-    await control.set_mode(ExtendedMode.CHARGE_FROM_GRID)
+# A mode at 0 W whose registers read exactly like another mode, and the
+# setter that brings the rate to 0 W (None: the mode is written at 0 W).
+ZERO_WATT_LOOKALIKES = [
+    (ExtendedMode.CHARGE_FROM_GRID, None),
+    (ExtendedMode.DISCHARGE_TO_GRID, None),
+    (ExtendedMode.PV_CHARGE_LIMIT, "set_charge_limit_w"),
+    (ExtendedMode.DISCHARGE_LIMIT, "set_discharge_limit_w"),
+    (ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT, "set_charge_limit_w"),
+    (ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT, "set_discharge_limit_w"),
+    (ExtendedMode.BLOCK_DISCHARGING, "set_charge_limit_w"),
+]
+
+
+@pytest.mark.parametrize(("mode", "setter"), ZERO_WATT_LOOKALIKES)
+async def test_a_mode_at_zero_watts_keeps_its_mode_across_polls(control, mode, setter):
+    """At 0 W these registers derive to a block mode; the choice must survive.
+
+    Audit F26: only Charge from Grid was covered, so Discharge to Grid and the
+    limit modes could flip to a block mode after the grace polls unnoticed.
+    """
+    await control.set_mode(mode)
+    if setter is not None:
+        await getattr(control, setter)(0)
     for _ in range(MODE_WRITE_GRACE_POLLS + 1):
         await control._storage.async_update()
         control.sync_from_device()
-    assert control.extended_mode is ExtendedMode.CHARGE_FROM_GRID
+    assert control.extended_mode is mode
 
 
 # The register images evcc writes for its battery modes (fronius-gen24 template):

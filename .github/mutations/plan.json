@@ -1937,5 +1937,40 @@
     "old": "        domain == DOMAIN and identifier in expected\n",
     "new": "        False\n",
     "tests": "no_longer_reports"
+  },
+  {
+    "label": "storage: a discharge limit writes the discharge rate",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        await self._write_rate(\n            \"out_w_rte\",\n            lambda: _watts_to_percent(max(watts, 0.0), self.max_discharge_rate_w),",
+    "new": "        await self._write_rate(\n            \"in_w_rte\",\n            lambda: _watts_to_percent(max(watts, 0.0), self.max_discharge_rate_w),",
+    "tests": "discharge_limit_writes_the_discharge_rate"
+  },
+  {
+    "label": "storage: a discharge limit is refused outside its modes",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            allowed=lambda: self.extended_mode in DISCHARGE_LIMIT_MODES,",
+    "new": "            allowed=lambda: True,",
+    "tests": "cannot_overwrite_the_grid_charge_power"
+  },
+  {
+    "label": "storage: discharge to grid at 0 W still fits its mode",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        return out_rate == expected_out and in_rate <= 0\n",
+    "new": "        return False\n",
+    "tests": "zero_watts_keeps_its_mode"
+  },
+  {
+    "label": "storage: a charge limit at 0 W still fits its mode",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "    in_fits = in_rate >= 0 if charge_free else in_rate == expected_in\n",
+    "new": "    in_fits = in_rate == expected_in\n",
+    "tests": "zero_watts_keeps_its_mode"
+  },
+  {
+    "label": "storage: a discharge limit at 0 W still fits its mode",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "    out_fits = out_rate >= 0 if discharge_free else out_rate == expected_out\n",
+    "new": "    out_fits = out_rate == expected_out\n",
+    "tests": "zero_watts_keeps_its_mode"
   }
 ]

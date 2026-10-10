@@ -111,13 +111,25 @@ def _marked_reported(entity_entry: er.RegistryEntry) -> bool:
 
 
 def registered_keys(hass: HomeAssistant, entry: ConfigEntry) -> frozenset[str]:
-    """The description keys of every entity the registry holds for this entry."""
+    """The description keys of every entity the registry holds for this entry.
+
+    An id from before the per-entry scheme counts under the key it migrates to:
+    the migrations run after this is read, and a sensor dark at the first start
+    after an upgrade counted as never registered and was deleted (reaudit RC-02).
+    """
     prefix = f"{entity_prefix(entry.entry_id)}_"
-    return frozenset(
-        unique_id.removeprefix(prefix)
-        for candidate in _entity_entries_for_config_entry(er.async_get(hass), entry)
-        if (unique_id := candidate.unique_id or "").startswith(prefix)
-    )
+    legacy_prefix = _legacy_entity_unique_id(entry, "")
+    v019_keys = {old_id: key for old_id, key, _, _ in _V019_MPPT_UNIQUE_ID_MAPPINGS}
+    keys = set()
+    for candidate in _entity_entries_for_config_entry(er.async_get(hass), entry):
+        unique_id = candidate.unique_id or ""
+        if unique_id.startswith(prefix):
+            keys.add(unique_id.removeprefix(prefix))
+        elif unique_id.startswith(legacy_prefix):
+            keys.add(unique_id.removeprefix(legacy_prefix))
+        elif unique_id in v019_keys:
+            keys.add(v019_keys[unique_id])
+    return frozenset(keys)
 
 
 def reported_keys(hass: HomeAssistant, entry: ConfigEntry) -> frozenset[str]:

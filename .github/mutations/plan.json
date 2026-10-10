@@ -2056,5 +2056,19 @@
     "old": "            if mode is self._extended_mode:\n                kept = _GRID_POWER_FIELDS.get(mode)\n",
     "new": "            if False:\n                kept = _GRID_POWER_FIELDS.get(mode)\n",
     "tests": "keeps_the_power_just_written"
+  },
+  {
+    "label": "migrations: a name-based id counts as registered under its key",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "            keys.add(unique_id.removeprefix(legacy_prefix))\n",
+    "new": "            pass\n",
+    "tests": "upgrade_keeps_its_legacy_sensors"
+  },
+  {
+    "label": "migrations: a v0.1.9 id counts as registered under its key",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "            keys.add(v019_keys[unique_id])\n",
+    "new": "            pass\n",
+    "tests": "upgrade_keeps_its_legacy_sensors"
   }
 ]

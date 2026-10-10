@@ -861,6 +861,45 @@ async def test_a_write_that_ends_after_unload_schedules_no_refresh(control):
     assert control._delayed_refresh_task is None
 
 
+async def test_a_battery_write_is_confirmed_by_a_refresh_shortly_after(
+    hass, monkeypatch
+):
+    """Audit F16: the confirming refresh was untested.
+
+    Without it a value the inverter refused stayed on screen until the next web poll.
+    """
+    monkeypatch.setattr(web_control, "BATTERY_WRITE_WEB_REFRESH_DELAY_SECONDS", 0)
+    pushed = []
+    control = make_control(hass)
+    control.attach_coordinator(
+        type("Coordinator", (), {"async_set_updated_data": pushed.append})()
+    )
+    try:
+        await control.async_refresh()
+        await control.set_backup_reserve(30)
+        assert pushed[-1].backup_reserved == 30
+        # The inverter did not keep the value.
+        control._client.battery["HYB_BACKUP_RESERVED"] = 5
+
+        await control._delayed_refresh_task
+
+        assert pushed[-1].backup_reserved == 5
+    finally:
+        control.shutdown()
+
+
+async def test_unloading_cancels_a_pending_confirmation_refresh(control):
+    """Audit F16: a refresh still waiting at unload would poll an unloaded entry."""
+    await control.async_refresh()
+    await control.set_backup_reserve(30)
+    pending = control._delayed_refresh_task
+
+    control.shutdown()
+    await asyncio.sleep(0)
+
+    assert pending.cancelled()
+
+
 async def test_a_burst_of_values_reaches_the_device_as_first_and_last(control):
     """Ten input-box steps were ten web writes; the inverter stalls Modbus after each."""
     await control.async_refresh()

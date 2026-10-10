@@ -1972,5 +1972,26 @@
     "old": "    out_fits = out_rate >= 0 if discharge_free else out_rate == expected_out\n",
     "new": "    out_fits = out_rate == expected_out\n",
     "tests": "zero_watts_keeps_its_mode"
+  },
+  {
+    "label": "web control: a battery write schedules the confirming refresh",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        self._publish()\n        self._schedule_delayed_web_refresh()\n",
+    "new": "        self._publish()\n",
+    "tests": "confirmed_by_a_refresh_shortly_after"
+  },
+  {
+    "label": "web control: the confirming refresh is published",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "                    await self.async_refresh()\n                    self._publish()\n",
+    "new": "                    await self.async_refresh()\n",
+    "tests": "confirmed_by_a_refresh_shortly_after"
+  },
+  {
+    "label": "web control: unloading cancels a pending confirming refresh",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        self._shut_down = True\n        if self._delayed_refresh_task and not self._delayed_refresh_task.done():\n            self._delayed_refresh_task.cancel()\n",
+    "new": "        self._shut_down = True\n",
+    "tests": "cancels_a_pending_confirmation_refresh"
   }
 ]

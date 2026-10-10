@@ -198,6 +198,17 @@ def test_the_hash_mode_follows_the_version_the_inverter_reports(inverter):
     assert froniuswebclient._hash_mode(f"http://{HOST}", "customer", 4.0) == "sha256"
 
 
+def test_a_refused_login_reads_the_hash_mode_again(inverter):
+    """Audit F11: a remembered mode outlived a device that changed it, until a restart."""
+    inverter.hashing_version = 1
+    inverter.always_401 = True
+    assert not froniuswebclient.login(HOST, "customer", password="secret")
+
+    inverter.hashing_version = 2
+
+    assert froniuswebclient._hash_mode(f"http://{HOST}", "customer", 4.0) == "sha256"
+
+
 def test_an_unreadable_status_page_falls_back_to_sha256(monkeypatch):
     def refuse(*_args, **_kwargs):
         raise requests.ConnectionError

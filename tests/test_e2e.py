@@ -1428,3 +1428,34 @@ async def test_every_power_number_spans_the_rated_power(hass, mock_modbus, monke
     assert bounds("ac_limit_rate") == (0, rated)
     assert bounds("export_soft_limit") == (0, rated)
     assert bounds("api_battery_power") == (-rated, rated)
+
+
+@pytest.mark.parametrize(
+    ("field", "suffix", "missing"),
+    [
+        ("dca", "dc_current", [0xFFFF]),
+        ("dcv", "dc_voltage", [0xFFFF]),
+        ("dcw", "dc_power", [0xFFFF]),
+        ("dcwh", "lifetime_energy", [0, 0]),
+    ],
+)
+async def test_a_dark_mppt_at_a_restart_keeps_its_sensors(
+    hass, mock_modbus, monkeypatch, symo_gen24, field, suffix, missing
+):
+    """Codex C-03: a string in the dark sends no value, and a reload deleted its sensor."""
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    entry = make_entry(hass)
+    await setup_entry(hass, entry)
+    original_id = entity_id_for(hass, entry, "sensor", f"mppt_module_0_{suffix}")
+    module = entry.runtime_data.device.mppt_module(0)
+    address = module.resolved_fields[field].address
+    for offset, word in enumerate(missing):
+        symo_gen24[INVERTER_UNIT_ID]["holding"][address + offset] = word
+
+    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert getattr(entry.runtime_data.device.mppt_module(0), field) is None
+    assert (
+        entity_id_for(hass, entry, "sensor", f"mppt_module_0_{suffix}") == original_id
+    )

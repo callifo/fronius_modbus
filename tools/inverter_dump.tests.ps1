@@ -98,6 +98,23 @@ foreach ($value in @('"10.1.0"', '236.69966666666724', '"tokenFormatVersion":"1"
 $short = (ConvertTo-ExportBodies @('{"zip":1}', '{"count":1,"name":"1 of 1"}') $true '')[1]
 Assert-True ($short -ceq '{"count":1,"name":"1 of 1"}') "a short sensitive value does not take every match: $short"
 
+# Audit F09: words learned from a field description and from a sensitive
+# object's settings were cut out of every answer, keys included.
+$schema = ConvertTo-ExportBodies @(
+    '{"psk":"synthetic-psk-value","_psk_meta":{"valueType":"String","displayType":"Password"}}',
+    '{"channels":["COMBINER_STRING_01"],"valueType":"String","label":"Password"}'
+) $true ''
+Assert-True ($schema[0].Contains('"valueType":"String"')) "a field description is no secret: $($schema[0])"
+Assert-True ($schema[1] -ceq '{"channels":["COMBINER_STRING_01"],"valueType":"String","label":"Password"}') "words of a field description stay elsewhere: $($schema[1])"
+Assert-True (-not $schema[0].Contains('synthetic-psk-value')) "the secret beside its description is redacted: $($schema[0])"
+
+$modes = ConvertTo-ExportBodies @(
+    '{"ip":{"mode":"manual","hostname":"synthetic-host-name"}}',
+    '{"BAT_M0_SOC_MODE":"manual","options":{"manual":1,"auto":2},"note":"synthetic-host-name"}'
+) $true ''
+Assert-True ($modes[1].StartsWith('{"BAT_M0_SOC_MODE":"manual","options":{"manual":1,"auto":2}')) "a mode word under a sensitive object stays elsewhere: $($modes[1])"
+Assert-True (-not $modes[1].Contains('synthetic-host-name')) "a name under a sensitive object is still learned: $($modes[1])"
+
 $device = Protect-One '{"hwrevisions":{"3PN10K-31000000000000017":"31000000000000017|4,071,594|0.6L__|"},"mac":"00:03:AC:12:34:56","commonName":"pilot-0.6e-3100000000000000019_1600000000"}'
 foreach ($secret in @('31000000000000017', '12:34:56', '3100000000000000019')) {
     Assert-True (-not $device.Contains($secret)) "$secret is redacted: $device"

@@ -126,6 +126,11 @@ foreach ($secret in @('2001:db8', 'FE80', '0042:8329')) {
     Assert-True (-not $ipv6.Contains($secret)) "the IPv6 address $secret is redacted: $ipv6"
 }
 
+# Audit F23: a Datamanager names its serial UniqueIdentifier (GetLoggerInfo).
+$logger = Protect-One '{"Body":{"LoggerInfo":{"UniqueIdentifier":"240.100013","ProductID":"fronius-datamanager-card"}}}'
+Assert-True (-not $logger.Contains('240.100013')) "the Datamanager serial is redacted: $logger"
+Assert-True ($logger.Contains('fronius-datamanager-card')) "the product beside it stays: $logger"
+
 $raw = (ConvertTo-ExportBodies @('{"serial":"ABCD1234"}') $false '')[0]
 Assert-True ($raw.Contains('ABCD1234')) 'without redaction the serial is kept'
 

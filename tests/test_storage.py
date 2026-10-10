@@ -138,22 +138,24 @@ def _refused_windows(inverter_unit):
     return refused
 
 
-@pytest.mark.parametrize(
-    ("grid_mode", "set_power"),
-    [
-        (ExtendedMode.CHARGE_FROM_GRID, "set_grid_charge_power_w"),
-        (ExtendedMode.DISCHARGE_TO_GRID, "set_grid_discharge_power_w"),
-    ],
-)
+# The grid modes start from a power set in them: the image the last poll misses.
+GRID_POWER_SETTERS = {
+    ExtendedMode.CHARGE_FROM_GRID: "set_grid_charge_power_w",
+    ExtendedMode.DISCHARGE_TO_GRID: "set_grid_discharge_power_w",
+}
+
+
 @pytest.mark.parametrize("then", list(ExtendedMode))
+@pytest.mark.parametrize("start", list(ExtendedMode))
 async def test_a_mode_change_before_the_next_poll_passes_no_refused_window(
-    control, inverter_unit, grid_mode, set_power, then
+    control, inverter_unit, start, then
 ):
     """Upstream #126 again: the order came from the last poll, which a second change outran."""
     refused = _refused_windows(inverter_unit)
 
-    await control.set_mode(grid_mode)
-    await getattr(control, set_power)(3000)
+    await control.set_mode(start)
+    if start in GRID_POWER_SETTERS:
+        await getattr(control, GRID_POWER_SETTERS[start])(3000)
     await control.set_mode(then)
 
     assert refused == []

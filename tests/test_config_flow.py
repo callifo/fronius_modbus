@@ -192,6 +192,59 @@ async def test_switching_the_role_asks_for_that_roles_password(hass, monkeypatch
     assert result["errors"]["base"] == "missing_api_password"
 
 
+async def _configure(hass, entry, scan_interval=10):
+    """Run Configure on the customer role and enter a password."""
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "host": HOST,
+            "scan_interval": scan_interval,
+            "web_scan_interval": 60,
+            "modbus_restriction": "keep",
+            "api_username": "customer",
+        },
+    )
+    assert result["step_id"] == "password"
+    return await hass.config_entries.options.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+
+
+@pytest.mark.parametrize(
+    ("loaded", "scan_interval", "reloads"),
+    [
+        # A new password alone changes nothing in the entry: no listener fires.
+        (True, 10, 1),
+        # A changed entry reloads through its update listener; one more
+        # reload here would run it twice (audit F24-10).
+        (True, 20, 0),
+        # An entry that is not loaded has no listener at all.
+        (False, 10, 1),
+        (False, 20, 1),
+    ],
+)
+async def test_configure_reloads_what_no_listener_reloads(
+    hass, monkeypatch, loaded, scan_interval, reloads
+):
+    """Audit F04: Configure stored a new token, and the entry kept the old one."""
+    entry = make_entry(hass)
+    monkeypatch.setattr(
+        config_flow, "_validate_input", AsyncMock(return_value={"title": "Fronius"})
+    )
+    reload = AsyncMock(return_value=True)
+    monkeypatch.setattr(hass.config_entries, "async_reload", reload)
+    await _configure(hass, entry)
+    if loaded:
+        entry.mock_state(hass, ConfigEntryState.LOADED)
+    reload.reset_mock()
+
+    result = await _configure(hass, entry, scan_interval)
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert reload.await_count == reloads
+
+
 async def test_changing_only_the_host_spelling_keeps_the_stored_token(
     hass, monkeypatch
 ):

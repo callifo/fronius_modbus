@@ -1412,3 +1412,19 @@ async def test_both_twins_of_a_legacy_unique_id_keep_their_entity_ids(
 
     for (domain, key), entity_id in originals.items():
         assert entity_id_for(hass, entry, domain, key) == entity_id
+
+
+async def test_every_power_number_spans_the_rated_power(hass, mock_modbus, monkeypatch):
+    """Audit F08: the export limit stopped at 15 kW and the target feed-in at 20 kW."""
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    entry = make_entry(hass)
+    await setup_entry(hass, entry)
+    rated = entry.runtime_data.device.settings.w_max
+
+    def bounds(key):
+        state = hass.states.get(entity_id_for(hass, entry, "number", key))
+        return state.attributes["min"], state.attributes["max"]
+
+    assert bounds("ac_limit_rate") == (0, rated)
+    assert bounds("export_soft_limit") == (0, rated)
+    assert bounds("api_battery_power") == (-rated, rated)

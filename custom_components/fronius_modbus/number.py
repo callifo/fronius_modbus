@@ -32,6 +32,12 @@ class FroniusNumber(FroniusEntity, NumberEntity):
         dynamic_max = self.entity_description.max_fn(self._runtime)
         return dynamic_max if dynamic_max is not None else super().native_max_value
 
+    @property
+    def native_min_value(self) -> float:
+        """The description's dynamic min, falling back to its static one."""
+        dynamic_min = self.entity_description.min_fn(self._runtime)
+        return dynamic_min if dynamic_min is not None else super().native_min_value
+
     async def async_set_native_value(self, value: float) -> None:
         """Write the value through the description's set_fn, then request a refresh."""
         await self.async_run_write(

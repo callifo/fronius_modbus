@@ -1853,5 +1853,19 @@
     "old": "            failed = report.failed.keys() - {REPORT_DISCOVERY}\n",
     "new": "            failed = report.failed.keys()\n",
     "tests": "silent_link_behind_an_incomplete_chain"
+  },
+  {
+    "label": "entities: a power number spans the rated power",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "    FroniusNumberDescription,\n    max_fn=_rated_power_w,\n",
+    "new": "    FroniusNumberDescription,\n",
+    "tests": "every_power_number_spans_the_rated_power"
+  },
+  {
+    "label": "number: the target feed-in reaches down to the rated power",
+    "path": "custom_components/fronius_modbus/number.py",
+    "old": "        dynamic_min = self.entity_description.min_fn(self._runtime)\n",
+    "new": "        dynamic_min = None\n",
+    "tests": "every_power_number_spans_the_rated_power"
   }
 ]

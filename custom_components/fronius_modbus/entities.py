@@ -91,11 +91,17 @@ from .fronius_modbus_api.sunspec_models import MpptModule
 from .inverter_events import EVENT_TYPES
 from .web_control import WebData
 
-# 0.3's static fallback for the AC limit rate's max, kept when settings.w_max is unknown.
-AC_LIMIT_RATE_FALLBACK_MAX_W = 50_000
+# The rated power while settings.w_max is unknown: 0.3's static AC limit maximum.
+RATED_POWER_FALLBACK_W = 50_000
 
 
 # -- value helpers -----------------------------------------------------------------
+
+
+def _rated_power_w(runtime: FroniusRuntimeData) -> float:
+    """The inverter's rated AC power, which no power control can go beyond."""
+    settings = runtime.device.settings
+    return (settings.w_max if settings else None) or RATED_POWER_FALLBACK_W
 
 
 def _control_status(value: bool | None) -> str | None:
@@ -1210,6 +1216,18 @@ def _storage_percent_number(
     )
 
 
+# A number in watts: no power control goes beyond the inverter's rated power.
+_power_number = partial(
+    FroniusNumberDescription,
+    max_fn=_rated_power_w,
+    native_min_value=0,
+    native_max_value=RATED_POWER_FALLBACK_W,
+    native_step=10,
+    mode=NumberMode.BOX,
+    native_unit_of_measurement="W",
+)
+
+
 _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
     _storage_percent_number(
         "grid_discharge_power",
@@ -1275,7 +1293,7 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
         mode=NumberMode.BOX,
         native_unit_of_measurement="%",
     ),
-    FroniusNumberDescription(
+    _power_number(
         key="ac_limit_rate",
         translation_key="ac_limit_rate",
         device="inverter",
@@ -1283,15 +1301,6 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
         value_fn=lambda r: _controls_value(r, lambda c: c.ac_limit_w),
         set_fn=lambda r, v: assume_present(r.inverter_controls).set_ac_limit_w(v),
         exists_fn=_controls_present,
-        max_fn=lambda r: (
-            (assume_present(r.device.settings).w_max if r.device.settings else None)
-            or AC_LIMIT_RATE_FALLBACK_MAX_W
-        ),
-        native_min_value=0,
-        native_max_value=AC_LIMIT_RATE_FALLBACK_MAX_W,
-        native_step=10,
-        mode=NumberMode.BOX,
-        native_unit_of_measurement="W",
     ),
     FroniusNumberDescription(
         key="power_factor",
@@ -1307,7 +1316,7 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
         native_step=0.001,
         mode=NumberMode.BOX,
     ),
-    FroniusNumberDescription(
+    _power_number(
         key="api_battery_power",
         translation_key="api_battery_power",
         device="storage",
@@ -1318,11 +1327,8 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
         available_fn=lambda r: (
             _web_configured(r) and assume_present(r.web_control).battery_mode_is_manual
         ),
-        native_min_value=-20000,
-        native_max_value=20000,
-        native_step=10,
-        mode=NumberMode.BOX,
-        native_unit_of_measurement="W",
+        min_fn=lambda r: -_rated_power_w(r),
+        native_min_value=-RATED_POWER_FALLBACK_W,
     ),
     FroniusNumberDescription(
         key="soc_maximum",
@@ -1374,7 +1380,7 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
         mode=NumberMode.BOX,
         native_unit_of_measurement="%",
     ),
-    FroniusNumberDescription(
+    _power_number(
         key="export_soft_limit",
         translation_key="export_soft_limit",
         web_client="technician",
@@ -1387,11 +1393,6 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
             r.web_control is not None
             and assume_present(r.web_control).technician_configured
         ),
-        native_min_value=0,
-        native_max_value=15000,
-        native_step=10,
-        mode=NumberMode.BOX,
-        native_unit_of_measurement="W",
     ),
 )
 

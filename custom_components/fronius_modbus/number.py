@@ -10,8 +10,10 @@ from .coordinator import FroniusConfigEntry
 from .entities import FroniusNumberDescription, number_descriptions
 from .entity_base import FroniusEntity
 
-# One write at a time: the inverter answers requests one after the other.
-PARALLEL_UPDATES = 1
+# Unlimited: every write path serialises itself (the controls' and the web
+# control's locks, the Modbus connection's queue), and a burst of values for
+# one web control must reach its lock together to be cut to first and last.
+PARALLEL_UPDATES = 0
 
 
 class FroniusNumber(FroniusEntity, NumberEntity):

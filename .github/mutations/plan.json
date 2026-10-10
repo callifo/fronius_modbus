@@ -442,7 +442,7 @@
   },
   {
     "label": "platforms: the writers run one action at a time",
-    "path": "custom_components/fronius_modbus/number.py",
+    "path": "custom_components/fronius_modbus/select.py",
     "old": "PARALLEL_UPDATES = 1",
     "new": "PARALLEL_UPDATES = 0",
     "tests": "every_platform_declares_its_parallel_updates"
@@ -1825,5 +1825,12 @@
     "old": "                key=lambda write: -write[1],\n",
     "new": "                key=lambda write: write[1],\n",
     "tests": "passes_no_refused_window or raises_the_discharge_rate_first"
+  },
+  {
+    "label": "platforms: numbers leave a burst to the write locks",
+    "path": "custom_components/fronius_modbus/number.py",
+    "old": "PARALLEL_UPDATES = 0",
+    "new": "PARALLEL_UPDATES = 1",
+    "tests": "every_platform_declares_its_parallel_updates"
   }
 ]

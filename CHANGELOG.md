@@ -5,6 +5,7 @@
 ### Fixed
 - Enabling Modbus TCP on an inverter whose Modbus server served RTU alone switched it to TCP alone and cut off the device reading it over RS485. It now becomes `TCP & RTU`.
 - A second storage mode change before the next poll could pass through a rate window the inverter refuses (both rates at or below zero), for example Charge from Grid followed quickly by Block Charging; the inverter stayed in the old mode. The rates are now ordered by the target, not by the last poll (upstream #126).
+- A burst of values for one web number (such as `Backup reserve` stepped from 10 to 50, or an automation setting several values) reached the inverter as every single value, each stalling its Modbus side, instead of the first and the last as 1.2.0 promised: Home Assistant ran the numbers one at a time and the burst never piled up.
 
 ## 1.2.0
 

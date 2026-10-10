@@ -20,6 +20,8 @@ from pytest_homeassistant_custom_component.common import (
 from custom_components import fronius_modbus
 from custom_components.fronius_modbus import config_flow, migrations, web_control
 from custom_components.fronius_modbus.const import (
+    CONF_METER_UNIT_ID,
+    CONF_METER_UNIT_IDS,
     CONF_RECONFIGURE_REQUIRED,
     DOMAIN,
     MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX,
@@ -273,6 +275,49 @@ async def test_minor_version_9_entries_migrate_to_the_current_shape(hass, mock_m
 
     await setup_entry(hass, entry)
     assert entry.state is ConfigEntryState.LOADED
+
+
+# The device identifiers 0.3.0 and older registered, built from the entry's name.
+LEGACY_DEVICE_IDENTIFIERS = (
+    "Fronius_inverter",
+    "Fronius_battery_storage",
+    "Fronius_meter1",
+)
+
+
+async def test_a_pre_web_api_entry_is_upgraded_and_loses_its_legacy_devices(
+    hass, mock_modbus, monkeypatch
+):
+    """Audit F27: no test started from an entry of 0.3.0 or older (minor 8)."""
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    entry = make_entry(
+        hass,
+        minor_version=8,
+        **{CONF_METER_UNIT_ID: METER_UNIT_ID, CONF_METER_UNIT_IDS: [METER_UNIT_ID]},
+    )
+    hass.config_entries.async_update_entry(entry, title="Fronius")
+    device_registry = dr.async_get(hass)
+    for identifier in LEGACY_DEVICE_IDENTIFIERS:
+        device_registry.async_get_or_create(
+            config_entry_id=entry.entry_id, identifiers={(DOMAIN, identifier)}
+        )
+
+    assert await migrations.async_migrate_entry(hass, entry)
+
+    assert CONF_METER_UNIT_ID not in entry.data
+    assert CONF_METER_UNIT_IDS not in entry.data
+    assert entry.data[CONF_RECONFIGURE_REQUIRED] is True
+    assert entry.title == f"Fronius {HOST}"
+
+    await setup_entry(hass, entry)
+
+    assert entry.state is ConfigEntryState.LOADED
+    identifiers = {
+        identifier
+        for device in dr.async_entries_for_config_entry(device_registry, entry.entry_id)
+        for _, identifier in device.identifiers
+    }
+    assert identifiers.isdisjoint(LEGACY_DEVICE_IDENTIFIERS)
 
 
 async def test_v019_mppt_entities_are_renamed(hass, mock_modbus):

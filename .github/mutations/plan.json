@@ -1993,5 +1993,26 @@
     "old": "        self._shut_down = True\n        if self._delayed_refresh_task and not self._delayed_refresh_task.done():\n            self._delayed_refresh_task.cancel()\n",
     "new": "        self._shut_down = True\n",
     "tests": "cancels_a_pending_confirmation_refresh"
+  },
+  {
+    "label": "migrations: a pre-web-API entry drops its meter ids and asks for reconfigure",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "    if entry.minor_version < _WEB_API_MINOR_VERSION:\n",
+    "new": "    if False:\n",
+    "tests": "pre_web_api_entry_is_upgraded"
+  },
+  {
+    "label": "migrations: legacy devices are removed",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "            device_registry.async_remove_device(device.id)\n",
+    "new": "            pass\n",
+    "tests": "pre_web_api_entry_is_upgraded"
+  },
+  {
+    "label": "migrations: name-based unique ids are moved",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "        registry.async_update_entity(\n            entity_entry.entity_id, new_unique_id=new_unique_id\n        )\n",
+    "new": "        pass\n",
+    "tests": "twins_of_a_legacy_unique_id"
   }
 ]

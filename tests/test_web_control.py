@@ -817,6 +817,16 @@ def _hold_the_first_write(control) -> asyncio.Event:
     return release
 
 
+async def test_a_write_that_ends_after_unload_schedules_no_refresh(control):
+    """Audit F12: a write in flight at unload started a refresh of the unloaded entry."""
+    await control.async_refresh()
+    control.shutdown()
+
+    await control.set_backup_reserve(30)
+
+    assert control._delayed_refresh_task is None
+
+
 async def test_a_burst_of_values_reaches_the_device_as_first_and_last(control):
     """Ten input-box steps were ten web writes; the inverter stalls Modbus after each."""
     await control.async_refresh()

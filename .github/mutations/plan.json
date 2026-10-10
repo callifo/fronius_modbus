@@ -820,7 +820,7 @@
   },
   {
     "label": "config flow: a changed loaded entry reloads once",
-    "path": "custom_components/fronius_modbus/config_flow.py",
+    "path": "custom_components/fronius_modbus/flow_entry.py",
     "old": "    if changed and loaded:\n        return\n",
     "new": "",
     "tests": "a_reconfigure_reloads_the_entry_once"
@@ -1832,5 +1832,12 @@
     "old": "PARALLEL_UPDATES = 0",
     "new": "PARALLEL_UPDATES = 1",
     "tests": "every_platform_declares_its_parallel_updates"
+  },
+  {
+    "label": "config flow: Configure reloads an entry no listener reloads",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "        await _async_reload_unless_listened(\n            self.hass, self.config_entry, changed=changed, loaded=loaded\n        )\n",
+    "new": "",
+    "tests": "reloads_what_no_listener_reloads"
   }
 ]

@@ -17,6 +17,7 @@ from custom_components.fronius_modbus.fronius_modbus_api.exceptions import (
     ControlUnavailable,
 )
 from custom_components.fronius_modbus.froniuswebclient import (
+    ENDPOINT_MISSING,
     FroniusWebAuthError,
     FroniusWebResponseError,
     FroniusWebUnreachable,
@@ -304,6 +305,29 @@ async def test_a_text_file_that_failed_once_is_read_again(hass):
         control.shutdown()
 
     assert data.active_events[0].text == "AFCI-Selbsttest fehlgeschlagen"
+
+
+async def test_the_event_texts_are_read_once_when_a_language_has_no_file(hass):
+    """Reaudit W-05: the caching of the texts was untested.
+
+    A file the firmware lacks counted as failed would fetch the English texts,
+    some 64 KB, on every poll.
+    """
+    hass.config.language = "pt-BR"
+    english = {"StateCodes": {"GEN24-1009": "AFCI selftest failed"}}
+    client = FakeClientWithEvents(texts={"en": english, "pt": ENDPOINT_MISSING})
+    control = make_control(hass, client=client)
+    try:
+        for _ in range(3):
+            data = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    text_reads = [
+        path for path in client.reads if path.endswith(("en.json", "pt.json"))
+    ]
+    assert len(text_reads) == 2
+    assert data.active_events[0].text == "AFCI selftest failed"
 
 
 async def test_event_texts_missing_in_a_language_fall_back_to_english(hass):

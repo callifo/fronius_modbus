@@ -2112,5 +2112,19 @@
     "old": "        if scheduled or not left_out - left_out_mppt_keys(runtime):\n",
     "new": "        if scheduled:\n",
     "tests": "gets_its_sensor_once_lit"
+  },
+  {
+    "label": "web control: the event texts are cached once every file answered",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        if answered:\n            self._event_texts = merged\n",
+    "new": "        if False:\n            self._event_texts = merged\n",
+    "tests": "read_once_when_a_language_has_no_file"
+  },
+  {
+    "label": "web control: a language file the firmware lacks counts as an answer",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "            answered = answered and answer is not None\n",
+    "new": "            answered = answered and isinstance(answer, dict)\n",
+    "tests": "read_once_when_a_language_has_no_file"
   }
 ]

@@ -277,6 +277,38 @@ async def test_minor_version_9_entries_migrate_to_the_current_shape(hass, mock_m
     assert entry.state is ConfigEntryState.LOADED
 
 
+async def test_a_string_dark_at_the_first_setup_gets_its_sensor_once_lit(
+    hass, mock_modbus, monkeypatch, symo_gen24
+):
+    """Reaudit W-03: set up at night, a string got no power sensor until a reload."""
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    probe = make_entry(hass)
+    await setup_entry(hass, probe)
+    address = probe.runtime_data.device.mppt_module(0).resolved_fields["dcw"].address
+    assert await hass.config_entries.async_remove(probe.entry_id)
+    await hass.async_block_till_done()
+    holding = symo_gen24[INVERTER_UNIT_ID]["holding"]
+    daylight = holding[address]
+    holding[address] = 0xFFFF
+    entry = make_entry(hass)
+    await setup_entry(hass, entry)
+    unique_id = f"{entity_prefix(entry.entry_id)}_mppt_module_0_dc_power"
+    registry = er.async_get(hass)
+    assert registry.async_get_entity_id("sensor", DOMAIN, unique_id) is None
+    runtime = entry.runtime_data
+    await runtime.modbus.async_refresh()
+    await hass.async_block_till_done()
+    assert entry.runtime_data is runtime, "a poll still in the dark reloaded"
+
+    # The live unit for the next poll, the fixture for the reload after it.
+    mock_modbus.unit(INVERTER_UNIT_ID).holding[address] = daylight
+    holding[address] = daylight
+    await entry.runtime_data.modbus.async_refresh()
+    await hass.async_block_till_done()
+
+    assert registry.async_get_entity_id("sensor", DOMAIN, unique_id) is not None
+
+
 # An MPPT sensor under each unique id an upgrade still finds: (old id, key, the
 # field that goes dark, the words it then sends).
 LEGACY_MPPT_IDS = [

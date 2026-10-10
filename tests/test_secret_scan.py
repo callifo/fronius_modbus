@@ -10,6 +10,7 @@ on the line is still reported, and that a plain translation key is not.
 Needs the gitleaks binary; the pre-push hook and check.sh need it anyway.
 """
 
+import os
 import pathlib
 import re
 import shutil
@@ -62,6 +63,9 @@ def _scan(tmp_path: pathlib.Path, source: str) -> int:
 @pytest.fixture(autouse=True)
 def _gitleaks_installed():
     if shutil.which("gitleaks") is None:
+        # In CI a skip read as green while the allowlist went unguarded (audit F30).
+        if os.environ.get("CI"):
+            pytest.fail("gitleaks is missing in CI; the allowlist goes unguarded")
         pytest.skip(
             "gitleaks is not installed here; check.sh and the pre-push hook require it"
         )

@@ -149,6 +149,19 @@ class WebData:
     event_log_readable: bool = False
 
 
+# What the web API answers without a login: a lost login keeps it (audit F14).
+_PUBLIC_FIELDS = (
+    "inverter_readings",
+    "inverter_endpoint_missing",
+    "storage_readings",
+    "storage_endpoint_missing",
+    "storage_manufacturer",
+    "storage_model",
+    "storage_serial",
+    "active_events",
+)
+
+
 def _export_limit_summary(config: dict[str, Any] | None) -> dict[str, Any]:
     """Distill the export-limit payload for change-logging."""
     if not isinstance(config, dict) or not config:
@@ -420,7 +433,9 @@ class FroniusWebControl:
 
         _LOGGER.warning("Disabling the Fronius web API after an auth failure: %s", err)
         self._client = None
-        self.data = WebData()
+        self.data = WebData(
+            **{field: getattr(self.data, field) for field in _PUBLIC_FIELDS}
+        )
         await async_get_token_store(self._hass).async_delete_token(
             self._host, self._api_username
         )

@@ -1916,5 +1916,12 @@
     "old": "        if self._shut_down:\n            return\n",
     "new": "",
     "tests": "ends_after_unload_schedules_no_refresh"
+  },
+  {
+    "label": "web control: a lost login keeps the public readings",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        self.data = WebData(\n            **{field: getattr(self.data, field) for field in _PUBLIC_FIELDS}\n        )\n",
+    "new": "        self.data = WebData()\n",
+    "tests": "keeps_the_public_readings_of_its_poll"
   }
 ]

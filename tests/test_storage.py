@@ -11,6 +11,9 @@ import pytest
 from custom_components.fronius_modbus.fronius_modbus_api import (
     storage as storage_module,
 )
+from custom_components.fronius_modbus.fronius_modbus_api.exceptions import (
+    ControlRefused,
+)
 from custom_components.fronius_modbus.fronius_modbus_api.storage import (
     MODE_WRITE_GRACE_POLLS,
     ExtendedMode,
@@ -277,6 +280,31 @@ async def test_a_discharge_limit_cannot_overwrite_the_grid_charge_power(
     assert writes == []
 
 
+# A block mode, and the limit that at 0 W would block the other way too.
+BOTH_WAYS_BLOCKED = [
+    (ExtendedMode.BLOCK_DISCHARGING, "set_charge_limit_w"),
+    (ExtendedMode.BLOCK_CHARGING, "set_discharge_limit_w"),
+]
+
+
+@pytest.mark.parametrize(("mode", "setter"), BOTH_WAYS_BLOCKED)
+async def test_a_zero_limit_that_blocks_both_ways_is_refused(
+    control, writes, mode, setter
+):
+    """Reaudit W-02: both rates at 0 W is an image the firmware refuses.
+
+    The write went out and came back as a bare Modbus error instead of a reason.
+    """
+    await control.set_mode(mode)
+    del writes[:]
+
+    with pytest.raises(ControlRefused) as refused:
+        await getattr(control, setter)(0)
+
+    assert refused.value.key == "limit_blocks_both_ways"
+    assert writes == []
+
+
 async def test_a_rate_above_the_maximum_is_clamped_to_100_percent(
     control, writes, inverter_unit
 ):
@@ -507,7 +535,6 @@ ZERO_WATT_LOOKALIKES = [
     (ExtendedMode.DISCHARGE_LIMIT, "set_discharge_limit_w"),
     (ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT, "set_charge_limit_w"),
     (ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT, "set_discharge_limit_w"),
-    (ExtendedMode.BLOCK_DISCHARGING, "set_charge_limit_w"),
 ]
 
 

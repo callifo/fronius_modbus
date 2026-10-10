@@ -1,6 +1,7 @@
 <#
-Offline checks of inverter_dump.ps1: redaction, strict JSON and the SunSpec
-walk, on synthetic data. Exits 1 and names each failed check.
+Offline checks of inverter_dump.ps1: redaction, strict JSON, the SunSpec
+walk, the Modbus wire and the login, on synthetic data. Exits 1 and names
+each failed check.
 
     pwsh -NoProfile -File tools/inverter_dump.tests.ps1
 #>
@@ -186,6 +187,108 @@ Assert-True ($units['200'].error -and $units['201'].complete) 'an absent meter d
 $export = New-ExportText $null $true ([ordered]@{ port = 502; units = $units }) @('/a') @(200) @('{"zip":12345}')
 Assert-True (Test-ValidJson $export) 'the whole export is valid JSON'
 Assert-True ($export.Contains('[1,2,3,4,5')) 'register values are no text to redact'
+
+# -- the Modbus wire (audit F31, Codex C-04) -----------------------------------------
+
+function New-FakeStream([byte[]]$Reply) {
+    # What the tool writes is kept in Sent; its reads are served from Reply.
+    $stream = [pscustomobject]@{
+        Sent  = New-Object System.Collections.Generic.List[byte]
+        Reply = New-Object System.IO.MemoryStream (, $Reply)
+    }
+    $stream | Add-Member ScriptMethod Write {
+        param($Buffer, $Offset, $Count)
+        $this.Sent.AddRange([byte[]]$Buffer[$Offset..($Offset + $Count - 1)])
+    }
+    $stream | Add-Member ScriptMethod Read {
+        param($Buffer, $Offset, $Count)
+        return $this.Reply.Read($Buffer, $Offset, $Count)
+    }
+    return $stream
+}
+
+function Get-ReadError($Stream) {
+    try {
+        $null = Read-Registers $Stream 1 40000 2
+        return ''
+    } catch {
+        return $_.Exception.Message
+    }
+}
+
+$script:TransactionId = 0x1233
+$wire = New-FakeStream ([byte[]]@(0x12, 0x34, 0, 0, 0, 7, 1, 3, 4, 0x53, 0x75, 0x6E, 0x53))
+$marker = Read-Registers $wire 1 40000 2
+$request = $wire.Sent.ToArray() -join ','
+# Transaction 0x1234, protocol 0, six bytes; unit 1, function 3, 40000, two registers.
+Assert-True ($request -eq '18,52,0,0,0,6,1,3,156,64,0,2') "a read asks for holding registers and nothing else: $request"
+Assert-True ($marker.Count -eq 2 -and $marker[0] -eq 0x5375 -and $marker[1] -eq 0x6E53) "the answer comes back as registers: $($marker -join ',')"
+
+$refusal = Get-ReadError (New-FakeStream ([byte[]]@(0, 1, 0, 0, 0, 3, 1, 0x83, 2)))
+Assert-True ($refusal -eq "$ModbusProtocolError 2") "an exception reply is reported as one: $refusal"
+$cut = Get-ReadError (New-FakeStream ([byte[]]@(0, 1, 0, 0)))
+Assert-True ($cut -eq 'The connection closed.') "a reply cut short ends the read: $cut"
+
+# Only an exception reply keeps request and answer in step; after any other
+# failure a late answer would pass for the next request's registers.
+$script:Connects = 0
+& {
+    function Connect-Modbus { $script:Connects++ }
+    function Read-Registers { throw 'The operation has timed out.' }
+    $null = Read-Modbus $false 6>$null
+}
+Assert-True ($script:Connects -eq 2 + $MeterCandidates) "a timeout reconnects before the next unit: $($script:Connects) connects"
+$script:Connects = 0
+& {
+    function Connect-Modbus { $script:Connects++ }
+    function Read-Registers { throw "$ModbusProtocolError 2" }
+    $null = Read-Modbus $false 6>$null
+}
+Assert-True ($script:Connects -eq 1) "an exception reply keeps the connection: $($script:Connects) connects"
+
+# -- the login (audit F31) -------------------------------------------------------------
+
+$versions = '{"authenticationOptions":{"digest":{"customerHashingVersion":2,"technicianHashingVersion":1}}}'
+Assert-True ((Get-SecretHasher $versions 'technician') -is [System.Security.Cryptography.MD5]) 'hashing version 1 logs in with MD5'
+Assert-True ((Get-SecretHasher $versions 'customer') -is [System.Security.Cryptography.SHA256]) 'hashing version 2 logs in with SHA-256'
+Assert-True ((Get-SecretHasher '{}' 'customer') -is [System.Security.Cryptography.SHA256]) 'no hashing version logs in with SHA-256'
+
+function Get-TestHex($Hasher, [string]$Text) {
+    # Independent of the tool's Get-Hex, so the tool does not vouch for itself.
+    return [BitConverter]::ToString($Hasher.ComputeHash([Text.Encoding]::UTF8.GetBytes($Text))).Replace('-', '').ToLower()
+}
+
+$script:Role = 'technician'
+$script:Password = 'synthetic-password'
+$script:SecretHasher = [System.Security.Cryptography.MD5]::Create()
+$script:Requests = New-Object System.Collections.Generic.List[object]
+& {
+    function Send-Get([string]$Path, [string]$Authorization) {
+        $script:Requests.Add(@($Path, $Authorization))
+        $response = New-Object System.Net.Http.HttpResponseMessage ([System.Net.HttpStatusCode]::OK)
+        if (-not $Authorization) {
+            $response.StatusCode = [System.Net.HttpStatusCode]::Unauthorized
+            [void]$response.Headers.TryAddWithoutValidation('X-WWW-Authenticate', 'Digest realm="synthetic-realm", nonce="synthetic-nonce", qop="auth"')
+        }
+        $response.Content = New-Object System.Net.Http.StringContent ''
+        return $response
+    }
+    $null = Read-Endpoint '/api/commands/Login?user=technician' $true
+}
+$header = [string]$script:Requests[$script:Requests.Count - 1][1]
+$field = @{}
+foreach ($match in [regex]::Matches($header, '(\w+)="?([^",]*)"?')) { $field[$match.Groups[1].Value] = $match.Groups[2].Value }
+$sha256 = [System.Security.Cryptography.SHA256]::Create()
+$secret = Get-TestHex ([System.Security.Cryptography.MD5]::Create()) 'technician:synthetic-realm:synthetic-password'
+$expected = Get-TestHex $sha256 "${secret}:synthetic-nonce:$($field.nc):$($field.cnonce):auth:$(Get-TestHex $sha256 'GET:/api/commands/Login')"
+Assert-True ($field.uri -eq '/api/commands/Login') "the login signs its path without the query: $header"
+Assert-True ($field.response -eq $expected) "the digest answers the challenge: $header"
+
+# -- read only (Codex C-04) -------------------------------------------------------------
+
+# The login is the one command the tool calls, and it is not on these lists.
+$commands = @($PublicPaths + $LoginPaths) | Where-Object { $_ -like '/api/commands/*' }
+Assert-True (@($commands).Count -eq 0) "no command endpoint is read: $($commands -join ', ')"
 
 # -----------------------------------------------------------------------------------
 

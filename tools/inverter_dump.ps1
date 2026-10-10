@@ -148,6 +148,20 @@ function Get-DigestHeader($Response, [string]$Uri) {
     return $header
 }
 
+function Get-SecretHasher([string]$CommonBody, [string]$Role) {
+    # Older firmware hashes the login with MD5 and says so per user; an
+    # answer without the field means SHA-256, as in the integration.
+    $version = $null
+    try {
+        $options = ($CommonBody | ConvertFrom-Json).authenticationOptions
+        $version = $options.digest."${Role}HashingVersion"
+    } catch {
+        Write-Host 'The hashing of the login is not readable; trying SHA-256.'
+    }
+    if ($version -eq 1) { return [System.Security.Cryptography.MD5]::Create() }
+    return [System.Security.Cryptography.SHA256]::Create()
+}
+
 function Read-Endpoint([string]$Path, [bool]$WithLogin) {
     try {
         $response = Send-Get $Path
@@ -552,17 +566,7 @@ function Invoke-Dump {
         $secure = Read-Host "Password of $($script:Role)" -AsSecureString
         $script:Password = [Runtime.InteropServices.Marshal]::PtrToStringBSTR(
             [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
-        # Older firmware hashes the login with MD5 and says so per user; an
-        # answer without the field means SHA-256, as in the integration.
-        $version = $null
-        try {
-            $options = ($common.body | ConvertFrom-Json).authenticationOptions
-            $version = $options.digest."$($script:Role)HashingVersion"
-        } catch {
-            Write-Host 'The hashing of the login is not readable; trying SHA-256.'
-        }
-        if ($version -eq 1) { $script:SecretHasher = [System.Security.Cryptography.MD5]::Create() }
-        else { $script:SecretHasher = [System.Security.Cryptography.SHA256]::Create() }
+        $script:SecretHasher = Get-SecretHasher $common.body $script:Role
         $login = Read-Endpoint "/api/commands/Login?user=$($script:Role)" $true
         if ($login.status -eq 200) {
             $loginRole = $script:Role

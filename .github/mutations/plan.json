@@ -1867,5 +1867,12 @@
     "old": "        dynamic_min = self.entity_description.min_fn(self._runtime)\n",
     "new": "        dynamic_min = None\n",
     "tests": "every_power_number_spans_the_rated_power"
+  },
+  {
+    "label": "mppt: a registered sensor survives a missing value",
+    "path": "custom_components/fronius_modbus/mppt_entities.py",
+    "old": "        if value is None and key not in runtime.registered_keys:\n",
+    "new": "        if value is None:\n",
+    "tests": "dark_mppt_at_a_restart_keeps_its_sensors"
   }
 ]

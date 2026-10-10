@@ -10,6 +10,7 @@
 - Updating from callifo 0.3.0 or older migrated only one of two entities that shared a unique id there (the sensor and the control of `Conn`, `ac_limit_enable`, `ac_limit_rate`, `soc_minimum`, `export_soft_limit`). The other was deleted and came back under a new entity id, so automations using it stopped working. Both now keep their entity ids.
 - On an inverter whose SunSpec map ends in a refused read (upstream #105), a link that stopped answering was never recognised as down: every poll waited out a timeout per sub-system, the stale connection was never replaced, the bridge after a web write did not hold, and the outage was logged as an error instead of once at info.
 - The export soft limit stopped at 15 kW and `Target Feed In` at ±20 kW, whatever the inverter: a Verto or a Tauro could not set a realistic export limit. Both now span the inverter's rated power (`WMax`), as `AC limit rate` already did.
+- A restart while an MPPT string was dark (at night it reports no current, voltage or power) deleted that string's sensors, with the names and entity ids the owner had given them, until a later reload created them anew. A sensor once registered now stays and reads unknown.
 
 ## 1.2.0
 

@@ -62,11 +62,15 @@ def _mppt_sensor_descriptions(
         state_class,
         unit,
     ) in _MPPT_MODULE_SENSOR_SPECS:
-        if getattr(runtime.device.mppt_module(index), attribute, None) is None:
+        key = f"mppt_module_{index}_{suffix}"
+        # A string in the dark sends no value; a restart then deleted the
+        # sensor the owner had (Codex C-03), so a registered one stays.
+        value = getattr(runtime.device.mppt_module(index), attribute, None)
+        if value is None and key not in runtime.registered_keys:
             continue
         descriptions.append(
             FroniusSensorDescription(
-                key=f"mppt_module_{index}_{suffix}",
+                key=key,
                 translation_key=f"mppt_module_{suffix}",
                 translation_placeholders={"module": str(index)},
                 device="inverter",

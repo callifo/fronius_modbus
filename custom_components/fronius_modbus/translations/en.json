@@ -880,6 +880,9 @@
     "limit_blocks_both_ways": {
       "message": "A limit of 0 W would block charging and discharging at once, which the inverter refuses."
     },
+    "storage_mode_left": {
+      "message": "The inverter is no longer in the selected storage mode, for example after a schedule or another controller changed it. Select the mode again."
+    },
     "discharge_limit_not_in_mode": {
       "message": "The discharge limit cannot be changed in the current storage mode."
     },

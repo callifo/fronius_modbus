@@ -299,6 +299,21 @@ async def test_entering_a_grid_mode_starts_at_zero_watts(
     assert control._storage.modbus_unit.holding[address] == 0
 
 
+@pytest.mark.parametrize(("mode", "setter", "address"), GRID_POWERS)
+async def test_entering_a_grid_mode_another_controller_set_starts_at_zero_watts(
+    control, inverter_unit, mode, setter, address
+):
+    """The image already fits the grid mode, but selecting it is still a change."""
+    sunspec_mode = {OUT_W_RTE: 2, IN_W_RTE: 1}[address]
+    inverter_unit.holding.update(
+        {STOR_CTL_MOD: sunspec_mode, address: (-2500) & 0xFFFF}
+    )
+
+    await control.set_mode(mode)
+
+    assert inverter_unit.holding[address] == 0
+
+
 @pytest.mark.parametrize("mode", list(ExtendedMode))
 async def test_a_mode_already_in_place_writes_nothing(control, writes, mode):
     """Picking the current mode again wrote StorCtl_Mod and both rates."""

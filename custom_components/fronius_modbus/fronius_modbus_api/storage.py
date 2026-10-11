@@ -17,7 +17,7 @@ import logging
 
 from .exceptions import ControlRefused
 from .sunspec_models import Storage
-from .writes import register_value, registers_holding
+from .writes import register_value, registers_holding, written_value
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -68,6 +68,7 @@ DISCHARGE_LIMIT_MODES = {
     ExtendedMode.BLOCK_CHARGING,
 }
 # The rate each grid mode leaves to the user, as its grid power.
+_IMAGE_FIELDS = ("stor_ctl_mod", "in_w_rte", "out_w_rte")
 _GRID_POWER_FIELDS = {
     ExtendedMode.CHARGE_FROM_GRID: "out_w_rte",
     ExtendedMode.DISCHARGE_TO_GRID: "in_w_rte",
@@ -350,11 +351,15 @@ class StorageControl:
         async with self._write_lock:
             if not allowed():
                 raise refusal
-            value = percent()
-            other_rate = await self._other_rate(field_name)
+            value = await written_value(self._storage, field_name, percent())
+            _, in_rate, out_rate = await self._image_for_a_rate()
+            if field_name == "in_w_rte":
+                in_rate = value
+            else:
+                out_rate = value
             # With both at or below 0 the firmware refuses the write
             # (exception 3, upstream #126), so say why instead (reaudit W-02).
-            if value <= 0 and other_rate <= 0:
+            if in_rate <= 0 and out_rate <= 0:
                 raise ControlRefused(
                     "limit_blocks_both_ways",
                     "A limit of 0 W would block charging and discharging at once, "
@@ -368,30 +373,47 @@ class StorageControl:
         Entering a grid mode starts its power at 0 W. The last poll may not
         hold a power written since, nor the one of a mode left since (reaudit
         RC-01), and the mode last chosen may not be what the registers hold:
-        another controller or an ignored write leaves a non-grid rate there
-        (reaudit D-02).
+        another controller, a schedule or an ignored write leaves another
+        image there (reaudit D-02, E-01).
         """
         field_name = _GRID_POWER_FIELDS.get(mode)
         if field_name is None or mode is not self._extended_mode:
             return None
-        power = await register_value(self._storage, field_name)
+        image = await self._live_image()
         # Unreadable for a moment right after a write: the power just set stays.
-        if power is None or power <= 0:
+        if image is None or _registers_fit(mode, *image):
             return field_name
         return None
 
-    async def _other_rate(self, field_name: str) -> float:
-        """The rate on the other side of ``field_name`` as the register holds it.
+    async def _image_for_a_rate(self) -> tuple[int, float, float]:
+        """The image a rate write lands in: the live one, while it is the selected mode's.
 
-        A limit mode leaves both sides to the user, so its table value says
-        nothing (reaudit D-01); unreadable, the mode's table value stands in.
+        A limit mode leaves both sides to the user, so its table says nothing
+        about them (reaudit D-01), and a schedule or another controller may
+        have changed the mode since the last poll (reaudit AC-01). Unreadable
+        for a moment right after a write, the mode's table stands in.
         """
-        other_name = "out_w_rte" if field_name == "in_w_rte" else "in_w_rte"
-        rate = await register_value(self._storage, other_name)
-        if rate is not None:
-            return float(rate)
-        _, in_rate, out_rate = _MODE_TABLE[self.extended_mode]
-        return out_rate if field_name == "in_w_rte" else in_rate
+        image = await self._live_image()
+        if image is None:
+            return _MODE_TABLE[self.extended_mode]
+        if not _registers_fit(self.extended_mode, *image):
+            raise ControlRefused(
+                "storage_mode_left",
+                "The inverter is no longer in the selected storage mode; "
+                "select it again",
+            )
+        return image
+
+    async def _live_image(self) -> tuple[int, float, float] | None:
+        """StorCtl_Mod, InWRte and OutWRte as the registers hold them.
+
+        None when one cannot be read. Read before the first write.
+        """
+        image = [await register_value(self._storage, name) for name in _IMAGE_FIELDS]
+        if None in image:
+            return None
+        mode, in_rate, out_rate = image
+        return int(mode), float(in_rate), float(out_rate)
 
     async def _write_changed(self, field_name: str, value: float) -> None:
         if not await registers_holding(self._storage, {field_name: value}):

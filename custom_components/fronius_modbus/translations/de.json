@@ -880,6 +880,9 @@
     "limit_blocks_both_ways": {
       "message": "Eine Grenze von 0 W würde Laden und Entladen zugleich sperren; das lehnt der Wechselrichter ab."
     },
+    "storage_mode_left": {
+      "message": "Der Wechselrichter ist nicht mehr im gewählten Speichermodus, etwa nach einem Zeitplan oder einer anderen Steuerung. Bitte den Modus erneut wählen."
+    },
     "discharge_limit_not_in_mode": {
       "message": "Die Entladegrenze kann im aktuellen Speichermodus nicht geändert werden."
     },

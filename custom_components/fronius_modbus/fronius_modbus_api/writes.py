@@ -57,6 +57,23 @@ async def register_value(component: Component, name: str) -> Any:
     return field.decode(list(words), exponent)
 
 
+async def written_value(component: Component, name: str, value: Any) -> Any:
+    """``value`` as the register of ``name`` will hold it, at the device's scale.
+
+    A rate a little above zero is a zero in the register; judged before the
+    encoding, it passed checks the register would fail. Unreadable scale:
+    ``value`` itself.
+    """
+    unit = component.modbus_unit
+    resolved = component.resolved_fields[name]
+    field = _register_field(resolved)
+    try:
+        exponent = await _scale_exponent(unit, resolved, field)
+    except ModbusError:
+        return value
+    return field.decode(field.encode(value, exponent), exponent)
+
+
 async def _encoded(unit: Any, resolved: ResolvedField, value: Any) -> list[int]:
     """The words a write of ``value`` puts into the register, at the device's scale."""
     field = _register_field(resolved)

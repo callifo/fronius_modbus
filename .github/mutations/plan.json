@@ -2088,15 +2088,15 @@
   {
     "label": "storage: a zero limit blocking both ways is refused",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "            if value <= 0 and other_rate <= 0:\n",
+    "old": "            if in_rate <= 0 and out_rate <= 0:\n",
     "new": "            if False:\n",
     "tests": "blocks_both_ways_is_refused"
   },
   {
-    "label": "storage: an unreadable other side falls back to the mode's rate",
+    "label": "storage: an unreadable image falls back to the mode's table",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "        return out_rate if field_name == \"in_w_rte\" else in_rate\n",
-    "new": "        return in_rate if field_name == \"in_w_rte\" else out_rate\n",
+    "old": "            return _MODE_TABLE[self.extended_mode]\n        if not",
+    "new": "            return (MODE_AUTO, FULL_RATE_PCT, FULL_RATE_PCT)\n        if not",
     "tests": "the_other_side_cannot_be_read"
   },
   {
@@ -2128,38 +2128,38 @@
     "tests": "read_once_when_a_language_has_no_file"
   },
   {
-    "label": "storage: a limit judges the other side by its register",
+    "label": "storage: a rate is judged by the live image",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "        rate = await register_value(self._storage, other_name)\n",
-    "new": "        rate = None\n",
+    "old": "        if image is None:\n            return _MODE_TABLE[self.extended_mode]\n",
+    "new": "        return _MODE_TABLE[self.extended_mode]\n",
+    "tests": "blocks_both_ways_is_refused or left_the_mode"
+  },
+  {
+    "label": "storage: a rate replaces its own side of the image",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            if field_name == \"in_w_rte\":\n                in_rate = value\n            else:\n                out_rate = value\n",
+    "new": "            if field_name == \"in_w_rte\":\n                out_rate = value\n            else:\n                in_rate = value\n",
     "tests": "blocks_both_ways_is_refused"
   },
   {
-    "label": "storage: the other side of a limit is the other register",
+    "label": "storage: a re-selected grid mode keeps its power only while the image fits",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "        other_name = \"out_w_rte\" if field_name == \"in_w_rte\" else \"in_w_rte\"\n",
-    "new": "        other_name = field_name\n",
-    "tests": "blocks_both_ways_is_refused"
-  },
-  {
-    "label": "storage: a re-selected grid mode keeps only a grid-signed power",
-    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "        if power is None or power <= 0:\n",
+    "old": "        if image is None or _registers_fit(mode, *image):\n",
     "new": "        if True:\n",
     "tests": "over_a_non_grid_rate_restores_it"
   },
   {
     "label": "storage: an unreadable grid power is kept",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "        if power is None or power <= 0:\n",
-    "new": "        if power is not None and power <= 0:\n",
+    "old": "        if image is None or _registers_fit(mode, *image):\n",
+    "new": "        if image is not None and _registers_fit(mode, *image):\n",
     "tests": "keeps_the_power_when_it_cannot_be_read"
   },
   {
     "label": "writes: a register value is read at the device scale",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/writes.py",
-    "old": "        exponent = await _scale_exponent(unit, resolved, field)\n",
-    "new": "        exponent = None\n",
+    "old": "        words = await unit.read_holding_registers(resolved.address, resolved.count)\n        exponent = await _scale_exponent(unit, resolved, field)\n",
+    "new": "        words = await unit.read_holding_registers(resolved.address, resolved.count)\n        exponent = None\n",
     "tests": "a_register_is_read_at_the_device_scale"
   },
   {
@@ -2168,5 +2168,26 @@
     "old": "    except ModbusError:\n        return None\n",
     "new": "    except ModbusError:\n        return 0\n",
     "tests": "cannot_be_read"
+  },
+  {
+    "label": "storage: a rate in a mode the inverter left is refused",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        if not _registers_fit(self.extended_mode, *image):\n",
+    "new": "        if False:\n",
+    "tests": "left_the_mode or both_limits_of_another_controller"
+  },
+  {
+    "label": "storage: an image with an unreadable register is unreadable",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        if None in image:\n            return None\n",
+    "new": "",
+    "tests": "cannot_be_read"
+  },
+  {
+    "label": "writes: a rate is judged as the register will hold it",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/writes.py",
+    "old": "    return field.decode(field.encode(value, exponent), exponent)\n",
+    "new": "    return value\n",
+    "tests": "blocks_both_ways_is_refused"
   }
 ]

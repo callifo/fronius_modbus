@@ -111,7 +111,7 @@ With the Web API login, the integration can:
 - enable Modbus TCP during setup and relevant configuration changes
 - switch the SunSpec model type to `int + SF`, the one the integration reads. When the inverter's Modbus is on and uses `float`, the setup asks first: an external device that reads the float models may no longer work after the switch. Declining leaves the inverter as it is and ends the setup.
 - handle the inverter's *Restrict Control* setting by choice (see [Configuration](#configuration))
-- set what the integration reads and controls: port 502, inverter address 1, meter address offset 200, and *Allow Control* switched on, which the Modbus controls need
+- set what the integration reads and controls: the entry's port and inverter address (502 and 1; an entry migrated from callifo 0.2.x keeps the ones it was set up with), meter address offset 200, and *Allow Control* switched on, which the Modbus controls need
 - keep the RS485 ports' master or slave role; a Modbus server that serves RTU alone becomes `TCP & RTU`, and the `TCP & RTU` mode stays as it is
 - derive configured smart meter addresses from `/api/components/PowerMeter/readable`
 - expose authenticated battery controls from `/api/config/batteries`
@@ -122,7 +122,7 @@ A host that another entry already serves is refused before the inverter is conta
 
 ### Without the web API
 
-Choose *Without the web API* as the access role to run the entry on Modbus alone. No password is asked for and no token is stored. Set the inverter's Modbus in its web UI first: Modbus TCP on, port 502, the SunSpec model type `int + SF`, inverter address 1 and meter address offset 200, and *Allow Control* on for the Modbus controls (optionally *Restrict Control* to Home Assistant's address). Without a login the setup cannot set any of this; it reports *Modbus did not answer* until Modbus TCP and `int + SF` are set, and the controls fail while *Allow Control* is off.
+Choose *Without the web API* as the access role to run the entry on Modbus alone. No password is asked for and no token is stored. Set the inverter's Modbus in its web UI first: Modbus TCP on, port 502, the SunSpec model type `int + SF`, inverter address 1 (or the port and address an entry migrated from callifo 0.2.x was set up with) and meter address offset 200, and *Allow Control* on for the Modbus controls (optionally *Restrict Control* to Home Assistant's address). Without a login the setup cannot set any of this; it reports *Modbus did not answer* until Modbus TCP and `int + SF` are set, and the controls fail while *Allow Control* is off.
 
 Stays:
 
@@ -168,7 +168,7 @@ The entities are grouped into devices: the inverter, the battery storage, and ea
 
 ### Inverter sensors
 
-<!-- entities: inverter -->
+<!-- entities: inverter sensor -->
 | Entity | Description |
 | ------ | ----------- |
 | AC power | Active power the inverter puts out (model 101/103 `W`). |
@@ -182,11 +182,12 @@ The entities are grouped into devices: the inverter, the battery storage, and ea
 | Storage charging current<br>Storage charging voltage<br>Storage charging power<br>Storage charging lifetime energy<br>Storage discharging current<br>Storage discharging voltage<br>Storage discharging power<br>Storage discharging lifetime energy | The battery's charge and discharge channels of model 160, on the inverter's device. |
 | Maximum power | The inverter's `WMax` (model 121), the reference of the AC limit. |
 | Isolation Resistance | The DC isolation resistance in MΩ. |
+| Export soft limit | The soft export limit in watts as the inverter holds it, over the Web API; unknown while it is off. Requires the `technician` role; set it with the control of the same name. |
 | Load | The household consumption, derived from the primary smart meter. For a meter at the feed-in point it is the meter's power plus the inverter's AC power; for a meter in the consumption path it is that meter's power. It needs the meter's location from the inverter's `PowerMeter` endpoint and is unknown without it, and while a negative sum could be battery charging. |
 
 ### Inverter diagnostics
 
-<!-- entities: inverter -->
+<!-- entities: inverter sensor -->
 | Entity | Description |
 | ------ | ----------- |
 | Grid status | `on_grid_operating`, `on_grid`, `off_grid_operating` or `off_grid`, based on meter and inverter frequency. An inverter frequency of 53 Hz means off-grid operation; normally it is 50 Hz. While the inverter sleeps, the meter frequency is checked for the connection. |
@@ -205,7 +206,7 @@ The entities are grouped into devices: the inverter, the battery storage, and ea
 
 ### Battery storage sensors
 
-<!-- entities: storage -->
+<!-- entities: storage sensor -->
 | Entity | Description |
 | ------ | ----------- |
 | State of charge | The current battery level (`ChaState`). |
@@ -219,7 +220,7 @@ The entities are grouped into devices: the inverter, the battery storage, and ea
 
 ### Smart meter sensors
 
-<!-- entities: meter -->
+<!-- entities: meter sensor -->
 | Entity | Description |
 | ------ | ----------- |
 | Power<br>Power L1<br>Power L2<br>Power L3 | Total and per-phase real power measured by the meter (`W`, `WphA`-`C`); the sign follows the meter's power direction. |
@@ -242,7 +243,7 @@ The inverter's component endpoints (`/api/components/inverter/readable` and `/ap
 
 On the inverter:
 
-<!-- entities: inverter -->
+<!-- entities: inverter sensor -->
 | Entity | Description |
 | ------ | ----------- |
 | AC module 1 temperature<br>AC module 2 temperature<br>AC module 3 temperature<br>AC module 4 temperature<br>AC module 5 temperature<br>AC module 6 temperature<br>DC module temperature (3)<br>DC or battery module temperature<br>DC module temperature (9)<br>DC module temperature (10) | The module temperatures the inverter reports, named as its web interface names them; channels 1, 2 and 5–8 are the AC modules 1–6. A GEN24 10.0 reports 1, 3 and 4, a Verto 30.0 Plus 1–5 and 9. |
@@ -260,7 +261,7 @@ On the inverter:
 
 On the battery:
 
-<!-- entities: storage -->
+<!-- entities: storage sensor -->
 | Entity | Description |
 | ------ | ----------- |
 | State of health | The battery's own estimate, in percent. |
@@ -298,7 +299,7 @@ Modbus reports events only as severity bits (`Event severity`), and none that on
 
 The inverter keeps events of three levels: the customer's, the technician's and the service's. Its web interface shows a customer login the customer level alone, and so do these entities, whatever login the entry uses. An event of the other levels can stay active for weeks without a visible effect, such as a failed arc-fault self test or an unreachable network gateway. The service entities show them; they start disabled.
 
-<!-- entities: inverter -->
+<!-- entities: inverter sensor event -->
 | Entity | Type | What it shows |
 | ------ | ---- | ------------- |
 | Active event | sensor, diagnostic | The text of the leading active customer event: an error before a warning before an info, the newest among equals. `OK` while none is active; unknown while the list could not be read. The attributes carry its `code` (such as `GEN24-1175`), `text`, `severity`, `visible_to`, `since` and `confirmable`, and the other active customer events under `other_events`. |
@@ -314,7 +315,7 @@ The inverter keeps events of three levels: the customer's, the technician's and 
 
 ### Inverter controls
 
-<!-- entities: inverter -->
+<!-- entities: inverter number select switch button -->
 | Entity | Description |
 | ------ | ----------- |
 | AC limit enable | Switches the AC limit on or off (`WMaxLim_Ena`). Setting `AC limit rate` first and then enabling it avoids that the limit the inverter still holds applies for a moment. |
@@ -342,14 +343,14 @@ If Web API credentials are configured, the integration exposes both Modbus batte
 | PV Charge Limit               | The storage can be charged with PV power at a limited rate. The limit is set to maximum power after the change.                                                                                                              |
 | Discharge Limit               | The storage can be charged with PV power and discharged at a limited rate. The limit is set to maximum power after the change.                                                                                              |
 | PV Charge and Discharge Limit | Allows setting both PV charge and discharge limits. The limits are set to maximum power after the change; with one limit at 0 W, 0 W (or a value that rounds to it) for the other is refused, since the inverter does not take both directions blocked. |
-| Charge from Grid              | The storage is charged from the grid at the rate from `Grid charge power`, which is set to 0 after the change; selecting the mode again keeps it. See [Charging from the grid](#charging-from-the-grid).                                                        |
-| Discharge to Grid             | The storage discharges to the grid at the rate from `Grid discharge power`, which is set to 0 after the change; selecting the mode again keeps it.                                                                                                             |
+| Charge from Grid              | The storage is charged from the grid at the rate from `Grid charge power`, which is set to 0 after the change; selecting the mode again keeps it while the inverter still holds the mode, otherwise it starts at 0 W again. See [Charging from the grid](#charging-from-the-grid).                                                        |
+| Discharge to Grid             | The storage discharges to the grid at the rate from `Grid discharge power`, which is set to 0 after the change; selecting the mode again keeps it while the inverter still holds the mode, otherwise it starts at 0 W again.                                                                                                             |
 | Block Discharging             | The storage can only be charged with PV power. The charge limit is set to maximum power; 0 W is refused, since the inverter does not take both directions blocked.                                                                                                                                    |
 | Block Charging                | The storage can only be discharged and is not charged with PV power. The discharge limit is set to maximum power; 0 W is refused, since the inverter does not take both directions blocked.                                                                                                          |
 
 ### Modbus controls
 
-<!-- entities: storage -->
+<!-- entities: storage number select -->
 | Entity | Description |
 | ------ | ----------- |
 | Storage Control Mode | Selects the storage mode; see the table above. |
@@ -389,7 +390,7 @@ The inverter keeps two independent switches, and the entities follow them:
 - `Web API SoC mode` is `BAT_M0_SOC_MODE`, the automatic/manual switch of the SoC window. `SoC Minimum (Web API)` and `SoC Maximum` belong to it; switching self-consumption optimisation does not touch the window.
 - `Backup reserve` is independent of both switches.
 
-<!-- entities: storage -->
+<!-- entities: storage number select switch -->
 | Entity | Description |
 | ------ | ----------- |
 | Self-consumption optimisation | `HYB_EM_MODE`: `Automatic` or `Manual`. Does not change the SoC window. |

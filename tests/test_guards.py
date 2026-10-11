@@ -38,7 +38,7 @@ GUARD_FILES = {
     "test_durations.py": "no test quietly starts taking minutes",
     "test_imports.py": "every module imports outside the author's own tree",
     "test_entity_table.py": "every legacy key is still registered and translated",
-    "test_readme_entities.py": "the README names every entity on its device, and no other",
+    "test_readme_entities.py": "the README names every entity on its device and platform, and no other",
     "test_api_is_ha_free.py": "the device library imports no Home Assistant",
     "test_log_hygiene.py": "no log line names the device, requests is called once, an outage is not an error",
     "test_mutation_harness.py": "the mutation run fails loudly instead of reporting success",

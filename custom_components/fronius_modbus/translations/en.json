@@ -5,7 +5,7 @@
     "step": {
       "user": {
         "title": "Set up Fronius System",
-        "description": "Enter the host, choose the local Web API access role, and set the update intervals and Modbus IP restriction. Minimum interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand. Switching an existing entry to it removes those entities; their history stays.",
+        "description": "Enter the host, choose the local Web API access role, and set the update intervals and Modbus IP restriction. Minimum interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand, with the SunSpec model type int + SF. Switching an existing entry to it removes those entities; their history stays.",
         "data": {
           "host": "Host",
           "scan_interval": "Update interval (seconds)",
@@ -27,7 +27,7 @@
       },
       "reconfigure": {
         "title": "Review Fronius System",
-        "description": "Review the host, the local Web API access role, the update intervals and the Modbus IP restriction. Minimum interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand. Switching an existing entry to it removes those entities; their history stays.",
+        "description": "Review the host, the local Web API access role, the update intervals and the Modbus IP restriction. Minimum interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand, with the SunSpec model type int + SF. Switching an existing entry to it removes those entities; their history stays.",
         "data": {
           "host": "Host",
           "scan_interval": "Update interval (seconds)",
@@ -49,7 +49,7 @@
       },
       "reauth_confirm": {
         "title": "Log in to the Fronius Web API again",
-        "description": "The stored login of this entry is missing or was rejected, for example after the password was changed on the inverter. Choose the access role; the next step asks for its password. If you do not want to use the web API, choose Without the web API. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand. Switching an existing entry to it removes those entities; their history stays.",
+        "description": "The stored login of this entry is missing or was rejected, for example after the password was changed on the inverter. Choose the access role; the next step asks for its password. If you do not want to use the web API, choose Without the web API. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand, with the SunSpec model type int + SF. Switching an existing entry to it removes those entities; their history stays.",
         "data": {
           "api_username": "Web API access role"
         }
@@ -76,7 +76,7 @@
     },
     "error": {
       "cannot_connect": "Failed to connect",
-      "cannot_connect_modbus": "Modbus did not answer. Without the web API, switch Modbus TCP on in the inverter first.",
+      "cannot_connect_modbus": "Modbus did not answer. Without the web API, switch Modbus TCP on in the inverter first and set the SunSpec model type to int + SF.",
       "invalid_port": "Invalid port number",
       "invalid_host": "Invalid host address",
       "unsupported_hardware": "Unsupported hardware. See logs.",
@@ -821,7 +821,7 @@
     "step": {
       "init": {
         "title": "Set up Fronius System",
-        "description": "Review the host, the local Web API access role, the update intervals and the Modbus IP restriction. Minimum interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand. Switching an existing entry to it removes those entities; their history stays.",
+        "description": "Review the host, the local Web API access role, the update intervals and the Modbus IP restriction. Minimum interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand, with the SunSpec model type int + SF. Switching an existing entry to it removes those entities; their history stays.",
         "data": {
           "host": "Host",
           "scan_interval": "Update interval (seconds)",
@@ -844,7 +844,7 @@
     },
     "error": {
       "cannot_connect": "Failed to connect",
-      "cannot_connect_modbus": "Modbus did not answer. Without the web API, switch Modbus TCP on in the inverter first.",
+      "cannot_connect_modbus": "Modbus did not answer. Without the web API, switch Modbus TCP on in the inverter first and set the SunSpec model type to int + SF.",
       "invalid_port": "Invalid port number",
       "invalid_host": "Invalid host address",
       "unsupported_hardware": "Unsupported hardware. See logs.",

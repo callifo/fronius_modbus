@@ -217,8 +217,15 @@ def _raised_by_another_controller(power_address):
     return {power_address: 10000}
 
 
+def _auto_with_the_rates_left(_address):
+    """A schedule switches to AUTO and leaves the grid power in its register."""
+    return {STOR_CTL_MOD: 0}
+
+
 @pytest.mark.parametrize("poll", [False, True])
-@pytest.mark.parametrize("left", [_ignored_mode, _raised_by_another_controller])
+@pytest.mark.parametrize(
+    "left", [_ignored_mode, _raised_by_another_controller, _auto_with_the_rates_left]
+)
 @pytest.mark.parametrize(("mode", "setter", "address"), GRID_POWERS)
 async def test_reselecting_a_grid_mode_over_a_non_grid_rate_restores_it(
     control, inverter_unit, mode, setter, address, left, poll
@@ -227,6 +234,8 @@ async def test_reselecting_a_grid_mode_over_a_non_grid_rate_restores_it(
 
     With a positive rate in the power register, only StorCtl_Mod went out and
     the image was Discharge Limit or PV Charge Limit instead of the grid mode.
+    Judged by the power register alone, AUTO with the rates left brought the
+    power of the earlier visit back (reaudit E-01).
     """
     await control.set_mode(mode)
     await getattr(control, setter)(2560)
@@ -364,24 +373,27 @@ ZERO_LIMITS = [
     )
     for mode in sorted(modes)
 ]
+BLOCK_MODES = (ExtendedMode.BLOCK_CHARGING, ExtendedMode.BLOCK_DISCHARGING)
 
 
+@pytest.mark.parametrize("watts", [0, 0.1])
 @pytest.mark.parametrize(("mode", "setter", "other"), ZERO_LIMITS)
 async def test_a_zero_limit_that_blocks_both_ways_is_refused(
-    control, writes, inverter_unit, mode, setter, other
+    control, writes, inverter_unit, mode, setter, other, watts
 ):
     """Reaudit W-02: both rates at 0 W is an image the firmware refuses.
 
     The write went out and came back as a bare Modbus error instead of a
     reason. The other side was read from the mode table, so in PV Charge and
-    Discharge Limit a second 0 W limit still went out (reaudit D-01).
+    Discharge Limit a second 0 W limit still went out (reaudit D-01), and
+    0.1 W passed the check to become a 0 in the register (reaudit AC-01).
     """
     await control.set_mode(mode)
     inverter_unit.holding[other] = 0
     del writes[:]
 
     with pytest.raises(ControlRefused) as refused:
-        await getattr(control, setter)(0)
+        await getattr(control, setter)(watts)
 
     assert refused.value.key == "limit_blocks_both_ways"
     assert writes == []
@@ -395,7 +407,7 @@ async def test_a_zero_limit_is_judged_by_the_mode_when_the_other_side_cannot_be_
     await control.set_mode(mode)
     inverter_unit.fail_read(other, ServerDeviceFailureError())
     del writes[:]
-    blocked = mode in (ExtendedMode.BLOCK_CHARGING, ExtendedMode.BLOCK_DISCHARGING)
+    blocked = mode in BLOCK_MODES
     outcome = pytest.raises(ControlRefused) if blocked else contextlib.nullcontext()
 
     with outcome:
@@ -404,7 +416,10 @@ async def test_a_zero_limit_is_judged_by_the_mode_when_the_other_side_cannot_be_
     assert len(writes) == (0 if blocked else 1)
 
 
-@pytest.mark.parametrize(("mode", "setter", "other"), ZERO_LIMITS)
+@pytest.mark.parametrize(
+    ("mode", "setter", "other"),
+    [row for row in ZERO_LIMITS if row[0] not in BLOCK_MODES],
+)
 async def test_a_zero_limit_is_written_while_the_other_side_is_open(
     control, writes, inverter_unit, mode, setter, other
 ):
@@ -416,6 +431,49 @@ async def test_a_zero_limit_is_written_while_the_other_side_is_open(
     await getattr(control, setter)(0)
 
     assert [event.values[0] for event in writes] == [0]
+
+
+# Every rate setter and a mode that allows it.
+RATE_SETTERS = [(mode, setter) for mode, setter, _ in ZERO_LIMITS] + [
+    (mode, setter) for mode, setter, _ in GRID_POWERS
+]
+
+
+@pytest.mark.parametrize(("mode", "setter"), RATE_SETTERS)
+async def test_a_rate_is_refused_once_the_inverter_left_the_mode(
+    control, writes, inverter_unit, mode, setter
+):
+    """Reaudit AC-01: a rate was judged by the mode last chosen.
+
+    A schedule or another controller changed the mode between two polls; the
+    rate went into that mode's image instead.
+    """
+    await control.set_mode(mode)
+    inverter_unit.holding[STOR_CTL_MOD] = 0
+    del writes[:]
+
+    with pytest.raises(ControlRefused) as refused:
+        await getattr(control, setter)(2560)
+
+    assert refused.value.key == "storage_mode_left"
+    assert writes == []
+
+
+@pytest.mark.parametrize(("mode", "setter", "address"), GRID_POWERS)
+async def test_a_grid_power_is_refused_over_both_limits_of_another_controller(
+    control, writes, inverter_unit, mode, setter, address
+):
+    """Reaudit AC-01: StorCtl_Mod 3 with a negative rate beyond the other is a
+    window the firmware refuses."""
+    await control.set_mode(mode)
+    inverter_unit.holding.update({STOR_CTL_MOD: 3, IN_W_RTE: 2500, OUT_W_RTE: 2500})
+    del writes[:]
+
+    with pytest.raises(ControlRefused) as refused:
+        await getattr(control, setter)(5120)
+
+    assert refused.value.key == "storage_mode_left"
+    assert writes == []
 
 
 async def test_a_rate_above_the_maximum_is_clamped_to_100_percent(

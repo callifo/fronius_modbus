@@ -285,6 +285,53 @@ Assert-True ($field.uri -eq '/api/commands/Login') "the login signs its path wit
 Assert-True ($field.response -eq $expected) "the digest answers the challenge: $header"
 Assert-True ($script:LoginStatus -eq 200) "the login reports its status: $($script:LoginStatus)"
 
+# -- the dump's login (reaudit D-04) -----------------------------------------------------
+
+function Invoke-TestDump([int]$LoginStatus) {
+    # Runs the dump against faked answers up to the file and keeps the role it would export.
+    $script:Reads = New-Object System.Collections.Generic.List[object]
+    $script:Exported = 'not exported'
+    $script:SecretHasher = $null
+    $script:InverterHost = '192.0.2.1'
+    & {
+        function Read-Host([string]$Prompt, [switch]$AsSecureString) {
+            if ($AsSecureString) {
+                $secure = New-Object Security.SecureString
+                foreach ($character in 'synthetic-password'.ToCharArray()) { $secure.AppendChar($character) }
+                return $secure
+            }
+            if ($Prompt -like 'Login*') { return 'technician' }
+            if ($Prompt -like '*Modbus*') { return 'n' }
+            return 'y'
+        }
+        function Read-Endpoint([string]$Path, [bool]$WithLogin) {
+            $script:Reads.Add(@($Path, $WithLogin))
+            if ($Path -eq '/api/status/common') { return @{ status = 200; body = $versions } }
+            if ($Path -like '/api/commands/Login*') { return @{ status = $LoginStatus; body = '' } }
+            return @{ status = 200; body = '{}' }
+        }
+        function New-ExportText($LoginRole) {
+            $script:Exported = $LoginRole
+            throw 'stopped before the file'
+        }
+        try { Invoke-Dump 6>$null } catch { if ("$_" -ne 'stopped before the file') { throw } }
+    }
+}
+
+function Get-PathsReadWithLogin {
+    return @($script:Reads | Where-Object { $_[1] -and $_[0] -notlike '/api/commands/*' } | ForEach-Object { $_[0] })
+}
+
+Invoke-TestDump 200
+Assert-True ($script:SecretHasher -is [System.Security.Cryptography.MD5]) "the dump logs in with the hashing the device names: $($script:SecretHasher)"
+Assert-True ($script:Exported -eq 'technician') "an accepted login is exported with its role: $($script:Exported)"
+$withLogin = Get-PathsReadWithLogin
+Assert-True (($withLogin -join ',') -eq ($LoginPaths -join ',')) "an accepted login reads the login paths with it: $($withLogin -join ', ')"
+Invoke-TestDump 401
+Assert-True ($null -eq $script:Exported) "a refused login is exported without a role: $($script:Exported)"
+$withLogin = Get-PathsReadWithLogin
+Assert-True ($withLogin.Count -eq 0) "a refused login reads nothing with it: $($withLogin -join ', ')"
+
 # -- read only (Codex C-04) -------------------------------------------------------------
 
 # The login is the one command the tool calls, and it is not on these lists.

@@ -36,7 +36,7 @@ What changes for users of [callifo/fronius_modbus](https://github.com/callifo/fr
 > [!IMPORTANT]
 > Enum states are translation keys now: `Auto` became `auto`, `Charge from Grid` became `charge_from_grid`, `On grid operating` became `on_grid_operating`, `Enabled`/`Disabled` became `enabled`/`disabled`. Update automations and templates that compare against the old texts; see the CHANGELOG for the rule.
 
-**Kept:** entity IDs, unique IDs, history/statistics and existing options. Existing entries are migrated on the first start.
+**Kept:** entity IDs, unique IDs, history/statistics and existing options. Existing entries are migrated on the first start. Coming straight from 0.2.7 or older, the MPPT and storage module sensors (`mppt1_power`, `mppt1_lfte` and the like) come back under new entity ids, as they did with callifo 0.2.8.
 
 **Connection and data**
 
@@ -298,7 +298,7 @@ If Web API credentials are configured, the integration exposes both Modbus batte
 | Auto                          | The inverter runs its own battery management; the `Modbus storage reserve` is not applied in this mode.                                                                                                                      |
 | PV Charge Limit               | The storage can be charged with PV power at a limited rate. The limit is set to maximum power after the change.                                                                                                              |
 | Discharge Limit               | The storage can be charged with PV power and discharged at a limited rate. The limit is set to maximum power after the change.                                                                                              |
-| PV Charge and Discharge Limit | Allows setting both PV charge and discharge limits. The limits are set to maximum power after the change.                                                                                                                    |
+| PV Charge and Discharge Limit | Allows setting both PV charge and discharge limits. The limits are set to maximum power after the change; with one limit at 0 W, 0 W for the other is refused, since the inverter does not take both directions blocked. |
 | Charge from Grid              | The storage is charged from the grid at the rate from `Grid Charge Power`, which is set to 0 after the change; selecting the mode again keeps it. See [Charging from the grid](#charging-from-the-grid).                                                        |
 | Discharge to Grid             | The storage discharges to the grid at the rate from `Grid Discharge Power`, which is set to 0 after the change; selecting the mode again keeps it.                                                                                                             |
 | Block discharging             | The storage can only be charged with PV power. The charge limit is set to maximum power; 0 W is refused, since the inverter does not take both directions blocked.                                                                                                                                    |

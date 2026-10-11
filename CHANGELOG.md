@@ -27,10 +27,10 @@
 - A battery setting written while its entry was reloaded or removed started a web refresh of the unloaded entry ten seconds later.
 - A web login lost in the middle of a poll threw away what that poll had already read without a login: the component sensors and the active events were unknown until the next poll.
 - A language file of the event texts that failed to load once kept the events in English, or as bare short names, until the entry was reloaded. A file that failed is now read again at the next poll.
-- Selecting `Charge from Grid` or `Discharge to Grid` again before the next poll set the grid power back to what that poll had read, so an automation that re-asserts its mode undid the power it had just set; entering one of them could also bring back the power of an earlier visit. Entering a grid mode now starts at 0 W, as documented, and selecting it again keeps the power.
-- Updating from callifo 0.3.0 or older, or from 0.1.9, while an MPPT string was dark deleted that string's sensors with the names the owner had given them. They are now migrated like the others.
+- Selecting `Charge from Grid` or `Discharge to Grid` again before the next poll set the grid power back to what that poll had read, so an automation that re-asserts its mode undid the power it had just set; entering one of them could also bring back the power of an earlier visit. Entering a grid mode now starts at 0 W, as documented, and selecting it again keeps the power set in it; a rate another controller left in its place is set to 0 W, so the grid mode is restored.
+- Updating from callifo 0.2.8 to 0.3.0, or from 0.1.9, while an MPPT string was dark deleted that string's sensors with the names the owner had given them. They are now migrated like the others.
 - Updating from callifo 0.3.0 or older replaced a title the owner had given the entry with the generated one.
-- A charge limit of 0 W in `Block discharging`, or a discharge limit of 0 W in `Block charging`, blocks both directions, which the inverter refuses; the owner got a bare Modbus error. Such a value is now refused with a reason.
+- A limit of 0 W while the other direction was already at 0 W blocks both directions, which the inverter refuses; the owner got a bare Modbus error. This is a charge limit of 0 W in `Block discharging`, a discharge limit of 0 W in `Block charging`, or the second of two 0 W limits in `PV Charge and Discharge Limit`. Such a value is now refused with a reason.
 - An entry set up while the MPPT strings were dark, for example at night, got their current, voltage and power sensors only at the next restart. It now reloads once a string sends a value.
 
 ## 1.2.0

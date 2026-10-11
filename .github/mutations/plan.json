@@ -2189,5 +2189,19 @@
     "old": "    return field.decode(field.encode(value, exponent), exponent)\n",
     "new": "    return value\n",
     "tests": "blocks_both_ways_is_refused"
+  },
+  {
+    "label": "mppt: a string lit during the platform setup is checked at once",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "    entry.async_on_unload(runtime.modbus.async_add_listener(_check))\n    _check()\n",
+    "new": "    entry.async_on_unload(runtime.modbus.async_add_listener(_check))\n",
+    "tests": "lit_while_the_platforms_set_up"
+  },
+  {
+    "label": "mppt: the strings left out are taken before the platform setup",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "    left_out = left_out_mppt_keys(entry.runtime_data)\n    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)\n",
+    "new": "    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)\n    left_out = left_out_mppt_keys(entry.runtime_data)\n",
+    "tests": "lit_while_the_platforms_set_up"
   }
 ]

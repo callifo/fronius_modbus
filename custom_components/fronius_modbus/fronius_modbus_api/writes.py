@@ -40,13 +40,40 @@ async def registers_holding(
     return holding
 
 
+async def register_value(component: Component, name: str) -> Any:
+    """What the register of ``name`` holds now, or None when it cannot be read.
+
+    Read before the first write, like ``registers_holding``: the last poll may
+    not hold what a write since left there.
+    """
+    unit = component.modbus_unit
+    resolved = component.resolved_fields[name]
+    field = _register_field(resolved)
+    try:
+        words = await unit.read_holding_registers(resolved.address, resolved.count)
+        exponent = await _scale_exponent(unit, resolved, field)
+    except ModbusError:
+        return None
+    return field.decode(list(words), exponent)
+
+
 async def _encoded(unit: Any, resolved: ResolvedField, value: Any) -> list[int]:
     """The words a write of ``value`` puts into the register, at the device's scale."""
+    field = _register_field(resolved)
+    return field.encode(value, await _scale_exponent(unit, resolved, field))
+
+
+def _register_field(resolved: ResolvedField) -> RegisterField[Any]:
     field = resolved.field
     if not isinstance(field, RegisterField):
         raise TypeError(f"{field!r} is not a register")
-    exponent = None
-    if field.scale_register is not None and resolved.scale_address is not None:
-        (scale,) = await unit.read_holding_registers(resolved.scale_address, 1)
-        exponent = decode_int([scale], signed=True)
-    return field.encode(value, exponent)
+    return field
+
+
+async def _scale_exponent(
+    unit: Any, resolved: ResolvedField, field: RegisterField[Any]
+) -> int | None:
+    if field.scale_register is None or resolved.scale_address is None:
+        return None
+    (scale,) = await unit.read_holding_registers(resolved.scale_address, 1)
+    return decode_int([scale], signed=True)

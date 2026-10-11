@@ -2051,11 +2051,11 @@
     "tests": "run_their_own_action"
   },
   {
-    "label": "storage: selecting a grid mode again keeps its power",
+    "label": "storage: only the grid mode in place keeps its power",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "            if mode is self._extended_mode:\n                kept = _GRID_POWER_FIELDS.get(mode)\n",
-    "new": "            if False:\n                kept = _GRID_POWER_FIELDS.get(mode)\n",
-    "tests": "keeps_the_power_just_written"
+    "old": "        if field_name is None or mode is not self._extended_mode:\n",
+    "new": "        if field_name is None:\n",
+    "tests": "starts_at_zero_watts"
   },
   {
     "label": "migrations: a name-based id counts as registered under its key",
@@ -2093,11 +2093,11 @@
     "tests": "blocks_both_ways_is_refused"
   },
   {
-    "label": "storage: the other side is the mode's fixed rate",
+    "label": "storage: an unreadable other side falls back to the mode's rate",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "            other_rate = out_rate if field_name == \"in_w_rte\" else in_rate\n",
-    "new": "            other_rate = in_rate if field_name == \"in_w_rte\" else out_rate\n",
-    "tests": "blocks_both_ways_is_refused"
+    "old": "        return out_rate if field_name == \"in_w_rte\" else in_rate\n",
+    "new": "        return in_rate if field_name == \"in_w_rte\" else out_rate\n",
+    "tests": "the_other_side_cannot_be_read"
   },
   {
     "label": "setup: a string lit after setup reloads the entry",
@@ -2126,5 +2126,47 @@
     "old": "            answered = answered and answer is not None\n",
     "new": "            answered = answered and isinstance(answer, dict)\n",
     "tests": "read_once_when_a_language_has_no_file"
+  },
+  {
+    "label": "storage: a limit judges the other side by its register",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        rate = await register_value(self._storage, other_name)\n",
+    "new": "        rate = None\n",
+    "tests": "blocks_both_ways_is_refused"
+  },
+  {
+    "label": "storage: the other side of a limit is the other register",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        other_name = \"out_w_rte\" if field_name == \"in_w_rte\" else \"in_w_rte\"\n",
+    "new": "        other_name = field_name\n",
+    "tests": "blocks_both_ways_is_refused"
+  },
+  {
+    "label": "storage: a re-selected grid mode keeps only a grid-signed power",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        if power is None or power <= 0:\n",
+    "new": "        if True:\n",
+    "tests": "over_a_non_grid_rate_restores_it"
+  },
+  {
+    "label": "storage: an unreadable grid power is kept",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        if power is None or power <= 0:\n",
+    "new": "        if power is not None and power <= 0:\n",
+    "tests": "keeps_the_power_when_it_cannot_be_read"
+  },
+  {
+    "label": "writes: a register value is read at the device scale",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/writes.py",
+    "old": "        exponent = await _scale_exponent(unit, resolved, field)\n",
+    "new": "        exponent = None\n",
+    "tests": "a_register_is_read_at_the_device_scale"
+  },
+  {
+    "label": "writes: an unreadable register value is None",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/writes.py",
+    "old": "    except ModbusError:\n        return None\n",
+    "new": "    except ModbusError:\n        return 0\n",
+    "tests": "cannot_be_read"
   }
 ]

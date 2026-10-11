@@ -17,7 +17,7 @@ import logging
 
 from .exceptions import ControlRefused
 from .sunspec_models import Storage
-from .writes import registers_holding
+from .writes import register_value, registers_holding
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -262,12 +262,8 @@ class StorageControl:
                 [("in_w_rte", in_rate), ("out_w_rte", out_rate)],
                 key=lambda write: -write[1],
             )
-            # Entering a grid mode starts its power at 0 W; selecting it again
-            # leaves the power as set. The last poll may not hold the power
-            # written since, nor the one of a mode left since (reaudit RC-01).
-            if mode is self._extended_mode:
-                kept = _GRID_POWER_FIELDS.get(mode)
-                rate_writes = [write for write in rate_writes if write[0] != kept]
+            kept = await self._grid_power_kept(mode)
+            rate_writes = [write for write in rate_writes if write[0] != kept]
             writes = [("stor_ctl_mod", sunspec_mode), *rate_writes]
             holding = await registers_holding(self._storage, dict(writes))
             for field_name, value in writes:
@@ -355,11 +351,9 @@ class StorageControl:
             if not allowed():
                 raise refusal
             value = percent()
-            _, in_rate, out_rate = _MODE_TABLE[self.extended_mode]
-            other_rate = out_rate if field_name == "in_w_rte" else in_rate
-            # The rate the mode holds fixed on the other side: with both at or
-            # below 0 the firmware refuses the write (exception 3, upstream
-            # #126), so say why instead (reaudit W-02).
+            other_rate = await self._other_rate(field_name)
+            # With both at or below 0 the firmware refuses the write
+            # (exception 3, upstream #126), so say why instead (reaudit W-02).
             if value <= 0 and other_rate <= 0:
                 raise ControlRefused(
                     "limit_blocks_both_ways",
@@ -367,6 +361,37 @@ class StorageControl:
                     "which the inverter refuses",
                 )
             await self._write_changed(field_name, value)
+
+    async def _grid_power_kept(self, mode: ExtendedMode) -> str | None:
+        """The grid power field selecting ``mode`` again leaves as set, if any.
+
+        Entering a grid mode starts its power at 0 W. The last poll may not
+        hold a power written since, nor the one of a mode left since (reaudit
+        RC-01), and the mode last chosen may not be what the registers hold:
+        another controller or an ignored write leaves a non-grid rate there
+        (reaudit D-02).
+        """
+        field_name = _GRID_POWER_FIELDS.get(mode)
+        if field_name is None or mode is not self._extended_mode:
+            return None
+        power = await register_value(self._storage, field_name)
+        # Unreadable for a moment right after a write: the power just set stays.
+        if power is None or power <= 0:
+            return field_name
+        return None
+
+    async def _other_rate(self, field_name: str) -> float:
+        """The rate on the other side of ``field_name`` as the register holds it.
+
+        A limit mode leaves both sides to the user, so its table value says
+        nothing (reaudit D-01); unreadable, the mode's table value stands in.
+        """
+        other_name = "out_w_rte" if field_name == "in_w_rte" else "in_w_rte"
+        rate = await register_value(self._storage, other_name)
+        if rate is not None:
+            return float(rate)
+        _, in_rate, out_rate = _MODE_TABLE[self.extended_mode]
+        return out_rate if field_name == "in_w_rte" else in_rate
 
     async def _write_changed(self, field_name: str, value: float) -> None:
         if not await registers_holding(self._storage, {field_name: value}):

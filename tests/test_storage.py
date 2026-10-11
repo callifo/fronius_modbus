@@ -1,6 +1,7 @@
 """The storage mode automaton and its write sequences, watched through the mock's write events."""
 
 import asyncio
+import contextlib
 import logging
 from types import SimpleNamespace
 
@@ -25,6 +26,7 @@ from custom_components.fronius_modbus.fronius_modbus_api.sunspec_models import (
     STORAGE_MODEL_ID,
     Storage,
 )
+from custom_components.fronius_modbus.fronius_modbus_api.writes import register_value
 
 STORAGE_HEADER = 40343
 STOR_CTL_MOD = STORAGE_HEADER + 5
@@ -166,6 +168,14 @@ async def test_a_mode_change_before_the_next_poll_passes_no_refused_window(
     assert refused == []
 
 
+async def test_a_register_is_read_at_the_device_scale(control):
+    """The rate the storage writes judge by is the percent the poll would show."""
+    await control.set_mode(ExtendedMode.CHARGE_FROM_GRID)
+    await control.set_grid_charge_power_w(2560)
+
+    assert await register_value(control._storage, "out_w_rte") == -25.0
+
+
 async def test_grid_charge_power_is_a_negative_discharge_rate(control, writes):
     await control.set_mode(ExtendedMode.CHARGE_FROM_GRID)
     await control.set_grid_charge_power_w(2560)
@@ -233,8 +243,37 @@ async def test_reselecting_a_grid_mode_over_a_non_grid_rate_restores_it(
 
 
 @pytest.mark.parametrize(("mode", "setter", "address"), GRID_POWERS)
+async def test_reselecting_a_grid_mode_keeps_the_power_when_it_cannot_be_read(
+    control, inverter_unit, mode, setter, address
+):
+    """The device refuses a read for a moment right after a write.
+
+    Judged by an unreadable register, the power just set went back to 0 W.
+    """
+    await control.set_mode(mode)
+    await getattr(control, setter)(2560)
+    inverter_unit.fail_read(address, ServerDeviceFailureError())
+
+    await control.set_mode(mode)
+
+    assert inverter_unit.holding[address] == (-2500) & 0xFFFF
+
+
+async def _select_auto(control):
+    await control.set_mode(ExtendedMode.AUTO)
+
+
+async def _auto_from_the_device(control):
+    """A schedule on the inverter switches to AUTO and leaves the rates as they are."""
+    control._storage.modbus_unit.holding[STOR_CTL_MOD] = 0
+    await control._storage.async_update()
+    control.sync_from_device()
+
+
+@pytest.mark.parametrize("leave", [_select_auto, _auto_from_the_device])
+@pytest.mark.parametrize(("mode", "setter", "address"), GRID_POWERS)
 async def test_entering_a_grid_mode_starts_at_zero_watts(
-    control, mode, setter, address
+    control, mode, setter, address, leave
 ):
     """Reaudit RC-01: a power set in a mode left since came back.
 
@@ -244,7 +283,7 @@ async def test_entering_a_grid_mode_starts_at_zero_watts(
     await getattr(control, setter)(2560)
     await control._storage.async_update()
     control.sync_from_device()
-    await control.set_mode(ExtendedMode.AUTO)
+    await leave(control)
 
     await control.set_mode(mode)
 
@@ -346,6 +385,23 @@ async def test_a_zero_limit_that_blocks_both_ways_is_refused(
 
     assert refused.value.key == "limit_blocks_both_ways"
     assert writes == []
+
+
+@pytest.mark.parametrize(("mode", "setter", "other"), ZERO_LIMITS)
+async def test_a_zero_limit_is_judged_by_the_mode_when_the_other_side_cannot_be_read(
+    control, writes, inverter_unit, mode, setter, other
+):
+    """An unreadable other side falls back to what the mode holds there."""
+    await control.set_mode(mode)
+    inverter_unit.fail_read(other, ServerDeviceFailureError())
+    del writes[:]
+    blocked = mode in (ExtendedMode.BLOCK_CHARGING, ExtendedMode.BLOCK_DISCHARGING)
+    outcome = pytest.raises(ControlRefused) if blocked else contextlib.nullcontext()
+
+    with outcome:
+        await getattr(control, setter)(0)
+
+    assert len(writes) == (0 if blocked else 1)
 
 
 @pytest.mark.parametrize(("mode", "setter", "other"), ZERO_LIMITS)

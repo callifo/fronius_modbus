@@ -2231,5 +2231,26 @@
     "old": "    if entry.minor_version >= _CHOSEN_ROLE_MINOR_VERSION and chosen:\n",
     "new": "    if chosen:\n",
     "tests": "callifo_0_3_1_entry_with_a_technician_token"
+  },
+  {
+    "label": "storage: a rate image is judged whole, not by StorCtl_Mod",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        if not _registers_fit(self.extended_mode, *image):\n",
+    "new": "        if image[0] != _MODE_TABLE[self.extended_mode][0]:\n",
+    "tests": "fits_the_mode_is_written"
+  },
+  {
+    "label": "storage: a rate over another mode on the same base is refused",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        if not _registers_fit(self.extended_mode, *image):\n",
+    "new": "        if image[0] != _MODE_TABLE[self.extended_mode][0] and not _registers_fit(self.extended_mode, *image):\n",
+    "tests": "another_mode_on_the_same_base_is_refused"
+  },
+  {
+    "label": "writes: a rate whose scale cannot be read is judged as asked",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/writes.py",
+    "old": "    except ModbusError:\n        return value\n",
+    "new": "    except ModbusError:\n        return 0\n",
+    "tests": "scale_is_refused_once"
   }
 ]

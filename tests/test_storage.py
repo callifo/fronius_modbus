@@ -773,3 +773,124 @@ async def test_a_mode_another_controller_wrote_is_adopted_once_not_every_poll(
         control.sync_from_device()
     assert control.extended_mode is expected
     assert [r.getMessage() for r in caplog.records] == []
+
+
+# The setters each mode allows, with a value and the register it lands in.
+SETTERS_IN = {
+    ExtendedMode.PV_CHARGE_LIMIT: [("set_charge_limit_w", IN_W_RTE)],
+    ExtendedMode.DISCHARGE_LIMIT: [("set_discharge_limit_w", OUT_W_RTE)],
+    ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT: [
+        ("set_charge_limit_w", IN_W_RTE),
+        ("set_discharge_limit_w", OUT_W_RTE),
+    ],
+    ExtendedMode.CHARGE_FROM_GRID: [("set_grid_charge_power_w", OUT_W_RTE)],
+    ExtendedMode.DISCHARGE_TO_GRID: [("set_grid_discharge_power_w", IN_W_RTE)],
+    ExtendedMode.BLOCK_DISCHARGING: [("set_charge_limit_w", IN_W_RTE)],
+    ExtendedMode.BLOCK_CHARGING: [("set_discharge_limit_w", OUT_W_RTE)],
+}
+# Images another controller leaves, or a restart reads, that are no table image:
+# evcc's battery modes, and the grid modes at 0 W that read as a block mode.
+FOREIGN_FITTING_IMAGES = [
+    (stor_ctl_mod, out_w_rte, in_w_rte)
+    for _, stor_ctl_mod, out_w_rte, in_w_rte, _ in EVCC_IMAGES
+] + [(2, 0, 10000), (1, 10000, 0)]
+
+
+@pytest.mark.parametrize(
+    ("stor_ctl_mod", "out_w_rte", "in_w_rte"), FOREIGN_FITTING_IMAGES
+)
+async def test_a_rate_over_an_image_that_fits_the_mode_is_written(
+    inverter_unit, writes, stor_ctl_mod, out_w_rte, in_w_rte
+):
+    """Reaudit G-02: the refusal judges the whole image, not StorCtl_Mod alone.
+
+    Compared with the mode's own table image, every rate under evcc or after a
+    restart was refused although the image is that mode.
+    """
+    inverter_unit.holding.update(
+        {STOR_CTL_MOD: stor_ctl_mod, OUT_W_RTE: out_w_rte, IN_W_RTE: in_w_rte}
+    )
+    chain = await scan(inverter_unit, 40000)
+    storage = Storage(inverter_unit, chain.first(STORAGE_MODEL_ID))
+    await storage.async_update()
+    control = StorageControl(
+        storage, max_charge_rate_w=10240, max_discharge_rate_w=10240
+    )
+    control.sync_from_device()
+
+    for setter, address in SETTERS_IN[control.extended_mode]:
+        del writes[:]
+        await getattr(control, setter)(2560)
+        assert [event.address for event in writes] == [address]
+
+
+# A mode, and the image of another mode on the same StorCtl_Mod.
+SAME_BASE_FOREIGN_IMAGES = [
+    (ExtendedMode.DISCHARGE_LIMIT, {OUT_W_RTE: (-5000) & 0xFFFF}),
+    (ExtendedMode.PV_CHARGE_LIMIT, {IN_W_RTE: (-5000) & 0xFFFF}),
+    (ExtendedMode.CHARGE_FROM_GRID, {OUT_W_RTE: 10000}),
+    (ExtendedMode.DISCHARGE_TO_GRID, {IN_W_RTE: 10000}),
+]
+
+
+@pytest.mark.parametrize(("mode", "image"), SAME_BASE_FOREIGN_IMAGES)
+async def test_a_rate_over_another_mode_on_the_same_base_is_refused(
+    control, writes, inverter_unit, mode, image
+):
+    """Reaudit G-02: a schedule left StorCtl_Mod as it was and changed a rate.
+
+    Judged by StorCtl_Mod alone, a discharge limit replaced the grid charging
+    the inverter was doing.
+    """
+    await control.set_mode(mode)
+    inverter_unit.holding.update(image)
+    setter, _ = SETTERS_IN[mode][0]
+    del writes[:]
+
+    with pytest.raises(ControlRefused) as refused:
+        await getattr(control, setter)(2560)
+
+    assert refused.value.key == "storage_mode_left"
+    assert writes == []
+
+
+IN_OUT_W_RTE_SF = STORAGE_HEADER + 25
+
+
+@pytest.mark.parametrize(
+    ("mode", "word"),
+    [
+        (ExtendedMode.PV_CHARGE_LIMIT, 2500),
+        (ExtendedMode.DISCHARGE_LIMIT, 2500),
+        (ExtendedMode.CHARGE_FROM_GRID, (-2500) & 0xFFFF),
+        (ExtendedMode.DISCHARGE_TO_GRID, (-2500) & 0xFFFF),
+    ],
+)
+async def test_a_rate_is_written_as_asked_when_its_scale_is_refused_once(
+    control, writes, inverter_unit, monkeypatch, mode, word
+):
+    """Reaudit G-03: the first read right after a write may be refused.
+
+    The rate is then judged as asked, not as the register would round it,
+    and written all the same.
+    """
+    await control.set_mode(mode)
+    read = inverter_unit.read_holding_registers
+    refused = []
+
+    async def refuse_the_first_scale_read(address, count):
+        if address == IN_OUT_W_RTE_SF and not refused:
+            refused.append(address)
+            raise ServerDeviceFailureError
+        return await read(address, count)
+
+    monkeypatch.setattr(
+        inverter_unit, "read_holding_registers", refuse_the_first_scale_read
+    )
+    setter, address = SETTERS_IN[mode][0]
+    del writes[:]
+
+    await getattr(control, setter)(2560)
+
+    assert refused
+    assert _words(writes, address) == [word]

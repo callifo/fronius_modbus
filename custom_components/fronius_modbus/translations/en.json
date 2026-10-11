@@ -880,6 +880,9 @@
     "limit_blocks_both_ways": {
       "message": "A limit of 0 W would block charging and discharging at once, which the inverter refuses."
     },
+    "grid_power_beyond_window": {
+      "message": "The inverter holds a combined charge and discharge limit, for example from another controller, that this grid power would exceed. Select the storage mode again to set the power freely."
+    },
     "storage_mode_left": {
       "message": "The inverter is no longer in the selected storage mode, for example after a schedule or another controller changed it. Select the mode again."
     },

@@ -2252,5 +2252,19 @@
     "old": "    except ModbusError:\n        return value\n",
     "new": "    except ModbusError:\n        return 0\n",
     "tests": "scale_is_refused_once"
+  },
+  {
+    "label": "storage: a grid power beyond a combined window is refused",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            if mode == MODE_CHARGE_AND_DISCHARGE and -in_rate > out_rate:\n",
+    "new": "            if False:\n",
+    "tests": "beyond_a_combined_window"
+  },
+  {
+    "label": "storage: the combined window's own bound is legal",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            if mode == MODE_CHARGE_AND_DISCHARGE and -in_rate > out_rate:\n",
+    "new": "            if mode == MODE_CHARGE_AND_DISCHARGE and -in_rate >= out_rate:\n",
+    "tests": "inside_a_combined_window"
   }
 ]

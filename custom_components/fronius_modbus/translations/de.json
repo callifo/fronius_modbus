@@ -880,6 +880,9 @@
     "limit_blocks_both_ways": {
       "message": "Eine Grenze von 0 W würde Laden und Entladen zugleich sperren; das lehnt der Wechselrichter ab."
     },
+    "grid_power_beyond_window": {
+      "message": "Der Wechselrichter hält eine kombinierte Lade- und Entladegrenze, etwa von einer anderen Steuerung, die diese Netzleistung überschreiten würde. Den Speichermodus erneut wählen, um die Leistung frei zu setzen."
+    },
     "storage_mode_left": {
       "message": "Der Wechselrichter ist nicht mehr im gewählten Speichermodus, etwa nach einem Zeitplan oder einer anderen Steuerung. Bitte den Modus erneut wählen."
     },

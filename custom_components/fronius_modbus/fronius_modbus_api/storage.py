@@ -352,7 +352,7 @@ class StorageControl:
             if not allowed():
                 raise refusal
             value = await written_value(self._storage, field_name, percent())
-            _, in_rate, out_rate = await self._image_for_a_rate()
+            mode, in_rate, out_rate = await self._image_for_a_rate()
             if field_name == "in_w_rte":
                 in_rate = value
             else:
@@ -364,6 +364,15 @@ class StorageControl:
                     "limit_blocks_both_ways",
                     "A limit of 0 W would block charging and discharging at once, "
                     "which the inverter refuses",
+                )
+            # In the combined mode it also refuses a negative rate beyond the
+            # other one (Fronius register map); another controller's image can
+            # hold a grid mode there (reaudit CX-01).
+            if mode == MODE_CHARGE_AND_DISCHARGE and -in_rate > out_rate:
+                raise ControlRefused(
+                    "grid_power_beyond_window",
+                    "The grid power exceeds the combined limit the inverter holds; "
+                    "select the storage mode again",
                 )
             await self._write_changed(field_name, value)
 

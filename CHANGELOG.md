@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 1.3.0b1
+
+A beta on 1.2.0 with the fixes of a full audit and its re-audits. Storage writes now judge the inverter's live registers and refuse, with a reason, what the firmware would refuse; updates from callifo keep entities, names, titles and the chosen role; enabling Modbus TCP keeps an RS485 client served; the README lists every entity. No new entry migration; unique ids and entity ids do not change.
 
 ### Added
 - A device the inverter no longer reports, such as a removed meter or battery, can be deleted on its device page. The integration still deletes none on its own: one short answer must not take a device with its history.
@@ -15,7 +17,7 @@
 - A new password entered in Configure with every other setting unchanged was stored, but the running entry kept the old token: nothing reloaded it, and the next refused poll could delete the new token and ask again. A host fixed in Configure on an entry that had not loaded did not take effect either. Configure now reloads the entry whenever no update listener does.
 - Updating from callifo 0.3.0 or older migrated only one of two entities that shared a unique id there (the sensor and the control of `Conn`, `ac_limit_enable`, `ac_limit_rate`, `soc_minimum`, `export_soft_limit`). The other was deleted and came back under a new entity id, so automations using it stopped working. Both now keep their entity ids.
 - On an inverter whose SunSpec map ends in a refused read (upstream #105), a link that stopped answering was never recognised as down: every poll waited out a timeout per sub-system, the stale connection was never replaced, the bridge after a web write did not hold, and the outage was logged as an error instead of once at info.
-- The export soft limit stopped at 15 kW and `Target Feed In` at ±20 kW, whatever the inverter: a Verto or a Tauro could not set a realistic export limit. Both now span the inverter's rated power (`WMax`), as `AC limit rate` already did.
+- The export soft limit stopped at 15 kW and `Target feed in` at ±20 kW, whatever the inverter: a Verto or a Tauro could not set a realistic export limit. Both now span the inverter's rated power (`WMax`), as `AC limit rate` already did.
 - A restart while an MPPT string was dark (at night it reports no current, voltage or power) deleted that string's sensors, with the names and entity ids the owner had given them, until a later reload created them anew. A sensor once registered now stays and reads unknown.
 - `tools/inverter_dump.bat` learned harmless words from a field description (`_psk_meta`: "String", "Password") and from a sensitive object's settings (an address mode "manual"), then cut them out of every answer, keys included: channel names broke apart and option lists lost entries. It now learns only the values right under a sensitive key; everything beneath one is still replaced.
 - `tools/inverter_dump.bat` left a Datamanager's serial number (`UniqueIdentifier` in `GetLoggerInfo`) in the file; it is redacted now.
@@ -30,7 +32,7 @@
 - Selecting `Charge from Grid` or `Discharge to Grid` again before the next poll set the grid power back to what that poll had read, so an automation that re-asserts its mode undid the power it had just set; entering one of them could also bring back the power of an earlier visit. Entering a grid mode now starts at 0 W, as documented, and selecting it again keeps the power set in it, as long as the inverter still holds the mode; otherwise the power starts at 0 W again.
 - Updating from callifo 0.2.8 to 0.3.0, or from 0.1.9, while an MPPT string was dark deleted that string's sensors with the names the owner had given them. They are now migrated like the others.
 - Updating from callifo 0.3.0 or older replaced a title the owner had given the entry with the generated one.
-- A limit of 0 W while the other direction was already at 0 W blocks both directions, which the inverter refuses; the owner got a bare Modbus error. This is a charge limit of 0 W in `Block discharging`, a discharge limit of 0 W in `Block charging`, or the second of two 0 W limits in `PV Charge and Discharge Limit`; a value just above 0 W that the register stores as 0 counts the same. Such a value is now refused with a reason.
+- A limit of 0 W while the other direction was already at 0 W blocks both directions, which the inverter refuses; the owner got a bare Modbus error. This is a charge limit of 0 W in `Block Discharging`, a discharge limit of 0 W in `Block Charging`, or the second of two 0 W limits in `PV Charge and Discharge Limit`; a value just above 0 W that the register stores as 0 counts the same. Such a value is now refused with a reason.
 - A limit or grid power set after a schedule or another controller had changed the storage mode, before the next poll, went into the image of that other mode; for a grid power the inverter refuses it. It is now refused with a reason: select the mode again. The same holds for a grid power beyond a combined charge and discharge limit another controller left in place.
 - Updating from callifo 0.3.2 or 0.3.3 turned an entry whose owner had chosen the `customer` role into `technician` when a technician token was still stored for the host, and deleted the customer token. The chosen role now stays.
 - Selecting `Charge from Grid` while the entry waited for a new web login set the mode but left grid charging as the inverter had it, without a word. It is now reported as an error, as a refused permission already was.

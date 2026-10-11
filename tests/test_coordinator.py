@@ -99,7 +99,11 @@ async def test_a_tolerated_outage_is_no_warning(coordinator, inverter_unit, capl
         await coordinator._async_update_data()
         await coordinator._async_update_data()
 
-    levels = [r.levelno for r in caplog.records if "tolerated" in r.getMessage()]
+    levels = [
+        r.levelno
+        for r in caplog.records
+        if r.name == coordinator_module.__name__ and "tolerated" in r.getMessage()
+    ]
     assert levels == [logging.DEBUG, logging.DEBUG]
 
 

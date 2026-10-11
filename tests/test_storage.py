@@ -15,6 +15,8 @@ from custom_components.fronius_modbus.fronius_modbus_api.exceptions import (
     ControlRefused,
 )
 from custom_components.fronius_modbus.fronius_modbus_api.storage import (
+    CHARGE_LIMIT_MODES,
+    DISCHARGE_LIMIT_MODES,
     MODE_WRITE_GRACE_POLLS,
     ExtendedMode,
     StorageControl,
@@ -196,6 +198,40 @@ async def test_reselecting_a_grid_mode_keeps_the_power_just_written(
     assert control._storage.modbus_unit.holding[address] == (-2500) & 0xFFFF
 
 
+def _ignored_mode(_address):
+    """The inverter kept AUTO as if the mode write never happened (upstream #127)."""
+    return {STOR_CTL_MOD: 0, IN_W_RTE: 10000, OUT_W_RTE: 10000}
+
+
+def _raised_by_another_controller(power_address):
+    return {power_address: 10000}
+
+
+@pytest.mark.parametrize("poll", [False, True])
+@pytest.mark.parametrize("left", [_ignored_mode, _raised_by_another_controller])
+@pytest.mark.parametrize(("mode", "setter", "address"), GRID_POWERS)
+async def test_reselecting_a_grid_mode_over_a_non_grid_rate_restores_it(
+    control, inverter_unit, mode, setter, address, left, poll
+):
+    """Reaudit D-02: "the same mode again" was judged by the mode last chosen.
+
+    With a positive rate in the power register, only StorCtl_Mod went out and
+    the image was Discharge Limit or PV Charge Limit instead of the grid mode.
+    """
+    await control.set_mode(mode)
+    await getattr(control, setter)(2560)
+    inverter_unit.holding.update(left(address))
+    if poll:
+        await control._storage.async_update()
+        control.sync_from_device()
+
+    await control.set_mode(mode)
+
+    image = [inverter_unit.holding[a] for a in (STOR_CTL_MOD, IN_W_RTE, OUT_W_RTE)]
+    expected = {OUT_W_RTE: [2, 10000, 0], IN_W_RTE: [1, 0, 10000]}[address]
+    assert image == expected
+
+
 @pytest.mark.parametrize(("mode", "setter", "address"), GRID_POWERS)
 async def test_entering_a_grid_mode_starts_at_zero_watts(
     control, mode, setter, address
@@ -280,22 +316,29 @@ async def test_a_discharge_limit_cannot_overwrite_the_grid_charge_power(
     assert writes == []
 
 
-# A block mode, and the limit that at 0 W would block the other way too.
-BOTH_WAYS_BLOCKED = [
-    (ExtendedMode.BLOCK_DISCHARGING, "set_charge_limit_w"),
-    (ExtendedMode.BLOCK_CHARGING, "set_discharge_limit_w"),
+# Every limit a mode leaves to the user, and the register of the other side.
+ZERO_LIMITS = [
+    (mode, setter, other)
+    for setter, modes, other in (
+        ("set_charge_limit_w", CHARGE_LIMIT_MODES, OUT_W_RTE),
+        ("set_discharge_limit_w", DISCHARGE_LIMIT_MODES, IN_W_RTE),
+    )
+    for mode in sorted(modes)
 ]
 
 
-@pytest.mark.parametrize(("mode", "setter"), BOTH_WAYS_BLOCKED)
+@pytest.mark.parametrize(("mode", "setter", "other"), ZERO_LIMITS)
 async def test_a_zero_limit_that_blocks_both_ways_is_refused(
-    control, writes, mode, setter
+    control, writes, inverter_unit, mode, setter, other
 ):
     """Reaudit W-02: both rates at 0 W is an image the firmware refuses.
 
-    The write went out and came back as a bare Modbus error instead of a reason.
+    The write went out and came back as a bare Modbus error instead of a
+    reason. The other side was read from the mode table, so in PV Charge and
+    Discharge Limit a second 0 W limit still went out (reaudit D-01).
     """
     await control.set_mode(mode)
+    inverter_unit.holding[other] = 0
     del writes[:]
 
     with pytest.raises(ControlRefused) as refused:
@@ -303,6 +346,20 @@ async def test_a_zero_limit_that_blocks_both_ways_is_refused(
 
     assert refused.value.key == "limit_blocks_both_ways"
     assert writes == []
+
+
+@pytest.mark.parametrize(("mode", "setter", "other"), ZERO_LIMITS)
+async def test_a_zero_limit_is_written_while_the_other_side_is_open(
+    control, writes, inverter_unit, mode, setter, other
+):
+    """The refusal is for both sides at 0 W, not for a mode (reaudit D-01)."""
+    await control.set_mode(mode)
+    inverter_unit.holding[other] = 10000
+    del writes[:]
+
+    await getattr(control, setter)(0)
+
+    assert [event.values[0] for event in writes] == [0]
 
 
 async def test_a_rate_above_the_maximum_is_clamped_to_100_percent(

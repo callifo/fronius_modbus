@@ -334,6 +334,10 @@ Assert-True ([string]::IsNullOrEmpty($script:Export.Role)) "a refused login is e
 $withLogin = Get-PathsReadWithLogin
 Assert-True ($withLogin.Count -eq 0) "a refused login reads nothing with it: $($withLogin -join ', ')"
 
+# Enter at the role question: the customer login (reaudit G-09).
+Invoke-TestDump 200 @{ 'need a login' = 'y' }
+Assert-True ($script:Export.Role -eq 'customer') "Enter at the role question logs in as customer: $($script:Export.Role)"
+
 # Enter at every question: the file is meant for an issue (reaudit E-02).
 Invoke-TestDump 200 @{}
 Assert-True ([string]::IsNullOrEmpty($script:Export.Role) -and (Get-PathsReadWithLogin).Count -eq 0) "Enter logs in nowhere: $($script:Export.Role)"

@@ -868,8 +868,8 @@
     "modbus_restriction": {
       "options": {
         "keep": "Keep the inverter's setting",
-        "home_assistant": "Restrict Modbus and allow this Home Assistant (hosts already allowed stay)",
-        "off": "Lift the restriction (Modbus open to every host)"
+        "home_assistant": "Restrict control to allowed hosts and allow this Home Assistant (hosts already allowed stay)",
+        "off": "Lift the restriction (every host may control the inverter)"
       }
     }
   },

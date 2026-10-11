@@ -868,8 +868,8 @@
     "modbus_restriction": {
       "options": {
         "keep": "Einstellung des Wechselrichters beibehalten",
-        "home_assistant": "Modbus beschränken und dieses Home Assistant zulassen (bereits erlaubte Hosts bleiben)",
-        "off": "Beschränkung aufheben (Modbus für jeden Host offen)"
+        "home_assistant": "Steuerung auf erlaubte Hosts beschränken und dieses Home Assistant zulassen (bereits erlaubte Hosts bleiben)",
+        "off": "Beschränkung aufheben (jeder Host darf den Wechselrichter steuern)"
       }
     }
   },

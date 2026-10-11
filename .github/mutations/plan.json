@@ -2203,5 +2203,12 @@
     "old": "    left_out = left_out_mppt_keys(entry.runtime_data)\n    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)\n",
     "new": "    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)\n    left_out = left_out_mppt_keys(entry.runtime_data)\n",
     "tests": "lit_while_the_platforms_set_up"
+  },
+  {
+    "label": "migrations: a role the owner chose stands at the upgrade",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "    if chosen:\n        return str(chosen)\n",
+    "new": "",
+    "tests": "keeps_the_role_its_owner_chose"
   }
 ]

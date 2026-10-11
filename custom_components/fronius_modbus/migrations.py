@@ -343,10 +343,14 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def _async_stored_role(hass: HomeAssistant, entry: ConfigEntry) -> str:
     """The role an entry used before roles were a setting.
 
-    Up to minor 10 an entry could hold a customer and a technician token at
-    once; the technician one enabled the export limit. With one role per entry
-    that entry keeps technician access, everything else stays on customer.
+    callifo 0.3.x stored the role its owner chose, and a technician token left
+    on the host did not override it. Without a stored role an entry could hold
+    a customer and a technician token at once; the technician one enabled the
+    export limit, so that entry keeps technician access.
     """
+    chosen = _entry_value(entry, CONF_API_USERNAME, "")
+    if chosen:
+        return str(chosen)
     host = str(_entry_value(entry, CONF_HOST, "")).strip()
     if not host:
         return API_USERNAME

@@ -44,8 +44,10 @@ _TARGET_MINOR_VERSION = 14
 # Entries below this minor version predate the web API integration and still
 # carry the dropped meter-unit config, so only they need the data migration.
 _WEB_API_MINOR_VERSION = 9
-# Entries below this minor version predate the single web API role.
+# From this minor version (callifo 0.3.2) the stored role is the owner's choice;
+# below it, a constant customer.
 _CHOSEN_ROLE_MINOR_VERSION = 10
+# Entries below this minor version predate the single web API role.
 _SINGLE_ROLE_MINOR_VERSION = 11
 # Entries below this minor version store the restriction as a checkbox.
 _RESTRICTION_CHOICE_MINOR_VERSION = 12

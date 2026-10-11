@@ -775,7 +775,7 @@ async def test_a_mode_another_controller_wrote_is_adopted_once_not_every_poll(
     assert [r.getMessage() for r in caplog.records] == []
 
 
-# The setters each mode allows, with a value and the register it lands in.
+# The setters each mode allows, and the register each one writes.
 SETTERS_IN = {
     ExtendedMode.PV_CHARGE_LIMIT: [("set_charge_limit_w", IN_W_RTE)],
     ExtendedMode.DISCHARGE_LIMIT: [("set_discharge_limit_w", OUT_W_RTE)],

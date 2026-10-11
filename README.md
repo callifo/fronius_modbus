@@ -181,6 +181,7 @@ The entities are grouped into devices: the inverter, the battery storage, and ea
 | MPPT module N DC current<br>MPPT module N DC voltage<br>MPPT module N DC power<br>MPPT module N Lifetime energy | One set per PV string (model 160). A string that is dark at the first setup gets its sensors once it sends a value. |
 | Storage charging current<br>Storage charging voltage<br>Storage charging power<br>Storage charging lifetime energy<br>Storage discharging current<br>Storage discharging voltage<br>Storage discharging power<br>Storage discharging lifetime energy | The battery's charge and discharge channels of model 160, on the inverter's device. |
 | Maximum power | The inverter's `WMax` (model 121), the reference of the AC limit. |
+| AC limit rate | The AC limit in watts as the inverter holds it; the control of the same name sets it. |
 | Isolation Resistance | The DC isolation resistance in MΩ. |
 | Export soft limit | The soft export limit in watts as the inverter holds it, over the Web API; unknown while it is off. Requires the `technician` role; set it with the control of the same name. |
 | Load | The household consumption, derived from the primary smart meter. For a meter at the feed-in point it is the meter's power plus the inverter's AC power; for a meter in the consumption path it is that meter's power. It needs the meter's location from the inverter's `PowerMeter` endpoint and is unknown without it, and while a negative sum could be battery charging. |
@@ -198,7 +199,6 @@ The entities are grouped into devices: the inverter, the battery storage, and ea
 | PV connection<br>Storage connection<br>Electrical connection | The connection states of model 122 (`PVConn`, `StorConn`, `ECPConn`). |
 | Connection control<br>AC limit enabled<br>Fixed power factor status<br>Limit VAr control | Whether the grid connection (`Conn`), the AC limit (`WMaxLim_Ena`), the fixed power factor (`OutPFSet_Ena`) and the reactive power limit (`VArPct_Ena`) are switched on. |
 | Throttle control | The AC limit flag once more, kept from upstream. *disabled* |
-| AC limit rate | The AC limit in watts as the inverter holds it; the control of the same name sets it. |
 | Reference voltage<br>Reference voltage offset | SunSpec model 121 PCC voltage reference values exposed by the inverter. |
 | Modbus ID | The inverter's Modbus unit id. |
 | Web API Modbus mode<br>Web API Modbus control<br>Web API SunSpec mode | The Modbus service settings from `/api/config/modbus`. A value the inverter answers in an unexpected shape shows as unknown. |

@@ -691,7 +691,7 @@ async def test_minor_version_10_entries_take_the_role_of_their_stored_token(
 async def test_a_minor_version_10_entry_keeps_the_role_its_owner_chose(
     hass, mock_modbus
 ):
-    """README audit: callifo 0.3.x stores the chosen role, and a technician
+    """README audit: callifo 0.3.2 and later store the chosen role, and a technician
     token left on the host made a customer entry technician and dropped its
     customer token."""
     entry = make_entry(hass, minor_version=10, api_username="customer")

@@ -309,6 +309,48 @@ async def test_a_string_dark_at_the_first_setup_gets_its_sensor_once_lit(
     assert registry.async_get_entity_id("sensor", DOMAIN, unique_id) is not None
 
 
+async def test_a_string_lit_while_the_platforms_set_up_gets_its_sensor(
+    hass, mock_modbus, monkeypatch, symo_gen24
+):
+    """Reaudit AC-02: the strings left out were taken after the platform setup.
+
+    A poll that lit the string in between left nothing to wait for, so the
+    sensor came only with the next restart.
+    """
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    probe = make_entry(hass)
+    await setup_entry(hass, probe)
+    address = probe.runtime_data.device.mppt_module(0).resolved_fields["dcw"].address
+    assert await hass.config_entries.async_remove(probe.entry_id)
+    await hass.async_block_till_done()
+    holding = symo_gen24[INVERTER_UNIT_ID]["holding"]
+    daylight = holding[address]
+    holding[address] = 0xFFFF
+    forward = hass.config_entries.async_forward_entry_setups
+    lit = False
+
+    async def forward_while_the_sun_rises(entry, platforms):
+        nonlocal lit
+        await forward(entry, platforms)
+        if lit:
+            return
+        lit = True
+        mock_modbus.unit(INVERTER_UNIT_ID).holding[address] = daylight
+        holding[address] = daylight
+        await entry.runtime_data.modbus.async_refresh()
+
+    monkeypatch.setattr(
+        hass.config_entries, "async_forward_entry_setups", forward_while_the_sun_rises
+    )
+    entry = make_entry(hass)
+
+    await setup_entry(hass, entry)
+    await hass.async_block_till_done()
+
+    unique_id = f"{entity_prefix(entry.entry_id)}_mppt_module_0_dc_power"
+    assert er.async_get(hass).async_get_entity_id("sensor", DOMAIN, unique_id)
+
+
 # An MPPT sensor under each unique id an upgrade still finds: (old id, key, the
 # field that goes dark, the words it then sends).
 LEGACY_MPPT_IDS = [

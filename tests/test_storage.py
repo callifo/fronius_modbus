@@ -796,6 +796,19 @@ FOREIGN_FITTING_IMAGES = [
 ] + [(2, 0, 10000), (1, 10000, 0)]
 
 
+async def _control_on(inverter_unit, image):
+    """A control that starts on the given registers, as after a restart."""
+    inverter_unit.holding.update(image)
+    chain = await scan(inverter_unit, 40000)
+    storage = Storage(inverter_unit, chain.first(STORAGE_MODEL_ID))
+    await storage.async_update()
+    control = StorageControl(
+        storage, max_charge_rate_w=10240, max_discharge_rate_w=10240
+    )
+    control.sync_from_device()
+    return control
+
+
 @pytest.mark.parametrize(
     ("stor_ctl_mod", "out_w_rte", "in_w_rte"), FOREIGN_FITTING_IMAGES
 )
@@ -807,16 +820,10 @@ async def test_a_rate_over_an_image_that_fits_the_mode_is_written(
     Compared with the mode's own table image, every rate under evcc or after a
     restart was refused although the image is that mode.
     """
-    inverter_unit.holding.update(
-        {STOR_CTL_MOD: stor_ctl_mod, OUT_W_RTE: out_w_rte, IN_W_RTE: in_w_rte}
+    control = await _control_on(
+        inverter_unit,
+        {STOR_CTL_MOD: stor_ctl_mod, OUT_W_RTE: out_w_rte, IN_W_RTE: in_w_rte},
     )
-    chain = await scan(inverter_unit, 40000)
-    storage = Storage(inverter_unit, chain.first(STORAGE_MODEL_ID))
-    await storage.async_update()
-    control = StorageControl(
-        storage, max_charge_rate_w=10240, max_discharge_rate_w=10240
-    )
-    control.sync_from_device()
 
     for setter, address in SETTERS_IN[control.extended_mode]:
         del writes[:]
@@ -894,3 +901,50 @@ async def test_a_rate_is_written_as_asked_when_its_scale_is_refused_once(
 
     assert refused
     assert _words(writes, address) == [word]
+
+
+# A grid mode another controller holds on StorCtl_Mod 3, the other rate at 25 %.
+COMBINED_GRID_IMAGES = [
+    (
+        ExtendedMode.CHARGE_FROM_GRID,
+        "set_grid_charge_power_w",
+        OUT_W_RTE,
+        {STOR_CTL_MOD: 3, IN_W_RTE: 2500, OUT_W_RTE: (-2000) & 0xFFFF},
+    ),
+    (
+        ExtendedMode.DISCHARGE_TO_GRID,
+        "set_grid_discharge_power_w",
+        IN_W_RTE,
+        {STOR_CTL_MOD: 3, IN_W_RTE: (-2000) & 0xFFFF, OUT_W_RTE: 2500},
+    ),
+]
+
+
+@pytest.mark.parametrize(("mode", "setter", "address", "image"), COMBINED_GRID_IMAGES)
+async def test_a_grid_power_beyond_a_combined_window_is_refused(
+    inverter_unit, writes, mode, setter, address, image
+):
+    """Reaudit CX-01: on StorCtl_Mod 3 the firmware refuses a negative rate
+    beyond the other one; the power went out and came back as a bare error."""
+    control = await _control_on(inverter_unit, image)
+    assert control.extended_mode is mode
+    del writes[:]
+
+    with pytest.raises(ControlRefused) as refused:
+        await getattr(control, setter)(5120)
+
+    assert refused.value.key == "grid_power_beyond_window"
+    assert writes == []
+
+
+@pytest.mark.parametrize(("mode", "setter", "address", "image"), COMBINED_GRID_IMAGES)
+async def test_a_grid_power_inside_a_combined_window_is_written(
+    inverter_unit, writes, mode, setter, address, image
+):
+    """The window's own bound is no refusal: -25 % against 25 % is legal."""
+    control = await _control_on(inverter_unit, image)
+    del writes[:]
+
+    await getattr(control, setter)(2560)
+
+    assert _words(writes, address) == [(-2500) & 0xFFFF]

@@ -45,6 +45,7 @@ _TARGET_MINOR_VERSION = 14
 # carry the dropped meter-unit config, so only they need the data migration.
 _WEB_API_MINOR_VERSION = 9
 # Entries below this minor version predate the single web API role.
+_CHOSEN_ROLE_MINOR_VERSION = 10
 _SINGLE_ROLE_MINOR_VERSION = 11
 # Entries below this minor version store the restriction as a checkbox.
 _RESTRICTION_CHOICE_MINOR_VERSION = 12
@@ -343,13 +344,13 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def _async_stored_role(hass: HomeAssistant, entry: ConfigEntry) -> str:
     """The role an entry used before roles were a setting.
 
-    callifo 0.3.x stored the role its owner chose, and a technician token left
-    on the host did not override it. Without a stored role an entry could hold
-    a customer and a technician token at once; the technician one enabled the
-    export limit, so that entry keeps technician access.
+    From minor 10 (callifo 0.3.2) the role is the one its owner chose, and a
+    technician token left on the host did not override it. Before, the stored
+    role was a constant customer beside a technician token that enabled the
+    export limit, so such an entry keeps technician access.
     """
     chosen = _entry_value(entry, CONF_API_USERNAME, "")
-    if chosen:
+    if entry.minor_version >= _CHOSEN_ROLE_MINOR_VERSION and chosen:
         return str(chosen)
     host = str(_entry_value(entry, CONF_HOST, "")).strip()
     if not host:

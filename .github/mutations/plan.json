@@ -2207,7 +2207,7 @@
   {
     "label": "migrations: a role the owner chose stands at the upgrade",
     "path": "custom_components/fronius_modbus/migrations.py",
-    "old": "    if chosen:\n        return str(chosen)\n",
+    "old": "    if entry.minor_version >= _CHOSEN_ROLE_MINOR_VERSION and chosen:\n        return str(chosen)\n",
     "new": "",
     "tests": "keeps_the_role_its_owner_chose"
   },
@@ -2224,5 +2224,12 @@
     "old": "        if mode is not ExtendedMode.CHARGE_FROM_GRID or web_api_disabled(\n",
     "new": "        if mode is not ExtendedMode.CHARGE_FROM_GRID or False and web_api_disabled(\n",
     "tests": "grid_charging_without_the_web_api_is_no_error or select_changes_the_storage_mode"
+  },
+  {
+    "label": "migrations: a role stored before minor 10 is no choice",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "    if entry.minor_version >= _CHOSEN_ROLE_MINOR_VERSION and chosen:\n",
+    "new": "    if chosen:\n",
+    "tests": "callifo_0_3_1_entry_with_a_technician_token"
   }
 ]

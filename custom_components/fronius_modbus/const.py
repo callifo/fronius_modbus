@@ -240,7 +240,7 @@ def instance_key(entry_id: str) -> str:
 
 def web_api_disabled(values: Mapping[str, Any]) -> bool:
     """Whether the owner set the entry up without a web login."""
-    return values.get(CONF_API_USERNAME, API_USERNAME) == WEB_API_DISABLED
+    return str(values.get(CONF_API_USERNAME, API_USERNAME)) == WEB_API_DISABLED
 
 
 def entry_title(data: Mapping[str, Any]) -> str:

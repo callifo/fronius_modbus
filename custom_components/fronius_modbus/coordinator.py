@@ -182,7 +182,7 @@ class FroniusRuntimeData:
         """Switch the storage mode; Charge from Grid also opens the web charge sources."""
         mode = ExtendedMode(code)
         await assume_present(self.storage_control).set_mode(mode)
-        entry = self.modbus.config_entry
+        entry = assume_present(self.modbus.config_entry)
         if mode is not ExtendedMode.CHARGE_FROM_GRID or web_api_disabled(
             {**entry.data, **entry.options}
         ):

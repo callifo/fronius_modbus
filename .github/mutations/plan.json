@@ -1080,8 +1080,8 @@
   {
     "label": "migrations: an entry set up without the web API is recognised",
     "path": "custom_components/fronius_modbus/const.py",
-    "old": "    return values.get(CONF_API_USERNAME, API_USERNAME) == WEB_API_DISABLED\n",
-    "new": "    return values.get(CONF_API_USERNAME, API_USERNAME) != WEB_API_DISABLED\n",
+    "old": "    return str(values.get(CONF_API_USERNAME, API_USERNAME)) == WEB_API_DISABLED\n",
+    "new": "    return str(values.get(CONF_API_USERNAME, API_USERNAME)) != WEB_API_DISABLED\n",
     "tests": "entry_without_the_web_api_is_not_asked_to_reconfigure"
   },
   {

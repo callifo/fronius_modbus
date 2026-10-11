@@ -287,10 +287,11 @@ Assert-True ($script:LoginStatus -eq 200) "the login reports its status: $($scri
 
 # -- the dump's login (reaudit D-04) -----------------------------------------------------
 
-function Invoke-TestDump([int]$LoginStatus) {
-    # Runs the dump against faked answers up to the file and keeps the role it would export.
+function Invoke-TestDump([int]$LoginStatus, [hashtable]$Answers) {
+    # Runs the dump against faked answers up to the file and keeps what it would export.
+    # A prompt no answer names gets Enter, its default.
     $script:Reads = New-Object System.Collections.Generic.List[object]
-    $script:Exported = 'not exported'
+    $script:Export = @{ Role = 'not exported' }
     $script:SecretHasher = $null
     $script:InverterHost = '192.0.2.1'
     & {
@@ -300,9 +301,8 @@ function Invoke-TestDump([int]$LoginStatus) {
                 foreach ($character in 'synthetic-password'.ToCharArray()) { $secure.AppendChar($character) }
                 return $secure
             }
-            if ($Prompt -like 'Login*') { return 'technician' }
-            if ($Prompt -like '*Modbus*') { return 'n' }
-            return 'y'
+            foreach ($key in $Answers.Keys) { if ($Prompt -like "*$key*") { return $Answers[$key] } }
+            return ''
         }
         function Read-Endpoint([string]$Path, [bool]$WithLogin) {
             $script:Reads.Add(@($Path, $WithLogin))
@@ -310,8 +310,9 @@ function Invoke-TestDump([int]$LoginStatus) {
             if ($Path -like '/api/commands/Login*') { return @{ status = $LoginStatus; body = '' } }
             return @{ status = 200; body = '{}' }
         }
-        function New-ExportText($LoginRole) {
-            $script:Exported = $LoginRole
+        function Read-Modbus([bool]$Redact) { return 'synthetic registers' }
+        function New-ExportText([string]$Login, [bool]$Redact, $Modbus) {
+            $script:Export = @{ Role = $Login; Redact = $Redact; Modbus = $Modbus }
             throw 'stopped before the file'
         }
         try { Invoke-Dump 6>$null } catch { if ("$_" -ne 'stopped before the file') { throw } }
@@ -322,15 +323,25 @@ function Get-PathsReadWithLogin {
     return @($script:Reads | Where-Object { $_[1] -and $_[0] -notlike '/api/commands/*' } | ForEach-Object { $_[0] })
 }
 
-Invoke-TestDump 200
+$withTechnician = @{ 'need a login' = 'y'; 'customer or technician' = 'technician' }
+Invoke-TestDump 200 $withTechnician
 Assert-True ($script:SecretHasher -is [System.Security.Cryptography.MD5]) "the dump logs in with the hashing the device names: $($script:SecretHasher)"
-Assert-True ($script:Exported -eq 'technician') "an accepted login is exported with its role: $($script:Exported)"
+Assert-True ($script:Export.Role -eq 'technician') "an accepted login is exported with its role: $($script:Export.Role)"
 $withLogin = Get-PathsReadWithLogin
 Assert-True (($withLogin -join ',') -eq ($LoginPaths -join ',')) "an accepted login reads the login paths with it: $($withLogin -join ', ')"
-Invoke-TestDump 401
-Assert-True ($null -eq $script:Exported) "a refused login is exported without a role: $($script:Exported)"
+Invoke-TestDump 401 $withTechnician
+Assert-True ([string]::IsNullOrEmpty($script:Export.Role)) "a refused login is exported without a role: $($script:Export.Role)"
 $withLogin = Get-PathsReadWithLogin
 Assert-True ($withLogin.Count -eq 0) "a refused login reads nothing with it: $($withLogin -join ', ')"
+
+# Enter at every question: the file is meant for an issue (reaudit E-02).
+Invoke-TestDump 200 @{}
+Assert-True ([string]::IsNullOrEmpty($script:Export.Role) -and (Get-PathsReadWithLogin).Count -eq 0) "Enter logs in nowhere: $($script:Export.Role)"
+Assert-True ($script:Export.Modbus -eq 'synthetic registers') "Enter reads the registers too: $($script:Export.Modbus)"
+Assert-True ($script:Export.Redact -eq $true) "Enter keeps the replacement on: $($script:Export.Redact)"
+Invoke-TestDump 200 @{ 'Modbus TCP' = 'n'; 'Replace serial' = 'n' }
+Assert-True ($null -eq $script:Export.Modbus) "n reads no registers: $($script:Export.Modbus)"
+Assert-True ($script:Export.Redact -eq $false) "n turns the replacement off: $($script:Export.Redact)"
 
 # -- read only (Codex C-04) -------------------------------------------------------------
 

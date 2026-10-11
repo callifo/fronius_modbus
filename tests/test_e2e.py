@@ -706,6 +706,23 @@ async def test_a_minor_version_10_entry_keeps_the_role_its_owner_chose(
     assert await store.async_load_token(HOST, "customer")
 
 
+async def test_a_callifo_0_3_1_entry_with_a_technician_token_keeps_technician(
+    hass, mock_modbus
+):
+    """Reaudit G-01: callifo 0.3.1 (minor 9) wrote customer as a constant, and
+    the technician token beside it was its export limit access; taking that
+    constant for a choice dropped the access and deleted the token."""
+    entry = make_entry(hass, minor_version=9, api_username="customer")
+    store = async_get_token_store(hass)
+    for user in ("customer", "technician"):
+        await store.async_save_token(HOST, realm="r", token="t", user=user)
+
+    assert await migrations.async_migrate_entry(hass, entry)
+
+    assert entry.data["api_username"] == "technician"
+    assert await store.async_load_token(HOST, "technician")
+
+
 async def test_minor_version_10_entries_without_a_technician_token_stay_customer(
     hass, mock_modbus
 ):

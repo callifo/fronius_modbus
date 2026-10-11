@@ -23,11 +23,12 @@ from .const import (
     DEFAULT_INVERTER_UNIT_ID,
     DEFAULT_PORT,
     DOMAIN,
-    entry_title,
+    entry_title_after,
     entry_unique_id,
     instance_key,
 )
 from .fronius_modbus_api.device import FroniusInverter
+from .fronius_modbus_api.exceptions import error_text
 from .token_store import async_get_token_store, canonical_host
 
 _LOGGER = logging.getLogger(__name__)
@@ -79,7 +80,7 @@ async def async_serial_at(
         ) as unit:
             identity = await FroniusInverter.async_probe(unit)
     except (ModbusError, HomeAssistantError, OSError, TimeoutError) as err:
-        _LOGGER.debug("No inverter read for an announced move: %s", err)
+        _LOGGER.debug("No inverter read for an announced move: %s", error_text(err))
         return None
     return identity.serial
 
@@ -162,11 +163,7 @@ async def async_follow_host(
     options = dict(entry.options)
     if CONF_HOST in options:
         options[CONF_HOST] = host
-    # A title the owner gave is theirs; only the one made from the address moves
-    # with it (reaudit Z-02).
-    title = entry.title
-    if title == entry_title(values):
-        title = entry_title({**data, **options})
+    title = entry_title_after(entry.title, values, {**data, **options})
     hass.config_entries.async_update_entry(
         entry, data=data, options=options, unique_id=unique_id, title=title
     )

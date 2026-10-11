@@ -198,6 +198,17 @@ def test_the_hash_mode_follows_the_version_the_inverter_reports(inverter):
     assert froniuswebclient._hash_mode(f"http://{HOST}", "customer", 4.0) == "sha256"
 
 
+def test_a_refused_login_reads_the_hash_mode_again(inverter):
+    """Audit F11: a remembered mode outlived a device that changed it, until a restart."""
+    inverter.hashing_version = 1
+    inverter.always_401 = True
+    assert not froniuswebclient.login(HOST, "customer", password="secret")
+
+    inverter.hashing_version = 2
+
+    assert froniuswebclient._hash_mode(f"http://{HOST}", "customer", 4.0) == "sha256"
+
+
 def test_an_unreadable_status_page_falls_back_to_sha256(monkeypatch):
     def refuse(*_args, **_kwargs):
         raise requests.ConnectionError
@@ -703,14 +714,19 @@ def test_tcp_and_rtu_together_already_serve_modbus_tcp(client, inverter):
     assert client.ensure_modbus_enabled(502, 200, 1) is False
 
 
-def test_a_rewrite_for_another_reason_keeps_mode_both(client, inverter):
-    inverter.bodies["/api/config/modbus"] = modbus_config_as_read(
-        mode="both", port=1502
-    )
+@pytest.mark.parametrize(
+    ("read", "written"),
+    [("off", "tcp"), ("rtu", "both"), ("tcp", "tcp"), ("both", "both")],
+)
+def test_enabling_tcp_keeps_every_transport_already_served(
+    client, inverter, read, written
+):
+    """An RTU-only slave was written "tcp" and cut off the RS485 client it served."""
+    inverter.bodies["/api/config/modbus"] = modbus_config_as_read(mode=read, port=1502)
 
     assert client.ensure_modbus_enabled(502, 200, 1) is True
 
-    assert modbus_write(inverter)["slave"]["mode"] == "both"
+    assert modbus_write(inverter)["slave"]["mode"] == written
 
 
 def test_the_field_descriptions_are_not_written_back(client, inverter):

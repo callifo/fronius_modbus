@@ -177,8 +177,28 @@ jobs:
           # the timeout that stops a hung run is exactly what must not depend
           # on some other package still happening to pull it in.
           pip install "$PHCC_SPEC" pytest-timeout -r requirements.txt
+          # The Modbus libraries core pins, not the newest: an installation
+          # shares core's connection and runs these (audit F29).
+          pip install $(python .github/scripts/core_modbus_pins.py)
+      - name: Install gitleaks for the allowlist tests
+        # The gitleaks job scans with the change's own rules, so a widened
+        # allowlist passes it; tests/test_secret_scan.py holds the rules to a
+        # known token and needs the binary (audit F30). Pinned and checked
+        # against the release's published checksum.
+        env:
+          GITLEAKS_VERSION: "8.30.1"
+          GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+        run: |
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "$archive" "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/$archive"
+          echo "$GITLEAKS_SHA256  $archive" | sha256sum --check
+          mkdir -p "$HOME/.local/bin"
+          tar -xzf "$archive" -C "$HOME/.local/bin" gitleaks
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Show the Home Assistant version under test
         run: python -c "from homeassistant.const import __version__; print(__version__)"
+      - name: The Modbus libraries must be the ones core pins
+        run: python .github/scripts/core_modbus_pins.py --check
       - name: The minimum job must run the version hacs.json declares
         if: matrix.check-declared-minimum
         run: python .github/scripts/check_min_ha.py

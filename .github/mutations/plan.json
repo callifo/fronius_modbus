@@ -114,8 +114,8 @@
   {
     "label": "storage: a rate write reads back inside the write lock",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "            await self._write_changed(field_name, percent())\n",
-    "new": "            await self._write_changed(field_name, percent())\n            await self._storage.async_update()\n",
+    "old": "            await self._write_changed(field_name, value)\n",
+    "new": "            await self._write_changed(field_name, value)\n            await self._storage.async_update()\n",
     "tests": "a_rate_write_succeeds_when_the_read_right_after_it_is_refused"
   },
   {
@@ -429,8 +429,8 @@
   {
     "label": "coordinator: a quiet sub-system is logged at info",
     "path": "custom_components/fronius_modbus/coordinator.py",
-    "old": "            if isinstance(err, NO_ANSWER):\n                _LOGGER.info(\"%s does not answer: %s\", name, err)",
-    "new": "            if isinstance(err, NO_ANSWER):\n                _LOGGER.warning(\"%s does not answer: %s\", name, err)",
+    "old": "            if isinstance(err, NO_ANSWER):\n                _LOGGER.info(\"%s does not answer: %s\", name, error_text(err))",
+    "new": "            if isinstance(err, NO_ANSWER):\n                _LOGGER.warning(\"%s does not answer: %s\", name, error_text(err))",
     "tests": "a_meter_that_stops_answering_is_logged_once_at_info_and_on_return"
   },
   {
@@ -442,7 +442,7 @@
   },
   {
     "label": "platforms: the writers run one action at a time",
-    "path": "custom_components/fronius_modbus/number.py",
+    "path": "custom_components/fronius_modbus/select.py",
     "old": "PARALLEL_UPDATES = 1",
     "new": "PARALLEL_UPDATES = 0",
     "tests": "every_platform_declares_its_parallel_updates"
@@ -480,7 +480,7 @@
     "path": "custom_components/fronius_modbus/froniuswebclient.py",
     "old": "TCP_MODES = (\"tcp\", \"both\")",
     "new": "TCP_MODES = (\"tcp\",)",
-    "tests": "tcp_and_rtu_together_already_serve_modbus_tcp or a_rewrite_for_another_reason_keeps_mode_both"
+    "tests": "tcp_and_rtu_together_already_serve_modbus_tcp"
   },
   {
     "label": "web client: field descriptions are not written back",
@@ -793,8 +793,8 @@
   {
     "label": "coordinator: refused grid charging is an error",
     "path": "custom_components/fronius_modbus/coordinator.py",
-    "old": "                raise ControlUnavailable(\n                    \"grid_charge_sources_failed\",",
-    "new": "                return\n                raise ControlUnavailable(\n                    \"grid_charge_sources_failed\",",
+    "old": "            raise ControlUnavailable(\n                \"grid_charge_sources_failed\",",
+    "new": "            return\n            raise ControlUnavailable(\n                \"grid_charge_sources_failed\",",
     "tests": "grid_charging_that_the_web_api_refuses_is_an_error"
   },
   {
@@ -820,10 +820,10 @@
   },
   {
     "label": "config flow: a changed loaded entry reloads once",
-    "path": "custom_components/fronius_modbus/config_flow.py",
+    "path": "custom_components/fronius_modbus/flow_entry.py",
     "old": "    if changed and loaded:\n        return\n",
     "new": "",
-    "tests": "a_reconfigure_reloads_the_entry_once"
+    "tests": "a_reconfigure_reloads_the_entry_once or reloads_a_loaded_entry_once_per_run"
   },
   {
     "label": "migrations: the dropped role takes its token with it",
@@ -1079,9 +1079,9 @@
   },
   {
     "label": "migrations: an entry set up without the web API is recognised",
-    "path": "custom_components/fronius_modbus/migrations.py",
-    "old": "    return _entry_value(entry, CONF_API_USERNAME, API_USERNAME) == WEB_API_DISABLED\n",
-    "new": "    return _entry_value(entry, CONF_API_USERNAME, API_USERNAME) != WEB_API_DISABLED\n",
+    "path": "custom_components/fronius_modbus/const.py",
+    "old": "    return str(values.get(CONF_API_USERNAME, API_USERNAME)) == WEB_API_DISABLED\n",
+    "new": "    return str(values.get(CONF_API_USERNAME, API_USERNAME)) != WEB_API_DISABLED\n",
     "tests": "entry_without_the_web_api_is_not_asked_to_reconfigure"
   },
   {
@@ -1260,11 +1260,11 @@
     "tests": "manual_setup_is_not_blocked_by_an_open_card"
   },
   {
-    "label": "discovery: a title the owner gave stays",
-    "path": "custom_components/fronius_modbus/discovery.py",
-    "old": "    if title == entry_title(values):\n",
-    "new": "    if True:\n",
-    "tests": "moved_inverter_keeps_the_title_its_owner_gave"
+    "label": "flows: a title the owner gave stays",
+    "path": "custom_components/fronius_modbus/const.py",
+    "old": "    return entry_title(after) if title == entry_title(before) else title\n",
+    "new": "    return entry_title(after)\n",
+    "tests": "moved_inverter_keeps_the_title_its_owner_gave or owner_gave_survives_every_settings_flow"
   },
   {
     "label": "discovery: an IPv6-only announcement is not offered",
@@ -1444,8 +1444,8 @@
   {
     "label": "coordinator: a tolerated outage is no warning",
     "path": "custom_components/fronius_modbus/coordinator.py",
-    "old": "            _LOGGER.debug(\"Modbus outage tolerated after a web write: %s\", err)\n",
-    "new": "            _LOGGER.warning(\"Modbus outage tolerated after a web write: %s\", err)\n",
+    "old": "            _LOGGER.debug(\n                \"Modbus outage tolerated after a web write: %s\", error_text(err)\n            )\n",
+    "new": "            _LOGGER.warning(\n                \"Modbus outage tolerated after a web write: %s\", error_text(err)\n            )\n",
     "tests": "tolerated_outage_is_no_warning"
   },
   {
@@ -1598,8 +1598,8 @@
   {
     "label": "web control: event texts fall back to English",
     "path": "custom_components/fronius_modbus/web_control.py",
-    "old": "            for candidate in dict.fromkeys((EVENT_TEXTS_FALLBACK_LANGUAGE, language)):\n",
-    "new": "            for candidate in (language,):\n",
+    "old": "        for candidate in dict.fromkeys((EVENT_TEXTS_FALLBACK_LANGUAGE, language)):\n",
+    "new": "        for candidate in (language,):\n",
     "tests": "event_texts_missing_in_a_language_fall_back_to_english or english_one"
   },
   {
@@ -1626,8 +1626,8 @@
   {
     "label": "web control: the language's text wins over the English one",
     "path": "custom_components/fronius_modbus/web_control.py",
-    "old": "            for candidate in dict.fromkeys((EVENT_TEXTS_FALLBACK_LANGUAGE, language)):\n",
-    "new": "            for candidate in dict.fromkeys((language, EVENT_TEXTS_FALLBACK_LANGUAGE)):\n",
+    "old": "        for candidate in dict.fromkeys((EVENT_TEXTS_FALLBACK_LANGUAGE, language)):\n",
+    "new": "        for candidate in dict.fromkeys((language, EVENT_TEXTS_FALLBACK_LANGUAGE)):\n",
     "tests": "names_the_active_events_in_the_language_of_home_assistant"
   },
   {
@@ -1811,5 +1811,460 @@
     "old": "    return (event.visible_to == CUSTOMER_LEVEL) == (audience == CUSTOMER)\n",
     "new": "    return event.visible_to == (CUSTOMER_LEVEL if audience == CUSTOMER else \"service\")\n",
     "tests": "technician_and_unknown_level_events"
+  },
+  {
+    "label": "web client: enabling TCP keeps an RTU client served",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "_MODE_WITH_TCP = {SLAVE_OFF: \"tcp\", \"rtu\": \"both\", \"tcp\": \"tcp\", \"both\": \"both\"}\n",
+    "new": "_MODE_WITH_TCP = {SLAVE_OFF: \"tcp\", \"rtu\": \"tcp\", \"tcp\": \"tcp\", \"both\": \"both\"}\n",
+    "tests": "keeps_every_transport_already_served"
+  },
+  {
+    "label": "storage: the higher target rate is written first",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "                key=lambda write: -write[1],\n",
+    "new": "                key=lambda write: write[1],\n",
+    "tests": "passes_no_refused_window or raises_the_discharge_rate_first"
+  },
+  {
+    "label": "platforms: numbers leave a burst to the write locks",
+    "path": "custom_components/fronius_modbus/number.py",
+    "old": "PARALLEL_UPDATES = 0",
+    "new": "PARALLEL_UPDATES = 1",
+    "tests": "every_platform_declares_its_parallel_updates"
+  },
+  {
+    "label": "config flow: Configure reloads an entry no listener reloads",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "        await _async_reload_unless_listened(\n            self.hass, self.config_entry, changed=changed, loaded=loaded\n        )\n",
+    "new": "",
+    "tests": "reloads_what_no_listener_reloads or reloads_a_loaded_entry_once_per_run"
+  },
+  {
+    "label": "migrations: a legacy twin is migrated per platform",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "            or (entity_entry.domain, new_unique_id) in taken\n",
+    "new": "            or any(taken_id == new_unique_id for _, taken_id in taken)\n",
+    "tests": "both_twins_of_a_legacy_unique_id"
+  },
+  {
+    "label": "device: the incomplete chain's note hides no outage",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "            failed = report.failed.keys() - {REPORT_DISCOVERY}\n",
+    "new": "            failed = report.failed.keys()\n",
+    "tests": "silent_link_behind_an_incomplete_chain"
+  },
+  {
+    "label": "entities: a power number spans the rated power",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "    FroniusNumberDescription,\n    max_fn=_rated_power_w,\n",
+    "new": "    FroniusNumberDescription,\n",
+    "tests": "every_power_number_spans_the_rated_power"
+  },
+  {
+    "label": "number: the target feed-in reaches down to the rated power",
+    "path": "custom_components/fronius_modbus/number.py",
+    "old": "        dynamic_min = self.entity_description.min_fn(self._runtime)\n",
+    "new": "        dynamic_min = None\n",
+    "tests": "every_power_number_spans_the_rated_power"
+  },
+  {
+    "label": "mppt: a registered sensor survives a missing value",
+    "path": "custom_components/fronius_modbus/mppt_entities.py",
+    "old": "    return value is None and key not in runtime.registered_keys\n",
+    "new": "    return value is None\n",
+    "tests": "dark_mppt_at_a_restart_keeps_its_sensors"
+  },
+  {
+    "label": "sensor: an enum value outside its options reads unknown",
+    "path": "custom_components/fronius_modbus/sensor.py",
+    "old": "        if options is None or value is None or value in options:\n",
+    "new": "        if True:\n",
+    "tests": "enum_value_outside_its_options_reads_unknown"
+  },
+  {
+    "label": "exceptions: a transport error shows by its kind alone",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/exceptions.py",
+    "old": "    if isinstance(err, (ModbusConnectionError, ModbusTimeoutError)):\n",
+    "new": "    if False:\n",
+    "tests": "names_no_host_in_logs_or_diagnostics"
+  },
+  {
+    "label": "coordinator: a cut cause stays out of the traceback",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "        cause = err if text == str(err) else None\n",
+    "new": "        cause = err\n",
+    "tests": "names_no_host_in_logs_or_diagnostics"
+  },
+  {
+    "label": "coordinator: the coordinator's name holds no host",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "            name=f\"{entry.entry_id} Modbus\",\n",
+    "new": "            name=f\"{entry.title} Modbus\",\n",
+    "tests": "names_no_host_in_logs_or_diagnostics"
+  },
+  {
+    "label": "web client: a refused login forgets the hash mode",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "            _HASH_MODES.pop((self.base_url or \"\", self.username), None)\n",
+    "new": "",
+    "tests": "refused_login_reads_the_hash_mode_again"
+  },
+  {
+    "label": "web control: no refresh is scheduled after unload",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        if self._shut_down:\n            return\n",
+    "new": "",
+    "tests": "ends_after_unload_schedules_no_refresh"
+  },
+  {
+    "label": "web control: a lost login keeps the public readings",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        self.data = WebData(\n            **{field: getattr(self.data, field) for field in _PUBLIC_FIELDS}\n        )\n",
+    "new": "        self.data = WebData()\n",
+    "tests": "keeps_the_public_readings_of_its_poll"
+  },
+  {
+    "label": "web control: a failed text file is asked again",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "            answered = answered and answer is not None\n",
+    "new": "",
+    "tests": "failed_once_is_read_again"
+  },
+  {
+    "label": "setup: a reported device cannot be deleted",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "        domain == DOMAIN and identifier in expected\n",
+    "new": "        False\n",
+    "tests": "no_longer_reports"
+  },
+  {
+    "label": "storage: a discharge limit writes the discharge rate",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        await self._write_rate(\n            \"out_w_rte\",\n            lambda: _watts_to_percent(max(watts, 0.0), self.max_discharge_rate_w),",
+    "new": "        await self._write_rate(\n            \"in_w_rte\",\n            lambda: _watts_to_percent(max(watts, 0.0), self.max_discharge_rate_w),",
+    "tests": "discharge_limit_writes_the_discharge_rate"
+  },
+  {
+    "label": "storage: a discharge limit is refused outside its modes",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            allowed=lambda: self.extended_mode in DISCHARGE_LIMIT_MODES,",
+    "new": "            allowed=lambda: True,",
+    "tests": "cannot_overwrite_the_grid_charge_power"
+  },
+  {
+    "label": "storage: discharge to grid at 0 W still fits its mode",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        return out_rate == expected_out and in_rate <= 0\n",
+    "new": "        return False\n",
+    "tests": "zero_watts_keeps_its_mode"
+  },
+  {
+    "label": "storage: a charge limit at 0 W still fits its mode",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "    in_fits = in_rate >= 0 if charge_free else in_rate == expected_in\n",
+    "new": "    in_fits = in_rate == expected_in\n",
+    "tests": "zero_watts_keeps_its_mode"
+  },
+  {
+    "label": "storage: a discharge limit at 0 W still fits its mode",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "    out_fits = out_rate >= 0 if discharge_free else out_rate == expected_out\n",
+    "new": "    out_fits = out_rate == expected_out\n",
+    "tests": "zero_watts_keeps_its_mode"
+  },
+  {
+    "label": "web control: a battery write schedules the confirming refresh",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        self._publish()\n        self._schedule_delayed_web_refresh()\n",
+    "new": "        self._publish()\n",
+    "tests": "confirmed_by_a_refresh_shortly_after"
+  },
+  {
+    "label": "web control: the confirming refresh is published",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "                    await self.async_refresh()\n                    self._publish()\n",
+    "new": "                    await self.async_refresh()\n",
+    "tests": "confirmed_by_a_refresh_shortly_after"
+  },
+  {
+    "label": "web control: unloading cancels a pending confirming refresh",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        self._shut_down = True\n        if self._delayed_refresh_task and not self._delayed_refresh_task.done():\n            self._delayed_refresh_task.cancel()\n",
+    "new": "        self._shut_down = True\n",
+    "tests": "cancels_a_pending_confirmation_refresh"
+  },
+  {
+    "label": "migrations: a pre-web-API entry drops its meter ids and asks for reconfigure",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "    if entry.minor_version < _WEB_API_MINOR_VERSION:\n",
+    "new": "    if False:\n",
+    "tests": "pre_web_api_entry_is_upgraded"
+  },
+  {
+    "label": "migrations: legacy devices are removed",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "            device_registry.async_remove_device(device.id)\n",
+    "new": "            pass\n",
+    "tests": "pre_web_api_entry_is_upgraded"
+  },
+  {
+    "label": "migrations: name-based unique ids are moved",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "        registry.async_update_entity(\n            entity_entry.entity_id, new_unique_id=new_unique_id\n        )\n",
+    "new": "        pass\n",
+    "tests": "twins_of_a_legacy_unique_id"
+  },
+  {
+    "label": "entities: the grid connection select connects on enabled",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "        set_fn=lambda r, code: assume_present(r.inverter_controls).set_connected(\n            bool(code)\n",
+    "new": "        set_fn=lambda r, code: assume_present(r.inverter_controls).set_connected(\n            not code\n",
+    "tests": "writes_through_the_right_call"
+  },
+  {
+    "label": "entities: the Solar API switch turns the API on, not off",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "        turn_on=lambda r: assume_present(r.web_control).set_solar_api_enabled(True),\n",
+    "new": "        turn_on=lambda r: assume_present(r.web_control).set_solar_api_enabled(False),\n",
+    "tests": "writes_through_the_right_call"
+  },
+  {
+    "label": "entities: turning off grid charging leaves AC charging alone",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "        turn_off=lambda r: assume_present(r.web_control).set_charge_sources(\n            charge_from_grid=False\n        ),\n",
+    "new": "        turn_off=lambda r: assume_present(r.web_control).set_charge_sources(\n            charge_from_grid=False, charge_from_ac=False\n        ),\n",
+    "tests": "writes_through_the_right_call"
+  },
+  {
+    "label": "switch: turning on runs the turn-on action",
+    "path": "custom_components/fronius_modbus/switch.py",
+    "old": "        await self._async_write(self.entity_description.turn_on)\n",
+    "new": "        await self._async_write(self.entity_description.turn_off)\n",
+    "tests": "run_their_own_action"
+  },
+  {
+    "label": "button: pressing runs the press action",
+    "path": "custom_components/fronius_modbus/button.py",
+    "old": "        await self.async_run_write(lambda: self.entity_description.press(self._runtime))\n",
+    "new": "        pass\n",
+    "tests": "run_their_own_action"
+  },
+  {
+    "label": "storage: only the grid mode in place keeps its power",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        if field_name is None or mode is not self._extended_mode:\n",
+    "new": "        if field_name is None:\n",
+    "tests": "starts_at_zero_watts"
+  },
+  {
+    "label": "migrations: a name-based id counts as registered under its key",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "            keys.add(unique_id.removeprefix(legacy_prefix))\n",
+    "new": "            pass\n",
+    "tests": "upgrade_keeps_its_legacy_sensors"
+  },
+  {
+    "label": "migrations: a v0.1.9 id counts as registered under its key",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "            keys.add(v019_keys[unique_id])\n",
+    "new": "            pass\n",
+    "tests": "upgrade_keeps_its_legacy_sensors"
+  },
+  {
+    "label": "migrations: only the generated pre-web-API title is replaced",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "        if title == str(_entry_value(entry, CONF_NAME, \"\")):\n",
+    "new": "        if True:\n",
+    "tests": "keeps_a_title_the_owner_gave"
+  },
+  {
+    "label": "controls: a control left disabled names no host",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/controls.py",
+    "old": "                f\"{error_text(restore_error)}\"\n",
+    "new": "                f\"{restore_error}\"\n",
+    "tests": "left_disabled_names_no_host"
+  },
+  {
+    "label": "storage: a zero limit blocking both ways is refused",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            if in_rate <= 0 and out_rate <= 0:\n",
+    "new": "            if False:\n",
+    "tests": "blocks_both_ways_is_refused"
+  },
+  {
+    "label": "storage: an unreadable image falls back to the mode's table",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            return _MODE_TABLE[self.extended_mode]\n        if not",
+    "new": "            return (MODE_AUTO, FULL_RATE_PCT, FULL_RATE_PCT)\n        if not",
+    "tests": "the_other_side_cannot_be_read"
+  },
+  {
+    "label": "setup: a string lit after setup reloads the entry",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "        scheduled = True\n        hass.config_entries.async_schedule_reload(entry.entry_id)\n",
+    "new": "        scheduled = True\n",
+    "tests": "gets_its_sensor_once_lit"
+  },
+  {
+    "label": "setup: only a string that sends a value reloads",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "        if scheduled or not left_out - left_out_mppt_keys(runtime):\n",
+    "new": "        if scheduled:\n",
+    "tests": "gets_its_sensor_once_lit"
+  },
+  {
+    "label": "web control: the event texts are cached once every file answered",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        if answered:\n            self._event_texts = merged\n",
+    "new": "        if False:\n            self._event_texts = merged\n",
+    "tests": "read_once_when_a_language_has_no_file"
+  },
+  {
+    "label": "web control: a language file the firmware lacks counts as an answer",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "            answered = answered and answer is not None\n",
+    "new": "            answered = answered and isinstance(answer, dict)\n",
+    "tests": "read_once_when_a_language_has_no_file"
+  },
+  {
+    "label": "storage: a rate is judged by the live image",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        if image is None:\n            return _MODE_TABLE[self.extended_mode]\n",
+    "new": "        return _MODE_TABLE[self.extended_mode]\n",
+    "tests": "blocks_both_ways_is_refused or left_the_mode"
+  },
+  {
+    "label": "storage: a rate replaces its own side of the image",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            if field_name == \"in_w_rte\":\n                in_rate = value\n            else:\n                out_rate = value\n",
+    "new": "            if field_name == \"in_w_rte\":\n                out_rate = value\n            else:\n                in_rate = value\n",
+    "tests": "blocks_both_ways_is_refused"
+  },
+  {
+    "label": "storage: a re-selected grid mode keeps its power only while the image fits",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        if image is None or _registers_fit(mode, *image):\n",
+    "new": "        if True:\n",
+    "tests": "over_a_non_grid_rate_restores_it"
+  },
+  {
+    "label": "storage: an unreadable grid power is kept",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        if image is None or _registers_fit(mode, *image):\n",
+    "new": "        if image is not None and _registers_fit(mode, *image):\n",
+    "tests": "keeps_the_power_when_it_cannot_be_read"
+  },
+  {
+    "label": "writes: a register value is read at the device scale",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/writes.py",
+    "old": "        words = await unit.read_holding_registers(resolved.address, resolved.count)\n        exponent = await _scale_exponent(unit, resolved, field)\n",
+    "new": "        words = await unit.read_holding_registers(resolved.address, resolved.count)\n        exponent = None\n",
+    "tests": "a_register_is_read_at_the_device_scale"
+  },
+  {
+    "label": "writes: an unreadable register value is None",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/writes.py",
+    "old": "    except ModbusError:\n        return None\n",
+    "new": "    except ModbusError:\n        return 0\n",
+    "tests": "cannot_be_read"
+  },
+  {
+    "label": "storage: a rate in a mode the inverter left is refused",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        if not _registers_fit(self.extended_mode, *image):\n",
+    "new": "        if False:\n",
+    "tests": "left_the_mode or both_limits_of_another_controller"
+  },
+  {
+    "label": "storage: an image with an unreadable register is unreadable",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        if None in image:\n            return None\n",
+    "new": "",
+    "tests": "cannot_be_read"
+  },
+  {
+    "label": "writes: a rate is judged as the register will hold it",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/writes.py",
+    "old": "    return field.decode(field.encode(value, exponent), exponent)\n",
+    "new": "    return value\n",
+    "tests": "blocks_both_ways_is_refused"
+  },
+  {
+    "label": "mppt: a string lit during the platform setup is checked at once",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "    entry.async_on_unload(runtime.modbus.async_add_listener(_check))\n    _check()\n",
+    "new": "    entry.async_on_unload(runtime.modbus.async_add_listener(_check))\n",
+    "tests": "lit_while_the_platforms_set_up"
+  },
+  {
+    "label": "mppt: the strings left out are taken before the platform setup",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "    left_out = left_out_mppt_keys(entry.runtime_data)\n    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)\n",
+    "new": "    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)\n    left_out = left_out_mppt_keys(entry.runtime_data)\n",
+    "tests": "lit_while_the_platforms_set_up"
+  },
+  {
+    "label": "migrations: a role the owner chose stands at the upgrade",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "    if entry.minor_version >= _CHOSEN_ROLE_MINOR_VERSION and chosen:\n        return str(chosen)\n",
+    "new": "",
+    "tests": "keeps_the_role_its_owner_chose"
+  },
+  {
+    "label": "coordinator: grid charging without the web login is an error",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "        if web_control is None or not web_control.configured:\n",
+    "new": "        if False:\n",
+    "tests": "grid_charging_without_the_web_login"
+  },
+  {
+    "label": "coordinator: an entry without the web API leaves the toggles alone",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "        if mode is not ExtendedMode.CHARGE_FROM_GRID or web_api_disabled(\n",
+    "new": "        if mode is not ExtendedMode.CHARGE_FROM_GRID or False and web_api_disabled(\n",
+    "tests": "grid_charging_without_the_web_api_is_no_error or select_changes_the_storage_mode"
+  },
+  {
+    "label": "migrations: a role stored before minor 10 is no choice",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "    if entry.minor_version >= _CHOSEN_ROLE_MINOR_VERSION and chosen:\n",
+    "new": "    if chosen:\n",
+    "tests": "callifo_0_3_1_entry_with_a_technician_token"
+  },
+  {
+    "label": "storage: a rate image is judged whole, not by StorCtl_Mod",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        if not _registers_fit(self.extended_mode, *image):\n",
+    "new": "        if image[0] != _MODE_TABLE[self.extended_mode][0]:\n",
+    "tests": "fits_the_mode_is_written"
+  },
+  {
+    "label": "storage: a rate over another mode on the same base is refused",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        if not _registers_fit(self.extended_mode, *image):\n",
+    "new": "        if image[0] != _MODE_TABLE[self.extended_mode][0] and not _registers_fit(self.extended_mode, *image):\n",
+    "tests": "another_mode_on_the_same_base_is_refused"
+  },
+  {
+    "label": "writes: a rate whose scale cannot be read is judged as asked",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/writes.py",
+    "old": "    except ModbusError:\n        return value\n",
+    "new": "    except ModbusError:\n        return 0\n",
+    "tests": "scale_is_refused_once"
+  },
+  {
+    "label": "storage: a grid power beyond a combined window is refused",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            if mode == MODE_CHARGE_AND_DISCHARGE and -in_rate > out_rate:\n",
+    "new": "            if False:\n",
+    "tests": "beyond_a_combined_window"
+  },
+  {
+    "label": "storage: the combined window's own bound is legal",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            if mode == MODE_CHARGE_AND_DISCHARGE and -in_rate > out_rate:\n",
+    "new": "            if mode == MODE_CHARGE_AND_DISCHARGE and -in_rate >= out_rate:\n",
+    "tests": "inside_a_combined_window"
   }
 ]

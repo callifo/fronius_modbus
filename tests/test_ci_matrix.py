@@ -148,6 +148,35 @@ def test_the_minimum_job_actually_checks_the_version_it_installed():
     )
 
 
+def test_both_test_jobs_run_the_modbus_libraries_core_pins():
+    """Audit F29: the minimum job ran modbus-connection 4.12 where 2026.9 pins 4.10.
+
+    The integration shares core's Modbus connection, so an installation runs
+    the library releases core pins. The workflow installs them and both the
+    workflow and the local gate check them.
+    """
+    steps = "\n".join(_steps_of("pytest"))
+    gate = (REPO / ".github" / "scripts" / "check.sh").read_text(encoding="utf-8")
+
+    assert "pip install $(python .github/scripts/core_modbus_pins.py)" in steps
+    assert "core_modbus_pins.py --check" in steps
+    assert '"$PYTHON" .github/scripts/core_modbus_pins.py --check' in gate
+    assert '"$MIN_HA_PYTHON" .github/scripts/core_modbus_pins.py --check' in gate
+
+
+def test_the_test_job_has_the_gitleaks_its_allowlist_tests_need():
+    """Audit F30: without the binary the allowlist tests skipped in CI, every run.
+
+    The gitleaks job scans with the change's own rules, so a widened allowlist
+    passes it; only these tests hold the rules to a known token.
+    """
+    steps = "\n".join(_steps_of("pytest"))
+
+    assert re.search(r'GITLEAKS_VERSION: "\d+\.\d+\.\d+"', steps)
+    assert "_linux_x64.tar.gz" in steps
+    assert "sha256sum --check" in steps
+
+
 def test_a_patch_release_still_counts_as_the_declared_minimum():
     """hacs.json names a patch; the plugin pins whichever patch of that
     feature release it ships. Comparing them literally would fail the job for

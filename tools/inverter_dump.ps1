@@ -69,9 +69,10 @@ $LoginPaths = @(
 )
 
 $Redacted = '<redacted>'
-# Everything beneath these keys is replaced, and each value found there again
-# wherever else it appears.
-$SensitiveKey = '^(serial|serialNumber|UniqueID|systemName|CustomName|hostname|hw_address|mac|ssid|ip|ipAddress|dns|nameservers|gateway|e-?mail|latitude|longitude|street|city|zip|postalCode|\w*(passw|secret|apikey|privatekey|psk)\w*|\w*token)$'
+# Everything beneath these keys is replaced; a value right under one is also
+# replaced wherever else it appears. A field's description (_psk_meta) names
+# its type, not its value, and stays.
+$SensitiveKey = '^(?!_\w*_meta$)(serial|serialNumber|UniqueID|UniqueIdentifier|systemName|CustomName|hostname|hw_address|mac|ssid|ip|ipAddress|dns|nameservers|gateway|e-?mail|latitude|longitude|street|city|zip|postalCode|\w*(passw|secret|apikey|privatekey|psk)\w*|\w*token)$'
 $SensitivePattern = @(
     '\b(?:(?:10|127)(?:\.\d{1,3}){3}|(?:192\.168|169\.254|172\.(?:1[6-9]|2\d|3[01]))(?:\.\d{1,3}){2})\b',
     '\b[0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5}\b',
@@ -147,6 +148,27 @@ function Get-DigestHeader($Response, [string]$Uri) {
     return $header
 }
 
+function Get-SecretHasher([string]$CommonBody, [string]$Role) {
+    # Older firmware hashes the login with MD5 and says so per user; an
+    # answer without the field means SHA-256, as in the integration.
+    $version = $null
+    try {
+        $options = ($CommonBody | ConvertFrom-Json).authenticationOptions
+        $version = $options.digest."${Role}HashingVersion"
+    } catch {
+        Write-Host 'The hashing of the login is not readable; trying SHA-256.'
+    }
+    if ($version -eq 1) { return [System.Security.Cryptography.MD5]::Create() }
+    return [System.Security.Cryptography.SHA256]::Create()
+}
+
+function Invoke-Login($Common) {
+    # Logs in as $script:Role with the hashing $Common (the answer of
+    # /api/status/common) names; returns the HTTP status of the login.
+    $script:SecretHasher = Get-SecretHasher $Common.body $script:Role
+    return (Read-Endpoint "/api/commands/Login?user=$($script:Role)" $true).status
+}
+
 function Read-Endpoint([string]$Path, [bool]$WithLogin) {
     try {
         $response = Send-Get $Path
@@ -220,10 +242,10 @@ function Set-KnownValues {
     $script:PatternExpression = New-Object regex (($SensitivePattern -join '|'), 'Compiled')
 }
 
-function Protect-JsonString([string]$Token, [bool]$Sensitive) {
+function Protect-JsonString([string]$Token, [bool]$Sensitive, [bool]$Learn) {
     $value = ConvertFrom-JsonString $Token
     if ($Sensitive) {
-        if ($value.Trim().Length -ge $MinKnownLength) { [void]$script:Known.Add($value.Trim()) }
+        if ($Learn -and $value.Trim().Length -ge $MinKnownLength) { [void]$script:Known.Add($value.Trim()) }
         return ConvertTo-JsonString $Redacted
     }
     if ($script:Collecting) { return $Token }
@@ -232,9 +254,9 @@ function Protect-JsonString([string]$Token, [bool]$Sensitive) {
     return ConvertTo-JsonString $protected
 }
 
-function Protect-JsonNumber([string]$Token, [bool]$Sensitive) {
+function Protect-JsonNumber([string]$Token, [bool]$Sensitive, [bool]$Learn) {
     if ($Sensitive) {
-        if ($Token.Length -ge $MinKnownLength) { [void]$script:Known.Add($Token) }
+        if ($Learn -and $Token.Length -ge $MinKnownLength) { [void]$script:Known.Add($Token) }
         return ConvertTo-JsonString $Redacted
     }
     if ($Token -match $LongNumber -or $script:Known.Contains($Token)) { return ConvertTo-JsonString $Redacted }
@@ -248,7 +270,10 @@ function Read-JsonDocument([string]$Text) {
     a login export take two minutes. Each frame knows what it expects next. #>
     $sensitiveKey = New-Object regex ($SensitiveKey, 'IgnoreCase')
     $parents = New-Object System.Collections.Generic.Stack[object]
-    $frame = @{ kind = 'root'; expect = 'value'; sensitive = $false; parts = $null; key = $null; valueSensitive = $false }
+    # "learn": the value sits right under a sensitive key (or in its array).
+    # A sensitive object's other settings, such as an address mode "manual",
+    # are replaced with it but not learned: they took every "manual" along.
+    $frame = @{ kind = 'root'; expect = 'value'; sensitive = $false; learn = $false; parts = $null; key = $null; valueSensitive = $false; valueLearn = $false }
     $result = $null
     foreach ($match in [regex]::Matches($Text, $JsonToken)) {
         $token = $match.Value
@@ -258,13 +283,14 @@ function Read-JsonDocument([string]$Text) {
         $expect = $frame.expect
         if ($expect -eq 'value' -or $expect -eq 'value-or-end') {
             $sensitive = $frame.sensitive
-            if ($frame.kind -eq 'object') { $sensitive = $frame.valueSensitive }
+            $learn = $frame.learn
+            if ($frame.kind -eq 'object') { $sensitive = $frame.valueSensitive; $learn = $frame.valueLearn }
             if ($token -ceq '{' -or $token -ceq '[') {
                 $parents.Push($frame)
                 $kind = 'array'
                 $opening = 'value-or-end'
                 if ($token -ceq '{') { $kind = 'object'; $opening = 'key-or-end' }
-                $frame = @{ kind = $kind; expect = $opening; sensitive = $sensitive; parts = (New-Object System.Collections.Generic.List[string]); key = $null; valueSensitive = $false }
+                $frame = @{ kind = $kind; expect = $opening; sensitive = $sensitive; learn = ($learn -and $kind -eq 'array'); parts = (New-Object System.Collections.Generic.List[string]); key = $null; valueSensitive = $false; valueLearn = $false }
                 continue
             }
             if ($token -ceq ']' -and $expect -eq 'value-or-end') {
@@ -277,7 +303,7 @@ function Read-JsonDocument([string]$Text) {
                     # cost more than all the redaction itself.
                     $inner = $token.Substring(1, $token.Length - 2)
                     if ($sensitive -or $inner.Contains('\')) {
-                        $value = Protect-JsonString $token $sensitive
+                        $value = Protect-JsonString $token $sensitive $learn
                     } else {
                         $protected = $inner
                         if ($script:KnownExpression) { $protected = $script:KnownExpression.Replace($protected, $Redacted) }
@@ -287,7 +313,7 @@ function Read-JsonDocument([string]$Text) {
                 }
             } elseif (($first -eq '-' -and $token.Length -gt 1) -or ($first -ge '0' -and $first -le '9')) {
                 $value = $token
-                if ($script:Redacting -and ($sensitive -or $token.Length -ge 12 -or $script:Known.Contains($token))) { $value = Protect-JsonNumber $token $sensitive }
+                if ($script:Redacting -and ($sensitive -or $token.Length -ge 12 -or $script:Known.Contains($token))) { $value = Protect-JsonNumber $token $sensitive $learn }
             } elseif ($token -cin 'true', 'false', 'null') {
                 $value = $token
             } else {
@@ -300,7 +326,8 @@ function Read-JsonDocument([string]$Text) {
             } elseif ($first -eq '"' -and $token.Length -ge 2) {
                 $key = $token.Substring(1, $token.Length - 2)
                 if ($key.Contains('\')) { $key = ConvertFrom-JsonString $token }
-                $frame.valueSensitive = $frame.sensitive -or $sensitiveKey.IsMatch($key)
+                $frame.valueLearn = $sensitiveKey.IsMatch($key)
+                $frame.valueSensitive = $frame.sensitive -or $frame.valueLearn
                 $frame.key = $token
                 if ($script:Redacting -and -not $script:Collecting) {
                     $protected = $key
@@ -546,23 +573,12 @@ function Invoke-Dump {
         $secure = Read-Host "Password of $($script:Role)" -AsSecureString
         $script:Password = [Runtime.InteropServices.Marshal]::PtrToStringBSTR(
             [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
-        # Older firmware hashes the login with MD5 and says so per user; an
-        # answer without the field means SHA-256, as in the integration.
-        $version = $null
-        try {
-            $options = ($common.body | ConvertFrom-Json).authenticationOptions
-            $version = $options.digest."$($script:Role)HashingVersion"
-        } catch {
-            Write-Host 'The hashing of the login is not readable; trying SHA-256.'
-        }
-        if ($version -eq 1) { $script:SecretHasher = [System.Security.Cryptography.MD5]::Create() }
-        else { $script:SecretHasher = [System.Security.Cryptography.SHA256]::Create() }
-        $login = Read-Endpoint "/api/commands/Login?user=$($script:Role)" $true
-        if ($login.status -eq 200) {
+        $loginStatus = Invoke-Login $common
+        if ($loginStatus -eq 200) {
             $loginRole = $script:Role
             foreach ($path in $LoginPaths) { $paths[$path] = $true }
         } else {
-            Write-Host "The inverter refused the login (HTTP $($login.status)); reading without it."
+            Write-Host "The inverter refused the login (HTTP $loginStatus); reading without it."
         }
     }
     $readModbus = -not ((Read-Host 'Also read the SunSpec registers over Modbus TCP (Modbus must be on)? [Y/n]') -match '^[nN]')

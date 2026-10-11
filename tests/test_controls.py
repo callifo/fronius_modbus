@@ -2,7 +2,7 @@
 
 import asyncio
 
-from modbus_connection import ServerDeviceFailureError
+from modbus_connection import ModbusConnectionError, ServerDeviceFailureError
 from modbus_connection.model.sunspec import scan
 import pytest
 
@@ -232,6 +232,35 @@ async def test_a_limit_that_cannot_be_re_enabled_is_reported_as_left_disabled(cl
     )
     with pytest.raises(ControlLeftDisabledError):
         await controls.set_ac_limit_w(5000)
+
+
+@pytest.mark.usefixtures("no_comparison")
+async def test_a_control_left_disabled_names_no_host(clock):
+    """Reaudit W-01: the report carried the lost connection's text, host and all.
+
+    It reaches the write_failed message the owner pastes into an issue.
+    """
+
+    class FakeControls:
+        w_max_lim_ena = 1
+
+        async def async_update(self):
+            pass
+
+        async def write(self, field, value):
+            if field == "w_max_lim_ena" and value == 0:
+                setattr(self, field, value)
+                return
+            raise ModbusConnectionError("could not connect to 192.0.2.10:502")
+
+    controls = InverterControls(
+        FakeControls(), max_power_w=10000, monotonic=clock.monotonic, sleep=clock.sleep
+    )
+    with pytest.raises(ControlLeftDisabledError) as raised:
+        await controls.set_ac_limit_w(5000)
+
+    assert "192.0.2.10" not in str(raised.value)
+    assert "ModbusConnectionError" in str(raised.value)
 
 
 @pytest.mark.parametrize(

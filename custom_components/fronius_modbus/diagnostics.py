@@ -10,6 +10,7 @@ from modbus_connection import ModbusError
 from homeassistant.core import HomeAssistant
 
 from .coordinator import FroniusConfigEntry, FroniusRuntimeData
+from .fronius_modbus_api.exceptions import error_text
 
 REDACTED = "**REDACTED**"
 
@@ -44,7 +45,7 @@ async def async_get_config_entry_diagnostics(
     return {
         "identity": runtime.device.identity._replace(serial=REDACTED)._asdict(),
         "updated": sorted(poll.report.updated),
-        "failed": {name: str(err) for name, err in poll.report.failed.items()},
+        "failed": {name: error_text(err) for name, err in poll.report.failed.items()},
         "registers": await _async_registers(runtime),
         "web": None
         if web_data is None

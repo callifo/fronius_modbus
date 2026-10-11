@@ -10,9 +10,10 @@ import time
 from modbus_connection import ModbusTcpParams
 
 from homeassistant.components.modbus import async_get_unit
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL, Platform
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr
 
 from . import migrations
 from .component_readings import reported_rows
@@ -26,6 +27,7 @@ from .const import (
     DEFAULT_PORT,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_WEB_SCAN_INTERVAL,
+    DOMAIN,
 )
 from .coordinator import (
     FroniusConfigEntry,
@@ -33,15 +35,13 @@ from .coordinator import (
     FroniusRuntimeData,
     FroniusWebCoordinator,
 )
+from .entity_base import expected_device_identifiers
 from .fronius_modbus_api.device import FroniusInverter
-from .froniuswebclient import FroniusWebAuthError, FroniusWebClient
-from .token_store import async_forget_unused_tokens, async_get_token_store
-from .web_control import (
-    BATTERY_WRITE_MODBUS_RECOVERY_SECONDS,
-    FroniusWebControl,
-    MeterTopology,
-    parse_meter_topology,
-)
+from .froniuswebclient import FroniusWebClient
+from .meter_topology import MeterTopology, parse_meter_topology
+from .mppt_entities import left_out_mppt_keys
+from .token_store import async_forget_unused_tokens
+from .web_control import BATTERY_WRITE_MODBUS_RECOVERY_SECONDS, FroniusWebControl
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -69,45 +69,51 @@ async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 
 async def _async_meter_topology(
-    hass: HomeAssistant,
-    entry: FroniusConfigEntry,
-    client: FroniusWebClient | None,
-    public_client: FroniusWebClient | None,
-) -> tuple[FroniusWebClient | None, MeterTopology]:
+    hass: HomeAssistant, public_client: FroniusWebClient | None
+) -> MeterTopology:
     """Ask the web API which meters exist; fall back to the single default meter.
 
-    An authentication failure drops the client for good: the stored token is
-    deleted, so the entry runs without its login until the user reconfigures it.
+    The read needs no login and answers None when it fails, so a rejected token
+    shows at the first protected read of the web poll instead.
     """
     unconfirmed = parse_meter_topology(None)
     if public_client is None:
         # Without a web client the entry only ever serves the default meter, so
         # that is the configuration, not an unread answer.
-        return None, replace(unconfirmed, confirmed=True)
+        return replace(unconfirmed, confirmed=True)
 
-    try:
-        info = await hass.async_add_executor_job(
-            public_client.get_power_meter_info, DEFAULT_METER_UNIT_ID
-        )
-    except FroniusWebAuthError as err:
-        _LOGGER.warning(
-            "Disabling the Fronius web API after an auth failure: %s",
-            err,
-        )
-        await async_get_token_store(hass).async_delete_token(
-            str(_entry_value(entry, CONF_HOST)),
-            str(_entry_value(entry, CONF_API_USERNAME, API_USERNAME)),
-        )
-        return None, unconfirmed
-    except Exception as err:
-        _LOGGER.warning(
-            "Could not read the meter topology from the web API: %s",
-            err,
-            exc_info=True,
-        )
-        return client, unconfirmed
+    info = await hass.async_add_executor_job(
+        public_client.get_power_meter_info, DEFAULT_METER_UNIT_ID
+    )
+    return parse_meter_topology(info)
 
-    return client, parse_meter_topology(info)
+
+@callback
+def _async_reload_when_a_string_lights_up(
+    hass: HomeAssistant, entry: FroniusConfigEntry, left_out: frozenset[str]
+) -> None:
+    """Reload once an MPPT string dark at setup sends its first value.
+
+    Its sensors were left out for want of a value; without the reload they
+    came only with the next restart (reaudit W-03). ``left_out`` is taken
+    before the platforms set up: a poll during their setup lit a string
+    unseen (reaudit AC-02).
+    """
+    if not left_out:
+        return
+    runtime = entry.runtime_data
+    scheduled = False
+
+    @callback
+    def _check() -> None:
+        nonlocal scheduled
+        if scheduled or not left_out - left_out_mppt_keys(runtime):
+            return
+        scheduled = True
+        hass.config_entries.async_schedule_reload(entry.entry_id)
+
+    entry.async_on_unload(runtime.modbus.async_add_listener(_check))
+    _check()
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> bool:
@@ -136,7 +142,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
     if migrations.web_api_disabled(entry):
         public_client = FroniusWebClient(host=host, username=API_USERNAME, password="")
 
-    client, topology = await _async_meter_topology(hass, entry, client, public_client)
+    topology = await _async_meter_topology(hass, public_client)
     meter_unit_ids, primary = topology.unit_ids, topology.primary_unit_id
     locations = topology.locations
 
@@ -209,7 +215,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
     )
 
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
+    left_out = left_out_mppt_keys(entry.runtime_data)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    _async_reload_when_a_string_lights_up(hass, entry, left_out)
     if web is not None:
         web_poll = web
 
@@ -234,3 +242,21 @@ async def async_unload_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> 
 async def async_remove_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> None:
     """Delete the entry's web token unless another entry still logs in with it."""
     await async_forget_unused_tokens(hass, str(_entry_value(entry, CONF_HOST, "")))
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, entry: FroniusConfigEntry, device_entry: dr.DeviceEntry
+) -> bool:
+    """Let the owner delete a device the inverter no longer reports.
+
+    Cleanup never deletes a device on doubt, so one short answer cannot take a
+    meter with its history; the owner decides instead (audit F32).
+    """
+    del hass
+    if entry.state is not ConfigEntryState.LOADED:
+        return False
+    expected = expected_device_identifiers(entry.runtime_data, entry)
+    return not any(
+        domain == DOMAIN and identifier in expected
+        for domain, identifier in device_entry.identifiers
+    )

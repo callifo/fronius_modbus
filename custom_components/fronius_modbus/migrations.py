@@ -24,12 +24,12 @@ from .const import (
     ENTITY_PREFIX,
     MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX,
     TECHNICIAN_USERNAME,
-    WEB_API_DISABLED,
     entity_prefix,
     entry_title,
     instance_key,
     ModbusRestriction,
 )
+from .const import web_api_disabled as entry_values_web_api_disabled
 from .component_readings import ONCE_REPORTED_KEYS
 from .entities import expected_unique_ids
 from .entity_base import expected_device_identifiers
@@ -44,6 +44,9 @@ _TARGET_MINOR_VERSION = 14
 # Entries below this minor version predate the web API integration and still
 # carry the dropped meter-unit config, so only they need the data migration.
 _WEB_API_MINOR_VERSION = 9
+# From this minor version (callifo 0.3.2) the stored role is the owner's choice;
+# below it, a constant customer.
+_CHOSEN_ROLE_MINOR_VERSION = 10
 # Entries below this minor version predate the single web API role.
 _SINGLE_ROLE_MINOR_VERSION = 11
 # Entries below this minor version store the restriction as a checkbox.
@@ -111,13 +114,25 @@ def _marked_reported(entity_entry: er.RegistryEntry) -> bool:
 
 
 def registered_keys(hass: HomeAssistant, entry: ConfigEntry) -> frozenset[str]:
-    """The description keys of every entity the registry holds for this entry."""
+    """The description keys of every entity the registry holds for this entry.
+
+    An id from before the per-entry scheme counts under the key it migrates to:
+    the migrations run after this is read, and a sensor dark at the first start
+    after an upgrade counted as never registered and was deleted (reaudit RC-02).
+    """
     prefix = f"{entity_prefix(entry.entry_id)}_"
-    return frozenset(
-        unique_id.removeprefix(prefix)
-        for candidate in _entity_entries_for_config_entry(er.async_get(hass), entry)
-        if (unique_id := candidate.unique_id or "").startswith(prefix)
-    )
+    legacy_prefix = _legacy_entity_unique_id(entry, "")
+    v019_keys = {old_id: key for old_id, key, _, _ in _V019_MPPT_UNIQUE_ID_MAPPINGS}
+    keys = set()
+    for candidate in _entity_entries_for_config_entry(er.async_get(hass), entry):
+        unique_id = candidate.unique_id or ""
+        if unique_id.startswith(prefix):
+            keys.add(unique_id.removeprefix(prefix))
+        elif unique_id.startswith(legacy_prefix):
+            keys.add(unique_id.removeprefix(legacy_prefix))
+        elif unique_id in v019_keys:
+            keys.add(v019_keys[unique_id])
+    return frozenset(keys)
 
 
 def reported_keys(hass: HomeAssistant, entry: ConfigEntry) -> frozenset[str]:
@@ -286,7 +301,10 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         new_options.pop(CONF_METER_UNIT_IDS, None)
         new_data[CONF_RECONFIGURE_REQUIRED] = True
         new_options[CONF_RECONFIGURE_REQUIRED] = True
-        title = entry_title({**entry.data, **entry.options})
+        # Up to 0.3.0 the generated title was the name alone; any other title
+        # is the owner's (reaudit RC-03).
+        if title == str(_entry_value(entry, CONF_NAME, "")):
+            title = entry_title({**entry.data, **entry.options})
 
     if entry.minor_version < _SINGLE_ROLE_MINOR_VERSION:
         api_username = await _async_stored_role(hass, entry)
@@ -328,10 +346,14 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def _async_stored_role(hass: HomeAssistant, entry: ConfigEntry) -> str:
     """The role an entry used before roles were a setting.
 
-    Up to minor 10 an entry could hold a customer and a technician token at
-    once; the technician one enabled the export limit. With one role per entry
-    that entry keeps technician access, everything else stays on customer.
+    From minor 10 (callifo 0.3.2) the role is the one its owner chose, and a
+    technician token left on the host did not override it. Before, the stored
+    role was a constant customer beside a technician token that enabled the
+    export limit, so such an entry keeps technician access.
     """
+    chosen = _entry_value(entry, CONF_API_USERNAME, "")
+    if entry.minor_version >= _CHOSEN_ROLE_MINOR_VERSION and chosen:
+        return str(chosen)
     host = str(_entry_value(entry, CONF_HOST, "")).strip()
     if not host:
         return API_USERNAME
@@ -343,7 +365,7 @@ async def _async_stored_role(hass: HomeAssistant, entry: ConfigEntry) -> str:
 
 def web_api_disabled(entry: ConfigEntry) -> bool:
     """Whether the owner set the entry up without a web login."""
-    return _entry_value(entry, CONF_API_USERNAME, API_USERNAME) == WEB_API_DISABLED
+    return entry_values_web_api_disabled({**entry.data, **entry.options})
 
 
 async def async_prepare_entry_token(
@@ -456,41 +478,34 @@ async def async_migrate_name_based_unique_ids(
     hass: HomeAssistant,
     entry: ConfigEntry,
 ) -> None:
-    """Move old name-based unique ids to stable per-entry ids."""
+    """Move old name-based unique ids to stable per-entry ids.
+
+    Per registry entry, not per id: up to 0.3.0 a sensor and a control shared
+    one unique id, and moving the first left its twin to be deleted (audit F05).
+    """
     registry = er.async_get(hass)
     entity_entries = _entity_entries_for_config_entry(registry, entry)
-    current_unique_ids = {candidate.unique_id or "" for candidate in entity_entries}
+    taken = {(candidate.domain, candidate.unique_id) for candidate in entity_entries}
     expected = expected_unique_ids(entry, entry.runtime_data)
+    legacy_prefix = _legacy_entity_unique_id(entry, "")
     migrated = 0
 
-    for new_unique_id in expected:
-        key = new_unique_id.removeprefix(f"{entity_prefix(entry.entry_id)}_")
-        if key == new_unique_id:
+    for entity_entry in entity_entries:
+        old_unique_id = entity_entry.unique_id or ""
+        if not old_unique_id.startswith(legacy_prefix):
             continue
-
-        old_unique_id = _legacy_entity_unique_id(entry, key)
+        key = old_unique_id.removeprefix(legacy_prefix)
+        new_unique_id = f"{entity_prefix(entry.entry_id)}_{key}"
         if (
-            old_unique_id not in current_unique_ids
-            or new_unique_id in current_unique_ids
+            new_unique_id not in expected
+            or (entity_entry.domain, new_unique_id) in taken
         ):
-            continue
-
-        entity_entry = next(
-            (
-                candidate
-                for candidate in entity_entries
-                if (candidate.unique_id or "") == old_unique_id
-            ),
-            None,
-        )
-        if entity_entry is None:
             continue
 
         registry.async_update_entity(
             entity_entry.entity_id, new_unique_id=new_unique_id
         )
-        current_unique_ids.discard(old_unique_id)
-        current_unique_ids.add(new_unique_id)
+        taken.add((entity_entry.domain, new_unique_id))
         migrated += 1
 
     if migrated:

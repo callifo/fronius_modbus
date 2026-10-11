@@ -70,6 +70,7 @@ because the thing it prevents happened, here or in a sibling project.
 | `test_guards.py` | No guard binds itself to one source file; every guard is listed; `check.sh` matches CI |
 | `test_imports.py` | Every module imports outside the author's own tree - the `from config.custom_components...` line that shipped on main cannot ship again |
 | `test_entity_table.py` | Every legacy unique-id key is still registered and translated (`legacy_unique_ids.json`) |
+| `test_readme_entities.py` | The README's marked entity tables name every entity on its device and platform, by its English name, and no other |
 | `test_api_is_ha_free.py` | The device library under `fronius_modbus_api/` imports no Home Assistant |
 | `test_mutation_harness.py` | The mutation run fails loudly rather than printing "all caught" without having checked |
 | `test_mypy_scope.py` | Every module is in the mypy scope or carries a written reason why not yet |
@@ -77,9 +78,9 @@ because the thing it prevents happened, here or in a sibling project.
 | `test_requirements.py` | `manifest.json` and `requirements.txt` name the same dependencies |
 | `test_exception_translations.py` | Every translated error key raised in the package has a message, with the same placeholders, in every language, and no message is orphaned |
 | `test_icon_translations.py` | No entity sets its icon in code; every `icons.json` entry names a translation key an entity carries and has an `mdi:` default |
-| `test_parallel_updates.py` | Every platform declares `PARALLEL_UPDATES`: 1 for the writing platforms, 0 for the sensors |
+| `test_parallel_updates.py` | Every platform declares `PARALLEL_UPDATES`: 0 for the readers and the numbers (their write paths serialise themselves, and a burst must reach them together), 1 for the other writers |
 | `test_step_texts.py` | No repair step shows a text copied from another flow, and the steps rendered by the settings form use no placeholder it cannot fill |
-| `test_secret_scan.py` | The gitleaks allowlist for translation keys does not hide a token on the same line (needs the gitleaks binary; skips without it) |
+| `test_secret_scan.py` | The gitleaks allowlist for translation keys does not hide a token on the same line (needs the gitleaks binary: without it the tests skip locally and fail in CI, where the pytest job installs a pinned one) |
 
 ### test_log_hygiene.py
 
@@ -152,10 +153,11 @@ what it holds, and a row to [the guard table](#the-guards) above.
 Tests move with their subject: `test_device.py`, `test_storage.py`,
 `test_controls.py` and `test_sunspec_models.py` cover the device library
 against the library's in-memory mock unit, `test_coordinator.py` and
-`test_derived.py` the polling and the derived values, `test_entities.py` and
-`test_entity_table.py` the entity layer, `test_web_control.py` the web side,
-and `test_config_flow.py` and `test_e2e.py` the parts that only exist once
-Home Assistant is driving the integration (`test_e2e.py` is marked `e2e`).
+`test_derived.py` the polling and the derived values, `test_entities.py`,
+`test_entity_table.py` and `test_entity_writes.py` the entity layer,
+`test_web_control.py` the web side, and `test_config_flow.py` and
+`test_e2e.py` the parts that only exist once Home Assistant is driving the
+integration (`test_e2e.py` is marked `e2e`).
 The `mock_modbus` fixture in `conftest.py` stands in for the connection Home
 Assistant's `modbus` integration shares - a fresh in-memory connection per
 (re)load, seeded from the captured Symo GEN24 in `tests/fixtures/`.

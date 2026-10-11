@@ -5,7 +5,7 @@
     "step": {
       "user": {
         "title": "Fronius-System einrichten",
-        "description": "Gib den Host ein, wähle die lokale Web-API-Zugriffsrolle und setze die Aktualisierungsintervalle sowie die Modbus-IP-Beschränkung. Mindestintervall: 5 Sekunden. Die Technikerrolle schaltet zusätzlich die Einspeisebegrenzung frei. Ohne Web-API fehlen SoC-Modus, SoC-Maximum, Notstrom-Reserve, Netzlade-Erlaubnis, Solar API, Einspeisebegrenzung und Modbus-Reset, und Modbus TCP muss vorher im Wechselrichter eingeschaltet sein. Beim Umstellen eines bestehenden Eintrags werden diese Entitäten entfernt; ihre Historie bleibt.",
+        "description": "Gib den Host ein, wähle die lokale Web-API-Zugriffsrolle und setze die Aktualisierungsintervalle sowie die Modbus-IP-Beschränkung. Mindestintervall: 5 Sekunden. Die Technikerrolle schaltet zusätzlich die Einspeisebegrenzung frei. Ohne Web-API fehlen SoC-Modus, SoC-Maximum, Notstrom-Reserve, Netzlade-Erlaubnis, Solar API, Einspeisebegrenzung und Modbus-Reset, und Modbus TCP muss vorher im Wechselrichter eingeschaltet sein, mit dem SunSpec-Modelltyp int + SF. Beim Umstellen eines bestehenden Eintrags werden diese Entitäten entfernt; ihre Historie bleibt.",
         "data": {
           "host": "Host",
           "scan_interval": "Aktualisierungsintervall (Sekunden)",
@@ -27,7 +27,7 @@
       },
       "reconfigure": {
         "title": "Fronius-System prüfen",
-        "description": "Prüfe Host, lokale Web-API-Zugriffsrolle, Aktualisierungsintervalle und Modbus-IP-Beschränkung. Mindestintervall: 5 Sekunden. Die Technikerrolle schaltet zusätzlich die Einspeisebegrenzung frei. Ohne Web-API fehlen SoC-Modus, SoC-Maximum, Notstrom-Reserve, Netzlade-Erlaubnis, Solar API, Einspeisebegrenzung und Modbus-Reset, und Modbus TCP muss vorher im Wechselrichter eingeschaltet sein. Beim Umstellen eines bestehenden Eintrags werden diese Entitäten entfernt; ihre Historie bleibt.",
+        "description": "Prüfe Host, lokale Web-API-Zugriffsrolle, Aktualisierungsintervalle und Modbus-IP-Beschränkung. Mindestintervall: 5 Sekunden. Die Technikerrolle schaltet zusätzlich die Einspeisebegrenzung frei. Ohne Web-API fehlen SoC-Modus, SoC-Maximum, Notstrom-Reserve, Netzlade-Erlaubnis, Solar API, Einspeisebegrenzung und Modbus-Reset, und Modbus TCP muss vorher im Wechselrichter eingeschaltet sein, mit dem SunSpec-Modelltyp int + SF. Beim Umstellen eines bestehenden Eintrags werden diese Entitäten entfernt; ihre Historie bleibt.",
         "data": {
           "host": "Host",
           "scan_interval": "Aktualisierungsintervall (Sekunden)",
@@ -49,7 +49,7 @@
       },
       "reauth_confirm": {
         "title": "Erneut an der Fronius-Web-API anmelden",
-        "description": "Die gespeicherte Anmeldung dieses Eintrags fehlt oder wurde abgelehnt, zum Beispiel nach einer Passwortänderung am Wechselrichter. Wähle die Zugriffsrolle; im nächsten Schritt wird ihr Passwort abgefragt. Wer die Web-API nicht nutzen will, wählt Ohne Web-API. Ohne Web-API fehlen SoC-Modus, SoC-Maximum, Notstrom-Reserve, Netzlade-Erlaubnis, Solar API, Einspeisebegrenzung und Modbus-Reset, und Modbus TCP muss vorher im Wechselrichter eingeschaltet sein. Beim Umstellen eines bestehenden Eintrags werden diese Entitäten entfernt; ihre Historie bleibt.",
+        "description": "Die gespeicherte Anmeldung dieses Eintrags fehlt oder wurde abgelehnt, zum Beispiel nach einer Passwortänderung am Wechselrichter. Wähle die Zugriffsrolle; im nächsten Schritt wird ihr Passwort abgefragt. Wer die Web-API nicht nutzen will, wählt Ohne Web-API. Ohne Web-API fehlen SoC-Modus, SoC-Maximum, Notstrom-Reserve, Netzlade-Erlaubnis, Solar API, Einspeisebegrenzung und Modbus-Reset, und Modbus TCP muss vorher im Wechselrichter eingeschaltet sein, mit dem SunSpec-Modelltyp int + SF. Beim Umstellen eines bestehenden Eintrags werden diese Entitäten entfernt; ihre Historie bleibt.",
         "data": {
           "api_username": "Web-API-Zugriffsrolle"
         }
@@ -68,6 +68,7 @@
     },
     "abort": {
       "already_configured": "Gerät ist bereits eingerichtet",
+      "already_in_progress": "Die Einrichtung dieses Wechselrichters läuft bereits.",
       "reconfigure_successful": "Konfiguration erfolgreich aktualisiert.",
       "not_ipv4_address": "Aus der Erkennung lässt sich nur ein Wechselrichter mit IPv4-Adresse hinzufügen.",
       "reauth_successful": "Erneut angemeldet.",
@@ -75,7 +76,7 @@
     },
     "error": {
       "cannot_connect": "Verbindung fehlgeschlagen",
-      "cannot_connect_modbus": "Modbus antwortet nicht. Ohne Web-API muss Modbus TCP vorher im Wechselrichter eingeschaltet werden.",
+      "cannot_connect_modbus": "Modbus antwortet nicht. Ohne Web-API muss Modbus TCP vorher im Wechselrichter eingeschaltet und der SunSpec-Modelltyp auf int + SF gestellt werden.",
       "invalid_port": "Ungültige Portnummer",
       "invalid_host": "Ungültige Host-Adresse",
       "unsupported_hardware": "Nicht unterstützte Hardware. Siehe Protokoll.",
@@ -264,7 +265,17 @@
         "name": "Netzfrequenz"
       },
       "inverter_controls": {
-        "name": "Steuermodus"
+        "name": "Steuermodus",
+        "state": {
+          "normal": "Normal",
+          "power_reduction": "Leistungsreduzierung",
+          "constant_reactive_power": "Konstante Blindleistung",
+          "constant_power_factor": "Konstanter Leistungsfaktor",
+          "power_reduction_constant_reactive_power": "Leistungsreduzierung,Konstante Blindleistung",
+          "power_reduction_constant_power_factor": "Leistungsreduzierung,Konstanter Leistungsfaktor",
+          "constant_reactive_power_constant_power_factor": "Konstante Blindleistung,Konstanter Leistungsfaktor",
+          "power_reduction_constant_reactive_power_constant_power_factor": "Leistungsreduzierung,Konstante Blindleistung,Konstanter Leistungsfaktor"
+        }
       },
       "vref": {
         "name": "Referenzspannung"
@@ -397,15 +408,7 @@
           "auto": "Automatisch",
           "charge": "Ladebetrieb",
           "discharge": "Entladebetrieb",
-          "charge_and_discharge": "Lade-/Entladebetrieb",
-          "normal": "Normal",
-          "power_reduction": "Leistungsreduzierung",
-          "constant_reactive_power": "Konstante Blindleistung",
-          "constant_power_factor": "Konstanter Leistungsfaktor",
-          "power_reduction_constant_reactive_power": "Leistungsreduzierung,Konstante Blindleistung",
-          "power_reduction_constant_power_factor": "Leistungsreduzierung,Konstanter Leistungsfaktor",
-          "constant_reactive_power_constant_power_factor": "Konstante Blindleistung,Konstanter Leistungsfaktor",
-          "power_reduction_constant_reactive_power_constant_power_factor": "Leistungsreduzierung,Konstante Blindleistung,Konstanter Leistungsfaktor"
+          "charge_and_discharge": "Lade-/Entladebetrieb"
         }
       },
       "charge_status": {
@@ -818,7 +821,7 @@
     "step": {
       "init": {
         "title": "Fronius-System einrichten",
-        "description": "Prüfe Host, lokale Web-API-Zugriffsrolle, Aktualisierungsintervalle und Modbus-IP-Beschränkung. Mindestintervall: 5 Sekunden. Die Technikerrolle schaltet zusätzlich die Einspeisebegrenzung frei. Ohne Web-API fehlen SoC-Modus, SoC-Maximum, Notstrom-Reserve, Netzlade-Erlaubnis, Solar API, Einspeisebegrenzung und Modbus-Reset, und Modbus TCP muss vorher im Wechselrichter eingeschaltet sein. Beim Umstellen eines bestehenden Eintrags werden diese Entitäten entfernt; ihre Historie bleibt.",
+        "description": "Prüfe Host, lokale Web-API-Zugriffsrolle, Aktualisierungsintervalle und Modbus-IP-Beschränkung. Mindestintervall: 5 Sekunden. Die Technikerrolle schaltet zusätzlich die Einspeisebegrenzung frei. Ohne Web-API fehlen SoC-Modus, SoC-Maximum, Notstrom-Reserve, Netzlade-Erlaubnis, Solar API, Einspeisebegrenzung und Modbus-Reset, und Modbus TCP muss vorher im Wechselrichter eingeschaltet sein, mit dem SunSpec-Modelltyp int + SF. Beim Umstellen eines bestehenden Eintrags werden diese Entitäten entfernt; ihre Historie bleibt.",
         "data": {
           "host": "Host",
           "scan_interval": "Aktualisierungsintervall (Sekunden)",
@@ -841,7 +844,7 @@
     },
     "error": {
       "cannot_connect": "Verbindung fehlgeschlagen",
-      "cannot_connect_modbus": "Modbus antwortet nicht. Ohne Web-API muss Modbus TCP vorher im Wechselrichter eingeschaltet werden.",
+      "cannot_connect_modbus": "Modbus antwortet nicht. Ohne Web-API muss Modbus TCP vorher im Wechselrichter eingeschaltet und der SunSpec-Modelltyp auf int + SF gestellt werden.",
       "invalid_port": "Ungültige Portnummer",
       "invalid_host": "Ungültige Host-Adresse",
       "unsupported_hardware": "Nicht unterstützte Hardware. Siehe Protokoll.",
@@ -865,14 +868,23 @@
     "modbus_restriction": {
       "options": {
         "keep": "Einstellung des Wechselrichters beibehalten",
-        "home_assistant": "Modbus beschränken und dieses Home Assistant zulassen (bereits erlaubte Hosts bleiben)",
-        "off": "Beschränkung aufheben (Modbus für jeden Host offen)"
+        "home_assistant": "Steuerung auf erlaubte Hosts beschränken und dieses Home Assistant zulassen (bereits erlaubte Hosts bleiben)",
+        "off": "Beschränkung aufheben (jeder Host darf den Wechselrichter steuern)"
       }
     }
   },
   "exceptions": {
     "charge_limit_not_in_mode": {
       "message": "Die Ladegrenze kann im aktuellen Speichermodus nicht geändert werden."
+    },
+    "limit_blocks_both_ways": {
+      "message": "Eine Grenze von 0 W würde Laden und Entladen zugleich sperren; das lehnt der Wechselrichter ab."
+    },
+    "grid_power_beyond_window": {
+      "message": "Der Wechselrichter hält eine kombinierte Lade- und Entladegrenze, etwa von einer anderen Steuerung, die diese Netzleistung überschreiten würde. Den Speichermodus erneut wählen, um die Leistung frei zu setzen."
+    },
+    "storage_mode_left": {
+      "message": "Der Wechselrichter ist nicht mehr im gewählten Speichermodus, etwa nach einem Zeitplan oder einer anderen Steuerung. Bitte den Modus erneut wählen."
     },
     "discharge_limit_not_in_mode": {
       "message": "Die Entladegrenze kann im aktuellen Speichermodus nicht geändert werden."
@@ -924,6 +936,9 @@
     },
     "grid_charge_sources_failed": {
       "message": "Der Speichermodus steht auf „Aus dem Netz laden“, aber die Weboberfläche des Wechselrichters hat das Netzladen nicht freigegeben: {error}"
+    },
+    "grid_charge_sources_login_lost": {
+      "message": "Der Speichermodus steht auf „Aus dem Netz laden“, aber ohne Web-Anmeldung ließ sich das Netzladen nicht freigeben. Bitte erneut anmelden, wenn Home Assistant bei der Integration danach fragt."
     },
     "soc_minimum_web_failed": {
       "message": "Die Modbus-Speicherreserve ist gesetzt, aber die Weboberfläche des Wechselrichters hat sie nicht als SoC-Minimum übernommen; die beiden Minima weichen jetzt ab: {error}"

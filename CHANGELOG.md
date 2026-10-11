@@ -1,5 +1,41 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- A device the inverter no longer reports, such as a removed meter or battery, can be deleted on its device page. The integration still deletes none on its own: one short answer must not take a device with its history.
+
+### Changed
+- The inverter's active controls sensor (`StActCtl`: power reduction, constant reactive power, constant power factor) is `Control mode` ("Steuermodus"), not `Core storage control mode`, the name of the storage sensor beside it. Its entity id does not change.
+
+### Fixed
+- Enabling Modbus TCP on an inverter whose Modbus server served RTU alone switched it to TCP alone and cut off the device reading it over RS485. It now becomes `TCP & RTU`.
+- A second storage mode change before the next poll could pass through a rate window the inverter refuses (both rates at or below zero), for example Charge from Grid followed quickly by Block Charging; the inverter stayed in the old mode. The rates are now ordered by the target, not by the last poll (upstream #126).
+- A burst of values for one web number (such as `Backup reserve` stepped from 10 to 50, or an automation setting several values) reached the inverter as every single value, each stalling its Modbus side, instead of the first and the last as 1.2.0 promised: Home Assistant ran the numbers one at a time and the burst never piled up.
+- A new password entered in Configure with every other setting unchanged was stored, but the running entry kept the old token: nothing reloaded it, and the next refused poll could delete the new token and ask again. A host fixed in Configure on an entry that had not loaded did not take effect either. Configure now reloads the entry whenever no update listener does.
+- Updating from callifo 0.3.0 or older migrated only one of two entities that shared a unique id there (the sensor and the control of `Conn`, `ac_limit_enable`, `ac_limit_rate`, `soc_minimum`, `export_soft_limit`). The other was deleted and came back under a new entity id, so automations using it stopped working. Both now keep their entity ids.
+- On an inverter whose SunSpec map ends in a refused read (upstream #105), a link that stopped answering was never recognised as down: every poll waited out a timeout per sub-system, the stale connection was never replaced, the bridge after a web write did not hold, and the outage was logged as an error instead of once at info.
+- The export soft limit stopped at 15 kW and `Target Feed In` at ±20 kW, whatever the inverter: a Verto or a Tauro could not set a realistic export limit. Both now span the inverter's rated power (`WMax`), as `AC limit rate` already did.
+- A restart while an MPPT string was dark (at night it reports no current, voltage or power) deleted that string's sensors, with the names and entity ids the owner had given them, until a later reload created them anew. A sensor once registered now stays and reads unknown.
+- `tools/inverter_dump.bat` learned harmless words from a field description (`_psk_meta`: "String", "Password") and from a sensitive object's settings (an address mode "manual"), then cut them out of every answer, keys included: channel names broke apart and option lists lost entries. It now learns only the values right under a sensitive key; everything beneath one is still replaced.
+- `tools/inverter_dump.bat` left a Datamanager's serial number (`UniqueIdentifier` in `GetLoggerInfo`) in the file; it is redacted now.
+- Configure, Reconfigure and a new login put the generated title back over a title the owner had given the entry. Only a generated title now follows the settings, as it already did when the inverter moved to a new address.
+- A second setup of an inverter whose setup was still open aborted with the raw key `already_in_progress`; it now has a text.
+- An enum sensor whose device value no option names failed its state write on every poll; it reads unknown now. The inverter's active controls (`StActCtl`) sent such a value for a control beyond the first three.
+- The inverter's address still reached the log and the diagnostics: through the pollers' names, which were the entry title, through the Modbus library's connection error, and through the error of a control that could not be switched back on. The integration's own log lines and the diagnostics now name no host, as 1.0.0b3 promised. Home Assistant's own setup messages still name the entry by its title, which holds the address unless the owner renamed it.
+- The web login's hash (md5 or sha256), learned once per inverter, outlived a device that changed it, for example a replaced unit at the same address: every login failed until Home Assistant restarted. A refused login now asks the device again.
+- A battery setting written while its entry was reloaded or removed started a web refresh of the unloaded entry ten seconds later.
+- A web login lost in the middle of a poll threw away what that poll had already read without a login: the component sensors and the active events were unknown until the next poll.
+- A language file of the event texts that failed to load once kept the events in English, or as bare short names, until the entry was reloaded. A file that failed is now read again at the next poll.
+- Selecting `Charge from Grid` or `Discharge to Grid` again before the next poll set the grid power back to what that poll had read, so an automation that re-asserts its mode undid the power it had just set; entering one of them could also bring back the power of an earlier visit. Entering a grid mode now starts at 0 W, as documented, and selecting it again keeps the power set in it, as long as the inverter still holds the mode; otherwise the power starts at 0 W again.
+- Updating from callifo 0.2.8 to 0.3.0, or from 0.1.9, while an MPPT string was dark deleted that string's sensors with the names the owner had given them. They are now migrated like the others.
+- Updating from callifo 0.3.0 or older replaced a title the owner had given the entry with the generated one.
+- A limit of 0 W while the other direction was already at 0 W blocks both directions, which the inverter refuses; the owner got a bare Modbus error. This is a charge limit of 0 W in `Block discharging`, a discharge limit of 0 W in `Block charging`, or the second of two 0 W limits in `PV Charge and Discharge Limit`; a value just above 0 W that the register stores as 0 counts the same. Such a value is now refused with a reason.
+- A limit or grid power set after a schedule or another controller had changed the storage mode, before the next poll, went into the image of that other mode; for a grid power the inverter refuses it. It is now refused with a reason: select the mode again. The same holds for a grid power beyond a combined charge and discharge limit another controller left in place.
+- Updating from callifo 0.3.2 or 0.3.3 turned an entry whose owner had chosen the `customer` role into `technician` when a technician token was still stored for the host, and deleted the customer token. The chosen role now stays.
+- Selecting `Charge from Grid` while the entry waited for a new web login set the mode but left grid charging as the inverter had it, without a word. It is now reported as an error, as a refused permission already was.
+- An entry set up while the MPPT strings were dark, for example at night, got their current, voltage and power sensors only at the next restart. It now reloads once a string sends a value.
+
 ## 1.2.0
 
 First stable release of 1.2. It contains everything from the six 1.2.0 pre-releases below, and the changes here on 1.2.0b6. Entries from 1.1.x migrate on their own to minor version 14; unique ids and entity ids do not change. Automations that wait for the throttle states `export_limit` or `active_power_control` need the new states: neither is reported any more (see 1.2.0b5).

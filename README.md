@@ -11,7 +11,7 @@ This is a fork of [callifo/fronius_modbus](https://github.com/callifo/fronius_mo
 > You are using this module (and its prerequisites/dependencies) at your own risk. Neither I nor any contributor to this or any prerequisite or dependency project is responsible for damage of any kind caused by this project or any of its prerequisites or dependencies.
 
 > [!IMPORTANT]
-> It is recommended to keep the inverter up to date; this integration is only tested on recent firmware. Firmware below 1.40.7-1 has a Solar API issue that caused outages on GEN24 inverters; the integration raises a repair issue on such firmware and offers to disable the Solar API until the inverter is updated.
+> It is recommended to keep the inverter up to date; this integration is only tested on recent firmware. Firmware below 1.40.7-1 has a Solar API issue that caused outages on GEN24 inverters; with a Web API role and the Solar API switched on, the integration raises a repair issue on such firmware and offers to disable the Solar API until the inverter is updated.
 
 ## Requirements
 
@@ -36,7 +36,7 @@ What changes for users of [callifo/fronius_modbus](https://github.com/callifo/fr
 > [!IMPORTANT]
 > Enum states are translation keys now: `Auto` became `auto`, `Charge from Grid` became `charge_from_grid`, `On grid operating` became `on_grid_operating`, `Enabled`/`Disabled` became `enabled`/`disabled`. Update automations and templates that compare against the old texts; see the CHANGELOG for the rule.
 
-**Kept:** entity IDs, unique IDs, history/statistics and existing options. Existing entries are migrated on the first start.
+**Kept:** entity IDs, unique IDs, history/statistics and existing options. Existing entries are migrated on the first start. Coming straight from 0.2.7 or older, the MPPT and storage module sensors (`mppt1_power`, `mppt1_lfte` and the like) come back under new entity ids, as they did with callifo 0.2.8.
 
 **Connection and data**
 
@@ -50,8 +50,8 @@ What changes for users of [callifo/fronius_modbus](https://github.com/callifo/fr
 
 **Setup and security**
 
-- The checkbox "Restrict Modbus to this IP" became the option **Modbus IP restriction** with three choices; the default keeps the inverter's setting. Upstream lifted the restriction whenever the box was unchecked, and a checked box replaced the allowed hosts with Home Assistant's address; allowing Home Assistant now adds its address to the hosts already allowed. Migrated entries keep their choice: checked becomes "restrict and allow this Home Assistant", unchecked becomes "keep".
-- Enabling Modbus TCP keeps the rest of the inverter's Modbus settings. Upstream writes a fixed block that moves both RS485 ports to master and turns the `TCP & RTU` mode into TCP.
+- The checkbox "Restrict Modbus to this IP" became the option **Modbus IP restriction** with three choices (it is the inverter's *Restrict Control* setting: which hosts may control it over Modbus); the default keeps the inverter's setting. Upstream lifted the restriction whenever the box was unchecked, and a checked box replaced the allowed hosts with Home Assistant's address; allowing Home Assistant now adds its address to the hosts already allowed. Migrated entries keep their choice: checked becomes "restrict and allow this Home Assistant", unchecked becomes "keep".
+- Enabling Modbus TCP keeps the RS485 ports' roles and the `TCP & RTU` mode; it sets what the integration needs (see [What the Web API setup does](#what-the-web-api-setup-does)). Upstream writes a fixed block that moves both RS485 ports to master and turns the `TCP & RTU` mode into TCP.
 - The stored Web API token is readable by Home Assistant only, and it is deleted once no entry uses its host and role.
 - The Web API login is optional: an entry can run on Modbus alone. Upstream requires it since 0.2.9.
 - The inverter is discovered over mDNS and offered under Discovered, and an entry set up by IPv4 address follows it to a new address (see [Discovery](#discovery)). Upstream has no discovery.
@@ -59,7 +59,7 @@ What changes for users of [callifo/fronius_modbus](https://github.com/callifo/fr
 **Battery**
 
 - The SoC window follows the inverter's own switch: `SoC Maximum` and the new `SoC Minimum (Web API)` are writable while the new `Web API SoC mode` is manual. Upstream ties them to `Self-consumption optimisation`.
-- `Grid Charge Power` and `Grid Discharge Power` scale by their own rate maximum; upstream writes each against the opposite one.
+- `Grid charge power` and `Grid discharge power` scale by their own rate maximum; upstream writes each against the opposite one.
 
 **New entities and tools**
 
@@ -77,6 +77,9 @@ What changes for users of [callifo/fronius_modbus](https://github.com/callifo/fr
 4. Add the [URL](https://github.com/Varitras/fronius_modbus) of this repository.
 5. Select the "Integration" type.
 6. Click "ADD".
+7. Open the repository in HACS and download it.
+8. Restart Home Assistant.
+9. Add **Fronius Modbus** under Settings -> Devices & services, or accept the card under **Discovered**.
 
 ### Manual
 
@@ -91,7 +94,7 @@ The inverter announces itself over mDNS (`_Fronius-SE-Inverter._tcp.local.`), an
 - mDNS stays within one network segment. An inverter in another subnet is found only if the router repeats mDNS between them (an mDNS repeater or reflector); otherwise add it by hand.
 - An inverter announced with an IPv6 address only is not offered; add it by hand with its IPv4 address.
 - An inverter already set up is not offered again, also when its entry uses a host name: the serial number it announces is matched against the one it reports over Modbus.
-- An entry set up with an IPv4 address follows the inverter to a new address it announces: the host, the entry's title and the stored Web API token move with it. The serial number in an announcement is no secret, so the integration first reads the serial number over Modbus at both addresses: it moves the entry only when the old address no longer reports the inverter's serial number and the announced one does. An announced address that does not answer yet is read again for a few minutes. An entry set up with a host name is left as it is, since the name finds the new address itself. Whenever the serial number cannot be read at the entry's address, even for a single failed read, a device in your network that sends mDNS and answers Modbus with the inverter's serial number could take the entry; if that is a concern, set the entry up with a host name.
+- An entry set up with an IPv4 address follows the inverter to a new address it announces: the host, a generated title and the stored Web API token move with it; a title you gave the entry stays. The serial number in an announcement is no secret, so the integration first reads the serial number over Modbus at both addresses: it moves the entry only when the old address no longer reports the inverter's serial number and the announced one does. An announced address that does not answer yet is read again for a few minutes. An entry set up with a host name is left as it is, since the name finds the new address itself. Whenever the serial number cannot be read at the entry's address, even for a single failed read, a device in your network that sends mDNS and answers Modbus with the inverter's serial number could take the entry; if that is a concern, set the entry up with a host name.
 
 ### Web API role
 
@@ -107,8 +110,9 @@ With the Web API login, the integration can:
 
 - enable Modbus TCP during setup and relevant configuration changes
 - switch the SunSpec model type to `int + SF`, the one the integration reads. When the inverter's Modbus is on and uses `float`, the setup asks first: an external device that reads the float models may no longer work after the switch. Declining leaves the inverter as it is and ends the setup.
-- handle the Modbus IP restriction of auto-enabled Modbus TCP by choice (see [Configuration](#configuration))
-- leave the rest of the inverter's Modbus settings alone: the RS485 ports keep their master or slave role, and the `TCP & RTU` mode stays as it is
+- handle the inverter's *Restrict Control* setting by choice (see [Configuration](#configuration))
+- set what the integration reads and controls: the entry's port and inverter address (502 and 1; an entry migrated from callifo 0.2.x keeps the ones it was set up with), meter address offset 200, and *Allow Control* switched on, which the Modbus controls need
+- keep the RS485 ports' master or slave role; a Modbus server that serves RTU alone becomes `TCP & RTU`, and the `TCP & RTU` mode stays as it is
 - derive configured smart meter addresses from `/api/components/PowerMeter/readable`
 - expose authenticated battery controls from `/api/config/batteries`
 - expose Modbus service diagnostics from `/api/config/modbus`
@@ -118,7 +122,7 @@ A host that another entry already serves is refused before the inverter is conta
 
 ### Without the web API
 
-Choose *Without the web API* as the access role to run the entry on Modbus alone. No password is asked for and no token is stored. Switch Modbus TCP on in the inverter's web UI first, with the SunSpec model type set to `int + SF`: without a login the setup cannot do either, and it reports *Modbus did not answer* until both are set.
+Choose *Without the web API* as the access role to run the entry on Modbus alone. No password is asked for and no token is stored. Set the inverter's Modbus in its web UI first: Modbus TCP on, port 502, the SunSpec model type `int + SF`, inverter address 1 (or the port and address an entry migrated from callifo 0.2.x was set up with) and meter address offset 200, and *Allow Control* on for the Modbus controls (optionally *Restrict Control* to Home Assistant's address). Without a login the setup cannot set any of this; it reports *Modbus did not answer* until Modbus TCP and `int + SF` are set, and the controls fail while *Allow Control* is off.
 
 Stays:
 
@@ -129,11 +133,11 @@ Needs the web API, so not there:
 
 - `Web API SoC mode`, `SoC Maximum`, `SoC Minimum (Web API)`, the backup reserve, self-consumption optimisation and its target feed in
 - the `Charge from grid` and `Charge from AC` toggles, the Solar API switch, the export soft limit, `Reset Modbus Control`
-- the Modbus service diagnostics, and enabling Modbus TCP during setup
+- the Modbus service diagnostics, enabling Modbus TCP during setup, and the repair issue for firmware below 1.40.7-1
 
 `Charge from Grid` then stops at around 500 W unless grid charging is allowed in the inverter's own battery configuration; allow it once in the inverter web UI (see [Charging from the grid](#charging-from-the-grid)).
 
-Switching an existing entry to *Without the web API* deletes its stored token and removes the entities that need the web API; their recorded history stays in Home Assistant. The removal waits for a start at which the list of smart meters can be read, like every cleanup; if the inverter reports no meter at all, delete those entities yourself. Switching back to a role creates them again and, as long as the entry lets the integration set up Modbus (the default), writes the Modbus settings, the IP restriction choice included, since nothing wrote them without the login. An entry that keeps a role but lost its login is not the same: its web entities stay, unavailable, and Home Assistant asks for a new login.
+Switching an existing entry to *Without the web API* deletes its stored token and removes the entities that need the web API; their recorded history stays in Home Assistant. The removal waits for a start at which the list of smart meters can be read, like every cleanup; if the inverter reports no meter at all, delete those entities yourself. Switching back to a role creates them again and writes the Modbus settings, the IP restriction choice included, since nothing wrote them without the login. An entry that keeps a role but lost its login is not the same: its web entities stay, unavailable, and Home Assistant asks for a new login.
 
 ### Migrating older entries
 
@@ -149,43 +153,83 @@ Set during setup; change them later with **Configure** or **Reconfigure** on the
 | Update interval (seconds)         | 10                          | The Modbus poll. Minimum 5.                                                                                                                                                                                                                                                          |
 | Web API update interval (seconds) | 60                          | The Web API poll, separate from the Modbus poll. 5 to 3600.                                                                                                                                                                                                                          |
 | Web API access role               | `customer`                  | `customer`, `technician` or *Without the web API*; see [Web API role](#web-api-role).                                                                                                                                                                                                |
-| Modbus IP restriction             | Keep the inverter's setting | What the integration does with the inverter's Modbus IP restriction whenever it writes the Modbus settings: keep it, restrict Modbus and allow this Home Assistant (its address is added to the hosts already allowed), or lift it. A lifted restriction stays lifted until you choose otherwise. |
+| Modbus IP restriction             | Keep the inverter's setting | What the integration does with the inverter's *Restrict Control* setting, which hosts may control the inverter over Modbus, whenever it writes the Modbus settings: keep it, restrict control and allow this Home Assistant (its address is added to the hosts already allowed), or lift it so every host may control the inverter. Reading over Modbus stays open to every host either way. A lifted restriction stays lifted until you choose otherwise. |
 
 ## Data updates
 
 - The Modbus poll reads the inverter, its meters and the battery every update interval. The Web API is polled on its own interval; a slow or unreachable Web API does not hold up the Modbus entities.
 - The component sensors come with the Web API poll that already runs; no extra request is made. They are read without a login, so they also run without the web API.
-- A value that could not be read shows as unavailable or unknown; a failed sub-system is logged once when it fails and once when it answers again.
+- A value that could not be read shows as unavailable or unknown, except an energy total, which keeps its last value; a failed sub-system is logged once when it fails and once when it answers again.
 - A control set to the value the inverter already holds writes nothing. The comparison is made against a fresh read, so a value another controller changed in between is still written.
 
 ## Entities
 
-The entities are grouped into devices: the inverter, the battery storage, and each smart meter.
+The entities are grouped into devices: the inverter, the battery storage, and each smart meter. The tables below list every entity the integration creates, by the English name it shows; a test keeps them complete. An entity whose source the inverter does not have is not created: the per-phase values of L2 and L3 need a three-phase inverter or meter, the battery entities need the storage model 124, the web entities need a Web API role (see [Without the web API](#without-the-web-api)). *disabled* marks an entity that starts disabled, *diagnostic* one Home Assistant files under diagnostics.
 
 ### Inverter sensors
 
-| Entity                  | Description                                                                                                 |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Load                    | The current total power consumption, derived by adding up the meter AC power and inverter AC power.         |
-| AC Current              | Total inverter AC current.                                                                                  |
-| AC Current L1 / L2 / L3 | Per-phase inverter AC current.                                                                              |
+<!-- entities: inverter sensor -->
+| Entity | Description |
+| ------ | ----------- |
+| AC power | Active power the inverter puts out (model 101/103 `W`). |
+| AC current<br>AC current L1<br>AC current L2<br>AC current L3 | Total and per-phase AC current. |
+| AC voltage L1-N<br>AC voltage L2-N<br>AC voltage L3-N<br>AC voltage L1-L2<br>AC voltage L2-L3<br>AC voltage L3-L1 | Phase and line-to-line AC voltage. |
+| Reactive power | Reactive power in var. |
+| Line frequency | AC frequency. |
+| AC energy | The inverter's lifetime AC energy (`WH`). |
+| PV power | The DC power of all PV strings together, from model 160. |
+| MPPT module N DC current<br>MPPT module N DC voltage<br>MPPT module N DC power<br>MPPT module N Lifetime energy | One set per PV string (model 160). A string that is dark at the first setup gets its sensors once it sends a value. |
+| Storage charging current<br>Storage charging voltage<br>Storage charging power<br>Storage charging lifetime energy<br>Storage discharging current<br>Storage discharging voltage<br>Storage discharging power<br>Storage discharging lifetime energy | The battery's charge and discharge channels of model 160, on the inverter's device. |
+| Maximum power | The inverter's `WMax` (model 121), the reference of the AC limit. |
+| AC limit rate | The AC limit in watts as the inverter holds it; the control of the same name sets it. |
+| Isolation Resistance | The DC isolation resistance in MΩ. |
+| Export soft limit | The soft export limit in watts as the inverter holds it, over the Web API; unknown while it is off. Requires the `technician` role; set it with the control of the same name. |
+| Load | The household consumption, derived from the primary smart meter. For a meter at the feed-in point it is the meter's power plus the inverter's AC power; for a meter in the consumption path it is that meter's power. It needs the meter's location from the inverter's `PowerMeter` endpoint and is unknown without it, and while a negative sum could be battery charging. |
 
-### Smart meter sensors
+### Inverter diagnostics
 
-| Entity                    | Description                                                                                                           |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| AC Current / L1 / L2 / L3 | Total and per-phase smart meter AC current.                                                                           |
-| Power                     | Net grid power measured by the smart meter.                                                                           |
-| Power L1 / L2 / L3        | Per-phase smart meter real power from SunSpec `WphA`, `WphB`, and `WphC`. The sign matches the meter power direction. |
-| Exported / Imported L1 / L2 / L3 | Per-phase energy counters (`TotWhExpPhA`-`C`, `TotWhImpPhA`-`C`). Created only for a meter that counts them, since some meters report 0, SunSpec's "not implemented"; a counter that starts counting later gets its entity at the next restart. Disabled by default. |
+<!-- entities: inverter sensor -->
+| Entity | Description |
+| ------ | ----------- |
+| Grid status | `on_grid_operating`, `on_grid`, `off_grid_operating` or `off_grid`, based on meter and inverter frequency. An inverter frequency of 53 Hz means off-grid operation; normally it is 50 Hz. While the inverter sleeps, the meter frequency is checked for the connection. |
+| Throttle reason | Why the inverter holds its output back right now; see [Throttle reason](#throttle-reason). |
+| Status<br>Vendor status | The SunSpec operating state (`St`) and the Fronius vendor state code (`StVnd`). |
+| Event severity | The Modbus event bits (`EvtVnd2`); the events themselves come from the web interface, see [Inverter events](#inverter-events). |
+| Control mode | The active inverter controls (model 122 `StActCtl`): power reduction, constant reactive power, constant power factor. |
+| PV connection<br>Storage connection<br>Electrical connection | The connection states of model 122 (`PVConn`, `StorConn`, `ECPConn`). |
+| Connection control<br>AC limit enabled<br>Fixed power factor status<br>Limit VAr control | Whether the grid connection (`Conn`), the AC limit (`WMaxLim_Ena`), the fixed power factor (`OutPFSet_Ena`) and the reactive power limit (`VArPct_Ena`) are switched on. |
+| Throttle control | The AC limit flag once more, kept from upstream. *disabled* |
+| Reference voltage<br>Reference voltage offset | SunSpec model 121 PCC voltage reference values exposed by the inverter. |
+| Modbus ID | The inverter's Modbus unit id. |
+| Web API Modbus mode<br>Web API Modbus control<br>Web API SunSpec mode | The Modbus service settings from `/api/config/modbus`. A value the inverter answers in an unexpected shape shows as unknown. |
+| Web API Modbus restriction<br>Web API Modbus restriction IP | Whether the inverter restricts which hosts may control it over Modbus (*Restrict Control* in its web interface), and the allowed addresses. |
 
 ### Battery storage sensors
 
-| Entity                 | Description                                                                     |
-| ---------------------- | ------------------------------------------------------------------------------- |
-| Charge Status          | `holding` / `charging` / `discharging` (plus `off`, `empty`, `full`, `testing`) |
-| Modbus storage reserve | Model 124 `MinRsvPct`. Not the SoC minimum of the inverter's own UI.            |
-| State of Charge        | The current battery level.                                                      |
+<!-- entities: storage sensor -->
+| Entity | Description |
+| ------ | ----------- |
+| State of charge | The current battery level (`ChaState`). |
+| Charge status | `holding` / `charging` / `discharging` (plus `off`, `empty`, `full`, `testing`). |
+| Modbus storage reserve | Model 124 `MinRsvPct`. Not the SoC minimum of the inverter's own UI; see [Two minimum SoC values](#two-minimum-soc-values). |
+| Core storage control mode | The raw storage control register (`StorCtl_Mod`); diagnostic. `Storage Control Mode` is the one to set. |
+| Charging power<br>Discharging power | The charge and discharge rates in percent (`InWRte`, `OutWRte`) the current mode holds; diagnostic. |
+| Charge/discharge reference power | `WChaMax`, the power the rates are a percentage of; diagnostic. |
+| Grid charging | Whether the storage may charge from the grid (`ChaGriSet`); diagnostic. |
+| Capacity<br>Maximum charge rate<br>Maximum discharge rate | The battery's nameplate (model 120); diagnostic. |
+
+### Smart meter sensors
+
+<!-- entities: meter sensor -->
+| Entity | Description |
+| ------ | ----------- |
+| Power<br>Power L1<br>Power L2<br>Power L3 | Total and per-phase real power measured by the meter (`W`, `WphA`-`C`); the sign follows the meter's power direction. |
+| AC current<br>AC current L1<br>AC current L2<br>AC current L3 | Total and per-phase current. |
+| AC voltage L1-N<br>AC voltage L2-N<br>AC voltage L3-N<br>AC voltage Line to Line | Phase and line-to-line voltage. |
+| Line frequency | Frequency. |
+| Exported<br>Imported | Total exported and imported energy. |
+| Exported L1<br>Exported L2<br>Exported L3<br>Imported L1<br>Imported L2<br>Imported L3 | Per-phase energy counters (`TotWhExpPhA`-`C`, `TotWhImpPhA`-`C`). Created only for a meter that counts them, since some meters report 0, SunSpec's "not implemented"; a counter that starts counting later gets its entity at the next restart. *disabled* |
+| Modbus ID | The meter's Modbus unit id; diagnostic. |
 
 ### Component sensors (Web API)
 
@@ -197,37 +241,36 @@ The inverter's component endpoints (`/api/components/inverter/readable` and `/ap
 - Firmware without these endpoints (HTTP 404) gets none of these sensors; a sensor registered before stays, as unknown, since one 404 from an endpoint that answered before proves nothing.
 - No sensor takes their serial numbers, part serials or device ids; the battery's serial number shows on its device page, as before, and is redacted in diagnostics.
 
-| Entity                                                                                                  | Device   | Default  | Description                                                                              |
-| ------------------------------------------------------------------------------------------------------- | -------- | -------- | ---------------------------------------------------------------------------------------- |
-| AC module 1–6 temperature, DC module temperature (3, 9, 10), DC or battery module temperature           | Inverter | enabled  | The module temperatures the inverter reports, named as its web interface names them; channels 1, 2 and 5–8 are the AC modules 1–6. A GEN24 10.0 reports 1, 3 and 4, a Verto 30.0 Plus 1–5 and 9. |
-| Internal temperature / Ambient temperature 2                                                            | Inverter | enabled  | The inverter's internal temperature, and a second ambient temperature on inverters that report one. |
-| Fan 1–5                                                                                                 | Inverter | enabled  | Fan speed in percent. Fans 3–5 exist only where the inverter reports them.               |
-| AC power L1 / L2 / L3                                                                                   | Inverter | enabled  | Per-phase active power of the inverter.                                                  |
-| Output power limit / Output limited                                                                     | Inverter | enabled  | The power limit in effect (the nameplate power, or the AC limit while it is set; an export limit does not lower it), and whether a limit set on the inverter holds the output, in percent or in watts. |
-| Battery max charge / discharge power (DC-DC)                                                            | Inverter | enabled  | What the battery converter can take or give right now.                                   |
-| Grid valid                                                                                              | Inverter | enabled  | The inverter's own verdict on the grid at its feed-in point.                             |
-| Surplus power available                                                                                 | Inverter | disabled | Observed, not documented by Fronius: yes while an export limit curtailed PV, no otherwise, also while the AC limit held the output. Seen on two inverters. |
-| Power stage 1 / 2 firmware                                                                              | Inverter | enabled  | Diagnostic.                                                                              |
-| Feed-in point voltage L1–L3, L1-L2–L3-L1, frequency                                                     | Inverter | disabled | Grid side of the inverter's relays; differs from the AC output only while they are open. |
-| DC link voltage, Operating time, Power stage hardware                                                   | Inverter | disabled | Diagnostic. The operating time counts in seconds but is no exact clock.                  |
-| Time in backup mode                                                                                     | Inverter | disabled | Total time the inverter ran in backup mode.                                              |
-| State of health                                                                                         | Battery  | enabled  | The battery's own estimate, in percent.                                                  |
-| Cell temperature min / max, BMS ambient temperature                                                     | Battery  | disabled |                                                                                          |
-| Current discharge limit / Current charge limit                                                          | Battery  | disabled | What the battery management system allows right now. Observed, not documented by Fronius: the charge limit fell to 0 W near a full battery while discharging stayed allowed. |
-| Peak charge / discharge power, Manufacturer SoC min / max, Voltage range min / max, Modules, Connection | Battery  | disabled | Diagnostic, from the battery's nameplate and attributes.                                 |
+On the inverter:
+
+<!-- entities: inverter sensor -->
+| Entity | Description |
+| ------ | ----------- |
+| AC module 1 temperature<br>AC module 2 temperature<br>AC module 3 temperature<br>AC module 4 temperature<br>AC module 5 temperature<br>AC module 6 temperature<br>DC module temperature (3)<br>DC or battery module temperature<br>DC module temperature (9)<br>DC module temperature (10) | The module temperatures the inverter reports, named as its web interface names them; channels 1, 2 and 5–8 are the AC modules 1–6. A GEN24 10.0 reports 1, 3 and 4, a Verto 30.0 Plus 1–5 and 9. |
+| Internal temperature<br>Ambient temperature 2 | The inverter's internal temperature, and a second ambient temperature on inverters that report one. |
+| Fan 1<br>Fan 2<br>Fan 3<br>Fan 4<br>Fan 5 | Fan speed in percent. Fans 3–5 exist only where the inverter reports them. |
+| AC power L1<br>AC power L2<br>AC power L3 | Per-phase active power of the inverter. |
+| Output power limit<br>Output limited | The power limit in effect (the nameplate power, or the AC limit while it is set; an export limit does not lower it), and whether a limit set on the inverter holds the output, in percent or in watts. |
+| Battery max charge power (DC-DC)<br>Battery max discharge power (DC-DC) | What the battery converter can take or give right now. |
+| Grid valid | The inverter's own verdict on the grid at its feed-in point. |
+| Surplus power available | Observed, not documented by Fronius: yes while an export limit curtailed PV, no otherwise, also while the AC limit held the output. Seen on two inverters. *disabled* |
+| Power stage 1 firmware<br>Power stage 2 firmware | Diagnostic. |
+| Feed-in point voltage L1<br>Feed-in point voltage L2<br>Feed-in point voltage L3<br>Feed-in point voltage L1-L2<br>Feed-in point voltage L2-L3<br>Feed-in point voltage L3-L1<br>Feed-in point frequency | Grid side of the inverter's relays; differs from the AC output only while they are open. *disabled* |
+| DC link voltage<br>Operating time<br>Power stage hardware | Diagnostic. The operating time counts in seconds but is no exact clock. *disabled* |
+| Time in backup mode | Total time the inverter ran in backup mode. *disabled* |
+
+On the battery:
+
+<!-- entities: storage sensor -->
+| Entity | Description |
+| ------ | ----------- |
+| State of health | The battery's own estimate, in percent. |
+| Cell temperature | The battery's cell temperature. |
+| Cell temperature min<br>Cell temperature max<br>BMS ambient temperature | *disabled* |
+| Current discharge limit<br>Current charge limit | What the battery management system allows right now. Observed, not documented by Fronius: the charge limit fell to 0 W near a full battery while discharging stayed allowed. *disabled* |
+| Peak charge power (10 s)<br>Peak discharge power (10 s)<br>Manufacturer SoC min<br>Manufacturer SoC max<br>Voltage range min<br>Voltage range max<br>Modules<br>Connection | Diagnostic, from the battery's nameplate and attributes. *disabled* |
 
 The battery's own firmware and hardware version appear on its device page.
-
-### Inverter diagnostics
-
-| Entity                                       | Description                                                                                                                                                                                                                                                                  |
-| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Grid status                                  | `on_grid_operating`, `on_grid`, `off_grid_operating` or `off_grid`, based on meter and inverter frequency. An inverter frequency of 53 Hz means off-grid operation; normally it is 50 Hz. While the inverter sleeps, the meter frequency is checked for the connection. |
-| Throttle reason                              | Why the inverter holds its output back right now; see [Throttle reason](#throttle-reason).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Status / Vendor status                       | Standard SunSpec inverter state plus the Fronius vendor-specific state code.                                                                                                                                                                                                 |
-| Reference voltage / Reference voltage offset | SunSpec model 121 PCC voltage reference values exposed by the inverter.                                                                                                                                                                                                      |
-| Web API Modbus mode / control / SunSpec mode | Authenticated Modbus service diagnostics from `/api/config/modbus`. A value the inverter answers in an unexpected shape shows as unknown.                                                                                                                                      |
-| Web API Modbus restriction / restriction IP  | Whether the inverter is restricting Modbus access by IP.                                                                                                                                                                                                                     |
 
 ### Throttle reason
 
@@ -238,11 +281,11 @@ The sensor names the limit the output is held at right now. A limit that is only
 | `none`                 | Not throttled               | Keine Drosselung                 | No limit holds the output.                                                                                            |
 | `ac_limit`             | AC limit                    | AC-Leistungsbegrenzung           | A percentage limit is reached, such as the AC limit (`AC limit enable`, `AC limit rate`).                             |
 | `feed_in_limit`        | Export limit                | Einspeisebegrenzung              | A limit in watts is reached. Measured with the export limit set in the inverter's web interface; other limits in watts may report the same way. |
-| `inverter_state`       | Inverter reports throttling | Wechselrichter meldet Drosselung | The inverter reports the SunSpec operating state throttled (model 103 `St`).                                          |
+| `inverter_state`       | Inverter reports throttling | Wechselrichter meldet Drosselung | The inverter reports the SunSpec operating state throttled (model 101/103 `St`).                                      |
 | `several`              | Several reasons             | Mehrere Gründe                   | More than one of the above at once.                                                                                   |
 | `active_power_control` | Active power control        | Wirkleistungsvorgabe             | No longer reported; kept so older history keeps its label.                                                            |
 | `export_limit`         | AC limit                    | AC-Leistungsbegrenzung           | No longer reported: up to 1.2.0b4 it meant an AC limit that was switched on. Kept so older history keeps its label.    |
-| unknown                |                             |                                  | No reason is found while a source is missing: the component endpoint or model 103 could not be read, the last web poll failed, the firmware does not report the flags, or the entry waits for a new web login. A reason one source names is shown even while the other is missing. |
+| unknown                |                             |                                  | No reason is found while a source is missing: the component endpoint or model 101/103 could not be read, the last web poll failed, the firmware does not report the flags, or the entry waits for a new web login. A reason one source names is shown even while the other is missing. |
 
 Where the states come from, measured on a GEN24 and a Verto:
 
@@ -256,12 +299,13 @@ Modbus reports events only as severity bits (`Event severity`), and none that on
 
 The inverter keeps events of three levels: the customer's, the technician's and the service's. Its web interface shows a customer login the customer level alone, and so do these entities, whatever login the entry uses. An event of the other levels can stay active for weeks without a visible effect, such as a failed arc-fault self test or an unreachable network gateway. The service entities show them; they start disabled.
 
+<!-- entities: inverter sensor event -->
 | Entity | Type | What it shows |
 | ------ | ---- | ------------- |
 | Active event | sensor, diagnostic | The text of the leading active customer event: an error before a warning before an info, the newest among equals. `OK` while none is active; unknown while the list could not be read. The attributes carry its `code` (such as `GEN24-1175`), `text`, `severity`, `visible_to`, `since` and `confirmable`, and the other active customer events under `other_events`. |
 | Active events | sensor, diagnostic | How many customer events are active. |
 | Inverter event | event | Fires once for every new customer entry of the inverter's event log, with the severity as its event type (`error`, `warning`, `info`, or `unclassified` for a severity in no known form) and the same attributes. It catches entries that last no time at all and never show as active, such as a short battery fault. Unavailable while the log does not answer. |
-| Active service event, Active service events, Service event | sensor, sensor, event; disabled by default | The same for the technician and service levels, which the web interface hides from a customer login. `visible_to` tells the level (`technician` or `service`); an event of a level in no known form shows here too, with `visible_to` null. |
+| Active service event<br>Active service events<br>Service event | sensor, sensor, event; *disabled* | The same for the technician and service levels, which the web interface hides from a customer login. `visible_to` tells the level (`technician` or `service`); an event of a level in no known form shows here too, with `visible_to` null. |
 
 - The texts come from the inverter itself, in Home Assistant's language, and in English where the inverter has none in that language; a code without a text shows its short name. They are read once: after changing Home Assistant's language, reload the entry.
 - The active events are read with every web poll; the log (about 60 KB) at the first web poll after 5 minutes have passed, and again at the next poll when it did not answer. An entry therefore arrives up to 5 minutes plus one web interval late (longer while the web API fails), with its own time in `since`.
@@ -271,16 +315,17 @@ The inverter keeps events of three levels: the customer's, the technician's and 
 
 ### Inverter controls
 
-| Entity               | Description                                                                                                                                                              |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| AC Limit Enable      | Allows limiting inverter AC output. Enable this setting first, and then set the AC limit below.                                                                          |
-| AC Limit Rate        | Sets the AC limit in watts. Internally this is mapped to SunSpec `WMaxLimPct` (% of `WMax`) using the inverter scale factor.                                             |
-| Power Factor Control | Enables or disables the Modbus fixed power factor control (`OutPFSet_Ena`).                                                                                              |
-| Power Factor         | Fixed power factor (`OutPFSet`). Range is `-1.0` to `1.0`. Negative values are over-excited, positive values are under-excited.                                          |
-| Inverter connection  | Connects or disconnects the inverter from the grid over Modbus (`Conn`).                                                                                                 |
-| Export soft limit    | The soft export limit in watts, over the Web API. Requires the `technician` role.                                                                                        |
-| Solar API            | Switches the inverter's Solar API v1 on or off over the Web API.                                                                                                         |
-| Reset Modbus Control | Sends the inverter's Modbus reset command (`/api/commands/ModbusReset`) over the Web API. Diagnostic.                                                                   |
+<!-- entities: inverter number select switch button -->
+| Entity | Description |
+| ------ | ----------- |
+| AC limit enable | Switches the AC limit on or off (`WMaxLim_Ena`). Setting `AC limit rate` first and then enabling it avoids that the limit the inverter still holds applies for a moment. |
+| AC limit rate | Sets the AC limit in watts. Internally this is mapped to SunSpec `WMaxLimPct` (% of `WMax`) using the inverter scale factor. |
+| Power factor control | Enables or disables the Modbus fixed power factor control (`OutPFSet_Ena`). |
+| Power factor | Fixed power factor (`OutPFSet`). Range is `-1.0` to `1.0`. Negative values are over-excited, positive values are under-excited. |
+| Inverter connection | Connects or disconnects the inverter from the grid over Modbus (`Conn`). |
+| Export soft limit | The soft export limit in watts, over the Web API; a number to set it and a sensor that shows it. Requires the `technician` role. Setting a value also switches the inverter's soft limit on; switch it off in the inverter's web interface. While it is off, both show unknown. |
+| Solar API | Switches the inverter's Solar API v1 on or off over the Web API; diagnostic. Switching it off also clears the inverter's option to switch the Solar API on for devices it discovers, and switching it on leaves that option off. |
+| Reset Modbus Control | Sends the inverter's Modbus reset command (`/api/commands/ModbusReset`) over the Web API. Diagnostic. |
 
 A new value for an active AC limit or power factor is applied by switching the control off and on around the write, as the inverter requires; if the write fails, the control is switched back on.
 
@@ -290,69 +335,72 @@ If Web API credentials are configured, the integration exposes both Modbus batte
 
 ### Storage control modes
 
-`Storage Control Mode` selects how the battery is controlled over Modbus. Change the mode first, then set the controls active in that mode. The mode names in this table are the display texts; the entity state and the `select_option` value are the keys `auto`, `pv_charge_limit`, `discharge_limit`, `pv_charge_and_discharge_limit`, `charge_from_grid`, `discharge_to_grid`, `block_discharging`, `block_charging`.
+`Storage Control Mode` selects how the battery is controlled over Modbus. Change the mode first, then set the controls active in that mode. A limit or grid power is refused while the inverter's registers no longer hold the selected mode, for example after a schedule or another controller changed it, and so is a grid power beyond a combined charge and discharge limit another controller left in place; select the mode again. The mode names in this table are the display texts; the entity state and the `select_option` value are the keys `auto`, `pv_charge_limit`, `discharge_limit`, `pv_charge_and_discharge_limit`, `charge_from_grid`, `discharge_to_grid`, `block_discharging`, `block_charging`.
 
 | Mode                          | Description                                                                                                                                                                                                                  |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Auto                          | The inverter runs its own battery management; the `Modbus storage reserve` is not applied in this mode.                                                                                                                      |
 | PV Charge Limit               | The storage can be charged with PV power at a limited rate. The limit is set to maximum power after the change.                                                                                                              |
 | Discharge Limit               | The storage can be charged with PV power and discharged at a limited rate. The limit is set to maximum power after the change.                                                                                              |
-| PV Charge and Discharge Limit | Allows setting both PV charge and discharge limits. The limits are set to maximum power after the change.                                                                                                                    |
-| Charge from Grid              | The storage is charged from the grid at the rate from `Grid Charge Power`, which is set to 0 after the change. See [Charging from the grid](#charging-from-the-grid).                                                        |
-| Discharge to Grid             | The storage discharges to the grid at the rate from `Grid Discharge Power`, which is set to 0 after the change.                                                                                                             |
-| Block discharging             | The storage can only be charged with PV power. The charge limit is set to maximum power.                                                                                                                                    |
-| Block charging                | The storage can only be discharged and is not charged with PV power. The discharge limit is set to maximum power.                                                                                                          |
+| PV Charge and Discharge Limit | Allows setting both PV charge and discharge limits. The limits are set to maximum power after the change; with one limit at 0 W, 0 W (or a value that rounds to it) for the other is refused, since the inverter does not take both directions blocked. |
+| Charge from Grid              | The storage is charged from the grid at the rate from `Grid charge power`, which is set to 0 after the change; selecting the mode again keeps it while the inverter still holds the mode, otherwise it starts at 0 W again. See [Charging from the grid](#charging-from-the-grid).                                                        |
+| Discharge to Grid             | The storage discharges to the grid at the rate from `Grid discharge power`, which is set to 0 after the change; selecting the mode again keeps it while the inverter still holds the mode, otherwise it starts at 0 W again.                                                                                                             |
+| Block Discharging             | The storage can only be charged with PV power. The charge limit is set to maximum power; 0 W is refused, since the inverter does not take both directions blocked.                                                                                                                                    |
+| Block Charging                | The storage can only be discharged and is not charged with PV power. The discharge limit is set to maximum power; 0 W is refused, since the inverter does not take both directions blocked.                                                                                                          |
 
 ### Modbus controls
 
-| Entity                 | Description                                                                                                                                                                                                           |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| PV Charge Limit        | The maximum PV charging power in watts.                                                                                                                                                                               |
-| Discharge Limit        | The maximum discharging power in watts.                                                                                                                                                                               |
-| Grid Charge Power      | The charging power in watts when the storage is charged from the grid. Grid charging has been reported to reach only about 50% of the set power.                                                                     |
-| Grid Discharge Power   | The discharging power in watts when the storage is discharged to the grid.                                                                                                                                            |
+<!-- entities: storage number select -->
+| Entity | Description |
+| ------ | ----------- |
+| Storage Control Mode | Selects the storage mode; see the table above. |
+| PV charge limit | The maximum PV charging power in watts. |
+| Discharge limit | The maximum discharging power in watts. |
+| Grid charge power | The charging power in watts when the storage is charged from the grid. Grid charging has been reported to reach only about 50% of the set power. |
+| Grid discharge power | The discharging power in watts when the storage is discharged to the grid. |
 | Modbus storage reserve | Model 124 `MinRsvPct`, the reserve the inverter applies under Modbus storage control. Whole numbers only. While the SoC mode is `manual` it is mirrored to `SoC Minimum (Web API)` and must not exceed `SoC Maximum`. |
 
 Which control each mode uses:
 
-| Mode                          | Charge Limit   | Discharge Limit | Grid Charge Power | Grid Discharge Power | Modbus storage reserve |
-| ----------------------------- | -------------- | --------------- | ----------------- | -------------------- | ---------------------- |
+| Mode                          | PV charge limit | Discharge limit | Grid charge power | Grid discharge power | Modbus storage reserve |
+| ----------------------------- | --------------- | --------------- | ----------------- | -------------------- | ---------------------- |
 | Auto                          | Ignored (100%) | Ignored (100%)  | Ignored (0%)      | Ignored (0%)         | Ignored                |
 | PV Charge Limit               | Used           | Ignored (100%)  | Ignored (0%)      | Ignored (0%)         | Used                   |
 | Discharge Limit               | Ignored (100%) | Used            | Ignored (0%)      | Ignored (0%)         | Used                   |
 | PV Charge and Discharge Limit | Used           | Used            | Ignored (0%)      | Ignored (0%)         | Used                   |
 | Charge from Grid              | Ignored        | Ignored         | Used              | Ignored (0%)         | Used                   |
 | Discharge to Grid             | Ignored        | Ignored         | Ignored (0%)      | Used                 | Used                   |
-| Block discharging             | Used           | Ignored (0%)    | Ignored (0%)      | Ignored (0%)         | Used                   |
-| Block charging                | Ignored (0%)   | Used            | Ignored (0%)      | Ignored (0%)         | Used                   |
+| Block Discharging             | Used           | Ignored (0%)    | Ignored (0%)      | Ignored (0%)         | Used                   |
+| Block Charging                | Ignored (0%)   | Used            | Ignored (0%)      | Ignored (0%)         | Used                   |
 
 How the modes relate to the time-dependent battery control of the Fronius web UI:
 
 | Web UI name            | Integration control  | Integration mode  |
 | ---------------------- | -------------------- | ----------------- |
-| Max. charging power    | PV Charge Limit      | PV Charge Limit   |
-| Min. charging power    | Grid Charge Power    | Charge from Grid  |
-| Max. discharging power | Discharge Limit      | Discharge Limit   |
-| Min. discharging power | Grid Discharge Power | Discharge to Grid |
+| Max. charging power    | PV charge limit      | PV Charge Limit   |
+| Min. charging power    | Grid charge power    | Charge from Grid  |
+| Max. discharging power | Discharge limit      | Discharge Limit   |
+| Min. discharging power | Grid discharge power | Discharge to Grid |
 
 ### Web API controls
 
 The inverter keeps two independent switches, and the entities follow them:
 
-- `Self-consumption optimisation` is `HYB_EM_MODE`, the inverter's automatic/manual energy management. `Target Feed In` belongs to it.
+- `Self-consumption optimisation` is `HYB_EM_MODE`, the inverter's automatic/manual energy management. `Target feed in` belongs to it.
 - `Web API SoC mode` is `BAT_M0_SOC_MODE`, the automatic/manual switch of the SoC window. `SoC Minimum (Web API)` and `SoC Maximum` belong to it; switching self-consumption optimisation does not touch the window.
 - `Backup reserve` is independent of both switches.
 
-| Entity                        | Description                                                                                                                                                                                                                                                 |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Self-consumption optimisation | `HYB_EM_MODE`: `Automatic` or `Manual`. Does not change the SoC window.                                                                                                                                                                                     |
-| Target Feed In                | Manual Fronius target feed-in in watts. Positive values target feed-in, negative values target grid consumption, which the inverter then targets even when PV power is available. Ignored by the inverter when battery charging is unavailable. Only available while `Self-consumption optimisation` is `Manual` (`HYB_EM_MODE=1`). |
-| Web API SoC mode              | `BAT_M0_SOC_MODE`: `Automatic` or `Manual`. The SoC window below is only writable while it is `Manual`.                                                                                                                                                    |
-| SoC Maximum                   | `BAT_M0_SOC_MAX`. Only available while `Web API SoC mode` is `Manual`, and it must not be set below `SoC Minimum (Web API)`.                                                                                                                               |
-| SoC Minimum (Web API)         | `BAT_M0_SOC_MIN`, the minimum shown in the inverter's own UI. Only available while `Web API SoC mode` is `Manual`.                                                                                                                                         |
-| Backup reserve                | `HYB_BACKUP_RESERVED`: the share of the battery kept for backup power, 5 to 100 percent.                                                                                                                                                                    |
-| Charge from grid              | Toggle for `HYB_EVU_CHARGEFROMGRID`. Turning it on also enables `Charge from AC`; turning it off only disables the grid flag.                                                                                                                              |
-| Charge from AC                | Toggle for `HYB_BM_CHARGEFROMAC`. Turning it off disables both charge-source flags.                                                                                                                                                                        |
+<!-- entities: storage number select switch -->
+| Entity | Description |
+| ------ | ----------- |
+| Self-consumption optimisation | `HYB_EM_MODE`: `Automatic` or `Manual`. Does not change the SoC window. |
+| Target feed in | Manual Fronius target feed-in in watts. Positive values target feed-in, negative values target grid consumption, which the inverter then targets even when PV power is available. Ignored by the inverter when battery charging is unavailable. Only available while `Self-consumption optimisation` is `Manual` (`HYB_EM_MODE=1`). |
+| Web API SoC mode | `BAT_M0_SOC_MODE`: `Automatic` or `Manual`. The SoC window below is only writable while it is `Manual`. |
+| SoC Maximum | `BAT_M0_SOC_MAX`. Only available while `Web API SoC mode` is `Manual`, and it must not be set below `SoC Minimum (Web API)`. |
+| SoC Minimum (Web API) | `BAT_M0_SOC_MIN`, the minimum shown in the inverter's own UI. Only available while `Web API SoC mode` is `Manual`. |
+| Backup reserve | `HYB_BACKUP_RESERVED`: the share of the battery kept for backup power, 5 to 100 percent. |
+| Charge from grid | Toggle for `HYB_EVU_CHARGEFROMGRID`. Turning it on also enables `Charge from AC`; turning it off only disables the grid flag. |
+| Charge from AC | Toggle for `HYB_BM_CHARGEFROMAC`. Turning it off disables both charge-source flags. |
 
 ### Two minimum SoC values
 
@@ -373,9 +421,9 @@ In practice: if you only use the inverter's own battery management (storage mode
 
 Turn off scheduled (dis)charging in the inverter's web UI to avoid unexpected behavior.
 
-Set `Grid Charge Power` to a multiple of 10 W. Other values do not work and lead to odd behavior such as charging at about 500 W; if you need to press "increment" to get the battery to charge, this is the likely cause. You do not need to touch the `Modbus storage reserve`.
+Set `Grid charge power` to a multiple of 10 W. Other values do not work and lead to odd behavior such as charging at about 500 W; if you need to press "increment" to get the battery to charge, this is the likely cause. You do not need to touch the `Modbus storage reserve`.
 
-Grid charging also stops at around 500 W while the inverter's own battery configuration does not allow charging from the grid, whatever charge power is written over Modbus. PV charging reaches full power in the same state, which makes this look like a Modbus fault. Selecting `Charge from Grid` therefore enables the `Charge from grid` and `Charge from AC` toggles over the Web API, so a configured Web API clears this on its own; without one, enable both in the inverter web UI. If the Web API refuses the toggles, Home Assistant reports an error: the storage mode is then set, but grid charging is not.
+Grid charging also stops at around 500 W while the inverter's own battery configuration does not allow charging from the grid, whatever charge power is written over Modbus. PV charging reaches full power in the same state, which makes this look like a Modbus fault. Selecting `Charge from Grid` therefore enables the `Charge from grid` and `Charge from AC` toggles over the Web API, so a configured Web API clears this on its own; without one, enable both in the inverter web UI. If the Web API refuses the toggles, or the entry has lost its web login and waits for a new one, Home Assistant reports an error: the storage mode is then set, but grid charging is not.
 
 ## Use cases
 
@@ -484,7 +532,7 @@ automation:
                   option: disabled
 ```
 
-Send a notification for every error or warning the inverter logs:
+Send a notification for every error or warning the inverter logs at the customer level (for the technician and service levels, enable `Service event` and add it to the target):
 
 ```yaml
 automation:
@@ -513,7 +561,7 @@ automation:
 - A module temperature or a limit sensor that appears later, for example after a firmware update, gets its entity at the next reload of the entry.
 - The Web API cannot be reached through an IPv6 address; set the entry up with an IPv4 address or a host name.
 - A module temperature entity that stays unknown for good, because the module is gone or because a development build created it as a placeholder, can be disabled in Home Assistant. It cannot be deleted: the integration keeps every module the inverter once reported, so one incomplete answer cannot take a real module with its history.
-- When the last smart meter is removed, its entities stay unavailable; delete them in Home Assistant, where they show as no longer provided. An empty meter list from the inverter is not taken as proof that no meter exists, so one short answer cannot delete meter entities and their history.
+- When the last smart meter is removed, its entities stay unavailable; delete them in Home Assistant, where they show as no longer provided. A device the inverter no longer reports, such as a removed meter or battery, can then be deleted on its device page. An empty meter list from the inverter is not taken as proof that no meter exists, so one short answer cannot delete meter entities and their history.
 - While the SoC mode is `Manual`, the `Modbus storage reserve` cannot be changed while the Web API does not answer (see [Two minimum SoC values](#two-minimum-soc-values)).
 - Scheduled (dis)charging in the inverter's web UI and the Modbus storage modes get in each other's way; turn the schedule off when using the modes.
 
@@ -522,17 +570,18 @@ automation:
 - **Diagnostics:** Settings -> Devices & services -> Fronius Modbus -> device -> Download diagnostics. The download includes which sub-systems the last poll read and which failed, the Web API values, and the raw SunSpec register map; serial numbers and the Modbus restriction IP are redacted. It also works while the inverter is offline.
 - **New login:** Home Assistant shows *Reauthentication required* on the integration when an entry has no valid token for its host and role, for example after the password was changed on the inverter. Follow it to enter the role's password again, or choose *Without the web API* to run the entry on Modbus alone.
 - **Repairs:**
-  - *Disable Fronius Solar API on older firmware* appears on firmware below 1.40.7-1 with the Solar API switched on. It offers to switch the Solar API off until the inverter is updated.
+  - *Disable Fronius Solar API on older firmware* appears on firmware below 1.40.7-1 with the Solar API switched on, for an entry with a Web API role. It offers to switch the Solar API off until the inverter is updated.
 - **Discovery:** no card appears for an inverter that is already set up, one in another subnet without an mDNS repeater between them, or one announced with an IPv6 address only (see [Discovery](#discovery)).
 - **Logs:** a sub-system that stops answering (inverter, a meter, the battery, the Web API) is logged once when it fails and once when it answers again. Web API errors name the error type, not the host.
 - **Everything the inverter reads out:** on Windows, run [`tools/inverter_dump.bat`](tools/inverter_dump.bat) (it starts `inverter_dump.ps1` next to it; both files are needed, nothing else is installed). It asks for the inverter's address and saves one JSON file next to the script with every status, component and Solar API endpoint and the web interface's channel names and event texts, which answer without a login, and on request the configuration endpoints of the `customer` or `technician` login and the raw SunSpec registers of the inverter and its meters over Modbus TCP (Modbus must be switched on); the password is asked for and not stored. It only reads: of the command endpoints it calls the login alone, and over Modbus it only reads registers. A device without the GEN24 web interface, such as a Datamanager, still gets its Solar API and Modbus read. Meters are looked for at units 200 to 209; for another meter offset, start `inverter_dump.bat <address> -FirstMeterUnit <offset>`. By default serial numbers, IP and MAC addresses, host and system names are replaced with `<redacted>`, and the serial number in the SunSpec registers with zeros; still look through the file before you share it. Attached to an issue, such a file helps to support a device that is not verified yet.
 
 ## Removal
 
-1. Settings -> Devices & services -> Fronius Modbus -> the entry's menu -> Delete.
-2. The stored Web API token for the entry's host and role is deleted with it, unless another entry still uses them.
-3. The Modbus settings the integration enabled on the inverter (Modbus TCP, SunSpec mode, IP restriction) stay as they are; change them in the inverter's web UI if you no longer need them.
-4. For a HACS installation, remove the integration in HACS as well.
+1. Undo the controls you set: `Storage Control Mode` to `auto`, `AC limit enable` and `Power factor control` to disabled, `Inverter connection` to enabled, and disable the automations that drive them. The inverter keeps what was written over Modbus, with no timeout, also after the entry is gone.
+2. Settings -> Devices & services -> Fronius Modbus -> the entry's menu -> Delete.
+3. The stored Web API token for the entry's host and role is deleted with it, unless another entry still uses them.
+4. The Modbus settings the integration wrote on the inverter (Modbus TCP, SunSpec mode, *Allow Control*, *Restrict Control*, port and addresses) stay as they are; change them in the inverter's web UI if you no longer need them.
+5. For a HACS installation, remove the integration in HACS as well.
 
 ## References
 
@@ -542,6 +591,6 @@ automation:
 
 Development happens against a WSL2 Home Assistant test environment; the integration itself only needs a recent Home Assistant.
 
-- `.github/scripts/check.sh` runs the gates of the Test workflow: ruff, mypy, pip-audit, gitleaks, pytest with a coverage gate, and a mutation run. Run it (or at least `pytest tests/ -q`) before calling a change done. The HACS and hassfest validations run in CI only.
+- `.github/scripts/check.sh` runs the gates of the Test workflow: ruff (lint and format), mypy, pip-audit, gitleaks (8.30 or newer), the check of the Modbus library pins against Home Assistant's core, pytest with a coverage gate, a mutation run, and the dump tool's offline tests, which need PowerShell 7 (`pwsh`); see [tests/README.md](tests/README.md). Run it (or at least `pytest tests/ -q`) before calling a change done. The HACS and hassfest validations run in CI only.
 - The default `pytest tests/ -q` run skips the end-to-end tests. Pass `-m ""` to include them.
 - `tests/fixtures/symo_gen24_fw1386.json` is a captured SunSpec register map from a Fronius Symo GEN24 10.0 running firmware 1.38.6-1. To capture a fixture from another inverter/firmware combination: download diagnostics for the integration's device (Settings -> Devices -> device -> Download diagnostics), take the `registers` object (`{unit_id: {space: {address: word}}}`), prepend the SunSpec marker registers (40000/40001, `"SunS"`) and append the end-of-chain header (a model id of `0xFFFF`) if the diagnostics dump doesn't already include them, and blank out the serial number words before committing the fixture.

@@ -22,6 +22,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .component_readings import limits_reached
+from .const import web_api_disabled
 from .derived import LoadEstimator, grid_status, throttle_reason
 from .fronius_modbus_api.controls import InverterControls
 from .fronius_modbus_api.device import (
@@ -31,7 +32,7 @@ from .fronius_modbus_api.device import (
     UpdateReport,
     meter_report_name,
 )
-from .fronius_modbus_api.exceptions import ControlUnavailable
+from .fronius_modbus_api.exceptions import ControlUnavailable, error_text
 from .fronius_modbus_api.storage import ExtendedMode, StorageControl
 from .fronius_modbus_api.sunspec_models import AcMeter
 from .froniuswebclient import FroniusWebUnreachable
@@ -181,24 +182,32 @@ class FroniusRuntimeData:
         """Switch the storage mode; Charge from Grid also opens the web charge sources."""
         mode = ExtendedMode(code)
         await assume_present(self.storage_control).set_mode(mode)
-        web_control = self.web_control
-        if (
-            mode is ExtendedMode.CHARGE_FROM_GRID
-            and web_control is not None
-            and web_control.configured
+        entry = assume_present(self.modbus.config_entry)
+        if mode is not ExtendedMode.CHARGE_FROM_GRID or web_api_disabled(
+            {**entry.data, **entry.options}
         ):
-            try:
-                await web_control.set_charge_sources(
-                    charge_from_grid=True, charge_from_ac=True
-                )
-            except (ModbusError, RuntimeError, ValueError, OSError) as err:
-                # The Modbus mode is already set and stays; the owner has to
-                # know that grid charging is not (audit F24-02).
-                raise ControlUnavailable(
-                    "grid_charge_sources_failed",
-                    f"Charge from Grid is set, but grid charging was refused: {err}",
-                    error=str(err),
-                ) from err
+            return
+        web_control = self.web_control
+        if web_control is None or not web_control.configured:
+            # The login is lost until reauth; the toggles stay as the inverter
+            # has them, which may hold grid charging at about 500 W.
+            raise ControlUnavailable(
+                "grid_charge_sources_login_lost",
+                "Charge from Grid is set, but grid charging could not be allowed "
+                "without the web login",
+            )
+        try:
+            await web_control.set_charge_sources(
+                charge_from_grid=True, charge_from_ac=True
+            )
+        except (ModbusError, RuntimeError, ValueError, OSError) as err:
+            # The Modbus mode is already set and stays; the owner has to
+            # know that grid charging is not (audit F24-02).
+            raise ControlUnavailable(
+                "grid_charge_sources_failed",
+                f"Charge from Grid is set, but grid charging was refused: {err}",
+                error=str(err),
+            ) from err
 
 
 type FroniusConfigEntry = ConfigEntry[FroniusRuntimeData]
@@ -222,7 +231,8 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
             hass,
             _LOGGER,
             config_entry=entry,
-            name=f"{entry.title} Modbus",
+            # The title holds the host, and the coordinator logs its name.
+            name=f"{entry.entry_id} Modbus",
             update_interval=interval,
         )
         self.device = device
@@ -279,7 +289,9 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
         if self.data is not None and time.monotonic() < self._tolerate_until:
             # Expected: the inverter restarts its Modbus server after a web write.
             # An outage outliving the window fails the update below instead.
-            _LOGGER.debug("Modbus outage tolerated after a web write: %s", err)
+            _LOGGER.debug(
+                "Modbus outage tolerated after a web write: %s", error_text(err)
+            )
             self._tolerated_failures += 1
             return replace(self.data, retained=True)
         if self._tolerated_failures:
@@ -291,7 +303,11 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
             self._tolerate_until = 0.0
             await self.device.unit.disconnect()
         failure = DeviceUnreachable if isinstance(err, NO_ANSWER) else UpdateFailed
-        raise failure(f"Modbus communication failure: {err}") from err
+        text = error_text(err)
+        # A cause whose text was cut would bring it back in the coordinator's
+        # debug traceback.
+        cause = err if text == str(err) else None
+        raise failure(f"Modbus communication failure: {text}") from cause
 
     def _log_sub_system_changes(self, report: UpdateReport) -> None:
         """Log each sub-system once when it drops out and once when it is back.
@@ -303,9 +319,9 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
         for name in sorted(report.failed.keys() - self._failed):
             err = report.failed[name]
             if isinstance(err, NO_ANSWER):
-                _LOGGER.info("%s does not answer: %s", name, err)
+                _LOGGER.info("%s does not answer: %s", name, error_text(err))
             else:
-                _LOGGER.warning("%s refused the read: %s", name, err)
+                _LOGGER.warning("%s refused the read: %s", name, error_text(err))
         for name in sorted(self._failed & set(report.updated)):
             _LOGGER.info("%s answers again", name)
         self._failed = frozenset(report.failed)
@@ -434,7 +450,7 @@ class FroniusWebCoordinator(DataUpdateCoordinator["WebData"]):
             hass,
             _LOGGER,
             config_entry=entry,
-            name=f"{entry.title} web API",
+            name=f"{entry.entry_id} web API",
             update_interval=interval,
         )
         self.web_control = web_control

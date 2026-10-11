@@ -1,7 +1,9 @@
 """End-to-end: a real Home Assistant sets the entry up on the mocked shared connection."""
 
 from dataclasses import replace
+import logging
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 from modbus_connection import (
     IllegalDataAddressError,
@@ -18,6 +20,8 @@ from pytest_homeassistant_custom_component.common import (
 from custom_components import fronius_modbus
 from custom_components.fronius_modbus import config_flow, migrations, web_control
 from custom_components.fronius_modbus.const import (
+    CONF_METER_UNIT_ID,
+    CONF_METER_UNIT_IDS,
     CONF_RECONFIGURE_REQUIRED,
     DOMAIN,
     MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX,
@@ -234,8 +238,10 @@ async def test_a_number_write_reaches_the_register(hass, mock_modbus):
     assert refused.value.translation_key == "charge_limit_not_in_mode"
 
 
-async def test_the_select_changes_the_storage_mode(hass, mock_modbus):
-    entry = make_entry(hass)
+async def test_the_select_changes_the_storage_mode(hass, mock_modbus, monkeypatch):
+    # Without the web API: with a role but no login, Charge from Grid is an error.
+    serve_the_public_endpoints(mock_modbus, monkeypatch)
+    entry = make_entry(hass, api_username="none")
     await setup_entry(hass, entry)
 
     await hass.services.async_call(
@@ -271,6 +277,177 @@ async def test_minor_version_9_entries_migrate_to_the_current_shape(hass, mock_m
 
     await setup_entry(hass, entry)
     assert entry.state is ConfigEntryState.LOADED
+
+
+async def test_a_string_dark_at_the_first_setup_gets_its_sensor_once_lit(
+    hass, mock_modbus, monkeypatch, symo_gen24
+):
+    """Reaudit W-03: set up at night, a string got no power sensor until a reload."""
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    probe = make_entry(hass)
+    await setup_entry(hass, probe)
+    address = probe.runtime_data.device.mppt_module(0).resolved_fields["dcw"].address
+    assert await hass.config_entries.async_remove(probe.entry_id)
+    await hass.async_block_till_done()
+    holding = symo_gen24[INVERTER_UNIT_ID]["holding"]
+    daylight = holding[address]
+    holding[address] = 0xFFFF
+    entry = make_entry(hass)
+    await setup_entry(hass, entry)
+    unique_id = f"{entity_prefix(entry.entry_id)}_mppt_module_0_dc_power"
+    registry = er.async_get(hass)
+    assert registry.async_get_entity_id("sensor", DOMAIN, unique_id) is None
+    runtime = entry.runtime_data
+    await runtime.modbus.async_refresh()
+    await hass.async_block_till_done()
+    assert entry.runtime_data is runtime, "a poll still in the dark reloaded"
+
+    # The live unit for the next poll, the fixture for the reload after it.
+    mock_modbus.unit(INVERTER_UNIT_ID).holding[address] = daylight
+    holding[address] = daylight
+    await entry.runtime_data.modbus.async_refresh()
+    await hass.async_block_till_done()
+
+    assert registry.async_get_entity_id("sensor", DOMAIN, unique_id) is not None
+
+
+async def test_a_string_lit_while_the_platforms_set_up_gets_its_sensor(
+    hass, mock_modbus, monkeypatch, symo_gen24
+):
+    """Reaudit AC-02: the strings left out were taken after the platform setup.
+
+    A poll that lit the string in between left nothing to wait for, so the
+    sensor came only with the next restart.
+    """
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    probe = make_entry(hass)
+    await setup_entry(hass, probe)
+    address = probe.runtime_data.device.mppt_module(0).resolved_fields["dcw"].address
+    assert await hass.config_entries.async_remove(probe.entry_id)
+    await hass.async_block_till_done()
+    holding = symo_gen24[INVERTER_UNIT_ID]["holding"]
+    daylight = holding[address]
+    holding[address] = 0xFFFF
+    forward = hass.config_entries.async_forward_entry_setups
+    lit = False
+
+    async def forward_while_the_sun_rises(entry, platforms):
+        nonlocal lit
+        await forward(entry, platforms)
+        if lit:
+            return
+        lit = True
+        mock_modbus.unit(INVERTER_UNIT_ID).holding[address] = daylight
+        holding[address] = daylight
+        await entry.runtime_data.modbus.async_refresh()
+
+    monkeypatch.setattr(
+        hass.config_entries, "async_forward_entry_setups", forward_while_the_sun_rises
+    )
+    entry = make_entry(hass)
+
+    await setup_entry(hass, entry)
+    await hass.async_block_till_done()
+
+    unique_id = f"{entity_prefix(entry.entry_id)}_mppt_module_0_dc_power"
+    assert er.async_get(hass).async_get_entity_id("sensor", DOMAIN, unique_id)
+
+
+# An MPPT sensor under each unique id an upgrade still finds: (old id, key, the
+# field that goes dark, the words it then sends).
+LEGACY_MPPT_IDS = [
+    ("fm_fronius__mppt_module_0_dc_power", "mppt_module_0_dc_power", "dcw", [0xFFFF]),
+    (
+        "fm_fronius__mppt_module_0_lifetime_energy",
+        "mppt_module_0_lifetime_energy",
+        "dcwh",
+        [0, 0],
+    ),
+    ("fm_mppt1_power", "mppt_module_0_dc_power", "dcw", [0xFFFF]),
+    ("fm_mppt1_lfte", "mppt_module_0_lifetime_energy", "dcwh", [0, 0]),
+]
+
+
+@pytest.mark.parametrize(("legacy_id", "key", "field", "missing"), LEGACY_MPPT_IDS)
+async def test_a_dark_mppt_at_the_upgrade_keeps_its_legacy_sensors(
+    hass, mock_modbus, monkeypatch, symo_gen24, legacy_id, key, field, missing
+):
+    """Reaudit RC-02: a sensor still under a legacy id counted as never registered.
+
+    Dark at the first start after the upgrade, it was neither migrated nor
+    kept, and the cleanup deleted it with the name the owner had given it.
+    """
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    entry = make_entry(hass)
+    await setup_entry(hass, entry)
+    entity_id = entity_id_for(hass, entry, "sensor", key)
+    module = entry.runtime_data.device.mppt_module(0)
+    address = module.resolved_fields[field].address
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    registry = er.async_get(hass)
+    registry.async_update_entity(entity_id, new_unique_id=legacy_id)
+    for offset, word in enumerate(missing):
+        symo_gen24[INVERTER_UNIT_ID]["holding"][address + offset] = word
+
+    await setup_entry(hass, entry)
+
+    # The v0.1.9 migration also renames the entity id; the entry itself stays.
+    current_id = f"{entity_prefix(entry.entry_id)}_{key}"
+    assert registry.async_get_entity_id("sensor", DOMAIN, current_id) is not None
+
+
+# The device identifiers 0.3.0 and older registered, built from the entry's name.
+LEGACY_DEVICE_IDENTIFIERS = (
+    "Fronius_inverter",
+    "Fronius_battery_storage",
+    "Fronius_meter1",
+)
+
+
+async def test_a_pre_web_api_entry_is_upgraded_and_loses_its_legacy_devices(
+    hass, mock_modbus, monkeypatch
+):
+    """Audit F27: no test started from an entry of 0.3.0 or older (minor 8)."""
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    entry = make_entry(
+        hass,
+        minor_version=8,
+        **{CONF_METER_UNIT_ID: METER_UNIT_ID, CONF_METER_UNIT_IDS: [METER_UNIT_ID]},
+    )
+    hass.config_entries.async_update_entry(entry, title="Fronius")
+    device_registry = dr.async_get(hass)
+    for identifier in LEGACY_DEVICE_IDENTIFIERS:
+        device_registry.async_get_or_create(
+            config_entry_id=entry.entry_id, identifiers={(DOMAIN, identifier)}
+        )
+
+    assert await migrations.async_migrate_entry(hass, entry)
+
+    assert CONF_METER_UNIT_ID not in entry.data
+    assert CONF_METER_UNIT_IDS not in entry.data
+    assert entry.data[CONF_RECONFIGURE_REQUIRED] is True
+    assert entry.title == f"Fronius {HOST}"
+
+    await setup_entry(hass, entry)
+
+    assert entry.state is ConfigEntryState.LOADED
+    identifiers = {
+        identifier
+        for device in dr.async_entries_for_config_entry(device_registry, entry.entry_id)
+        for _, identifier in device.identifiers
+    }
+    assert identifiers.isdisjoint(LEGACY_DEVICE_IDENTIFIERS)
+
+
+async def test_a_pre_web_api_entry_keeps_a_title_the_owner_gave(hass):
+    """Reaudit RC-03: the upgrade put the generated title over the owner's."""
+    entry = make_entry(hass, minor_version=8)
+    hass.config_entries.async_update_entry(entry, title="Garage roof")
+
+    assert await migrations.async_migrate_entry(hass, entry)
+
+    assert entry.title == "Garage roof"
 
 
 async def test_v019_mppt_entities_are_renamed(hass, mock_modbus):
@@ -511,6 +688,41 @@ async def test_minor_version_10_entries_take_the_role_of_their_stored_token(
     assert entry.options["api_username"] == "technician"
 
 
+async def test_a_minor_version_10_entry_keeps_the_role_its_owner_chose(
+    hass, mock_modbus
+):
+    """README audit: callifo 0.3.2 and later store the chosen role, and a technician
+    token left on the host made a customer entry technician and dropped its
+    customer token."""
+    entry = make_entry(hass, minor_version=10, api_username="customer")
+    store = async_get_token_store(hass)
+    for user in ("customer", "technician"):
+        await store.async_save_token(HOST, realm="r", token="t", user=user)
+
+    assert await migrations.async_migrate_entry(hass, entry)
+
+    assert entry.data["api_username"] == "customer"
+    assert entry.options["api_username"] == "customer"
+    assert await store.async_load_token(HOST, "customer")
+
+
+async def test_a_callifo_0_3_1_entry_with_a_technician_token_keeps_technician(
+    hass, mock_modbus
+):
+    """Reaudit G-01: callifo 0.3.1 (minor 9) wrote customer as a constant, and
+    the technician token beside it was its export limit access; taking that
+    constant for a choice dropped the access and deleted the token."""
+    entry = make_entry(hass, minor_version=9, api_username="customer")
+    store = async_get_token_store(hass)
+    for user in ("customer", "technician"):
+        await store.async_save_token(HOST, realm="r", token="t", user=user)
+
+    assert await migrations.async_migrate_entry(hass, entry)
+
+    assert entry.data["api_username"] == "technician"
+    assert await store.async_load_token(HOST, "technician")
+
+
 async def test_minor_version_10_entries_without_a_technician_token_stay_customer(
     hass, mock_modbus
 ):
@@ -561,6 +773,50 @@ class _FakeWebClientWithTopology:
             return None
 
         return _quiet
+
+
+class _RecordingWebClient(_FakeWebClientWithTopology):
+    """The topology fake, with every call it answers written to `calls`."""
+
+    calls: list[tuple] = []
+
+    def __getattr__(self, name: str):
+        answer = super().__getattr__(name)
+
+        def _record(*args, **kwargs):
+            self.calls.append((name, *args))
+            return answer(*args, **kwargs)
+
+        return _record
+
+
+async def test_a_switch_and_a_button_run_their_own_action(
+    hass, mock_modbus, monkeypatch
+):
+    """Audit F10: no test turned a switch on or off or pressed a button."""
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _RecordingWebClient)
+    monkeypatch.setattr(_RecordingWebClient, "calls", [])
+    entry = make_entry(hass)
+    await setup_entry(hass, entry)
+    switch = entity_id_for(hass, entry, "switch", "api_solar_api_enabled")
+    button = entity_id_for(hass, entry, "button", "reset_modbus_control")
+
+    for domain, service, entity_id in (
+        ("switch", "turn_on", switch),
+        ("switch", "turn_off", switch),
+        ("button", "press", button),
+    ):
+        await hass.services.async_call(
+            domain, service, {"entity_id": entity_id}, blocking=True
+        )
+
+    writes = {"set_solar_api_enabled", "reset_modbus_control"}
+    assert [call for call in _RecordingWebClient.calls if call[0] in writes] == [
+        ("set_solar_api_enabled", True),
+        ("set_solar_api_enabled", False),
+        ("reset_modbus_control",),
+    ]
 
 
 async def test_a_topology_outage_keeps_the_second_meters_entities(
@@ -648,8 +904,10 @@ class _WebClientLosingItsLogin(_FakeWebClientWithTopology):
         return super().__getattr__(name)
 
     def get_power_meter_info(self, *_args, **_kwargs):
+        # Like the real client: the public topology read never raises, an
+        # unanswered one is None (audit F13).
         if self.lost_at == "get_power_meter_info":
-            raise FroniusWebAuthError("token rejected")
+            return None
         return self.topology
 
 
@@ -697,9 +955,10 @@ async def test_a_rejected_technician_token_is_the_one_deleted(
     """The topology read deleted the customer token whatever role had been rejected.
 
     The rejected technician token survived and was offered again on every start.
+    The first protected read is where a rejected login shows (audit F13).
     """
     monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientLosingItsLogin)
-    monkeypatch.setattr(_WebClientLosingItsLogin, "lost_at", "get_power_meter_info")
+    monkeypatch.setattr(_WebClientLosingItsLogin, "lost_at", "get_modbus_config")
     entry = make_entry(hass)
     store = async_get_token_store(hass)
     await store.async_save_token(HOST, realm="r", token="t", user="technician")
@@ -1373,3 +1632,188 @@ async def test_service_events_reach_only_the_service_entities(
 
     assert hass.states.get(service_id).attributes["code"] == "GEN24-1186"
     assert hass.states.get(customer_id).attributes.get("event_type") is None
+
+
+# Keys that 0.3.0 and earlier registered on two platforms under one unique id.
+LEGACY_TWINS = [
+    ("sensor", "Conn"),
+    ("select", "Conn"),
+    ("sensor", "ac_limit_enable"),
+    ("select", "ac_limit_enable"),
+    ("sensor", "ac_limit_rate"),
+    ("number", "ac_limit_rate"),
+    ("sensor", "soc_minimum"),
+    ("number", "soc_minimum"),
+    ("sensor", "export_soft_limit"),
+    ("number", "export_soft_limit"),
+]
+
+
+async def test_both_twins_of_a_legacy_unique_id_keep_their_entity_ids(
+    hass, mock_modbus, monkeypatch
+):
+    """Audit F05: only one twin per key was migrated; the other was deleted."""
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    entry = make_entry(hass)
+    registry = er.async_get(hass)
+    originals = {
+        (domain, key): registry.async_get_or_create(
+            domain,
+            DOMAIN,
+            f"fm_fronius__{key}",
+            config_entry=entry,
+            suggested_object_id=f"legacy_{key}",
+        ).entity_id
+        for domain, key in LEGACY_TWINS
+    }
+
+    await setup_entry(hass, entry)
+
+    for (domain, key), entity_id in originals.items():
+        assert entity_id_for(hass, entry, domain, key) == entity_id
+
+
+async def test_every_power_number_spans_the_rated_power(hass, mock_modbus, monkeypatch):
+    """Audit F08: the export limit stopped at 15 kW and the target feed-in at 20 kW."""
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    entry = make_entry(hass)
+    await setup_entry(hass, entry)
+    rated = entry.runtime_data.device.settings.w_max
+
+    def bounds(key):
+        state = hass.states.get(entity_id_for(hass, entry, "number", key))
+        return state.attributes["min"], state.attributes["max"]
+
+    assert bounds("ac_limit_rate") == (0, rated)
+    assert bounds("export_soft_limit") == (0, rated)
+    assert bounds("api_battery_power") == (-rated, rated)
+
+
+@pytest.mark.parametrize(
+    ("field", "suffix", "missing"),
+    [
+        ("dca", "dc_current", [0xFFFF]),
+        ("dcv", "dc_voltage", [0xFFFF]),
+        ("dcw", "dc_power", [0xFFFF]),
+        ("dcwh", "lifetime_energy", [0, 0]),
+    ],
+)
+async def test_a_dark_mppt_at_a_restart_keeps_its_sensors(
+    hass, mock_modbus, monkeypatch, symo_gen24, field, suffix, missing
+):
+    """Codex C-03: a string in the dark sends no value, and a reload deleted its sensor."""
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    entry = make_entry(hass)
+    await setup_entry(hass, entry)
+    original_id = entity_id_for(hass, entry, "sensor", f"mppt_module_0_{suffix}")
+    module = entry.runtime_data.device.mppt_module(0)
+    address = module.resolved_fields[field].address
+    for offset, word in enumerate(missing):
+        symo_gen24[INVERTER_UNIT_ID]["holding"][address + offset] = word
+
+    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert getattr(entry.runtime_data.device.mppt_module(0), field) is None
+    assert (
+        entity_id_for(hass, entry, "sensor", f"mppt_module_0_{suffix}") == original_id
+    )
+
+
+async def test_configure_reloads_a_loaded_entry_once_per_run(
+    hass, mock_modbus, monkeypatch
+):
+    """Audit F04: a new password alone reloaded nothing; a change must not reload twice."""
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    entry = make_entry(hass)
+    await setup_entry(hass, entry)
+    monkeypatch.setattr(
+        config_flow, "_validate_input", AsyncMock(return_value={"title": "Fronius"})
+    )
+    monkeypatch.setattr(
+        config_flow,
+        "_async_mint_token",
+        AsyncMock(return_value={"realm": "r", "token": "new"}),
+    )
+    setups = []
+    setup = hass.config_entries.async_setup
+
+    async def counted_setup(entry_id, *args, **kwargs):
+        setups.append(entry_id)
+        return await setup(entry_id, *args, **kwargs)
+
+    monkeypatch.setattr(hass.config_entries, "async_setup", counted_setup)
+    defaults = config_flow.entry_defaults(entry)
+    settings = {
+        key: defaults[key]
+        for key in (
+            "host",
+            "scan_interval",
+            "web_scan_interval",
+            "modbus_restriction",
+            "api_username",
+        )
+    }
+
+    # The first run writes the options; the second changes nothing but the token.
+    for runs in (1, 2):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], settings
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"api_password": "secret"}
+        )
+        await hass.async_block_till_done()
+
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert entry.state is ConfigEntryState.LOADED
+        assert len(setups) == runs
+
+
+async def test_an_outage_names_no_host_in_logs_or_diagnostics(
+    hass, mock_modbus, caplog
+):
+    """Audit F07: the coordinator's name and the library's connect error carried the host."""
+    caplog.set_level(logging.DEBUG, "custom_components.fronius_modbus")
+    entry = make_entry(hass)
+    await setup_entry(hass, entry)
+    caplog.clear()
+    connect_error = f"could not connect to {HOST}:502"
+    coordinator = entry.runtime_data.modbus
+
+    # A meter drops out while the inverter answers: the poll keeps its error.
+    mock_modbus.fail_requests(METER_UNIT_ID, ModbusTimeoutError(connect_error))
+    await coordinator.async_refresh()
+    diagnostics = await async_get_config_entry_diagnostics(hass, entry)
+    # Then the whole link.
+    mock_modbus.fail_requests(INVERTER_UNIT_ID, ModbusConnectionError(connect_error))
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert diagnostics["failed"]
+    assert HOST not in repr(diagnostics["failed"])
+    assert HOST not in caplog.text
+
+
+async def test_the_owner_can_delete_a_device_the_inverter_no_longer_reports(
+    hass, mock_modbus
+):
+    """Audit F32: an empty device of a removed meter stayed, with no Delete button."""
+    entry = make_entry(hass)
+    await setup_entry(hass, entry)
+    registry = dr.async_get(hass)
+    key = instance_key(entry.entry_id)
+    gone = registry.async_get_or_create(
+        config_entry_id=entry.entry_id, identifiers={(DOMAIN, f"{key}_meter_205")}
+    )
+    inverter = next(
+        device
+        for device in dr.async_entries_for_config_entry(registry, entry.entry_id)
+        if (DOMAIN, f"{key}_inverter") in device.identifiers
+    )
+
+    assert await fronius_modbus.async_remove_config_entry_device(hass, entry, gone)
+    assert not await fronius_modbus.async_remove_config_entry_device(
+        hass, entry, inverter
+    )

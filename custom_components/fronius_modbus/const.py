@@ -221,7 +221,8 @@ SENSOR_STATE_OPTIONS = {
     "power_factor_control": _state_values(CONTROL_STATUS),
     "reactive_power_control": _state_values(CONTROL_STATUS),
     "ac_limit_enable": _state_values(AC_LIMIT_STATUS, {2: UNKNOWN_STATE}),
-    "control_mode": _state_values(STORAGE_CONTROL_MODE) + INVERTER_CONTROL_STATE_VALUES,
+    "control_mode": _state_values(STORAGE_CONTROL_MODE),
+    "inverter_controls": [*INVERTER_CONTROL_STATE_VALUES, UNKNOWN_STATE],
     "charge_status": _state_values(CHARGE_STATUS),
     "grid_charging": _state_values(CHARGE_GRID_STATUS),
     "api_modbus_control": _state_values(CONTROL_STATUS),
@@ -237,11 +238,26 @@ def instance_key(entry_id: str) -> str:
     return _NOT_A_KEY_CHARACTER.sub("_", entry_id.lower()).strip("_") or "fronius"
 
 
+def web_api_disabled(values: Mapping[str, Any]) -> bool:
+    """Whether the owner set the entry up without a web login."""
+    return str(values.get(CONF_API_USERNAME, API_USERNAME)) == WEB_API_DISABLED
+
+
 def entry_title(data: Mapping[str, Any]) -> str:
     """The entry's title: its name and the host it serves."""
     host = str(data.get(CONF_HOST, "")).strip()
     name = str(data.get(CONF_NAME, DEFAULT_NAME)).strip() or DEFAULT_NAME
     return f"{name} {host}" if host else name
+
+
+def entry_title_after(
+    title: str, before: Mapping[str, Any], after: Mapping[str, Any]
+) -> str:
+    """The title for changed settings: only a generated one follows them.
+
+    A title the owner gave is theirs (reaudit Z-02, audit F18).
+    """
+    return entry_title(after) if title == entry_title(before) else title
 
 
 def entry_unique_id(data: Mapping[str, Any]) -> str:

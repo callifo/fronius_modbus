@@ -87,6 +87,10 @@ async def test_failures_are_tolerated_inside_the_write_window(
 
 async def test_a_tolerated_outage_is_no_warning(coordinator, inverter_unit, caplog):
     """The inverter restarts its Modbus server after a web write; that is expected."""
+    # A loaded machine, made certain: under phcc's asyncio debug mode every step
+    # then logs a slow-callback warning that names this test's coroutine, and
+    # with it the word "tolerated" (seen once in a full run, 2026-10-11).
+    asyncio.get_running_loop().slow_callback_duration = 0
     coordinator.data = await coordinator._async_update_data()
     coordinator.tolerate_failures_until(10**9)
     inverter_unit.fail_requests(ModbusConnectionError())
@@ -95,7 +99,11 @@ async def test_a_tolerated_outage_is_no_warning(coordinator, inverter_unit, capl
         await coordinator._async_update_data()
         await coordinator._async_update_data()
 
-    levels = [r.levelno for r in caplog.records if "tolerated" in r.getMessage()]
+    levels = [
+        r.levelno
+        for r in caplog.records
+        if r.name == coordinator_module.__name__ and "tolerated" in r.getMessage()
+    ]
     assert levels == [logging.DEBUG, logging.DEBUG]
 
 

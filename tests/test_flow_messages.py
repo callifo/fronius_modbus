@@ -22,6 +22,24 @@ TRANSLATION_FILES = tuple(
 )
 
 
+# Reasons Home Assistant raises inside a helper the flow calls: the source
+# never spells them out, and "already_in_progress" showed as the raw key.
+IMPLIED_BY = {"async_set_unique_id": "already_in_progress"}
+
+
+def _implied(node: ast.AST) -> str | None:
+    if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
+        return None
+    if any(
+        keyword.arg == "raise_on_progress"
+        and isinstance(keyword.value, ast.Constant)
+        and keyword.value.value is False
+        for keyword in node.keywords
+    ):
+        return None
+    return IMPLIED_BY.get(node.func.attr)
+
+
 def _flow_messages() -> set[str]:
     """Every abort reason and error key the flow hands to the frontend.
 
@@ -32,7 +50,10 @@ def _flow_messages() -> set[str]:
     `AbortFlow("...")` raised from a step.
     """
     messages = set()
+    implied = set()
     for node in ast.walk(ast.parse(FLOW.read_text(encoding="utf-8"))):
+        if reason := _implied(node):
+            implied.add(reason)
         if (
             (isinstance(node, ast.keyword) and node.arg == "reason")
             or (
@@ -53,7 +74,7 @@ def _flow_messages() -> set[str]:
             field, message = node.elts
             if isinstance(field, ast.Constant) and field.value in ("base", "host"):
                 messages.add(message)
-    return {
+    return implied | {
         node.value
         for node in messages
         if isinstance(node, ast.Constant) and isinstance(node.value, str)
@@ -84,3 +105,4 @@ def test_the_reader_finds_the_messages_it_is_pointed_at():
 
     assert "cannot_connect" in messages, "an errors[...] assignment"
     assert "invalid_host" in messages, "a message the flow builds itself"
+    assert "already_in_progress" in messages, "a reason a helper raises"

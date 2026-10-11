@@ -12,7 +12,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components import fronius_modbus
 from custom_components.fronius_modbus import config_flow, discovery, froniuswebclient
-from custom_components.fronius_modbus.const import DOMAIN, instance_key
+from custom_components.fronius_modbus.const import DOMAIN, entry_title, instance_key
 from custom_components.fronius_modbus.fronius_modbus_api.device import DeviceIdentity
 from custom_components.fronius_modbus.froniuswebclient import FroniusWebResponseError
 from custom_components.fronius_modbus.token_store import async_get_token_store
@@ -190,6 +190,93 @@ async def test_switching_the_role_asks_for_that_roles_password(hass, monkeypatch
     )
     assert result["type"] is FlowResultType.FORM
     assert result["errors"]["base"] == "missing_api_password"
+
+
+async def _configure(hass, entry, scan_interval=10):
+    """Run Configure on the customer role and enter a password."""
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "host": HOST,
+            "scan_interval": scan_interval,
+            "web_scan_interval": 60,
+            "modbus_restriction": "keep",
+            "api_username": "customer",
+        },
+    )
+    assert result["step_id"] == "password"
+    return await hass.config_entries.options.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+
+
+@pytest.mark.parametrize(
+    ("loaded", "scan_interval", "reloads"),
+    [
+        # A new password alone changes nothing in the entry: no listener fires.
+        (True, 10, 1),
+        # A changed entry reloads through its update listener; one more
+        # reload here would run it twice (audit F24-10).
+        (True, 20, 0),
+        # An entry that is not loaded has no listener at all.
+        (False, 10, 1),
+        (False, 20, 1),
+    ],
+)
+async def test_configure_reloads_what_no_listener_reloads(
+    hass, monkeypatch, loaded, scan_interval, reloads
+):
+    """Audit F04: Configure stored a new token, and the entry kept the old one."""
+    entry = make_entry(hass)
+    monkeypatch.setattr(
+        config_flow, "_validate_input", AsyncMock(return_value={"title": "Fronius"})
+    )
+    reload = AsyncMock(return_value=True)
+    monkeypatch.setattr(hass.config_entries, "async_reload", reload)
+    await _configure(hass, entry)
+    if loaded:
+        entry.mock_state(hass, ConfigEntryState.LOADED)
+    reload.reset_mock()
+
+    result = await _configure(hass, entry, scan_interval)
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert reload.await_count == reloads
+
+
+async def test_a_title_the_owner_gave_survives_every_settings_flow(hass, monkeypatch):
+    """Audit F18: Configure, Reconfigure and Reauth put the generated title back."""
+    entry = make_entry(hass)
+    hass.config_entries.async_update_entry(entry, title="Garage roof")
+    monkeypatch.setattr(
+        config_flow, "_validate_input", AsyncMock(return_value={"title": "Fronius"})
+    )
+    monkeypatch.setattr(
+        hass.config_entries, "async_reload", AsyncMock(return_value=True)
+    )
+
+    await _configure(hass, entry, scan_interval=20)
+    assert entry.title == "Garage roof"
+    await config_flow.async_update_entry_from_input(
+        hass, entry, config_flow.entry_defaults(entry) | {"scan_interval": 30}
+    )
+    assert entry.title == "Garage roof"
+
+
+async def test_a_generated_title_follows_the_host(hass, monkeypatch):
+    entry = make_entry(hass)
+    hass.config_entries.async_update_entry(
+        entry, title=entry_title(config_flow.entry_defaults(entry))
+    )
+    monkeypatch.setattr(
+        hass.config_entries, "async_reload", AsyncMock(return_value=True)
+    )
+    settings = config_flow.entry_defaults(entry) | {"host": "192.0.2.99"}
+
+    await config_flow.async_update_entry_from_input(hass, entry, settings)
+
+    assert entry.title == entry_title(settings)
 
 
 async def test_changing_only_the_host_spelling_keeps_the_stored_token(

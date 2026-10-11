@@ -36,6 +36,7 @@ from .inverter_events import (
     event_texts,
     parse_events,
 )
+from .meter_topology import MeterTopology, parse_meter_topology
 from .token_store import async_get_token_store
 
 _LOGGER = logging.getLogger(__name__)
@@ -148,6 +149,19 @@ class WebData:
     event_log_readable: bool = False
 
 
+# What the web API answers without a login: a lost login keeps it (audit F14).
+_PUBLIC_FIELDS = (
+    "inverter_readings",
+    "inverter_endpoint_missing",
+    "storage_readings",
+    "storage_endpoint_missing",
+    "storage_manufacturer",
+    "storage_model",
+    "storage_serial",
+    "active_events",
+)
+
+
 def _export_limit_summary(config: dict[str, Any] | None) -> dict[str, Any]:
     """Distill the export-limit payload for change-logging."""
     if not isinstance(config, dict) or not config:
@@ -220,20 +234,6 @@ def _derive_api_battery_mode(raw_mode: int | None) -> int | None:
     return None
 
 
-@dataclass(slots=True)
-class MeterTopology:
-    """Which meters the web API reports, and whether it actually answered.
-
-    `confirmed` is the difference between "this device has one meter" and "the
-    question could not be asked": only the former may retire entities (audit A04).
-    """
-
-    unit_ids: list[int]
-    primary_unit_id: int
-    locations: dict[int, int]
-    confirmed: bool
-
-
 def _config_part(config: dict[str, Any] | None, key: str) -> dict[str, Any] | None:
     """A nested part; None when it, or what holds it, has the wrong shape."""
     if config is None:
@@ -253,25 +253,6 @@ def _flag_state(part: dict[str, Any] | None) -> str | None:
     if flag is None:
         return None
     return _enabled_state(flag)
-
-
-def parse_meter_topology(info: dict | None) -> MeterTopology:
-    """The topology an answer describes, or the unconfirmed single-meter default."""
-    default = MeterTopology([DEFAULT_METER_UNIT_ID], DEFAULT_METER_UNIT_ID, {}, False)
-    if not info or not info.get("unit_ids"):
-        return default
-    unit_ids = [int(unit) for unit in info["unit_ids"] if int(unit) > 0]
-    if not unit_ids:
-        return default
-    return MeterTopology(
-        unit_ids=unit_ids,
-        primary_unit_id=int(info.get("primary_unit_id") or unit_ids[0]),
-        locations={
-            int(unit_id): int(location)
-            for unit_id, location in (info.get("locations_by_unit_id") or {}).items()
-        },
-        confirmed=True,
-    )
 
 
 class FroniusWebControl:
@@ -309,6 +290,9 @@ class FroniusWebControl:
         self.data = WebData()
         self._coordinator: Any = None
         self._delayed_refresh_task: asyncio.Task | None = None
+        # A write still in flight at unload must not start a refresh of the
+        # unloaded entry once it returns (audit F12).
+        self._shut_down = False
         self._event_tracker = EventTracker()
         self._event_texts: dict[str, str] | None = None
         self._next_event_log_read = 0.0
@@ -351,6 +335,7 @@ class FroniusWebControl:
 
     def shutdown(self) -> None:
         """Cancel the delayed post-write refresh; called from entry.async_on_unload."""
+        self._shut_down = True
         if self._delayed_refresh_task and not self._delayed_refresh_task.done():
             self._delayed_refresh_task.cancel()
 
@@ -448,7 +433,9 @@ class FroniusWebControl:
 
         _LOGGER.warning("Disabling the Fronius web API after an auth failure: %s", err)
         self._client = None
-        self.data = WebData()
+        self.data = WebData(
+            **{field: getattr(self.data, field) for field in _PUBLIC_FIELDS}
+        )
         await async_get_token_store(self._hass).async_delete_token(
             self._host, self._api_username
         )
@@ -606,14 +593,22 @@ class FroniusWebControl:
         A language file lacks some codes (the German one 200 of 944); those
         read in English rather than as a bare short name.
         """
-        if self._event_texts is None:
-            language = self._hass.config.language.split("-")[0].lower()
-            merged: dict[str, str] = {}
-            for candidate in dict.fromkeys((EVENT_TEXTS_FALLBACK_LANGUAGE, language)):
-                path = EVENT_TEXTS_PATH.format(language=candidate)
-                merged |= event_texts(await self._async_public_read(path))
-            self._event_texts = merged or None
-        return self._event_texts or {}
+        if self._event_texts is not None:
+            return self._event_texts
+        language = self._hass.config.language.split("-")[0].lower()
+        merged: dict[str, str] = {}
+        answered = True
+        for candidate in dict.fromkeys((EVENT_TEXTS_FALLBACK_LANGUAGE, language)):
+            answer = await self._async_public_read(
+                EVENT_TEXTS_PATH.format(language=candidate)
+            )
+            # A file that failed is asked again; one the firmware lacks is not
+            # (audit F15).
+            answered = answered and answer is not None
+            merged |= event_texts(answer)
+        if answered:
+            self._event_texts = merged
+        return merged
 
     async def _async_public_read(self, path: str) -> Any:
         return await self._async_client_job("get_optional_json", path, public=True)
@@ -621,6 +616,8 @@ class FroniusWebControl:
     # -- battery write transition -------------------------------------------------
 
     def _schedule_delayed_web_refresh(self) -> None:
+        if self._shut_down:
+            return
         if self._delayed_refresh_task and not self._delayed_refresh_task.done():
             self._delayed_refresh_task.cancel()
 
@@ -650,8 +647,8 @@ class FroniusWebControl:
     def _publish(self) -> None:
         """Hand the entities the state a write just produced.
 
-        The delayed refresh confirms it minutes later; until then the entity
-        would show the write undone (discussion #6).
+        The delayed refresh confirms it some ten seconds later; until then the
+        entity would show the write undone (discussion #6).
         """
         if self._coordinator is not None:
             self._coordinator.async_set_updated_data(replace(self.data))

@@ -5,7 +5,7 @@
     "step": {
       "user": {
         "title": "Set up Fronius System",
-        "description": "Enter the host, choose the local Web API access role, and set the update intervals and Modbus IP restriction. Minimum interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand. Switching an existing entry to it removes those entities; their history stays.",
+        "description": "Enter the host, choose the local Web API access role, and set the update intervals and Modbus IP restriction. Minimum interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand, with the SunSpec model type int + SF. Switching an existing entry to it removes those entities; their history stays.",
         "data": {
           "host": "Host",
           "scan_interval": "Update interval (seconds)",
@@ -27,7 +27,7 @@
       },
       "reconfigure": {
         "title": "Review Fronius System",
-        "description": "Review the host, the local Web API access role, the update intervals and the Modbus IP restriction. Minimum interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand. Switching an existing entry to it removes those entities; their history stays.",
+        "description": "Review the host, the local Web API access role, the update intervals and the Modbus IP restriction. Minimum interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand, with the SunSpec model type int + SF. Switching an existing entry to it removes those entities; their history stays.",
         "data": {
           "host": "Host",
           "scan_interval": "Update interval (seconds)",
@@ -49,7 +49,7 @@
       },
       "reauth_confirm": {
         "title": "Log in to the Fronius Web API again",
-        "description": "The stored login of this entry is missing or was rejected, for example after the password was changed on the inverter. Choose the access role; the next step asks for its password. If you do not want to use the web API, choose Without the web API. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand. Switching an existing entry to it removes those entities; their history stays.",
+        "description": "The stored login of this entry is missing or was rejected, for example after the password was changed on the inverter. Choose the access role; the next step asks for its password. If you do not want to use the web API, choose Without the web API. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand, with the SunSpec model type int + SF. Switching an existing entry to it removes those entities; their history stays.",
         "data": {
           "api_username": "Web API access role"
         }
@@ -68,6 +68,7 @@
     },
     "abort": {
       "already_configured": "Device is already configured",
+      "already_in_progress": "Setting up this inverter is already in progress.",
       "reconfigure_successful": "Configuration updated successfully.",
       "not_ipv4_address": "Only an inverter announced with an IPv4 address can be added from discovery.",
       "reauth_successful": "Logged in again.",
@@ -75,7 +76,7 @@
     },
     "error": {
       "cannot_connect": "Failed to connect",
-      "cannot_connect_modbus": "Modbus did not answer. Without the web API, switch Modbus TCP on in the inverter first.",
+      "cannot_connect_modbus": "Modbus did not answer. Without the web API, switch Modbus TCP on in the inverter first and set the SunSpec model type to int + SF.",
       "invalid_port": "Invalid port number",
       "invalid_host": "Invalid host address",
       "unsupported_hardware": "Unsupported hardware. See logs.",
@@ -264,7 +265,17 @@
         "name": "Line frequency"
       },
       "inverter_controls": {
-        "name": "Control mode"
+        "name": "Control mode",
+        "state": {
+          "normal": "Normal",
+          "power_reduction": "Power reduction",
+          "constant_reactive_power": "Constant reactive power",
+          "constant_power_factor": "Constant power factor",
+          "power_reduction_constant_reactive_power": "Power reduction,Constant reactive power",
+          "power_reduction_constant_power_factor": "Power reduction,Constant power factor",
+          "constant_reactive_power_constant_power_factor": "Constant reactive power,Constant power factor",
+          "power_reduction_constant_reactive_power_constant_power_factor": "Power reduction,Constant reactive power,Constant power factor"
+        }
       },
       "vref": {
         "name": "Reference voltage"
@@ -397,15 +408,7 @@
           "auto": "Auto",
           "charge": "Charge",
           "discharge": "Discharge",
-          "charge_and_discharge": "Charge and Discharge",
-          "normal": "Normal",
-          "power_reduction": "Power reduction",
-          "constant_reactive_power": "Constant reactive power",
-          "constant_power_factor": "Constant power factor",
-          "power_reduction_constant_reactive_power": "Power reduction,Constant reactive power",
-          "power_reduction_constant_power_factor": "Power reduction,Constant power factor",
-          "constant_reactive_power_constant_power_factor": "Constant reactive power,Constant power factor",
-          "power_reduction_constant_reactive_power_constant_power_factor": "Power reduction,Constant reactive power,Constant power factor"
+          "charge_and_discharge": "Charge and Discharge"
         }
       },
       "charge_status": {
@@ -818,7 +821,7 @@
     "step": {
       "init": {
         "title": "Set up Fronius System",
-        "description": "Review the host, the local Web API access role, the update intervals and the Modbus IP restriction. Minimum interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand. Switching an existing entry to it removes those entities; their history stays.",
+        "description": "Review the host, the local Web API access role, the update intervals and the Modbus IP restriction. Minimum interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand, with the SunSpec model type int + SF. Switching an existing entry to it removes those entities; their history stays.",
         "data": {
           "host": "Host",
           "scan_interval": "Update interval (seconds)",
@@ -841,7 +844,7 @@
     },
     "error": {
       "cannot_connect": "Failed to connect",
-      "cannot_connect_modbus": "Modbus did not answer. Without the web API, switch Modbus TCP on in the inverter first.",
+      "cannot_connect_modbus": "Modbus did not answer. Without the web API, switch Modbus TCP on in the inverter first and set the SunSpec model type to int + SF.",
       "invalid_port": "Invalid port number",
       "invalid_host": "Invalid host address",
       "unsupported_hardware": "Unsupported hardware. See logs.",
@@ -865,14 +868,23 @@
     "modbus_restriction": {
       "options": {
         "keep": "Keep the inverter's setting",
-        "home_assistant": "Restrict Modbus and allow this Home Assistant (hosts already allowed stay)",
-        "off": "Lift the restriction (Modbus open to every host)"
+        "home_assistant": "Restrict control to allowed hosts and allow this Home Assistant (hosts already allowed stay)",
+        "off": "Lift the restriction (every host may control the inverter)"
       }
     }
   },
   "exceptions": {
     "charge_limit_not_in_mode": {
       "message": "The charge limit cannot be changed in the current storage mode."
+    },
+    "limit_blocks_both_ways": {
+      "message": "A limit of 0 W would block charging and discharging at once, which the inverter refuses."
+    },
+    "grid_power_beyond_window": {
+      "message": "The inverter holds a combined charge and discharge limit, for example from another controller, that this grid power would exceed. Select the storage mode again to set the power freely."
+    },
+    "storage_mode_left": {
+      "message": "The inverter is no longer in the selected storage mode, for example after a schedule or another controller changed it. Select the mode again."
     },
     "discharge_limit_not_in_mode": {
       "message": "The discharge limit cannot be changed in the current storage mode."
@@ -924,6 +936,9 @@
     },
     "grid_charge_sources_failed": {
       "message": "The storage mode is set to Charge from Grid, but the inverter's web interface did not allow charging from the grid: {error}"
+    },
+    "grid_charge_sources_login_lost": {
+      "message": "The storage mode is set to Charge from Grid, but without the web login charging from the grid could not be allowed. Log in again when Home Assistant asks for it on the integration."
     },
     "soc_minimum_web_failed": {
       "message": "The Modbus storage reserve is set, but the inverter's web interface did not take it as SoC minimum; the two minimums now differ: {error}"

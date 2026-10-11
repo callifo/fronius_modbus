@@ -10,8 +10,10 @@ from .coordinator import FroniusConfigEntry
 from .entities import FroniusNumberDescription, number_descriptions
 from .entity_base import FroniusEntity
 
-# One write at a time: the inverter answers requests one after the other.
-PARALLEL_UPDATES = 1
+# Unlimited: every write path serialises itself (the controls' and the web
+# control's locks, the Modbus connection's queue), and a burst of values for
+# one web control must reach its lock together to be cut to first and last.
+PARALLEL_UPDATES = 0
 
 
 class FroniusNumber(FroniusEntity, NumberEntity):
@@ -29,6 +31,12 @@ class FroniusNumber(FroniusEntity, NumberEntity):
         """The description's dynamic max, falling back to its static one."""
         dynamic_max = self.entity_description.max_fn(self._runtime)
         return dynamic_max if dynamic_max is not None else super().native_max_value
+
+    @property
+    def native_min_value(self) -> float:
+        """The description's dynamic min, falling back to its static one."""
+        dynamic_min = self.entity_description.min_fn(self._runtime)
+        return dynamic_min if dynamic_min is not None else super().native_min_value
 
     async def async_set_native_value(self, value: float) -> None:
         """Write the value through the description's set_fn, then request a refresh."""

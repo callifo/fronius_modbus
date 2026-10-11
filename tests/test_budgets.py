@@ -48,7 +48,8 @@ LINE_BUDGETS = {
     # 1625 - the base entity and the device info, now entity_base.py
     # 1680 + the inverter event entities
     # 1625 - the description types, now descriptions.py; + the service event entities
-    "entities.py": 1625,
+    # 1560 - the MPPT module sensors, now mppt_entities.py
+    "entities.py": 1560,
 }
 
 # SonarSource's own default. Above it, a function is one somebody has to

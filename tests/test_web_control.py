@@ -17,6 +17,7 @@ from custom_components.fronius_modbus.fronius_modbus_api.exceptions import (
     ControlUnavailable,
 )
 from custom_components.fronius_modbus.froniuswebclient import (
+    ENDPOINT_MISSING,
     FroniusWebAuthError,
     FroniusWebResponseError,
     FroniusWebUnreachable,
@@ -290,6 +291,45 @@ async def test_the_refresh_names_the_active_events_in_the_language_of_home_assis
     assert (event.code, event.text) == ("GEN24-1009", "AFCI-Selbsttest fehlgeschlagen")
 
 
+async def test_a_text_file_that_failed_once_is_read_again(hass):
+    """Audit F15: one failed read of the language file kept English texts until reload."""
+    hass.config.language = "de"
+    client = FakeClientWithEvents()
+    german = client.texts.pop("de")
+    control = make_control(hass, client=client)
+    try:
+        await control.async_refresh()
+        client.texts["de"] = german
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert data.active_events[0].text == "AFCI-Selbsttest fehlgeschlagen"
+
+
+async def test_the_event_texts_are_read_once_when_a_language_has_no_file(hass):
+    """Reaudit W-05: the caching of the texts was untested.
+
+    A file the firmware lacks counted as failed would fetch the English texts,
+    some 64 KB, on every poll.
+    """
+    hass.config.language = "pt-BR"
+    english = {"StateCodes": {"GEN24-1009": "AFCI selftest failed"}}
+    client = FakeClientWithEvents(texts={"en": english, "pt": ENDPOINT_MISSING})
+    control = make_control(hass, client=client)
+    try:
+        for _ in range(3):
+            data = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    text_reads = [
+        path for path in client.reads if path.endswith(("en.json", "pt.json"))
+    ]
+    assert len(text_reads) == 2
+    assert data.active_events[0].text == "AFCI selftest failed"
+
+
 async def test_event_texts_missing_in_a_language_fall_back_to_english(hass):
     hass.config.language = "pt-BR"
     control = make_control(hass, client=FakeClientWithEvents())
@@ -423,6 +463,24 @@ async def test_a_log_entry_survives_an_auth_failure_in_the_same_poll(hass, monke
         control.shutdown()
 
     assert [event.code for event in data.new_events] == ["BYD2-44"]
+
+
+async def test_a_lost_login_keeps_the_public_readings_of_its_poll(hass):
+    """Audit F14: the auth failure reset the data the public reads had just filled."""
+    client = FakeClientWithEvents()
+    control = make_control(hass, client=client)
+
+    def login_rejected():
+        raise FroniusWebAuthError("token rejected")
+
+    client.get_modbus_config = login_rejected
+    try:
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert data.inverter_readings == {"DEVICE_TEMPERATURE_AMBIENTMEAN_01_F32": 41.5}
+    assert data.active_events is not None
 
 
 async def test_a_log_entry_after_a_failed_first_read_is_news(hass):
@@ -815,6 +873,55 @@ def _hold_the_first_write(control) -> asyncio.Event:
 
     control._async_web_job = holding_job
     return release
+
+
+async def test_a_write_that_ends_after_unload_schedules_no_refresh(control):
+    """Audit F12: a write in flight at unload started a refresh of the unloaded entry."""
+    await control.async_refresh()
+    control.shutdown()
+
+    await control.set_backup_reserve(30)
+
+    assert control._delayed_refresh_task is None
+
+
+async def test_a_battery_write_is_confirmed_by_a_refresh_shortly_after(
+    hass, monkeypatch
+):
+    """Audit F16: the confirming refresh was untested.
+
+    Without it a value the inverter refused stayed on screen until the next web poll.
+    """
+    monkeypatch.setattr(web_control, "BATTERY_WRITE_WEB_REFRESH_DELAY_SECONDS", 0)
+    pushed = []
+    control = make_control(hass)
+    control.attach_coordinator(
+        type("Coordinator", (), {"async_set_updated_data": pushed.append})()
+    )
+    try:
+        await control.async_refresh()
+        await control.set_backup_reserve(30)
+        assert pushed[-1].backup_reserved == 30
+        # The inverter did not keep the value.
+        control._client.battery["HYB_BACKUP_RESERVED"] = 5
+
+        await control._delayed_refresh_task
+
+        assert pushed[-1].backup_reserved == 5
+    finally:
+        control.shutdown()
+
+
+async def test_unloading_cancels_a_pending_confirmation_refresh(control):
+    """Audit F16: a refresh still waiting at unload would poll an unloaded entry."""
+    await control.async_refresh()
+    await control.set_backup_reserve(30)
+    pending = control._delayed_refresh_task
+
+    control.shutdown()
+    await asyncio.sleep(0)
+
+    assert pending.cancelled()
 
 
 async def test_a_burst_of_values_reaches_the_device_as_first_and_last(control):

@@ -286,6 +286,20 @@ CHAIN_END_ADDRESS = 40369
 INVERTER_HEADER_ADDRESS = 40069
 
 
+async def test_a_silent_link_behind_an_incomplete_chain_is_a_timeout(connection):
+    """Audit F06: the chain's note made every outage a report, so nothing recycled the link."""
+    unit = connection.for_unit(INVERTER_UNIT_ID)
+    unit.fail_read(CHAIN_END_ADDRESS, IllegalDataAddressError())
+    device = FroniusInverter(unit, INVERTER_UNIT_ID, {})
+    await device.async_update()
+    assert not device.discovery_complete
+
+    unit.fail_requests(ModbusTimeoutError("no answer"))
+
+    with pytest.raises(ModbusTimeoutError):
+        await device.async_update()
+
+
 async def test_a_failed_identity_read_does_not_finish_incomplete_discovery(
     connection, monkeypatch
 ):

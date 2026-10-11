@@ -238,8 +238,10 @@ async def test_a_number_write_reaches_the_register(hass, mock_modbus):
     assert refused.value.translation_key == "charge_limit_not_in_mode"
 
 
-async def test_the_select_changes_the_storage_mode(hass, mock_modbus):
-    entry = make_entry(hass)
+async def test_the_select_changes_the_storage_mode(hass, mock_modbus, monkeypatch):
+    # Without the web API: with a role but no login, Charge from Grid is an error.
+    serve_the_public_endpoints(mock_modbus, monkeypatch)
+    entry = make_entry(hass, api_username="none")
     await setup_entry(hass, entry)
 
     await hass.services.async_call(

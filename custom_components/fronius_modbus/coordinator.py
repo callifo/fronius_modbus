@@ -22,6 +22,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .component_readings import limits_reached
+from .const import web_api_disabled
 from .derived import LoadEstimator, grid_status, throttle_reason
 from .fronius_modbus_api.controls import InverterControls
 from .fronius_modbus_api.device import (
@@ -181,24 +182,32 @@ class FroniusRuntimeData:
         """Switch the storage mode; Charge from Grid also opens the web charge sources."""
         mode = ExtendedMode(code)
         await assume_present(self.storage_control).set_mode(mode)
-        web_control = self.web_control
-        if (
-            mode is ExtendedMode.CHARGE_FROM_GRID
-            and web_control is not None
-            and web_control.configured
+        entry = self.modbus.config_entry
+        if mode is not ExtendedMode.CHARGE_FROM_GRID or web_api_disabled(
+            {**entry.data, **entry.options}
         ):
-            try:
-                await web_control.set_charge_sources(
-                    charge_from_grid=True, charge_from_ac=True
-                )
-            except (ModbusError, RuntimeError, ValueError, OSError) as err:
-                # The Modbus mode is already set and stays; the owner has to
-                # know that grid charging is not (audit F24-02).
-                raise ControlUnavailable(
-                    "grid_charge_sources_failed",
-                    f"Charge from Grid is set, but grid charging was refused: {err}",
-                    error=str(err),
-                ) from err
+            return
+        web_control = self.web_control
+        if web_control is None or not web_control.configured:
+            # The login is lost until reauth; the toggles stay as the inverter
+            # has them, which may hold grid charging at about 500 W.
+            raise ControlUnavailable(
+                "grid_charge_sources_login_lost",
+                "Charge from Grid is set, but grid charging could not be allowed "
+                "without the web login",
+            )
+        try:
+            await web_control.set_charge_sources(
+                charge_from_grid=True, charge_from_ac=True
+            )
+        except (ModbusError, RuntimeError, ValueError, OSError) as err:
+            # The Modbus mode is already set and stays; the owner has to
+            # know that grid charging is not (audit F24-02).
+            raise ControlUnavailable(
+                "grid_charge_sources_failed",
+                f"Charge from Grid is set, but grid charging was refused: {err}",
+                error=str(err),
+            ) from err
 
 
 type FroniusConfigEntry = ConfigEntry[FroniusRuntimeData]

@@ -793,8 +793,8 @@
   {
     "label": "coordinator: refused grid charging is an error",
     "path": "custom_components/fronius_modbus/coordinator.py",
-    "old": "                raise ControlUnavailable(\n                    \"grid_charge_sources_failed\",",
-    "new": "                return\n                raise ControlUnavailable(\n                    \"grid_charge_sources_failed\",",
+    "old": "            raise ControlUnavailable(\n                \"grid_charge_sources_failed\",",
+    "new": "            return\n            raise ControlUnavailable(\n                \"grid_charge_sources_failed\",",
     "tests": "grid_charging_that_the_web_api_refuses_is_an_error"
   },
   {
@@ -1079,9 +1079,9 @@
   },
   {
     "label": "migrations: an entry set up without the web API is recognised",
-    "path": "custom_components/fronius_modbus/migrations.py",
-    "old": "    return _entry_value(entry, CONF_API_USERNAME, API_USERNAME) == WEB_API_DISABLED\n",
-    "new": "    return _entry_value(entry, CONF_API_USERNAME, API_USERNAME) != WEB_API_DISABLED\n",
+    "path": "custom_components/fronius_modbus/const.py",
+    "old": "    return values.get(CONF_API_USERNAME, API_USERNAME) == WEB_API_DISABLED\n",
+    "new": "    return values.get(CONF_API_USERNAME, API_USERNAME) != WEB_API_DISABLED\n",
     "tests": "entry_without_the_web_api_is_not_asked_to_reconfigure"
   },
   {
@@ -2210,5 +2210,19 @@
     "old": "    if chosen:\n        return str(chosen)\n",
     "new": "",
     "tests": "keeps_the_role_its_owner_chose"
+  },
+  {
+    "label": "coordinator: grid charging without the web login is an error",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "        if web_control is None or not web_control.configured:\n",
+    "new": "        if False:\n",
+    "tests": "grid_charging_without_the_web_login"
+  },
+  {
+    "label": "coordinator: an entry without the web API leaves the toggles alone",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "        if mode is not ExtendedMode.CHARGE_FROM_GRID or web_api_disabled(\n",
+    "new": "        if mode is not ExtendedMode.CHARGE_FROM_GRID or False and web_api_disabled(\n",
+    "tests": "grid_charging_without_the_web_api_is_no_error or select_changes_the_storage_mode"
   }
 ]

@@ -934,6 +934,9 @@
     "grid_charge_sources_failed": {
       "message": "Der Speichermodus steht auf „Aus dem Netz laden“, aber die Weboberfläche des Wechselrichters hat das Netzladen nicht freigegeben: {error}"
     },
+    "grid_charge_sources_login_lost": {
+      "message": "Der Speichermodus steht auf Laden aus dem Netz, aber ohne Web-Anmeldung ließ sich das Laden aus dem Netz nicht freigeben. Bitte erneut anmelden, wenn Home Assistant bei der Integration danach fragt."
+    },
     "soc_minimum_web_failed": {
       "message": "Die Modbus-Speicherreserve ist gesetzt, aber die Weboberfläche des Wechselrichters hat sie nicht als SoC-Minimum übernommen; die beiden Minima weichen jetzt ab: {error}"
     }

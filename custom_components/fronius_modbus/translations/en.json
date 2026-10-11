@@ -934,6 +934,9 @@
     "grid_charge_sources_failed": {
       "message": "The storage mode is set to Charge from Grid, but the inverter's web interface did not allow charging from the grid: {error}"
     },
+    "grid_charge_sources_login_lost": {
+      "message": "The storage mode is set to Charge from Grid, but without the web login charging from the grid could not be allowed. Log in again when Home Assistant asks for it on the integration."
+    },
     "soc_minimum_web_failed": {
       "message": "The Modbus storage reserve is set, but the inverter's web interface did not take it as SoC minimum; the two minimums now differ: {error}"
     }

@@ -24,12 +24,12 @@ from .const import (
     ENTITY_PREFIX,
     MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX,
     TECHNICIAN_USERNAME,
-    WEB_API_DISABLED,
     entity_prefix,
     entry_title,
     instance_key,
     ModbusRestriction,
 )
+from .const import web_api_disabled as entry_values_web_api_disabled
 from .component_readings import ONCE_REPORTED_KEYS
 from .entities import expected_unique_ids
 from .entity_base import expected_device_identifiers
@@ -362,7 +362,7 @@ async def _async_stored_role(hass: HomeAssistant, entry: ConfigEntry) -> str:
 
 def web_api_disabled(entry: ConfigEntry) -> bool:
     """Whether the owner set the entry up without a web login."""
-    return _entry_value(entry, CONF_API_USERNAME, API_USERNAME) == WEB_API_DISABLED
+    return entry_values_web_api_disabled({**entry.data, **entry.options})
 
 
 async def async_prepare_entry_token(

@@ -700,6 +700,40 @@ async def test_grid_charging_that_the_web_api_refuses_is_an_error(
     assert runtime.storage_control.extended_mode is ExtendedMode.CHARGE_FROM_GRID
 
 
+@pytest.mark.parametrize("web_control_kept", [True, False])
+async def test_grid_charging_without_the_web_login_is_an_error(
+    hass, entry, connection, web_control_kept
+):
+    """README audit: with the login lost, or never there, the charge sources
+    were skipped without a word, and grid charging could stay at about 500 W.
+    """
+    runtime = await make_runtime(hass, entry, connection)
+    web_control = make_control(hass)
+    web_control._client = None
+    runtime = replace(runtime, web_control=web_control if web_control_kept else None)
+    try:
+        with pytest.raises(ControlUnavailable) as raised:
+            await runtime.async_set_extended_mode(ExtendedMode.CHARGE_FROM_GRID)
+    finally:
+        web_control.shutdown()
+
+    assert raised.value.key == "grid_charge_sources_login_lost"
+    assert runtime.storage_control.extended_mode is ExtendedMode.CHARGE_FROM_GRID
+
+
+async def test_grid_charging_without_the_web_api_is_no_error(hass, connection):
+    """An entry set up without the web API leaves the toggles to the owner."""
+    entry = MockConfigEntry(
+        domain=DOMAIN, data={"host": "192.0.2.1", "api_username": "none"}
+    )
+    entry.add_to_hass(hass)
+    runtime = await make_runtime(hass, entry, connection)
+
+    await runtime.async_set_extended_mode(ExtendedMode.CHARGE_FROM_GRID)
+
+    assert runtime.storage_control.extended_mode is ExtendedMode.CHARGE_FROM_GRID
+
+
 # The meter's per-phase energy counters: model 203 starts at 40069 on this
 # capture, TotWhExpPhA-C at offsets 40/42/44 and TotWhImpPhA-C at 48/50/52.
 _METER_MODEL_ADDRESS = 40069

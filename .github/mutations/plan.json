@@ -2266,5 +2266,40 @@
     "old": "            if mode == MODE_CHARGE_AND_DISCHARGE and -in_rate > out_rate:\n",
     "new": "            if mode == MODE_CHARGE_AND_DISCHARGE and -in_rate >= out_rate:\n",
     "tests": "inside_a_combined_window"
+  },
+  {
+    "label": "identity: an outage makes the identity check due",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "        self._identity_check_due = True\n",
+    "new": "        pass\n",
+    "tests": "firmware_update_during_an_outage"
+  },
+  {
+    "label": "identity: a check that could not read stays due",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "            _LOGGER.debug(\"Identity not read again yet: %s\", error_text(err))\n            return\n",
+    "new": "            _LOGGER.debug(\"Identity not read again yet: %s\", error_text(err))\n            self._identity_check_due = False\n            return\n",
+    "tests": "unread_firmware"
+  },
+  {
+    "label": "identity: an unchanged identity does not reload",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "        if not changed:\n            return\n",
+    "new": "        if False:\n            return\n",
+    "tests": "outage_without_a_firmware_change"
+  },
+  {
+    "label": "identity: the inverter's model 1 is compared",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        if await _read_identity(self._common) != self.identity:\n",
+    "new": "        if False:\n",
+    "tests": "firmware_update_during_an_outage"
+  },
+  {
+    "label": "identity: each meter's model 1 is compared",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "            if identity != info.identity:\n",
+    "new": "            if False:\n",
+    "tests": "firmware_update_during_an_outage"
   }
 ]

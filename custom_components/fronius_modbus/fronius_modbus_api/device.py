@@ -114,14 +114,18 @@ class MeterInfo:
 
     unit_id: int
     identity: DeviceIdentity
+    common: Common
     phases: int
     meter: AcMeter
 
 
-async def _read_identity(unit: ModbusUnit, chain: SunSpecModels) -> DeviceIdentity:
+def _common(unit: ModbusUnit, chain: SunSpecModels) -> Common:
     # Model 1 is mandatory in every SunSpec map, and _scan() has already
     # refused a chain without it - so the lookup cannot be None here.
-    common = Common(unit, cast(SunSpecModel, chain.first(COMMON_MODEL_ID)))
+    return Common(unit, cast(SunSpecModel, chain.first(COMMON_MODEL_ID)))
+
+
+async def _read_identity(common: Common) -> DeviceIdentity:
     await common.async_update()
     return DeviceIdentity(
         manufacturer=common.mn or "",
@@ -203,6 +207,7 @@ class FroniusInverter:
         # the second meter as soon as the first is unplugged.
         self.meter_unit_ids: tuple[int, ...] = tuple(self._meter_units)
         self.identity: DeviceIdentity | None = None
+        self._common: Common | None = None
         self.three_phase = False
         self.inverter: Inverter | None = None
         self.nameplate: Nameplate | None = None
@@ -237,7 +242,7 @@ class FroniusInverter:
         chain, _complete = await _scan(unit)
         if chain.first(*INVERTER_MODEL_IDS) is None:
             raise NotAFroniusInverter("no SunSpec inverter model in the chain")
-        return await _read_identity(unit, chain)
+        return await _read_identity(_common(unit, chain))
 
     @property
     def is_set_up(self) -> bool:
@@ -245,7 +250,7 @@ class FroniusInverter:
         return self.inverter is not None
 
     async def _async_setup(self) -> None:
-        """Read what never changes and place the components, as one step.
+        """Read what changes only with a restart and place the components, as one step.
 
         Everything is built beside the live state and published only when it is
         whole. A failure halfway through leaves the entities on the objects they
@@ -256,7 +261,8 @@ class FroniusInverter:
         inverter_model = chain.first(*INVERTER_MODEL_IDS)
         if inverter_model is None:
             raise NotAFroniusInverter("no SunSpec inverter model in the chain")
-        identity = await _read_identity(self._unit, chain)
+        common = _common(self._unit, chain)
+        identity = await _read_identity(common)
         components = {
             REPORT_INVERTER: self._optional(Inverter, chain, inverter_model.model_id),
             REPORT_NAMEPLATE: self._optional(Nameplate, chain, NAMEPLATE_MODEL_ID),
@@ -275,6 +281,7 @@ class FroniusInverter:
             )
 
         self.identity = identity
+        self._common = common
         self.three_phase = inverter_model.model_id == THREE_PHASE_INVERTER_MODEL_ID
         self.inverter = components[REPORT_INVERTER]
         self.nameplate = components[REPORT_NAMEPLATE]
@@ -367,7 +374,8 @@ class FroniusInverter:
         model = chain.first(*METER_MODEL_IDS)
         if model is None:
             return None
-        identity = await _read_identity(meter_unit, chain)
+        common = _common(meter_unit, chain)
+        identity = await _read_identity(common)
         phases = 1 if model.model_id == SINGLE_PHASE_METER_MODEL_ID else 3
         # An unchanged meter keeps its component, so a poll that fails right
         # after a rediscovery still shows the last readings (audit D02).
@@ -378,9 +386,35 @@ class FroniusInverter:
         return MeterInfo(
             unit_id=unit_id,
             identity=identity,
+            common=common,
             phases=phases,
             meter=meter,
         )
+
+    async def async_identities_changed(self) -> bool:
+        """Whether model 1 of the inverter or of a meter says something new.
+
+        A firmware update restarts the inverter; what setup read would name the
+        old version until a reload. The inverter's read propagates its error,
+        a meter that fails is that meter's failure and counts as unchanged.
+        """
+        if self._common is None:
+            return False
+        if await _read_identity(self._common) != self.identity:
+            return True
+        for info in self.meters.values():
+            try:
+                identity = await _read_identity(info.common)
+            except ModbusConnectionError:
+                raise
+            except ModbusError as err:
+                _LOGGER.debug(
+                    "Meter on unit %s did not answer: %s", info.unit_id, error_text(err)
+                )
+                continue
+            if identity != info.identity:
+                return True
+        return False
 
     def _component(self, name: str) -> Any:
         if name.startswith("meter_"):

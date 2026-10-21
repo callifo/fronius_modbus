@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- After a firmware update the device page kept the old firmware version, and a Solar API repair the update had settled stayed open, until Home Assistant restarted. Once the inverter answers again after an outage, the integration reads the version of the inverter and its meters again and reloads the entry if it changed.
+
 ## 1.3.0b1
 
 A beta on 1.2.0 with the fixes of a full audit and its re-audits. Storage writes now judge the inverter's live registers and refuse, with a reason, what the firmware would refuse; updates from callifo keep entities, names, titles and the chosen role; enabling Modbus TCP keeps an RS485 client served; the README lists every entity. No new entry migration; unique ids and entity ids do not change.

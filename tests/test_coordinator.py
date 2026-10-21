@@ -375,3 +375,76 @@ async def test_a_mode_written_while_a_poll_runs_is_neither_dropped_nor_undone(
     assert written
     assert storage.extended_mode is ExtendedMode.BLOCK_CHARGING
     assert inverter_unit.holding[STORAGE_CONTROL_MODE_ADDRESS] == 3
+
+
+# Model 1 and its Vr (firmware version) in the captured fixture, the same on every unit.
+COMMON_ADDRESS = 40002
+VERSION_ADDRESS = 40044
+VERSION_LENGTH = 8
+
+
+def _set_version(unit, version: str) -> None:
+    encoded = version.encode().ljust(VERSION_LENGTH * 2, b"\0")
+    for offset in range(VERSION_LENGTH):
+        unit.holding[VERSION_ADDRESS + offset] = int.from_bytes(
+            encoded[2 * offset : 2 * offset + 2], "big"
+        )
+
+
+async def _away_and_back(coordinator, inverter_unit) -> None:
+    inverter_unit.fail_requests(ModbusConnectionError())
+    await coordinator.async_refresh()
+    assert not coordinator.last_update_success
+    inverter_unit.fail_requests(None)
+    await coordinator.async_refresh()
+
+
+@pytest.mark.parametrize("updated", ["inverter_unit", "meter_unit"])
+async def test_a_firmware_update_during_an_outage_reloads_the_entry(
+    coordinator, inverter_unit, hass, entry, monkeypatch, request, updated
+):
+    """The device page kept the firmware read at setup until a restart.
+
+    A firmware update restarts the inverter; the identity read at setup then
+    named the old version, and the Solar API repair judged it too.
+    """
+    await coordinator.async_refresh()
+    reload = MagicMock()
+    monkeypatch.setattr(hass.config_entries, "async_schedule_reload", reload)
+
+    _set_version(request.getfixturevalue(updated), "1.42.9-1")
+    await _away_and_back(coordinator, inverter_unit)
+
+    reload.assert_called_once_with(entry.entry_id)
+    await coordinator.async_refresh()
+    reload.assert_called_once()
+
+
+async def test_an_outage_without_a_firmware_change_does_not_reload(
+    coordinator, inverter_unit, hass, monkeypatch
+):
+    await coordinator.async_refresh()
+    reload = MagicMock()
+    monkeypatch.setattr(hass.config_entries, "async_schedule_reload", reload)
+
+    await _away_and_back(coordinator, inverter_unit)
+
+    reload.assert_not_called()
+
+
+async def test_an_unread_firmware_is_read_again_on_the_next_poll(
+    coordinator, inverter_unit, hass, entry, monkeypatch
+):
+    """A check that failed is still due: it must not count as unchanged."""
+    await coordinator.async_refresh()
+    reload = MagicMock()
+    monkeypatch.setattr(hass.config_entries, "async_schedule_reload", reload)
+    _set_version(inverter_unit, "1.42.9-1")
+    inverter_unit.fail_read(COMMON_ADDRESS, ServerDeviceFailureError())
+
+    await _away_and_back(coordinator, inverter_unit)
+    reload.assert_not_called()
+
+    inverter_unit.fail_read(COMMON_ADDRESS, None)
+    await coordinator.async_refresh()
+    reload.assert_called_once_with(entry.entry_id)

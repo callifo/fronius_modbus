@@ -246,6 +246,9 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
         # by the first refresh. One that answers only later has no entities
         # yet, so the entry reloads once to build them (audit F03).
         self._built_for: frozenset[str] | None = None
+        # Set by an outage: a firmware update restarts the inverter, so the
+        # identity read at setup is read again once it answers.
+        self._identity_check_due = False
         self._timeouts = 0
         self._tolerate_until = 0.0
         self._tolerated_failures = 0
@@ -277,6 +280,7 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
             raise UpdateFailed("no sub-system answered")
         self._log_sub_system_changes(report)
         self._reload_for_new_sub_systems(report)
+        await self._reload_for_a_new_identity()
         self._build_controls()
         return ModbusPoll(
             report=report,
@@ -302,6 +306,7 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
             self._tolerated_failures = 0
             self._tolerate_until = 0.0
             await self.device.unit.disconnect()
+        self._identity_check_due = True
         failure = DeviceUnreachable if isinstance(err, NO_ANSWER) else UpdateFailed
         text = error_text(err)
         # A cause whose text was cut would bring it back in the coordinator's
@@ -339,6 +344,25 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
             ", ".join(sorted(new)),
         )
         self._built_for = self._built_for | new
+        self.hass.config_entries.async_schedule_reload(
+            assume_present(self.config_entry).entry_id
+        )
+
+    async def _reload_for_a_new_identity(self) -> None:
+        if not self._identity_check_due:
+            return
+        try:
+            changed = await self.device.async_identities_changed()
+        except ModbusError as err:
+            _LOGGER.debug("Identity not read again yet: %s", error_text(err))
+            return
+        self._identity_check_due = False
+        if not changed:
+            return
+        _LOGGER.info(
+            "The inverter reports a new identity, such as a firmware update; "
+            "reloading the entry to apply it"
+        )
         self.hass.config_entries.async_schedule_reload(
             assume_present(self.config_entry).entry_id
         )

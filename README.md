@@ -43,7 +43,7 @@ What changes for users of [callifo/fronius_modbus](https://github.com/callifo/fr
 - **Minimum Home Assistant version: 2026.9.0** (upstream: 2024.4.0).
 - The integration no longer opens its own Modbus TCP connection with its own `pymodbus`. It asks Home Assistant's built-in `modbus` integration for a unit on a shared connection (`async_get_unit`), so it can coexist with other integrations talking to the same inverter without pymodbus version conflicts.
 - Registers are decoded by the `modbus-connection` library from the SunSpec model definitions, including sentinel values and scale factors, instead of by hand-written decoding.
-- If a firmware update changes the inverter's SunSpec model chain, the integration reloads the config entry automatically.
+- If a firmware update changes the inverter's SunSpec model chain, or the version the inverter or a meter reports once it answers again, the integration reloads the config entry automatically.
 - The Web API is polled on its own interval (new option, default 60 s) instead of once per Modbus poll. A slow or unreachable Web API no longer stalls the Modbus poll or blocks the Modbus entities.
 - An energy total still ignores a drop and an implausible jump, but accepts a genuine counter reset, such as a replaced meter, after three readings that agree. Upstream refuses every lower value for good.
 - A control set to the value the inverter already holds writes nothing, over Modbus and over the Web API.
@@ -558,7 +558,7 @@ automation:
 
 - Firmware without the web interface's event endpoints leaves `Active event`, `Active events` and their service counterparts unknown, and `Inverter event` and `Service event` unavailable.
 - Models other than the verified setup (see [Supported devices](#supported-devices)) are untested.
-- A module temperature or a limit sensor that appears later, for example after a firmware update, gets its entity at the next reload of the entry.
+- A module temperature or a limit sensor that appears later gets its entity at the next reload of the entry. A firmware update reloads the entry on its own.
 - The Web API cannot be reached through an IPv6 address; set the entry up with an IPv4 address or a host name.
 - A module temperature entity that stays unknown for good, because the module is gone or because a development build created it as a placeholder, can be disabled in Home Assistant. It cannot be deleted: the integration keeps every module the inverter once reported, so one incomplete answer cannot take a real module with its history.
 - When the last smart meter is removed, its entities stay unavailable; delete them in Home Assistant, where they show as no longer provided. A device the inverter no longer reports, such as a removed meter or battery, can then be deleted on its device page. An empty meter list from the inverter is not taken as proof that no meter exists, so one short answer cannot delete meter entities and their history.

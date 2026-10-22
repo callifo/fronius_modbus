@@ -1471,8 +1471,8 @@ async def test_an_entry_of_a_failed_poll_notifies_once(
 
     The failed poll left the event unavailable, and event.received ignores a
     change away from unavailable: an entry fired in the poll that brought the
-    event back, or into an event still unavailable, never ran the README's
-    automation.
+    event back, or into an event still unavailable, never ran the documented
+    notification automation.
     """
     mock_modbus.add_unit(201, like=METER_UNIT_ID)
     monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientWithEvents)

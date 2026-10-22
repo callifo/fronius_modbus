@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Changed
+- The full documentation moved to the [wiki](https://github.com/Varitras/fronius_modbus/wiki): every entity with its English and German name, source and range, the battery and inverter controls, the inverter's events, how data updates, examples, troubleshooting and migration. The README keeps the overview, installation, setup and removal.
+
 ### Fixed
 - After a firmware update the device page kept the old firmware version, and a Solar API repair the update had settled stayed open, until Home Assistant restarted. Once the inverter answers again after an outage, the integration reads the version of the inverter and its meters again and reloads the entry if it changed.
 - The Modbus IP restriction choice that allows this Home Assistant now says what it does while the inverter's restriction is off: Home Assistant becomes the only allowed host, so another device that controls the inverter over Modbus must be added in the inverter's web interface. The README says so too, and corrects the grid status rule, the storage diagnostic sensors, the rounding of the Modbus storage reserve, the diagnostics while the inverter is offline, and the order of the negative-price example (the rate before the AC limit is enabled).

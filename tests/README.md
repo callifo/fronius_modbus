@@ -70,7 +70,6 @@ because the thing it prevents happened, here or in a sibling project.
 | `test_guards.py` | No guard binds itself to one source file; every guard is listed; `check.sh` matches CI |
 | `test_imports.py` | Every module imports outside the author's own tree - the `from config.custom_components...` line that shipped on main cannot ship again |
 | `test_entity_table.py` | Every legacy unique-id key is still registered and translated (`legacy_unique_ids.json`) |
-| `test_readme_entities.py` | The README's marked entity tables name every entity on its device and platform, by its English name, and no other |
 | `test_api_is_ha_free.py` | The device library under `fronius_modbus_api/` imports no Home Assistant |
 | `test_mutation_harness.py` | The mutation run fails loudly rather than printing "all caught" without having checked |
 | `test_mypy_scope.py` | Every module is in the mypy scope or carries a written reason why not yet |

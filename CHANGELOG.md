@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 1.3.0
+
+Released 2026-10-22. First stable release of 1.3. It contains everything from 1.3.0b1 below, and the changes here on 1.3.0b1. No new entry migration; unique ids and entity ids do not change. The documentation moved to the wiki.
 
 ### Changed
 - The full documentation moved to the [wiki](https://github.com/Varitras/fronius_modbus/wiki): every entity with its English and German name, source and range, the battery and inverter controls, the inverter's events, how data updates, examples, troubleshooting and migration. The README keeps the overview, installation, setup and removal.

@@ -494,8 +494,8 @@ class FroniusWebCoordinator(DataUpdateCoordinator["WebData"]):
     async def _async_recheck_topology(self) -> None:
         """Look once more for meters a failed topology read hid (audit A04).
 
-        Only a confirmed answer that names a unit the entry does not serve
-        reloads it, so a permanently broken endpoint cannot loop.
+        Only a confirmed answer reloads the entry, once, so a permanently
+        broken endpoint cannot loop.
         """
         entry = assume_present(self.config_entry)
         runtime = getattr(entry, "runtime_data", None)

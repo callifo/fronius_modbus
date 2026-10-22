@@ -50,8 +50,8 @@ What changes for users of [callifo/fronius_modbus](https://github.com/callifo/fr
 
 **Setup and security**
 
-- The checkbox "Restrict Modbus to this IP" became the option **Modbus IP restriction** with three choices (it is the inverter's *Restrict Control* setting: which hosts may control it over Modbus); the default keeps the inverter's setting. Upstream lifted the restriction whenever the box was unchecked, and a checked box replaced the allowed hosts with Home Assistant's address; allowing Home Assistant now adds its address to the hosts already allowed. Migrated entries keep their choice: checked becomes "restrict and allow this Home Assistant", unchecked becomes "keep".
-- Enabling Modbus TCP keeps the RS485 ports' roles and the `TCP & RTU` mode; it sets what the integration needs (see [What the Web API setup does](#what-the-web-api-setup-does)). Upstream writes a fixed block that moves both RS485 ports to master and turns the `TCP & RTU` mode into TCP.
+- The checkbox "Restrict Modbus to this IP" became the option **Modbus IP restriction** with three choices (it is the inverter's *Restrict Control* setting: which hosts may control it over Modbus); the default keeps the inverter's setting. Upstream lifted the restriction whenever the box was unchecked, and a checked box replaced the allowed hosts with Home Assistant's address; allowing Home Assistant now adds its address to the hosts already allowed while the restriction is on; while it is off, Home Assistant's address becomes the only allowed host. Migrated entries keep their choice: checked becomes "restrict and allow this Home Assistant", unchecked becomes "keep".
+- Enabling Modbus TCP keeps the RS485 ports' roles and Modbus RTU served alongside TCP; it sets what the integration needs (see [What the Web API setup does](#what-the-web-api-setup-does)). Upstream writes a fixed block that moves both RS485 ports to master and turns RTU served alongside TCP into TCP alone.
 - The stored Web API token is readable by Home Assistant only, and it is deleted once no entry uses its host and role.
 - The Web API login is optional: an entry can run on Modbus alone. Upstream requires it since 0.2.9.
 - The inverter is discovered over mDNS and offered under Discovered, and an entry set up by IPv4 address follows it to a new address (see [Discovery](#discovery)). Upstream has no discovery.
@@ -112,8 +112,7 @@ With the Web API login, the integration can:
 - switch the SunSpec model type to `int + SF`, the one the integration reads. When the inverter's Modbus is on and uses `float`, the setup asks first: an external device that reads the float models may no longer work after the switch. Declining leaves the inverter as it is and ends the setup.
 - handle the inverter's *Restrict Control* setting by choice (see [Configuration](#configuration))
 - set what the integration reads and controls: the entry's port and inverter address (502 and 1; an entry migrated from callifo 0.2.x keeps the ones it was set up with), meter address offset 200, and *Allow Control* switched on, which the Modbus controls need
-- keep the RS485 ports' master or slave role; a Modbus server that serves RTU alone becomes `TCP & RTU`, and the `TCP & RTU` mode stays as it is
-- derive configured smart meter addresses from `/api/components/PowerMeter/readable`
+- keep the RS485 ports' master or slave role; an RS485 port that serves Modbus RTU keeps serving it, with the Modbus server via TCP added next to it, and a setup that already serves both stays as it is
 - expose authenticated battery controls from `/api/config/batteries`
 - expose Modbus service diagnostics from `/api/config/modbus`
 - expose the export limit control, with the `technician` role
@@ -137,7 +136,7 @@ Needs the web API, so not there:
 
 `Charge from Grid` then stops at around 500 W unless grid charging is allowed in the inverter's own battery configuration; allow it once in the inverter web UI (see [Charging from the grid](#charging-from-the-grid)).
 
-Switching an existing entry to *Without the web API* deletes its stored token and removes the entities that need the web API; their recorded history stays in Home Assistant. The removal waits for a start at which the list of smart meters can be read, like every cleanup; if the inverter reports no meter at all, delete those entities yourself. Switching back to a role creates them again and writes the Modbus settings, the IP restriction choice included, since nothing wrote them without the login. An entry that keeps a role but lost its login is not the same: its web entities stay, unavailable, and Home Assistant asks for a new login.
+Switching an existing entry to *Without the web API* deletes its stored token and removes the entities that need the web API; their recorded history stays in Home Assistant. The removal waits for a start at which the list of smart meters can be read, like every cleanup; if the inverter reports no meter at all, delete those entities yourself. Switching back to a role creates them again and writes the Modbus settings, the IP restriction choice included, since nothing wrote them without the login. An entry that keeps a role but lost its login is not the same: its web entities stay, unavailable, and Home Assistant asks for a new login. Until then the entry does not poll the inverter's web interface at all, also not the endpoints that need no login: the component sensors, the events and the throttle reason's limit flags are missing, and only the first smart meter is read.
 
 ### Migrating older entries
 
@@ -153,7 +152,7 @@ Set during setup; change them later with **Configure** or **Reconfigure** on the
 | Update interval (seconds)         | 10                          | The Modbus poll. Minimum 5.                                                                                                                                                                                                                                                          |
 | Web API update interval (seconds) | 60                          | The Web API poll, separate from the Modbus poll. 5 to 3600.                                                                                                                                                                                                                          |
 | Web API access role               | `customer`                  | `customer`, `technician` or *Without the web API*; see [Web API role](#web-api-role).                                                                                                                                                                                                |
-| Modbus IP restriction             | Keep the inverter's setting | What the integration does with the inverter's *Restrict Control* setting, which hosts may control the inverter over Modbus, whenever it writes the Modbus settings: keep it, restrict control and allow this Home Assistant (its address is added to the hosts already allowed), or lift it so every host may control the inverter. Reading over Modbus stays open to every host either way. A lifted restriction stays lifted until you choose otherwise. |
+| Modbus IP restriction             | Keep the inverter's setting | What the integration does with the inverter's *Restrict Control* setting, which hosts may control the inverter over Modbus, whenever it writes the Modbus settings: keep it, restrict control and allow this Home Assistant (its address is added to the hosts already allowed; if the restriction was off, it becomes the only allowed host, so add any other device that controls the inverter over Modbus in the inverter's web UI), or lift it so every host may control the inverter. Reading over Modbus stays open to every host either way. A lifted restriction stays lifted until you choose otherwise. |
 
 ## Data updates
 
@@ -191,7 +190,7 @@ The entities are grouped into devices: the inverter, the battery storage, and ea
 <!-- entities: inverter sensor -->
 | Entity | Description |
 | ------ | ----------- |
-| Grid status | `on_grid_operating`, `on_grid`, `off_grid_operating` or `off_grid`, based on meter and inverter frequency. An inverter frequency of 53 Hz means off-grid operation; normally it is 50 Hz. While the inverter sleeps, the meter frequency is checked for the connection. |
+| Grid status | From the meter and the inverter frequency: `on_grid_operating` with both within 50 ± 0.2 Hz; `off_grid_operating` with the meter outside that band while the inverter runs at 45 to 55 Hz (in backup operation about 53 Hz was observed); `on_grid` while the inverter stands still (below 1 Hz) and the meter sees the grid; `off_grid` with both below 1 Hz. Any other combination is unknown. |
 | Throttle reason | Why the inverter holds its output back right now; see [Throttle reason](#throttle-reason). |
 | Status<br>Vendor status | The SunSpec operating state (`St`) and the Fronius vendor state code (`StVnd`). |
 | Event severity | The Modbus event bits (`EvtVnd2`); the events themselves come from the web interface, see [Inverter events](#inverter-events). |
@@ -212,8 +211,8 @@ The entities are grouped into devices: the inverter, the battery storage, and ea
 | State of charge | The current battery level (`ChaState`). |
 | Charge status | `holding` / `charging` / `discharging` (plus `off`, `empty`, `full`, `testing`). |
 | Modbus storage reserve | Model 124 `MinRsvPct`. Not the SoC minimum of the inverter's own UI; see [Two minimum SoC values](#two-minimum-soc-values). |
-| Core storage control mode | The raw storage control register (`StorCtl_Mod`); diagnostic. `Storage Control Mode` is the one to set. |
-| Charging power<br>Discharging power | The charge and discharge rates in percent (`InWRte`, `OutWRte`) the current mode holds; diagnostic. |
+| Core storage control mode | The storage control register (`StorCtl_Mod`) as the direction the battery is driven: in `Charge from Grid` it shows `charge`, in `Discharge to Grid` `discharge`; diagnostic. `Storage Control Mode` is the one to set. |
+| Charging power<br>Discharging power | The charge and discharge rates (`InWRte`, `OutWRte`) the current mode holds, in percent of `WChaMax`; a negative rate is a grid mode's power; diagnostic. |
 | Charge/discharge reference power | `WChaMax`, the power the rates are a percentage of; diagnostic. |
 | Grid charging | Whether the storage may charge from the grid (`ChaGriSet`); diagnostic. |
 | Capacity<br>Maximum charge rate<br>Maximum discharge rate | The battery's nameplate (model 120); diagnostic. |
@@ -358,7 +357,7 @@ If Web API credentials are configured, the integration exposes both Modbus batte
 | Discharge limit | The maximum discharging power in watts. |
 | Grid charge power | The charging power in watts when the storage is charged from the grid. Grid charging has been reported to reach only about 50% of the set power. |
 | Grid discharge power | The discharging power in watts when the storage is discharged to the grid. |
-| Modbus storage reserve | Model 124 `MinRsvPct`, the reserve the inverter applies under Modbus storage control. Whole numbers only. While the SoC mode is `manual` it is mirrored to `SoC Minimum (Web API)` and must not exceed `SoC Maximum`. |
+| Modbus storage reserve | Model 124 `MinRsvPct`, the reserve the inverter applies under Modbus storage control. A whole percent from 5 to 100; a fractional value is rounded. While the SoC mode is `manual` it is mirrored to `SoC Minimum (Web API)` and must not exceed `SoC Maximum`. |
 
 Which control each mode uses:
 
@@ -394,7 +393,7 @@ The inverter keeps two independent switches, and the entities follow them:
 | Entity | Description |
 | ------ | ----------- |
 | Self-consumption optimisation | `HYB_EM_MODE`: `Automatic` or `Manual`. Does not change the SoC window. |
-| Target feed in | Manual Fronius target feed-in in watts. Positive values target feed-in, negative values target grid consumption, which the inverter then targets even when PV power is available. Ignored by the inverter when battery charging is unavailable. Only available while `Self-consumption optimisation` is `Manual` (`HYB_EM_MODE=1`). |
+| Target feed in | Manual Fronius target feed-in in watts. Positive values target feed-in, negative values target grid consumption, which the inverter then targets even when PV power is available. Reported, not documented by Fronius: the inverter ignores it while battery charging is unavailable. Only available while `Self-consumption optimisation` is `Manual` (`HYB_EM_MODE=1`). |
 | Web API SoC mode | `BAT_M0_SOC_MODE`: `Automatic` or `Manual`. The SoC window below is only writable while it is `Manual`. |
 | SoC Maximum | `BAT_M0_SOC_MAX`. Only available while `Web API SoC mode` is `Manual`, and it must not be set below `SoC Minimum (Web API)`. |
 | SoC Minimum (Web API) | `BAT_M0_SOC_MIN`, the minimum shown in the inverter's own UI. Only available while `Web API SoC mode` is `Manual`. |
@@ -510,16 +509,17 @@ automation:
                 entity_id: sensor.electricity_price
                 below: 0
             sequence:
-              - action: select.select_option
-                target:
-                  entity_id: select.fronius_ac_limit_enable
-                data:
-                  option: enabled
+              # The rate first: enabling first would apply the old limit for a moment.
               - action: number.set_value
                 target:
                   entity_id: number.fronius_ac_limit_rate
                 data:
                   value: 0
+              - action: select.select_option
+                target:
+                  entity_id: select.fronius_ac_limit_enable
+                data:
+                  option: enabled
           - conditions:
               - condition: state
                 entity_id: select.fronius_ac_limit_enable
@@ -567,7 +567,7 @@ automation:
 
 ## Troubleshooting
 
-- **Diagnostics:** Settings -> Devices & services -> Fronius Modbus -> device -> Download diagnostics. The download includes which sub-systems the last poll read and which failed, the Web API values, and the raw SunSpec register map; serial numbers and the Modbus restriction IP are redacted. It also works while the inverter is offline.
+- **Diagnostics:** Settings -> Devices & services -> Fronius Modbus -> device -> Download diagnostics. The download includes which sub-systems the last poll read and which failed, the Web API values, and the raw SunSpec register map; serial numbers and the Modbus restriction IP are redacted. It also works while the inverter is offline, as long as the entry was loaded before it went offline.
 - **New login:** Home Assistant shows *Reauthentication required* on the integration when an entry has no valid token for its host and role, for example after the password was changed on the inverter. Follow it to enter the role's password again, or choose *Without the web API* to run the entry on Modbus alone.
 - **Repairs:**
   - *Disable Fronius Solar API on older firmware* appears on firmware below 1.40.7-1 with the Solar API switched on, for an entry with a Web API role. It offers to switch the Solar API off until the inverter is updated.

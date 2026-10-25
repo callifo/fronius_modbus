@@ -195,3 +195,14 @@ Inverter
 - https://www.fronius.com/~/downloads/Solar%20Energy/Operating%20Instructions/42,0410,2649.pdf
 - https://github.com/binsentsu/home-assistant-solaredge-modbus/
 - https://github.com/bigramonk/byd_charging
+
+
+### Load sensor reliability and diagnostics
+
+Load is calculated from fresh adjacent inverter/primary-meter reads. Signed
+negative balances are preserved: with additional AC generation (such as a balcony
+solar inverter), this is household consumption minus that other generation,
+not total household consumption. Invalid or stale samples remain unknown;
+values are never clamped to zero or replaced with old readings. See [load calculation reliability](docs/load-calculation.md)
+for meter/battery sign conventions, timing limits, tests, and installation/rollback
+instructions, especially when applying the fix to a newer upstream version.

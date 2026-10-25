@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import re
 import time
 from datetime import timedelta
@@ -173,15 +174,10 @@ STORAGE_DATA_KEYS = (
 
 BATTERY_WRITE_MODBUS_RECOVERY_SECONDS = 30.0
 BATTERY_WRITE_WEB_REFRESH_DELAY_SECONDS = 10.0
-# Load is derived from separate inverter/meter polls, so keep a small skew guard.
+# Bound the entire adjacent request window, including waits/retries, not just
+# completion-time skew. Modbus does not expose device acquisition timestamps.
 LOAD_MAX_SAMPLE_SKEW_SECONDS = 0.5
-# Fronius occasionally drops inverter AC power to ~0 for one poll while PV is clearly active.
-LOAD_GLITCH_MIN_EXPORT_W = 1000.0
-LOAD_GLITCH_MAX_ABS_INVERTER_W = 50.0
-LOAD_GLITCH_MIN_PV_W = 1000.0
-# During strong battery charging on Verto, meter export can exceed inverter AC power and
-# the simple grid-meter formula produces bogus negative/zero load values.
-LOAD_STORAGE_CHARGE_MIN_W = 1000.0
+LOAD_DIAGNOSTIC_INTERVAL_SECONDS = 300.0
 
 
 class FroniusCoordinator(DataUpdateCoordinator):
@@ -293,55 +289,19 @@ class Hub:
         self._battery_write_transition_warned = False
         self._delayed_web_refresh_task: asyncio.Task | None = None
         self._last_export_limit_summary: dict[str, Any] | None = None
-        self._last_good_load_w: float | None = None
-        self._last_good_inverter_power_w: float | None = None
-        self._consecutive_bad_load_polls = 0
+        self._next_load_warning_ts = 0.0
 
     def _meter_prefix(self, unit_id: int) -> str:
         return f"meter_{int(unit_id)}_"
 
-    def _reset_bad_load_tracking(self) -> None:
-        self._consecutive_bad_load_polls = 0
-
-    def _set_load(
-        self,
-        load_w: float,
-        *,
-        cache: bool = False,
-        inverter_power: float | None = None,
-    ) -> None:
-        load_value = round(float(load_w), 2)
-        self.data["load"] = load_value
-        if cache:
-            self._last_good_load_w = load_value
-            if inverter_power is not None:
-                self._last_good_inverter_power_w = float(inverter_power)
-        self._reset_bad_load_tracking()
-
-    def _is_inverter_power_glitch(
-        self,
-        *,
-        candidate_load: float,
-        meter_power: float,
-        inverter_power: float,
-    ) -> bool:
-        pv_power = self.data.get("pv_power")
-        pv_active = self._client.is_numeric(pv_power) and float(pv_power) >= LOAD_GLITCH_MIN_PV_W
-        previous_inverter_active = self._last_good_inverter_power_w is not None and (
-            self._last_good_inverter_power_w >= LOAD_GLITCH_MIN_PV_W
-        )
-        return (
-            candidate_load < 0
-            and meter_power <= -LOAD_GLITCH_MIN_EXPORT_W
-            and abs(inverter_power) <= LOAD_GLITCH_MAX_ABS_INVERTER_W
-            and (pv_active or previous_inverter_active)
-        )
-
-    def _apply_glitch_load_fallback(self) -> None:
-        self._consecutive_bad_load_polls += 1
-        # Keep one last-good value for a single bad poll, then fall back to unavailable.
-        if self._consecutive_bad_load_polls == 1 and self._last_good_load_w is not None:
-            self.data["load"] = self._last_good_load_w
+    def _reject_load(self, reason: str, **details: Any) -> None:
+        """Explain rejected samples without warning on every coordinator update."""
+        now = time.monotonic()
+        log = _LOGGER.debug
+        if now >= self._next_load_warning_ts:
+            log = _LOGGER.warning
+            self._next_load_warning_ts = now + LOAD_DIAGNOSTIC_INTERVAL_SECONDS
+        log("Fronius load unknown for %s: %s; %s", self._host, reason, details)
 
     def _solar_api_warning_issue_id(self) -> str | None:
         if self._config_entry is None:
@@ -518,6 +478,24 @@ class Hub:
 
     async def _async_refresh_optional_data(self) -> None:
         self.data["load"] = None
+        if self._client.meter_configured:
+            if self._client.primary_meter_unit_id not in self._client._meter_unit_ids:
+                self.data["load"] = None
+                self.data["grid_status"] = None
+
+            primary = self._client.primary_meter_unit_id
+            meter_addresses = sorted(self._client._meter_unit_ids, key=lambda unit: unit != primary)
+            for meter_address in meter_addresses:
+                await self._async_optional_poll(
+                    f"meter {meter_address}",
+                    self._client.read_meter_data,
+                    unit_id=meter_address,
+                    is_primary=meter_address == self._client.primary_meter_unit_id,
+                    stale_keys=self._meter_data_keys(meter_address),
+                )
+                if meter_address == primary:
+                    self._apply_modbus_load_data()
+
         await self._async_optional_poll(
             "inverter status",
             self._client.read_inverter_status_data,
@@ -533,20 +511,6 @@ class Hub:
             self._client.read_inverter_controls_data,
             stale_keys=INVERTER_CONTROL_DATA_KEYS,
         )
-
-        if self._client.meter_configured:
-            if self._client.primary_meter_unit_id not in self._client._meter_unit_ids:
-                self.data["load"] = None
-                self.data["grid_status"] = None
-
-            for meter_address in self._client._meter_unit_ids:
-                await self._async_optional_poll(
-                    f"meter {meter_address}",
-                    self._client.read_meter_data,
-                    unit_id=meter_address,
-                    is_primary=meter_address == self._client.primary_meter_unit_id,
-                    stale_keys=self._meter_data_keys(meter_address),
-                )
 
         if self._client.mppt_configured:
             await self._async_optional_poll(
@@ -567,8 +531,6 @@ class Hub:
                 self._client.read_inverter_storage_data,
                 stale_keys=STORAGE_DATA_KEYS,
             )
-
-        self._apply_modbus_load_data()
 
         if self.web_api_configured:
             try:
@@ -795,64 +757,59 @@ class Hub:
         self.data['api_modbus_restriction_ip'] = restriction.get('ip')
 
     def _apply_modbus_load_data(self) -> None:
+        """Calculate only from a fresh primary-meter snapshot; never reuse load."""
         self.data["load"] = None
         if not self._client.meter_configured:
-            self._reset_bad_load_tracking()
             return
 
-        primary_unit_id = self._client.primary_meter_unit_id
-        meter_prefix = self._meter_prefix(primary_unit_id)
-        meter_location = self._as_int(self.data.get(f"{meter_prefix}location"))
-        meter_power = self.data.get(f"{meter_prefix}power")
-        inverter_power = self.data.get("acpower")
-        inverter_sample_ts, meter_sample_ts = self._client.get_load_sample_timestamps(primary_unit_id)
-        if meter_sample_ts is None or meter_power is None or not self._client.is_numeric(meter_power):
-            self._reset_bad_load_tracking()
-            return
-        meter_power_f = float(meter_power)
+        primary = self._client.primary_meter_unit_id
+        prefix = self._meter_prefix(primary)
+        location = self._as_int(self.data.get(f"{prefix}location"))
+        meter = self.data.get(f"{prefix}power")
+        inverter = self.data.get("acpower")
+        inverter_window, meter_window = self._client.get_load_sample_windows(primary)
 
-        if meter_location == 1 or (
-            meter_location is not None and 256 <= meter_location <= 511
-        ):
-            self._set_load(-meter_power_f, cache=meter_power_f <= 0)
-            return
+        def finite_number(value: Any) -> bool:
+            return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
-        if meter_location != 0:
-            self._reset_bad_load_tracking()
-            return
+        now = time.monotonic()
 
-        if (
-            inverter_sample_ts is None
-            or inverter_power is None
-            or not self._client.is_numeric(inverter_power)
-            or abs(inverter_sample_ts - meter_sample_ts) > LOAD_MAX_SAMPLE_SKEW_SECONDS
-        ):
-            # Do not mix inverter and meter values from different poll moments.
-            self._reset_bad_load_tracking()
-            return
-        inverter_power_f = float(inverter_power)
+        def fresh_window(window) -> bool:
+            return (
+                window is not None
+                and all(finite_number(value) for value in window)
+                and window[0] <= window[1] <= now
+                and now - window[0] <= LOAD_MAX_SAMPLE_SKEW_SECONDS
+            )
 
-        candidate_load = meter_power_f + inverter_power_f
-        if self._is_inverter_power_glitch(
-            candidate_load=candidate_load,
-            meter_power=meter_power_f,
-            inverter_power=inverter_power_f,
-        ):
-            self._apply_glitch_load_fallback()
+        if not finite_number(meter) or not fresh_window(meter_window):
+            self._reject_load("missing, invalid or stale meter sample", meter=meter, window=meter_window)
             return
 
-        storage_charge_power = self.data.get("storage_charge_power")
-        if (
-            candidate_load < 0
-            and self.storage_configured
-            and self._client.is_numeric(storage_charge_power)
-            and float(storage_charge_power) >= LOAD_STORAGE_CHARGE_MIN_W
-        ):
-            # Battery charging can make the simple formula lie; prefer unavailable over bogus 0 W.
-            self._reset_bad_load_tracking()
+        # Load/subload meters directly measure signed net consumption. A hidden
+        # generator can legitimately make this negative (Fronius meter convention).
+        if location == 1 or (location is not None and 256 <= location <= 511):
+            self.data["load"] = round(-float(meter), 2)
             return
+        if location != 0:
+            self._reject_load("unsupported primary meter location", location=location)
+            return
+        if not finite_number(inverter) or not fresh_window(inverter_window):
+            self._reject_load("missing, invalid or stale inverter sample", inverter=inverter, window=inverter_window)
+            return
+        window_seconds = max(inverter_window[1], meter_window[1]) - min(inverter_window[0], meter_window[0])
 
-        self._set_load(max(candidate_load, 0.0), cache=True, inverter_power=inverter_power_f)
+        # Signed total AC output already includes the DC-coupled battery's
+        # contribution. Adding/subtracting DC storage power would count it twice.
+        # Preserve signed net demand: additional AC generation behind the grid
+        # meter makes this household consumption minus that generation. Its sign
+        # cannot distinguish valid generation from asynchronous device samples.
+        candidate = float(inverter) + float(meter)
+        self.data["load"] = round(candidate, 2)
+        _LOGGER.debug(
+            "Fronius load balance: inverter=%s W meter=%s W load=%s W request_window=%.3f s",
+            inverter, meter, candidate, window_seconds,
+        )
 
     async def refresh_web_data(self) -> None:
         if not self._webclient:

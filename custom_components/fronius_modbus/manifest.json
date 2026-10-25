@@ -9,4 +9,9 @@
     "issue_tracker": "https://github.com/callifo/fronius_modbus/issues",
     "requirements": ["pymodbus>=3.13.1"],
     "version": "0.3.4"
+    "categories": [
+        "energy.solar_batteries",
+        "energy.backup_power",
+        "energy.meters_monitoring"
+    ]
   }

@@ -10,8 +10,8 @@
     "requirements": ["pymodbus>=3.13.1"],
     "version": "0.3.4",
     "categories": [
+        "energy",
         "energy.solar_batteries",
-        "energy.backup_power",
-        "energy.meters_monitoring"
+        "energy.backup_power"
     ]
   }

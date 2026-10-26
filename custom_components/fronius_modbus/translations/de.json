@@ -103,42 +103,42 @@
       "ext_control_mode": {
         "name": "Speicher-Steuermodus",
         "state": {
-          "Auto": "Automatisch",
-          "PV Charge Limit": "PV-Ladebegrenzung",
-          "Discharge Limit": "Entladebegrenzung",
-          "PV Charge and Discharge Limit": "PV-Lade- und Entladebegrenzung",
-          "Charge from Grid": "Aus dem Netz laden",
-          "Discharge to Grid": "Ins Netz entladen",
-          "Block Discharging": "Entladen sperren",
-          "Block Charging": "Laden sperren"
+          "auto": "Automatisch",
+          "pv charge limit": "PV-Ladebegrenzung",
+          "discharge limit": "Entladebegrenzung",
+          "pv charge and discharge limit": "PV-Lade- und Entladebegrenzung",
+          "charge from grid": "Aus dem Netz laden",
+          "discharge to grid": "Ins Netz entladen",
+          "block discharging": "Entladen sperren",
+          "block charging": "Laden sperren"
         }
       },
       "api_battery_mode": {
         "name": "Batterie-API-Modus",
         "state": {
-          "Auto": "Automatisch",
-          "Manual": "Manuell"
+          "auto": "Automatisch",
+          "manual": "Manuell"
         }
       },
       "ac_limit_enable": {
         "name": "AC-Begrenzung aktivieren",
         "state": {
-          "Disabled": "Deaktiviert",
-          "Enabled": "Aktiviert"
+          "disabled": "Deaktiviert",
+          "enabled": "Aktiviert"
         }
       },
       "power_factor_enable": {
         "name": "Leistungsfaktor-Steuerung",
         "state": {
-          "Disabled": "Deaktiviert",
-          "Enabled": "Aktiviert"
+          "disabled": "Deaktiviert",
+          "enabled": "Aktiviert"
         }
       },
       "conn": {
         "name": "Wechselrichterverbindung",
         "state": {
-          "Disabled": "Deaktiviert",
-          "Enabled": "Aktiviert"
+          "disabled": "Deaktiviert",
+          "enabled": "Aktiviert"
         }
       }
     },
@@ -176,48 +176,48 @@
       "pv_connection": {
         "name": "PV-Verbindung",
         "state": {
-          "Disconnected": "Getrennt",
-          "Connected": "Verbunden",
-          "Available": "Bereit",
-          "Operating": "Aktiv"
+          "disconnected": "Getrennt",
+          "connected": "Verbunden",
+          "available": "Bereit",
+          "operating": "Aktiv"
         }
       },
       "ecp_connection": {
         "name": "Netzverbindung",
         "state": {
-          "Disconnected": "Getrennt",
-          "Connected": "Verbunden"
+          "disconnected": "Getrennt",
+          "connected": "Verbunden"
         }
       },
       "status": {
         "name": "Status",
         "state": {
-          "Off": "Aus",
-          "Sleeping": "Schlafmodus",
-          "Starting": "Startvorgang",
-          "Normal": "Normalbetrieb",
-          "Throttled": "Abgeregelt",
-          "Shutdown": "Abgeschaltet",
-          "Fault": "Fehler",
-          "Standby": "Bereit"
+          "off": "Aus",
+          "sleeping": "Schlafmodus",
+          "starting": "Startvorgang",
+          "normal": "Normalbetrieb",
+          "throttled": "Abgeregelt",
+          "shutdown": "Abgeschaltet",
+          "fault": "Fehler",
+          "standby": "Bereit"
         }
       },
       "statusvendor": {
         "name": "Herstellerstatus",
         "state": {
-          "Off": "Aus",
-          "Sleeping": "Schlafmodus",
-          "Starting": "Startvorgang",
-          "Normal": "Normalbetrieb",
-          "Throttled": "Abgeregelt",
-          "Shutdown": "Abgeschaltet",
-          "Fault": "Fehler",
-          "Standby": "Bereit",
-          "No solarnet": "Keine SolarNet-Verbindung",
-          "No inverter communication": "Keine Wechselrichter-Kommunikation",
-          "Overcurrent solarnet": "SolarNet-Überstrom",
-          "Firmware updating": "Firmware-Update läuft",
-          "ACFI event": "ACFI-Auslösung"
+          "off": "Aus",
+          "sleeping": "Schlafmodus",
+          "starting": "Startvorgang",
+          "normal": "Normalbetrieb",
+          "throttled": "Abgeregelt",
+          "shutdown": "Abgeschaltet",
+          "fault": "Fehler",
+          "standby": "Bereit",
+          "no solarnet": "Keine SolarNet-Verbindung",
+          "no inverter communication": "Keine Wechselrichter-Kommunikation",
+          "overcurrent solarnet": "SolarNet-Überstrom",
+          "firmware updating": "Firmware-Update läuft",
+          "acfi event": "ACFI-Auslösung"
         }
       },
       "line_frequency": {
@@ -241,38 +241,38 @@
       "grid_status": {
         "name": "Netzstatus",
         "state": {
-          "Off grid": "Vom Netz getrennt",
-          "Off grid operating": "Inselbetrieb",
-          "On grid": "Am Netz",
-          "On grid operating": "Netzbetrieb aktiv"
+          "off grid": "Vom Netz getrennt",
+          "off grid operating": "Inselbetrieb",
+          "on grid": "Am Netz",
+          "on grid operating": "Netzbetrieb aktiv"
         }
       },
       "conn": {
         "name": "Verbindungssteuerung",
         "state": {
-          "Disabled": "Deaktiviert",
-          "Enabled": "Aktiviert"
+          "disabled": "Deaktiviert",
+          "enabled": "Aktiviert"
         }
       },
       "wmaxlim_ena": {
         "name": "Leistungsbegrenzung aktiv",
         "state": {
-          "Disabled": "Deaktiviert",
-          "Enabled": "Aktiviert"
+          "disabled": "Deaktiviert",
+          "enabled": "Aktiviert"
         }
       },
       "outpfset_ena": {
         "name": "Fester Leistungsfaktor aktiv",
         "state": {
-          "Disabled": "Deaktiviert",
-          "Enabled": "Aktiviert"
+          "disabled": "Deaktiviert",
+          "enabled": "Aktiviert"
         }
       },
       "varpct_ena": {
         "name": "Blindleistungsbegrenzung aktiv",
         "state": {
-          "Disabled": "Deaktiviert",
-          "Enabled": "Aktiviert"
+          "disabled": "Deaktiviert",
+          "enabled": "Aktiviert"
         }
       },
       "phvpha": {
@@ -314,9 +314,9 @@
       "ac_limit_enable": {
         "name": "AC-Leistungsbegrenzung aktiv",
         "state": {
-          "Disabled": "Deaktiviert",
-          "Enabled": "Aktiviert",
-          "Unknown": "Unbekannt"
+          "disabled": "Deaktiviert",
+          "enabled": "Aktiviert",
+          "unknown": "Unbekannt"
         }
       },
       "isolation_resistance": {
@@ -340,8 +340,8 @@
       "api_modbus_control": {
         "name": "Web-API-Modbus aktiv",
         "state": {
-          "Disabled": "Deaktiviert",
-          "Enabled": "Aktiviert"
+          "disabled": "Deaktiviert",
+          "enabled": "Aktiviert"
         }
       },
       "api_modbus_sunspec_mode": {
@@ -350,8 +350,8 @@
       "api_modbus_restriction": {
         "name": "Web-API-Modbus-IP-Beschränkung",
         "state": {
-          "Disabled": "Deaktiviert",
-          "Enabled": "Aktiviert"
+          "disabled": "Deaktiviert",
+          "enabled": "Aktiviert"
         }
       },
       "api_modbus_restriction_ip": {
@@ -360,30 +360,30 @@
       "control_mode": {
         "name": "Interner Speicher-Steuermodus",
         "state": {
-          "Auto": "Automatisch",
-          "Charge": "Ladebetrieb",
-          "Discharge": "Entladebetrieb",
-          "Charge and Discharge": "Lade-/Entladebetrieb",
-          "Normal": "Normal",
-          "Power reduction": "Leistungsreduzierung",
-          "Constant reactive power": "Konstante Blindleistung",
-          "Constant power factor": "Konstanter Leistungsfaktor",
-          "Power reduction,Constant reactive power": "Leistungsreduzierung,Konstante Blindleistung",
-          "Power reduction,Constant power factor": "Leistungsreduzierung,Konstanter Leistungsfaktor",
-          "Constant reactive power,Constant power factor": "Konstante Blindleistung,Konstanter Leistungsfaktor",
-          "Power reduction,Constant reactive power,Constant power factor": "Leistungsreduzierung,Konstante Blindleistung,Konstanter Leistungsfaktor"
+          "auto": "Automatisch",
+          "charge": "Ladebetrieb",
+          "discharge": "Entladebetrieb",
+          "charge and discharge": "Lade-/Entladebetrieb",
+          "normal": "Normal",
+          "power reduction": "Leistungsreduzierung",
+          "constant reactive power": "Konstante Blindleistung",
+          "constant power factor": "Konstanter Leistungsfaktor",
+          "power reduction,constant reactive power": "Leistungsreduzierung,Konstante Blindleistung",
+          "power reduction,constant power factor": "Leistungsreduzierung,Konstanter Leistungsfaktor",
+          "constant reactive power,constant power factor": "Konstante Blindleistung,Konstanter Leistungsfaktor",
+          "power reduction,constant reactive power,constant power factor": "Leistungsreduzierung,Konstante Blindleistung,Konstanter Leistungsfaktor"
         }
       },
       "charge_status": {
         "name": "Ladestatus",
         "state": {
-          "Off": "Aus",
-          "Empty": "Leer",
-          "Discharging": "Entladen",
-          "Charging": "Laden",
-          "Full": "Voll",
-          "Holding": "Erhaltung",
-          "Testing": "Testbetrieb"
+          "off": "Aus",
+          "empty": "Leer",
+          "discharging": "Entladen",
+          "charging": "Laden",
+          "full": "Voll",
+          "holding": "Erhaltung",
+          "testing": "Testbetrieb"
         }
       },
       "max_charge": {
@@ -416,10 +416,10 @@
       "storage_connection": {
         "name": "Speicherverbindung",
         "state": {
-          "Disconnected": "Getrennt",
-          "Connected": "Verbunden",
-          "Available": "Bereit",
-          "Operating": "Aktiv"
+          "disconnected": "Getrennt",
+          "connected": "Verbunden",
+          "available": "Bereit",
+          "operating": "Aktiv"
         }
       },
       "storage_temperature": {
@@ -434,8 +434,8 @@
       "grid_charging": {
         "name": "Netzladen",
         "state": {
-          "Disabled": "Deaktiviert",
-          "Enabled": "Aktiviert"
+          "disabled": "Deaktiviert",
+          "enabled": "Aktiviert"
         }
       },
       "whrtg": {

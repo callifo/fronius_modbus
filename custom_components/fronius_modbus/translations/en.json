@@ -106,56 +106,56 @@
       "ext_control_mode": {
         "name": "Storage Control Mode",
         "state": {
-          "Auto": "Auto",
-          "PV Charge Limit": "PV Charge Limit",
-          "Discharge Limit": "Discharge Limit",
-          "PV Charge and Discharge Limit": "PV Charge and Discharge Limit",
-          "Charge from Grid": "Charge from Grid",
-          "Discharge to Grid": "Discharge to Grid",
-          "Block Discharging": "Block Discharging",
-          "Block Charging": "Block Charging"
+          "auto": "Auto",
+          "pv_charge_limit": "PV Charge Limit",
+          "discharge_limit": "Discharge Limit",
+          "pv_charge_and_discharge_limit": "PV Charge and Discharge Limit",
+          "charge_from_grid": "Charge from Grid",
+          "discharge_to_grid": "Discharge to Grid",
+          "block_discharging": "Block Discharging",
+          "block_charging": "Block Charging"
         }
       },
       "api_battery_mode": {
         "name": "Battery API mode",
         "state": {
-          "Auto": "Auto",
-          "Manual": "Manual"
+          "auto": "Auto",
+          "manual": "Manual"
         }
       },
       "ac_limit_enable": {
         "name": "AC limit enable",
         "state": {
-          "Disabled": "Disabled",
-          "Enabled": "Enabled"
+          "disabled": "Disabled",
+          "enabled": "Enabled"
         }
       },
       "power_factor_enable": {
         "name": "Power factor control",
         "state": {
-          "Disabled": "Disabled",
-          "Enabled": "Enabled"
+          "disabled": "Disabled",
+          "enabled": "Enabled"
         }
       },
-      "Conn": {
+      "conn": {
         "name": "Inverter connection",
         "state": {
-          "Disabled": "Disabled",
-          "Enabled": "Enabled"
+          "disabled": "Disabled",
+          "enabled": "Enabled"
         }
       }
     },
     "sensor": {
-      "A": {
+      "a": {
         "name": "AC current"
       },
-      "AphA": {
+      "apha": {
         "name": "AC current L1"
       },
-      "AphB": {
+      "aphb": {
         "name": "AC current L2"
       },
-      "AphC": {
+      "aphc": {
         "name": "AC current L3"
       },
       "acpower": {
@@ -179,48 +179,48 @@
       "pv_connection": {
         "name": "PV connection",
         "state": {
-          "Disconnected": "Disconnected",
-          "Connected": "Connected",
-          "Available": "Available",
-          "Operating": "Operating"
+          "disconnected": "Disconnected",
+          "connected": "Connected",
+          "available": "Available",
+          "operating": "Operating"
         }
       },
       "ecp_connection": {
         "name": "Electrical connection",
         "state": {
-          "Disconnected": "Disconnected",
-          "Connected": "Connected"
+          "disconnected": "Disconnected",
+          "connected": "Connected"
         }
       },
       "status": {
         "name": "Status",
         "state": {
           "Off": "Off",
-          "Sleeping": "Sleeping",
-          "Starting": "Starting",
-          "Normal": "Normal",
-          "Throttled": "Throttled",
-          "Shutdown": "Shutdown",
-          "Fault": "Fault",
-          "Standby": "Standby"
+          "sleeping": "Sleeping",
+          "starting": "Starting",
+          "normal": "Normal",
+          "throttled": "Throttled",
+          "shutdown": "Shutdown",
+          "fault": "Fault",
+          "standby": "Standby"
         }
       },
       "statusvendor": {
         "name": "Vendor status",
         "state": {
-          "Off": "Off",
-          "Sleeping": "Sleeping",
-          "Starting": "Starting",
-          "Normal": "Normal",
-          "Throttled": "Throttled",
-          "Shutdown": "Shutdown",
-          "Fault": "Fault",
-          "Standby": "Standby",
-          "No solarnet": "No solarnet",
-          "No inverter communication": "No inverter communication",
-          "Overcurrent solarnet": "Overcurrent solarnet",
-          "Firmware updating": "Firmware updating",
-          "ACFI event": "ACFI event"
+          "off": "Off",
+          "sleeping": "Sleeping",
+          "starting": "Starting",
+          "normal": "Normal",
+          "throttled": "Throttled",
+          "shutdown": "Shutdown",
+          "fault": "Fault",
+          "standby": "Standby",
+          "no_solarnet": "No solarnet",
+          "no_inverter_communication": "No inverter communication",
+          "overcurrent_solarnet": "Overcurrent solarnet",
+          "firmware_updating": "Firmware updating",
+          "acfi_event": "ACFI event"
         }
       },
       "line_frequency": {
@@ -244,68 +244,68 @@
       "grid_status": {
         "name": "Grid status",
         "state": {
-          "Off grid": "Off grid",
-          "Off grid operating": "Off grid operating",
-          "On grid": "On grid",
-          "On grid operating": "On grid operating"
+          "off_grid": "Off grid",
+          "off_grid_operating": "Off grid operating",
+          "on_grid": "On grid",
+          "on_grid_operating": "On grid operating"
         }
       },
-      "Conn": {
+      "conn": {
         "name": "Connection control",
         "state": {
-          "Disabled": "Disabled",
-          "Enabled": "Enabled"
+          "disabled": "Disabled",
+          "enabled": "Enabled"
         }
       },
-      "WMaxLim_Ena": {
+      "wmaxlim_ena": {
         "name": "Throttle control",
         "state": {
-          "Disabled": "Disabled",
-          "Enabled": "Enabled"
+          "disabled": "Disabled",
+          "enabled": "Enabled"
         }
       },
-      "OutPFSet_Ena": {
+      "outpfset_ena": {
         "name": "Fixed power factor status",
         "state": {
-          "Disabled": "Disabled",
-          "Enabled": "Enabled"
+          "disabled": "Disabled",
+          "enabled": "Enabled"
         }
       },
-      "VArPct_Ena": {
+      "varpct_ena": {
         "name": "Limit VAr control",
         "state": {
-          "Disabled": "Disabled",
-          "Enabled": "Enabled"
+          "disabled": "Disabled",
+          "enabled": "Enabled"
         }
       },
-      "PhVphA": {
+      "phvpha": {
         "name": "AC voltage L1-N"
       },
-      "PhVphB": {
+      "phvphb": {
         "name": "AC voltage L2-N"
       },
-      "PhVphC": {
+      "phvphc": {
         "name": "AC voltage L3-N"
       },
-      "PPV": {
+      "ppv": {
         "name": "AC voltage Line to Line"
       },
-      "PPVphAB": {
+      "ppvphab": {
         "name": "AC voltage L1-L2"
       },
-      "PPVphBC": {
+      "ppvphbc": {
         "name": "AC voltage L2-L3"
       },
-      "PPVphCA": {
+      "ppvphca": {
         "name": "AC voltage L3-L1"
       },
-      "WphA": {
+      "wpha": {
         "name": "Power L1"
       },
-      "WphB": {
+      "wphb": {
         "name": "Power L2"
       },
-      "WphC": {
+      "wphc": {
         "name": "Power L3"
       },
       "unit_id": {
@@ -320,9 +320,9 @@
       "ac_limit_enable": {
         "name": "AC limit enabled",
         "state": {
-          "Disabled": "Disabled",
-          "Enabled": "Enabled",
-          "Unknown": "Unknown"
+          "disabled": "Disabled",
+          "enabled": "Enabled",
+          "unknown": "Unknown"
         }
       },
       "isolation_resistance": {
@@ -346,8 +346,8 @@
       "api_modbus_control": {
         "name": "Web API Modbus control",
         "state": {
-          "Disabled": "Disabled",
-          "Enabled": "Enabled"
+          "disabled": "Disabled",
+          "enabled": "Enabled"
         }
       },
       "api_modbus_sunspec_mode": {
@@ -356,8 +356,8 @@
       "api_modbus_restriction": {
         "name": "Web API Modbus restriction",
         "state": {
-          "Disabled": "Disabled",
-          "Enabled": "Enabled"
+          "disabled": "Disabled",
+          "enabled": "Enabled"
         }
       },
       "api_modbus_restriction_ip": {
@@ -366,30 +366,30 @@
       "control_mode": {
         "name": "Core storage control mode",
         "state": {
-          "Auto": "Auto",
-          "Charge": "Charge",
-          "Discharge": "Discharge",
-          "Charge and Discharge": "Charge and Discharge",
-          "Normal": "Normal",
-          "Power reduction": "Power reduction",
-          "Constant reactive power": "Constant reactive power",
-          "Constant power factor": "Constant power factor",
-          "Power reduction,Constant reactive power": "Power reduction,Constant reactive power",
-          "Power reduction,Constant power factor": "Power reduction,Constant power factor",
-          "Constant reactive power,Constant power factor": "Constant reactive power,Constant power factor",
-          "Power reduction,Constant reactive power,Constant power factor": "Power reduction,Constant reactive power,Constant power factor"
+          "auto": "Auto",
+          "charge": "Charge",
+          "discharge": "Discharge",
+          "charge_and_discharge": "Charge and Discharge",
+          "normal": "Normal",
+          "power_reduction": "Power reduction",
+          "constant_reactive_power": "Constant reactive power",
+          "constant_power_factor": "Constant power factor",
+          "power_reduction,constant_reactive_power": "Power reduction,Constant reactive power",
+          "power_reduction,constant_power_factor": "Power reduction,Constant power factor",
+          "Constant reactive power,constant_power_factor": "Constant reactive power,Constant power factor",
+          "power_reduction,constant_reactive_power,constant_power_factor": "Power reduction,Constant reactive power,Constant power factor"
         }
       },
       "charge_status": {
         "name": "Charge status",
         "state": {
-          "Off": "Off",
-          "Empty": "Empty",
-          "Discharging": "Discharging",
-          "Charging": "Charging",
-          "Full": "Full",
-          "Holding": "Holding",
-          "Testing": "Testing"
+          "off": "Off",
+          "empty": "Empty",
+          "discharging": "Discharging",
+          "charging": "Charging",
+          "full": "Full",
+          "holding": "Holding",
+          "testing": "Testing"
         }
       },
       "max_charge": {
@@ -422,10 +422,10 @@
       "storage_connection": {
         "name": "Storage connection",
         "state": {
-          "Disconnected": "Disconnected",
-          "Connected": "Connected",
-          "Available": "Available",
-          "Operating": "Operating"
+          "disconnected": "Disconnected",
+          "connected": "Connected",
+          "available": "Available",
+          "operating": "Operating"
         }
       },
       "storage_temperature": {
@@ -440,17 +440,17 @@
       "grid_charging": {
         "name": "Grid charging",
         "state": {
-          "Disabled": "Disabled",
-          "Enabled": "Enabled"
+          "disabled": "Disabled",
+          "enabled": "Enabled"
         }
       },
-      "WHRtg": {
+      "whrtg": {
         "name": "Capacity"
       },
-      "MaxChaRte": {
+      "maxcharte": {
         "name": "Maximum charge rate"
       },
-      "MaxDisChaRte": {
+      "maxdischarte": {
         "name": "Maximum discharge rate"
       },
       "soc": {

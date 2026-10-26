@@ -105,7 +105,7 @@ class FroniusModbusSelect(FroniusModbusBaseEntity, SelectEntity):
             await self._hub.set_ac_limit_enable(new_mode)
         elif self._key == 'power_factor_enable':
             await self._hub.set_power_factor_enable(new_mode)
-        elif self._key == 'Conn':
+        elif self._key == 'conn':
             await self._hub.set_conn_status(new_mode)
 
         # Update coordinator data will trigger entity updates

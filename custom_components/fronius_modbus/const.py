@@ -45,8 +45,8 @@ SUPPORTED_MANUFACTURERS = ['Fronius']
 SUPPORTED_MODELS = ['Primo GEN24', 'Symo GEN24', 'Verto']
 
 API_BATTERY_MODE = {
-    0: 'Auto',
-    1: 'Manual',
+    0: 'auto',
+    1: 'manual',
 }
 
 API_SOC_MODE = {
@@ -55,14 +55,14 @@ API_SOC_MODE = {
 }
 
 STORAGE_EXT_CONTROL_MODE = {
-    0: 'Auto',
-    1: 'PV Charge Limit',
-    2: 'Discharge Limit',
-    3: 'PV Charge and Discharge Limit',
-    4: 'Charge from Grid',
-    5: 'Discharge to Grid',
-    6: 'Block Discharging',
-    7: 'Block Charging',
+    0: 'auto',
+    1: 'pv_charge_limit',
+    2: 'discharge_limit',
+    3: 'pv_charge_and_discharge_limit',
+    4: 'charge_from_grid',
+    5: 'discharge_to_grid',
+    6: 'block_discharging',
+    7: 'block_charging',
 }
 
 STORAGE_MODBUS_SELECT_TYPES = [
@@ -79,10 +79,10 @@ STORAGE_API_SWITCH_TYPES = [
 ]
 
 STORAGE_MODBUS_NUMBER_TYPES = [
-    ['grid_discharge_power', 'grid_discharge_power', {'min': 0, 'max': 10100, 'step': 10, 'mode':'box', 'unit': 'W', 'max_key': 'MaxDisChaRte'}],
-    ['grid_charge_power', 'grid_charge_power', {'min': 0, 'max': 10100, 'step': 10, 'mode':'box', 'unit': 'W', 'max_key': 'MaxChaRte'}],
-    ['discharge_limit', 'discharge_limit',  {'min': 0, 'max': 10100, 'step': 10, 'mode':'box', 'unit': 'W', 'max_key': 'MaxDisChaRte'}],
-    ['charge_limit', 'charge_limit', {'min': 0, 'max': 10100, 'step': 10, 'mode':'box', 'unit': 'W', 'max_key': 'MaxChaRte'}],
+    ['grid_discharge_power', 'grid_discharge_power', {'min': 0, 'max': 10100, 'step': 10, 'mode':'box', 'unit': 'W', 'max_key': 'maxdischarte'}],
+    ['grid_charge_power', 'grid_charge_power', {'min': 0, 'max': 10100, 'step': 10, 'mode':'box', 'unit': 'W', 'max_key': 'maxcharte'}],
+    ['discharge_limit', 'discharge_limit',  {'min': 0, 'max': 10100, 'step': 10, 'mode':'box', 'unit': 'W', 'max_key': 'maxdischarte'}],
+    ['charge_limit', 'charge_limit', {'min': 0, 'max': 10100, 'step': 10, 'mode':'box', 'unit': 'W', 'max_key': 'maxcharte'}],
     ['soc_minimum', 'soc_minimum', {'min': 5, 'max': 100, 'step': 1, 'mode':'box', 'unit': '%'}],
 ]
 
@@ -102,9 +102,9 @@ INVERTER_WEB_NUMBER_TYPES = [
 ]
 
 INVERTER_SELECT_TYPES = [
-    ['ac_limit_enable', 'ac_limit_enable', {0: 'Disabled', 1: 'Enabled'}],
-    ['power_factor_enable', 'power_factor_enable', {0: 'Disabled', 1: 'Enabled'}],
-    ['Conn', 'Conn', {0: 'Disabled', 1: 'Enabled'}],
+    ['ac_limit_enable', 'ac_limit_enable', {0: 'disabled', 1: 'enabled'}],
+    ['power_factor_enable', 'power_factor_enable', {0: 'disabled', 1: 'enabled'}],
+    ['conn', 'conn', {0: 'disabled', 1: 'enabled'}],
 ]
 
 INVERTER_API_SWITCH_TYPES = [
@@ -116,8 +116,8 @@ INVERTER_API_BUTTON_TYPES = [
 ]
 
 INVERTER_SENSOR_TYPES = {
-    'A': ['A', 'A', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-ac', None],
-    'AphA': ['AphA', 'AphA', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-ac', None],
+    'a': ['a', 'a', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-ac', None],
+    'apha': ['apha', 'apha', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-ac', None],
     'acpower': ['acpower', 'acpower', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:lightning-bolt', None],
     'var': ['var', 'var', None, SensorStateClass.MEASUREMENT, 'var', 'mdi:sine-wave', None],
     'acenergy': ['acenergy', 'acenergy', SensorDeviceClass.ENERGY, SensorStateClass.TOTAL_INCREASING, 'Wh', 'mdi:lightning-bolt', None],
@@ -136,11 +136,11 @@ INVERTER_SENSOR_TYPES = {
 
     'grid_status': ['grid_status', 'grid_status', None, None, None, None, EntityCategory.DIAGNOSTIC],
 
-    'Conn': ['Conn', 'Conn', None, None, None, None, EntityCategory.DIAGNOSTIC],
-    'WMaxLim_Ena': ['WMaxLim_Ena', 'WMaxLim_Ena', None, None, None, None, EntityCategory.DIAGNOSTIC],
-    'OutPFSet_Ena': ['OutPFSet_Ena', 'OutPFSet_Ena', None, None, None, None, EntityCategory.DIAGNOSTIC],
-    'VArPct_Ena': ['VArPct_Ena', 'VArPct_Ena', None, None, None, None, EntityCategory.DIAGNOSTIC],
-    'PhVphA': ['PhVphA', 'PhVphA', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
+    'conn': ['conn', 'conn', None, None, None, None, EntityCategory.DIAGNOSTIC],
+    'wmaxlim_ena': ['wmaxlim_ena', 'wmaxlim_ena', None, None, None, None, EntityCategory.DIAGNOSTIC],
+    'outpfset_ena': ['outpfset_ena', 'outpfset_ena', None, None, None, None, EntityCategory.DIAGNOSTIC],
+    'varpct_ena': ['varpct_ena', 'varpct_ena', None, None, None, None, EntityCategory.DIAGNOSTIC],
+    'phvpha': ['phvpha', 'phvpha', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
     'unit_id': ['unit_id', 'i_unit_id', None, None, None, None, EntityCategory.DIAGNOSTIC],
     'ac_limit_rate': ['ac_limit_rate', 'ac_limit_rate', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:chart-line', None],
     'ac_limit_enable': ['ac_limit_enable', 'ac_limit_enable', None, None, None, 'mdi:power-plug', EntityCategory.DIAGNOSTIC],
@@ -168,13 +168,13 @@ MPPT_MODULE_SENSOR_TYPES = [
 ]
 
 INVERTER_SYMO_SENSOR_TYPES = {
-    'AphB': ['AphB', 'AphB', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-ac', None],
-    'AphC': ['AphC', 'AphC', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-ac', None],
-    'PhVphB': ['PhVphB', 'PhVphB', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
-    'PhVphC': ['PhVphC', 'PhVphC', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
-    'PPVphAB': ['PPVphAB', 'PPVphAB', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
-    'PPVphBC': ['PPVphBC', 'PPVphBC', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
-    'PPVphCA': ['PPVphCA', 'PPVphCA', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
+    'aphb': ['aphb', 'aphb', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-ac', None],
+    'aphc': ['aphc', 'aphc', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-ac', None],
+    'phvphb': ['phvphb', 'phvphb', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
+    'phvphc': ['phvphc', 'phvphc', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
+    'ppvphab': ['ppvphab', 'ppvphab', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
+    'ppvphbc': ['ppvphbc', 'ppvphbc', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
+    'ppvphca': ['ppvphca', 'ppvphca', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
 }
 
 INVERTER_STORAGE_SENSOR_TYPES = {
@@ -191,32 +191,32 @@ INVERTER_STORAGE_SENSOR_TYPES = {
 
 
 METER_SENSOR_TYPES = {
-    'A': ['A', 'A', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-ac', None],
-    'AphA': ['AphA', 'AphA', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-ac', None],
-    'AphB': ['AphB', 'AphB', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-ac', None],
-    'AphC': ['AphC', 'AphC', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-ac', None],
+    'a': ['a', 'a', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-ac', None],
+    'apha': ['apha', 'apha', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-ac', None],
+    'aphb': ['aphb', 'aphb', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-ac', None],
+    'aphc': ['aphc', 'aphc', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-ac', None],
     'power': ['power', 'power', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:lightning-bolt', None],
-    'WphA': ['WphA', 'WphA', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:lightning-bolt', None],
-    'WphB': ['WphB', 'WphB', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:lightning-bolt', None],
-    'WphC': ['WphC', 'WphC', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:lightning-bolt', None],
+    'wpha': ['wpha', 'wpha', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:lightning-bolt', None],
+    'wphb': ['wphb', 'wphb', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:lightning-bolt', None],
+    'wphc': ['wphc', 'wphc', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:lightning-bolt', None],
     'exported': ['exported', 'exported', SensorDeviceClass.ENERGY, SensorStateClass.TOTAL_INCREASING, 'Wh', 'mdi:lightning-bolt', None],
     'imported': ['imported', 'imported', SensorDeviceClass.ENERGY, SensorStateClass.TOTAL_INCREASING, 'Wh', 'mdi:lightning-bolt', None],
     'line_frequency': ['line_frequency', 'line_frequency', SensorDeviceClass.FREQUENCY, SensorStateClass.MEASUREMENT, 'Hz', None, None],
-    'PhVphA': ['PhVphA', 'PhVphA', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
-    'PhVphB': ['PhVphB', 'PhVphB', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
-    'PhVphC': ['PhVphC', 'PhVphC', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
-    'PPV': ['PPV', 'PPV', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
+    'phvpha': ['phvpha', 'phvpha', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
+    'phvphb': ['phvphb', 'phvphb', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
+    'phvphc': ['phvphc', 'phvphc', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
+    'ppv': ['ppv', 'ppv', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
     'unit_id': ['unit_id', 'unit_id', None, None, None, None, EntityCategory.DIAGNOSTIC],
 }
 
 SINGLE_PHASE_UNSUPPORTED_METER_SENSOR_KEYS = (
-    "AphB",
-    "AphC",
-    "WphB",
-    "WphC",
-    "PhVphB",
-    "PhVphC",
-    "PPV",
+    "aphb",
+    "aphc",
+    "wphb",
+    "wphc",
+    "phvphb",
+    "phvphc",
+    "ppv",
 )
 
 STORAGE_SENSOR_TYPES = {
@@ -229,9 +229,9 @@ STORAGE_SENSOR_TYPES = {
     'discharging_power': ['discharging_power', 'discharging_power',  None, None, '%', 'mdi:gauge', EntityCategory.DIAGNOSTIC],
     'soc_minimum': ['soc_minimum', 'soc_minimum',  None, None, '%', 'mdi:gauge', None],
     'grid_charging': ['grid_charging', 'grid_charging',  None, None, None, None, EntityCategory.DIAGNOSTIC],
-    'WHRtg': ['WHRtg', 'WHRtg',  SensorDeviceClass.ENERGY, SensorStateClass.MEASUREMENT, 'Wh', None, EntityCategory.DIAGNOSTIC],
-    'MaxChaRte': ['MaxChaRte', 'MaxChaRte',  SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', None, EntityCategory.DIAGNOSTIC],
-    'MaxDisChaRte': ['MaxDisChaRte', 'MaxDisChaRte',  SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', None, EntityCategory.DIAGNOSTIC],
+    'whrtg': ['whrtg', 'whrtg',  SensorDeviceClass.ENERGY, SensorStateClass.MEASUREMENT, 'Wh', None, EntityCategory.DIAGNOSTIC],
+    'maxcharte': ['maxcharte', 'maxcharte',  SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', None, EntityCategory.DIAGNOSTIC],
+    'maxdischarte': ['maxdischarte', 'maxdischarte',  SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', None, EntityCategory.DIAGNOSTIC],
 }
 
 
@@ -240,14 +240,14 @@ def _state_values(*mappings) -> list[str]:
 
 
 INVERTER_CONTROL_STATE_VALUES = [
-    "Normal",
-    "Power reduction",
-    "Constant reactive power",
-    "Constant power factor",
-    "Power reduction,Constant reactive power",
-    "Power reduction,Constant power factor",
-    "Constant reactive power,Constant power factor",
-    "Power reduction,Constant reactive power,Constant power factor",
+    "normal",
+    "power_reduction",
+    "constant_reactive_power",
+    "constant_power_factor",
+    "power_reduction,constant_reactive_power",
+    "power_reduction,constant_power_factor",
+    "constant_reactive_power,constant_power_factor",
+    "power_reduction,constant_reactive_power,constant_power_factor",
 ]
 
 
@@ -258,11 +258,11 @@ SENSOR_STATE_OPTIONS = {
     'status': _state_values(INVERTER_STATUS),
     'statusvendor': _state_values(FRONIUS_INVERTER_STATUS),
     'grid_status': _state_values(GRID_STATUS),
-    'Conn': _state_values(CONTROL_STATUS),
-    'WMaxLim_Ena': _state_values(CONTROL_STATUS),
-    'OutPFSet_Ena': _state_values(CONTROL_STATUS),
-    'VArPct_Ena': _state_values(CONTROL_STATUS),
-    'ac_limit_enable': _state_values(AC_LIMIT_STATUS, {2: 'Unknown'}),
+    'conn': _state_values(CONTROL_STATUS),
+    'wmaxlim_ena': _state_values(CONTROL_STATUS),
+    'outpfset_ena': _state_values(CONTROL_STATUS),
+    'varpct_ena': _state_values(CONTROL_STATUS),
+    'ac_limit_enable': _state_values(AC_LIMIT_STATUS, {2: 'unknown'}),
     'control_mode': _state_values(STORAGE_CONTROL_MODE) + INVERTER_CONTROL_STATE_VALUES,
     'charge_status': _state_values(CHARGE_STATUS),
     'grid_charging': _state_values(CHARGE_GRID_STATUS),

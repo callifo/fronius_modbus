@@ -24,37 +24,37 @@ OUT_PF_SET_ENABLE_ADDRESS = 40241
 CONN_ADDRESS = 40231
 
 STORAGE_CONTROL_MODE = {
-    0: 'Auto',
-    1: 'Charge',
-    2: 'Discharge',
-    3: 'Charge and Discharge',
+    0: 'auto',
+    1: 'charge',
+    2: 'discharge',
+    3: 'charge_and_discharge',
 }
 
 CHARGE_STATUS = {
-    1: 'Off',
-    2: 'Empty',
-    3: 'Discharging',
-    4: 'Charging',
-    5: 'Full',
-    6: 'Holding',
-    7: 'Testing',
+    1: 'off',
+    2: 'empty',
+    3: 'discharging',
+    4: 'charging',
+    5: 'full',
+    6: 'holding',
+    7: 'testing',
 }
 
 INVERTER_STATUS = {
-    1: 'Off',
-    2: 'Sleeping',
-    3: 'Starting',
-    4: 'Normal',
-    5: 'Throttled',
-    6: 'Shutdown',
-    7: 'Fault',
-    8: 'Standby',
+    1: 'off',
+    2: 'sleeping',
+    3: 'starting',
+    4: 'normal',
+    5: 'throttled',
+    6: 'shutdown',
+    7: 'fault',
+    8: 'standby',
 }
 
 INVERTER_CONTROLS = [
-    'Power reduction',
-    'Constant reactive power',
-    'Constant power factor',
+    'power_reduction',
+    'constant_reactive_power',
+    'constant_power_factor',
 ]
 
 INVERTER_EVENTS = [
@@ -64,68 +64,68 @@ INVERTER_EVENTS = [
 ]
 
 FRONIUS_INVERTER_STATUS = {
-    1: 'Off',
-    2: 'Sleeping',
-    3: 'Starting',
-    4: 'Normal',
-    5: 'Throttled',
-    6: 'Shutdown',
-    7: 'Fault',
-    8: 'Standby',
-    9: 'No solarnet',
-    10: 'No inverter communication',
-    11: 'Overcurrent solarnet',
-    12: 'Firmware updating',
-    13: 'ACFI event',
+    1: 'off',
+    2: 'sleeping',
+    3: 'starting',
+    4: 'normal',
+    5: 'throttled',
+    6: 'shutdown',
+    7: 'fault',
+    8: 'standby',
+    9: 'no_solarnet',
+    10: 'no_inverter_communication',
+    11: 'overcurrent_solarnet',
+    12: 'firmware_updating',
+    13: 'acfi_event',
 }
 
 CHARGE_GRID_STATUS = {
-    0: 'Disabled',
-    1: 'Enabled',
+    0: 'disabled',
+    1: 'enabled',
 }
 
 GRID_STATUS = {
-    0: 'Off grid',
-    1: 'Off grid operating',
-    2: 'On grid',
-    3: 'On grid operating',
+    0: 'off_grid',
+    1: 'off_grid_operating',
+    2: 'on_grid',
+    3: 'on_grid_operating',
 }
 
 CONNECTION_STATUS = [ 
-    'Connected',
-    'Available',
-    'Operating',
+    'connected',
+    'available',
+    'operating',
 ]
 
 CONNECTION_STATUS_CONDENSED = {
-    0: 'Disconnected',
-    1: 'Connected', 
-    3: 'Available', 
-    7: 'Operating', 
+    0: 'disconnected',
+    1: 'connected', 
+    3: 'available', 
+    7: 'operating', 
 }
 
 ECP_CONNECTION_STATUS = {
-    0: 'Disconnected',
-    1: 'Connected',
+    0: 'disconnected',
+    1: 'connected',
 }
 
 CONTROL_STATUS = {
-    0: 'Disabled',
-    1: 'Enabled',
+    0: 'disabled',
+    1: 'enabled',
 }
 
 AC_LIMIT_STATUS = {
-    0: 'Disabled',
-    1: 'Enabled',
+    0: 'disabled',
+    1: 'enabled',
 }
 
 STORAGE_EXT_CONTROL_MODE = {
-    0: 'Auto',
-    1: 'PV Charge Limit',
-    2: 'Discharge Limit',
-    3: 'PV Charge and Discharge Limit',
-    4: 'Charge from Grid',
-    5: 'Discharge to Grid',
-    6: 'Block Discharging',
-    7: 'Block Charging',
+    0: 'auto',
+    1: 'pv_charge_limit',
+    2: 'discharge_limit',
+    3: 'pv_charge_and_discharge_limit',
+    4: 'charge_from_grid',
+    5: 'discharge_to_grid',
+    6: 'block_discharging',
+    7: 'block_charging',
 }

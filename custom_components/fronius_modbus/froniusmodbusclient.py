@@ -379,15 +379,15 @@ class FroniusModbusClient(ExtModbusClient):
         return await self._read_enable_raw(OUT_PF_SET_ENABLE_ADDRESS)
 
     def _set_ac_limit_enable_state(self, enable_raw: int) -> None:
-        self.data['ac_limit_enable'] = AC_LIMIT_STATUS.get(enable_raw, 'Unknown')
+        self.data['ac_limit_enable'] = AC_LIMIT_STATUS.get(enable_raw, 'unknown')
 
     def _set_ac_limit_control_state(self, enable_raw: int) -> None:
-        self.data['WMaxLim_Ena'] = self._map_value(CONTROL_STATUS, enable_raw, 'throttle control')
+        self.data['wmaxlim_ena'] = self._map_value(CONTROL_STATUS, enable_raw, 'throttle control')
         self._set_ac_limit_enable_state(enable_raw)
 
     def _set_power_factor_enable_state(self, enable_raw: int) -> None:
         status = self._map_value(CONTROL_STATUS, enable_raw, 'fixed power factor')
-        self.data['OutPFSet_Ena'] = status
+        self.data['outpfset_ena'] = status
         self.data['power_factor_enable'] = status
 
     def _set_ac_limit_rate_values(self, raw_value: int | None) -> None:
@@ -688,10 +688,10 @@ class FroniusModbusClient(ExtModbusClient):
         raw = self._decode_registers(
             regs,
             (
-                ('A', 0, 1, dt.UINT16), ('AphA', 1, 1, dt.UINT16), ('AphB', 2, 1, dt.UINT16),
-                ('AphC', 3, 1, dt.UINT16), ('A_SF', 4, 1, dt.INT16), ('PPVphAB', 5, 1, dt.UINT16),
-                ('PPVphBC', 6, 1, dt.UINT16), ('PPVphCA', 7, 1, dt.UINT16), ('PhVphA', 8, 1, dt.UINT16),
-                ('PhVphB', 9, 1, dt.UINT16), ('PhVphC', 10, 1, dt.UINT16), ('V_SF', 11, 1, dt.INT16),
+                ('a', 0, 1, dt.UINT16), ('apha', 1, 1, dt.UINT16), ('aphb', 2, 1, dt.UINT16),
+                ('aphc', 3, 1, dt.UINT16), ('A_SF', 4, 1, dt.INT16), ('ppvphab', 5, 1, dt.UINT16),
+                ('ppvphbc', 6, 1, dt.UINT16), ('ppvphca', 7, 1, dt.UINT16), ('phvpha', 8, 1, dt.UINT16),
+                ('phvphb', 9, 1, dt.UINT16), ('phvphc', 10, 1, dt.UINT16), ('V_SF', 11, 1, dt.INT16),
                 ('W', 12, 1, dt.INT16), ('W_SF', 13, 1, dt.INT16), ('Hz', 14, 1, dt.UINT16),
                 ('Hz_SF', 15, 1, dt.INT16), ('VAr', 18, 1, dt.INT16), ('VAr_SF', 19, 1, dt.INT16),
                 ('WH', 22, 2, dt.UINT32), ('WH_SF', 24, 1, dt.INT16), ('St', 36, 1, dt.UINT16),
@@ -699,9 +699,9 @@ class FroniusModbusClient(ExtModbusClient):
             ),
         )
 
-        for key in ('A', 'AphA', 'AphB', 'AphC'):
+        for key in ('a', 'apha', 'aphb', 'aphc'):
             self._set_calculated(key, raw[key], raw['A_SF'], 3, 0, 1000)
-        for key in ('PPVphAB', 'PPVphBC', 'PPVphCA', 'PhVphA', 'PhVphB', 'PhVphC'):
+        for key in ('ppvphab', 'ppvphbc', 'ppvphca', 'phvpha', 'phvphb', 'phvphc'):
             self._set_calculated(key, raw[key], raw['V_SF'])
         self.data["acpower"] = self._calculate_load_power(raw["W"], raw["W_SF"])
         self._set_calculated("var", raw['VAr'], raw['VAr_SF'], 2, -50000, 50000)
@@ -726,27 +726,27 @@ class FroniusModbusClient(ExtModbusClient):
         raw = self._decode_registers(
             regs,
             (
-                ('DERTyp', 0, 1, dt.UINT16), ('WHRtg', 17, 1, dt.UINT16), ('WHRtg_SF', 18, 1, dt.INT16),
-                ('MaxChaRte', 21, 1, dt.UINT16), ('MaxChaRte_SF', 22, 1, dt.INT16),
-                ('MaxDisChaRte', 23, 1, dt.UINT16), ('MaxDisChaRte_SF', 24, 1, dt.INT16),
+                ('DERTyp', 0, 1, dt.UINT16), ('whrtg', 17, 1, dt.UINT16), ('whrtg_SF', 18, 1, dt.INT16),
+                ('maxcharte', 21, 1, dt.UINT16), ('maxcharte_SF', 22, 1, dt.INT16),
+                ('maxdischarte', 23, 1, dt.UINT16), ('maxdischarte_SF', 24, 1, dt.INT16),
             ),
         )
 
         has_storage_ratings = any(
             self.is_numeric(value) and 0 < value < 65535
-            for value in [raw['WHRtg'], raw['MaxChaRte'], raw['MaxDisChaRte']]
+            for value in [raw['whrtg'], raw['maxcharte'], raw['maxdischarte']]
         )
         if raw['DERTyp'] == 82 or has_storage_ratings:
             self.storage_configured = True
         self.data['DERTyp'] = raw['DERTyp']
-        self._set_calculated('WHRtg', raw['WHRtg'], raw['WHRtg_SF'], 0)
-        self._set_calculated('MaxChaRte', raw['MaxChaRte'], raw['MaxChaRte_SF'], 0)
-        self._set_calculated('MaxDisChaRte', raw['MaxDisChaRte'], raw['MaxDisChaRte_SF'], 0)
+        self._set_calculated('whrtg', raw['whrtg'], raw['whrtg_SF'], 0)
+        self._set_calculated('maxcharte', raw['maxcharte'], raw['maxcharte_SF'], 0)
+        self._set_calculated('maxdischarte', raw['maxdischarte'], raw['maxdischarte_SF'], 0)
     
-        if self.is_numeric(self.data['MaxChaRte']):
-            self.max_charge_rate_w = self.data['MaxChaRte']
-        if self.is_numeric(self.data['MaxDisChaRte']):
-            self.max_discharge_rate_w = self.data['MaxDisChaRte']
+        if self.is_numeric(self.data['maxcharte']):
+            self.max_charge_rate_w = self.data['maxcharte']
+        if self.is_numeric(self.data['maxdischarte']):
+            self.max_discharge_rate_w = self.data['maxdischarte']
 
         return True
 
@@ -770,7 +770,7 @@ class FroniusModbusClient(ExtModbusClient):
         self._set_mapped('storage_connection', CONNECTION_STATUS_CONDENSED, raw['StorConn'], 'storage connection')
         self.storage_configured = raw['StorConn'] in {1, 3, 7}
         self._set_mapped('ecp_connection', ECP_CONNECTION_STATUS, raw['ECPConn'], 'electrical connection')
-        self.data['inverter_controls'] = self.bitmask_to_string(raw['StActCtl'], INVERTER_CONTROLS, 'Normal')
+        self.data['inverter_controls'] = self.bitmask_to_string(raw['StActCtl'], INVERTER_CONTROLS, 'normal')
         # Adjust the scaling factor because isolation resistance is provided
         # in Ohm and stored in Mega Ohm.
         self._set_calculated('isolation_resistance', raw['Ris'], raw['Ris_SF'] - 6)
@@ -809,25 +809,25 @@ class FroniusModbusClient(ExtModbusClient):
         raw = self._decode_registers(
             regs,
             (
-                ('Conn', 2, 1, dt.UINT16), ('WMaxLim_Ena', 7, 1, dt.UINT16),
-                ('OutPFSet', 8, 1, dt.INT16), ('OutPFSet_Ena', 12, 1, dt.UINT16),
-                ('VArPct_Ena', 20, 1, dt.UINT16), ('WMaxLimPct_SF', 21, 1, dt.INT16),
+                ('conn', 2, 1, dt.UINT16), ('wmaxlim_ena', 7, 1, dt.UINT16),
+                ('OutPFSet', 8, 1, dt.INT16), ('outpfset_ena', 12, 1, dt.UINT16),
+                ('varpct_ena', 20, 1, dt.UINT16), ('WMaxLimPct_SF', 21, 1, dt.INT16),
                 ('OutPFSet_SF', 22, 1, dt.INT16),
             ),
         )
 
-        self._set_mapped('Conn', CONTROL_STATUS, raw['Conn'], 'connection control')
+        self._set_mapped('conn', CONTROL_STATUS, raw['conn'], 'connection control')
         if time.monotonic() < self._ac_limit_enable_mask_until:
             self._set_ac_limit_control_state(1)
         else:
-            self._set_ac_limit_control_state(raw['WMaxLim_Ena'])
+            self._set_ac_limit_control_state(raw['wmaxlim_ena'])
         if time.monotonic() < self._power_factor_enable_mask_until:
             self._set_power_factor_enable_state(1)
         else:
-            self._set_power_factor_enable_state(raw['OutPFSet_Ena'])
-            if raw['OutPFSet_Ena'] == 1:
+            self._set_power_factor_enable_state(raw['outpfset_ena'])
+            if raw['outpfset_ena'] == 1:
                 self._power_factor_enable_mask_until = 0.0
-        self._set_mapped('VArPct_Ena', CONTROL_STATUS, raw['VArPct_Ena'], 'VAr control')
+        self._set_mapped('varpct_ena', CONTROL_STATUS, raw['varpct_ena'], 'VAr control')
         self.data['ac_limit_rate_sf'] = raw['WMaxLimPct_SF']
         self.data['power_factor_sf'] = raw['OutPFSet_SF']
         self.data['power_factor'] = self._power_factor_raw_to_value(raw['OutPFSet'])
@@ -1243,12 +1243,12 @@ class FroniusModbusClient(ExtModbusClient):
         raw = self._decode_registers(
             regs,
             (
-                ('A', 0, 1, dt.INT16), ('AphA', 1, 1, dt.INT16), ('AphB', 2, 1, dt.INT16),
-                ('AphC', 3, 1, dt.INT16), ('A_SF', 4, 1, dt.INT16), ('PhVphA', 6, 1, dt.INT16),
-                ('PhVphB', 7, 1, dt.INT16), ('PhVphC', 8, 1, dt.INT16), ('PPV', 9, 1, dt.INT16),
+                ('a', 0, 1, dt.INT16), ('apha', 1, 1, dt.INT16), ('aphb', 2, 1, dt.INT16),
+                ('aphc', 3, 1, dt.INT16), ('A_SF', 4, 1, dt.INT16), ('phvpha', 6, 1, dt.INT16),
+                ('phvphb', 7, 1, dt.INT16), ('phvphc', 8, 1, dt.INT16), ('ppv', 9, 1, dt.INT16),
                 ('V_SF', 13, 1, dt.INT16), ('Hz', 14, 1, dt.INT16), ('Hz_SF', 15, 1, dt.INT16),
-                ('W', 16, 1, dt.INT16), ('WphA', 17, 1, dt.INT16), ('WphB', 18, 1, dt.INT16),
-                ('WphC', 19, 1, dt.INT16), ('W_SF', 20, 1, dt.INT16), ('TotWhExp', 36, 2, dt.UINT32),
+                ('W', 16, 1, dt.INT16), ('wpha', 17, 1, dt.INT16), ('wphb', 18, 1, dt.INT16),
+                ('wphc', 19, 1, dt.INT16), ('W_SF', 20, 1, dt.INT16), ('TotWhExp', 36, 2, dt.UINT32),
                 ('TotWhImp', 44, 2, dt.UINT32), ('TotWh_SF', 52, 1, dt.INT16),
             ),
         )
@@ -1256,11 +1256,11 @@ class FroniusModbusClient(ExtModbusClient):
         acpower = self._calculate_load_power(raw["W"], raw["W_SF"])
         m_frequency = self.calculate_value(raw['Hz'], raw['Hz_SF'], 2, 0, 100)
 
-        for key in ('A', 'AphA', 'AphB', 'AphC'):
+        for key in ('a', 'apha', 'aphb', 'aphc'):
             self._set_calculated(meter_prefix + key, raw[key], raw['A_SF'], 3, -1000, 1000)
-        for key in ('PhVphA', 'PhVphB', 'PhVphC', 'PPV'):
+        for key in ('phvpha', 'phvphb', 'phvphc', 'ppv'):
             self._set_calculated(meter_prefix + key, raw[key], raw['V_SF'], 1, 0, 1000)
-        for key in ('WphA', 'WphB', 'WphC'):
+        for key in ('wpha', 'wphb', 'wphc'):
             self._set_calculated(meter_prefix + key, raw[key], raw['W_SF'], 2, -50000, 50000)
         self.data[meter_prefix + "exported"] = self.protect_lfte(
             meter_prefix + 'exported',
@@ -1323,7 +1323,7 @@ class FroniusModbusClient(ExtModbusClient):
 
         ac_limit_enable_raw = await self._read_ac_limit_enable_raw()
         if ac_limit_enable_raw is not None:
-            self.data['ac_limit_enable'] = AC_LIMIT_STATUS.get(ac_limit_enable_raw, 'Unknown')
+            self.data['ac_limit_enable'] = AC_LIMIT_STATUS.get(ac_limit_enable_raw, 'unknown')
             if ac_limit_enable_raw == 1:
                 self._ac_limit_enable_mask_until = 0.0
         elif 'ac_limit_enable' not in self.data:
@@ -1615,5 +1615,5 @@ class FroniusModbusClient(ExtModbusClient):
         """Enable/disable inverter connection (0=Disconnected/Standby, 1=Connected/Normal)"""
         conn_value = 1 if enable else 0
         await self.write_registers(unit_id=self._inverter_unit_id, address=CONN_ADDRESS, payload=[conn_value])
-        self.data['Conn'] = CONTROL_STATUS[conn_value]
+        self.data['conn'] = CONTROL_STATUS[conn_value]
         _LOGGER.info(f"Set inverter connection status to {conn_value} ({'Connected' if enable else 'Disconnected/Standby'})")

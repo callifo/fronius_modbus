@@ -122,11 +122,11 @@ INVERTER_SETTINGS_DATA_KEYS = (
     "vrefofs",
 )
 INVERTER_CONTROL_DATA_KEYS = (
-    "Conn",
-    "WMaxLim_Ena",
-    "OutPFSet_Ena",
+    "conn",
+    "wmaxlim_ena",
+    "outpfset_ena",
     "power_factor_enable",
-    "VArPct_Ena",
+    "varpct_ena",
     "ac_limit_rate_sf",
     "power_factor_sf",
     "power_factor",
@@ -138,17 +138,17 @@ AC_LIMIT_DATA_KEYS = (
     "ac_limit_enable",
 )
 METER_DATA_KEY_SUFFIXES = (
-    "A",
-    "AphA",
-    "AphB",
-    "AphC",
-    "PhVphA",
-    "PhVphB",
-    "PhVphC",
-    "PPV",
-    "WphA",
-    "WphB",
-    "WphC",
+    "a",
+    "apha",
+    "aphb",
+    "aphc",
+    "phvpha",
+    "phvphb",
+    "phvphc",
+    "ppv",
+    "wpha",
+    "wphb",
+    "wphc",
     "exported",
     "imported",
     "line_frequency",
@@ -1022,7 +1022,7 @@ class Hub:
             is_enabled = normalized in ['1', 'true', 'on', 'yes', 'enabled']
         else:
             is_enabled = bool(value)
-        return 'Enabled' if is_enabled else 'Disabled'
+        return 'enabled' if is_enabled else 'disabled'
 
     def _enabled_bool(self, value: Any) -> bool:
         if isinstance(value, str):

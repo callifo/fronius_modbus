@@ -374,10 +374,10 @@
           "power_reduction": "Power reduction",
           "constant_reactive_power": "Constant reactive power",
           "constant_power_factor": "Constant power factor",
-          "power_reduction,constant_reactive_power": "Power reduction,Constant reactive power",
-          "power_reduction,constant_power_factor": "Power reduction,Constant power factor",
-          "Constant reactive power,constant_power_factor": "Constant reactive power,Constant power factor",
-          "power_reduction,constant_reactive_power,constant_power_factor": "Power reduction,Constant reactive power,Constant power factor"
+          "power_reduction_constant_reactive_power": "Power reduction,Constant reactive power",
+          "power_reduction_constant_power_factor": "Power reduction,Constant power factor",
+          "constant_reactive_power_constant_power_factor": "Constant reactive power,Constant power factor",
+          "power_reduction_constant_reactive_power_constant_power_factor": "Power reduction,Constant reactive power,Constant power factor"
         }
       },
       "charge_status": {

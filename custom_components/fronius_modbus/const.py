@@ -244,10 +244,10 @@ INVERTER_CONTROL_STATE_VALUES = [
     "power_reduction",
     "constant_reactive_power",
     "constant_power_factor",
-    "power_reduction,constant_reactive_power",
-    "power_reduction,constant_power_factor",
-    "constant_reactive_power,constant_power_factor",
-    "power_reduction,constant_reactive_power,constant_power_factor",
+    "power_reduction_constant_reactive_power",
+    "power_reduction_constant_power_factor",
+    "constant_reactive_power_constant_power_factor",
+    "power_reduction_constant_reactive_power_constant_power_factor",
 ]
 
 

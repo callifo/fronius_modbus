@@ -1,6 +1,5 @@
 {
   "config": {
-    "title": "Fronius Modbus",
     "step": {
       "user": {
         "title": "Fronius-System einrichten",

@@ -134,7 +134,7 @@
           "Enabled": "Aktiviert"
         }
       },
-      "Conn": {
+      "conn": {
         "name": "Wechselrichterverbindung",
         "state": {
           "Disabled": "Deaktiviert",
@@ -143,16 +143,16 @@
       }
     },
     "sensor": {
-      "A": {
+      "a": {
         "name": "AC-Strom"
       },
-      "AphA": {
+      "apha": {
         "name": "AC-Strom L1"
       },
-      "AphB": {
+      "aphb": {
         "name": "AC-Strom L2"
       },
-      "AphC": {
+      "aphc": {
         "name": "AC-Strom L3"
       },
       "acpower": {
@@ -247,62 +247,62 @@
           "On grid operating": "Netzbetrieb aktiv"
         }
       },
-      "Conn": {
+      "conn": {
         "name": "Verbindungssteuerung",
         "state": {
           "Disabled": "Deaktiviert",
           "Enabled": "Aktiviert"
         }
       },
-      "WMaxLim_Ena": {
+      "wmaxlim_ena": {
         "name": "Leistungsbegrenzung aktiv",
         "state": {
           "Disabled": "Deaktiviert",
           "Enabled": "Aktiviert"
         }
       },
-      "OutPFSet_Ena": {
+      "outpfset_ena": {
         "name": "Fester Leistungsfaktor aktiv",
         "state": {
           "Disabled": "Deaktiviert",
           "Enabled": "Aktiviert"
         }
       },
-      "VArPct_Ena": {
+      "varpct_ena": {
         "name": "Blindleistungsbegrenzung aktiv",
         "state": {
           "Disabled": "Deaktiviert",
           "Enabled": "Aktiviert"
         }
       },
-      "PhVphA": {
+      "phvpha": {
         "name": "AC-Spannung L1-N"
       },
-      "PhVphB": {
+      "phvphb": {
         "name": "AC-Spannung L2-N"
       },
-      "PhVphC": {
+      "phvphc": {
         "name": "AC-Spannung L3-N"
       },
-      "PPV": {
+      "ppv": {
         "name": "AC-Spannung Leiter-Leiter"
       },
-      "PPVphAB": {
+      "ppvphab": {
         "name": "AC-Spannung L1-L2"
       },
-      "PPVphBC": {
+      "ppvphbc": {
         "name": "AC-Spannung L2-L3"
       },
-      "PPVphCA": {
+      "ppvphca": {
         "name": "AC-Spannung L3-L1"
       },
-      "WphA": {
+      "wpha": {
         "name": "Leistung L1"
       },
-      "WphB": {
+      "wphb": {
         "name": "Leistung L2"
       },
-      "WphC": {
+      "wphc": {
         "name": "Leistung L3"
       },
       "unit_id": {
@@ -438,13 +438,13 @@
           "Enabled": "Aktiviert"
         }
       },
-      "WHRtg": {
+      "whrtg": {
         "name": "Nennkapazität"
       },
-      "MaxChaRte": {
+      "maxcharte": {
         "name": "Maximale Ladeleistung"
       },
-      "MaxDisChaRte": {
+      "maxdischarte": {
         "name": "Maximale Entladeleistung"
       },
       "soc": {

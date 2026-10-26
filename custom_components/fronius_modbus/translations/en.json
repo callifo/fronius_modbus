@@ -137,7 +137,7 @@
           "Enabled": "Enabled"
         }
       },
-      "Conn": {
+      "conn": {
         "name": "Inverter connection",
         "state": {
           "Disabled": "Disabled",
@@ -146,16 +146,16 @@
       }
     },
     "sensor": {
-      "A": {
+      "a": {
         "name": "AC current"
       },
-      "AphA": {
+      "apha": {
         "name": "AC current L1"
       },
-      "AphB": {
+      "aphb": {
         "name": "AC current L2"
       },
-      "AphC": {
+      "aphc": {
         "name": "AC current L3"
       },
       "acpower": {
@@ -250,62 +250,62 @@
           "On grid operating": "On grid operating"
         }
       },
-      "Conn": {
+      "conn": {
         "name": "Connection control",
         "state": {
           "Disabled": "Disabled",
           "Enabled": "Enabled"
         }
       },
-      "WMaxLim_Ena": {
+      "wmaxlim_ena": {
         "name": "Throttle control",
         "state": {
           "Disabled": "Disabled",
           "Enabled": "Enabled"
         }
       },
-      "OutPFSet_Ena": {
+      "outpfset_ena": {
         "name": "Fixed power factor status",
         "state": {
           "Disabled": "Disabled",
           "Enabled": "Enabled"
         }
       },
-      "VArPct_Ena": {
+      "varpct_ena": {
         "name": "Limit VAr control",
         "state": {
           "Disabled": "Disabled",
           "Enabled": "Enabled"
         }
       },
-      "PhVphA": {
+      "phvpha": {
         "name": "AC voltage L1-N"
       },
-      "PhVphB": {
+      "phvphb": {
         "name": "AC voltage L2-N"
       },
-      "PhVphC": {
+      "phvphc": {
         "name": "AC voltage L3-N"
       },
-      "PPV": {
+      "ppv": {
         "name": "AC voltage Line to Line"
       },
-      "PPVphAB": {
+      "ppvphab": {
         "name": "AC voltage L1-L2"
       },
-      "PPVphBC": {
+      "ppvphbc": {
         "name": "AC voltage L2-L3"
       },
-      "PPVphCA": {
+      "ppvphca": {
         "name": "AC voltage L3-L1"
       },
-      "WphA": {
+      "wpha": {
         "name": "Power L1"
       },
-      "WphB": {
+      "wphb": {
         "name": "Power L2"
       },
-      "WphC": {
+      "wphc": {
         "name": "Power L3"
       },
       "unit_id": {
@@ -444,13 +444,13 @@
           "Enabled": "Enabled"
         }
       },
-      "WHRtg": {
+      "whrtg": {
         "name": "Capacity"
       },
-      "MaxChaRte": {
+      "maxcharte": {
         "name": "Maximum charge rate"
       },
-      "MaxDisChaRte": {
+      "maxdischarte": {
         "name": "Maximum discharge rate"
       },
       "soc": {

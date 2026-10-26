@@ -195,7 +195,7 @@
       "status": {
         "name": "Status",
         "state": {
-          "Off": "Off",
+          "off": "Off",
           "sleeping": "Sleeping",
           "starting": "Starting",
           "normal": "Normal",

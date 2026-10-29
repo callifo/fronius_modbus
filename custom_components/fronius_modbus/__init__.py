@@ -21,8 +21,10 @@ from .const import (
     API_USERNAME,
     CONF_API_USERNAME,
     CONF_INVERTER_UNIT_ID,
+    CONF_METER_POWER_INTERVAL,
     CONF_WEB_SCAN_INTERVAL,
     DEFAULT_INVERTER_UNIT_ID,
+    DEFAULT_METER_POWER_INTERVAL,
     DEFAULT_METER_UNIT_ID,
     DEFAULT_PORT,
     DEFAULT_SCAN_INTERVAL,
@@ -31,6 +33,7 @@ from .const import (
 )
 from .coordinator import (
     FroniusConfigEntry,
+    FroniusMeterPowerCoordinator,
     FroniusModbusCoordinator,
     FroniusRuntimeData,
     FroniusWebCoordinator,
@@ -127,6 +130,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
     web_scan_interval = int(
         _entry_value(entry, CONF_WEB_SCAN_INTERVAL, DEFAULT_WEB_SCAN_INTERVAL)
     )
+    meter_power_interval = int(
+        _entry_value(entry, CONF_METER_POWER_INTERVAL, DEFAULT_METER_POWER_INTERVAL)
+    )
 
     api_username = str(_entry_value(entry, CONF_API_USERNAME, API_USERNAME))
     api_token = await migrations.async_prepare_entry_token(hass, entry, host)
@@ -162,6 +168,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
         meter_locations=locations,
     )
     await modbus.async_config_entry_first_refresh()
+
+    meter_power = None
+    grid_meter = device.meters.get(primary)
+    if meter_power_interval and grid_meter is not None:
+        meter_power = FroniusMeterPowerCoordinator(
+            hass, entry, grid_meter, interval=timedelta(seconds=meter_power_interval)
+        )
+        await meter_power.async_refresh()
 
     web_control = None
     web = None
@@ -200,6 +214,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
         web=web,
         web_control=web_control,
         meter_locations=locations,
+        meter_power=meter_power,
         primary_meter_unit_id=primary,
         topology_confirmed=topology.confirmed,
         reported_keys=migrations.reported_keys(hass, entry),

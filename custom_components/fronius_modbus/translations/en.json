@@ -10,6 +10,7 @@
           "host": "Host",
           "scan_interval": "Update interval (seconds)",
           "web_scan_interval": "Web API update interval (seconds)",
+          "meter_power_interval": "Grid meter power update interval (seconds, 0 = with the update interval)",
           "modbus_restriction": "Modbus IP restriction",
           "api_username": "Web API access role"
         }
@@ -32,6 +33,7 @@
           "host": "Host",
           "scan_interval": "Update interval (seconds)",
           "web_scan_interval": "Web API update interval (seconds)",
+          "meter_power_interval": "Grid meter power update interval (seconds, 0 = with the update interval)",
           "modbus_restriction": "Modbus IP restriction",
           "api_username": "Web API access role"
         }
@@ -826,6 +828,7 @@
           "host": "Host",
           "scan_interval": "Update interval (seconds)",
           "web_scan_interval": "Web API update interval (seconds)",
+          "meter_power_interval": "Grid meter power update interval (seconds, 0 = with the update interval)",
           "modbus_restriction": "Modbus IP restriction",
           "api_username": "Web API access role"
         }

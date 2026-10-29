@@ -324,8 +324,8 @@
   {
     "label": "coordinator: an unreachable device is not an error",
     "path": "custom_components/fronius_modbus/coordinator.py",
-    "old": "        failure = DeviceUnreachable if isinstance(err, NO_ANSWER) else UpdateFailed",
-    "new": "        failure = UpdateFailed",
+    "old": "    failure = DeviceUnreachable if isinstance(err, NO_ANSWER) else UpdateFailed",
+    "new": "    failure = UpdateFailed",
     "tests": "an_unreachable_device_is_not_logged_as_an_error"
   },
   {
@@ -1892,8 +1892,8 @@
   {
     "label": "coordinator: a cut cause stays out of the traceback",
     "path": "custom_components/fronius_modbus/coordinator.py",
-    "old": "        cause = err if text == str(err) else None\n",
-    "new": "        cause = err\n",
+    "old": "    cause = err if text == str(err) else None\n",
+    "new": "    cause = err\n",
     "tests": "names_no_host_in_logs_or_diagnostics"
   },
   {
@@ -2301,5 +2301,26 @@
     "old": "            if identity != info.identity:\n",
     "new": "            if False:\n",
     "tests": "firmware_update_during_an_outage"
+  },
+  {
+    "label": "meter power: only the option starts the fast poll",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "    if meter_power_interval and grid_meter is not None:\n",
+    "new": "    if grid_meter is not None:\n",
+    "tests": "without_the_option_nothing_polls_faster"
+  },
+  {
+    "label": "meter power: the fast poll reads the power block alone",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "        self._power.restrict_fields((\"w\", \"wph_a\", \"wph_b\", \"wph_c\"))\n",
+    "new": "        self._power.restrict_fields((\"w\",))\n",
+    "tests": "reads_the_power_and_its_scale_factor_only"
+  },
+  {
+    "label": "meter power: a failed fast read falls back to the full poll",
+    "path": "custom_components/fronius_modbus/sensor.py",
+    "old": "        if meter_power is None or not meter_power.last_update_success:\n",
+    "new": "        if meter_power is None:\n",
+    "tests": "failed_fast_read_falls_back"
   }
 ]

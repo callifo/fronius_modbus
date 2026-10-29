@@ -10,6 +10,7 @@
           "host": "Host",
           "scan_interval": "Aktualisierungsintervall (Sekunden)",
           "web_scan_interval": "Web-API-Aktualisierungsintervall (Sekunden)",
+          "meter_power_interval": "Aktualisierungsintervall Netzzähler-Leistung (Sekunden, 0 = mit dem Aktualisierungsintervall)",
           "modbus_restriction": "Modbus-IP-Beschränkung",
           "api_username": "Web-API-Zugriffsrolle"
         }
@@ -32,6 +33,7 @@
           "host": "Host",
           "scan_interval": "Aktualisierungsintervall (Sekunden)",
           "web_scan_interval": "Web-API-Aktualisierungsintervall (Sekunden)",
+          "meter_power_interval": "Aktualisierungsintervall Netzzähler-Leistung (Sekunden, 0 = mit dem Aktualisierungsintervall)",
           "modbus_restriction": "Modbus-IP-Beschränkung",
           "api_username": "Web-API-Zugriffsrolle"
         }
@@ -826,6 +828,7 @@
           "host": "Host",
           "scan_interval": "Aktualisierungsintervall (Sekunden)",
           "web_scan_interval": "Web-API-Aktualisierungsintervall (Sekunden)",
+          "meter_power_interval": "Aktualisierungsintervall Netzzähler-Leistung (Sekunden, 0 = mit dem Aktualisierungsintervall)",
           "modbus_restriction": "Modbus-IP-Beschränkung",
           "api_username": "Web-API-Zugriffsrolle"
         }

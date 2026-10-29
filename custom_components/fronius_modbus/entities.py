@@ -176,6 +176,7 @@ def _sensor(
     unit: str | None = None,
     entity_category: EntityCategory | None = None,
     enabled: bool = True,
+    meter_power: bool = False,
 ) -> FroniusSensorDescription:
     options = SENSOR_STATE_OPTIONS.get(translation_key)
     return FroniusSensorDescription(
@@ -195,6 +196,7 @@ def _sensor(
         entity_category=entity_category,
         options=options,
         entity_registry_enabled_default=enabled,
+        meter_power=meter_power,
     )
 
 
@@ -974,6 +976,7 @@ def _meter_sensor_descriptions(
             device_class=device_class,
             state_class=state_class,
             unit=unit,
+            meter_power=suffix == "power",
         )
         for suffix, getter, device_class, state_class, unit in _METER_SENSOR_SPECS
         if phases != 1 or suffix not in _SINGLE_PHASE_UNSUPPORTED_METER_KEYS

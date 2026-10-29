@@ -51,6 +51,10 @@ class FroniusDescriptionMixin:
 class FroniusSensorDescription(SensorEntityDescription, FroniusDescriptionMixin):
     """A sensor built from a value_fn."""
 
+    # A meter's total power: shown from the fast meter power poll where that
+    # polls this meter and its last read succeeded.
+    meter_power: bool = False
+
 
 @dataclass(frozen=True, kw_only=True)
 class FroniusEventDescription(EventEntityDescription, FroniusDescriptionMixin):

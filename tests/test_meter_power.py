@@ -1,7 +1,9 @@
 """The grid meter's power on its own short interval, for a battery control that follows it."""
 
+from modbus_connection import ModbusTimeoutError
 import pytest
 
+from custom_components.fronius_modbus.coordinator import DeviceUnreachable
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
@@ -61,17 +63,16 @@ async def test_the_fast_poll_reads_the_power_and_its_scale_factor_only(
     await setup_entry(hass, entry)
     unit = mock_modbus.unit(METER_UNIT_ID)
     power = _power_address(entry)
-    # W, WphA-C and W_SF: the scale factor is four registers on.
-    span = range(power, power + 5)
+    header = entry.runtime_data.device.meters[METER_UNIT_ID].model.address
     unit.read_events.clear()
 
     await _poll_fast(hass, entry)
 
-    assert unit.read_events
-    assert all(
-        event.address in span and event.address + event.count - 1 in span
-        for event in unit.read_events
-    )
+    # The model header, checked on every read, then W, WphA-C and W_SF.
+    assert [(event.address, event.count) for event in unit.read_events] == [
+        (header, 2),
+        (power, 5),
+    ]
 
 
 async def test_a_failed_fast_read_falls_back_to_the_full_poll(
@@ -86,13 +87,14 @@ async def test_a_failed_fast_read_falls_back_to_the_full_poll(
     await _poll_fast(hass, entry)
     assert state_of(hass, entry, POWER_KEY) == "60.0"
 
-    async def _no_answer(*_args, **_kwargs):
-        raise UpdateFailed("no answer")
+    # The full poll reads the same blocks, so the failure is the fast reader's own.
+    async def _no_answer(**_kwargs):
+        raise ModbusTimeoutError
 
-    monkeypatch.setattr(
-        entry.runtime_data.meter_power, "_async_update_data", _no_answer
-    )
+    meter_power = entry.runtime_data.meter_power
+    monkeypatch.setattr(meter_power._power, "async_update", _no_answer)
     await _poll_fast(hass, entry)
+    assert not entry.runtime_data.meter_power.last_update_success
     holding[power] = raw * 3
     await entry.runtime_data.modbus.async_refresh()
     await hass.async_block_till_done()
@@ -115,3 +117,22 @@ async def test_the_other_meter_sensors_stay_on_the_full_poll(hass, mock_modbus):
     await _poll_fast(hass, entry)
 
     assert state_of(hass, entry, f"meter_{METER_UNIT_ID}_line_frequency") == before
+
+
+async def test_a_meter_that_does_not_answer_is_an_expected_outage(hass, mock_modbus):
+    entry = make_entry(hass, meter_power_interval=1)
+    await setup_entry(hass, entry)
+    mock_modbus.fail_requests(METER_UNIT_ID, ModbusTimeoutError())
+
+    with pytest.raises(DeviceUnreachable):
+        await entry.runtime_data.meter_power._async_update_data()
+
+
+async def test_a_shifted_meter_model_fails_the_fast_read(hass, mock_modbus):
+    entry = make_entry(hass, meter_power_interval=1)
+    await setup_entry(hass, entry)
+    header = entry.runtime_data.device.meters[METER_UNIT_ID].model.address
+    mock_modbus.unit(METER_UNIT_ID).holding[header] += 1
+
+    with pytest.raises(UpdateFailed, match="register map has changed"):
+        await entry.runtime_data.meter_power._async_update_data()

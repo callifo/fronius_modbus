@@ -56,6 +56,10 @@ class _ScanIntervalTooShort(exceptions.HomeAssistantError):
     """Error to indicate the scan interval is too short."""
 
 
+class _MeterPowerIntervalTooLong(exceptions.HomeAssistantError):
+    """Error to indicate the meter power interval is not below the scan interval."""
+
+
 class _MissingApiPassword(exceptions.HomeAssistantError):
     """Error to indicate the Web API password is required."""
 

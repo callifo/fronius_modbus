@@ -19,6 +19,7 @@ from .const import (
     CONF_API_USERNAME,
     CONF_AUTO_ENABLE_MODBUS,
     CONF_INVERTER_UNIT_ID,
+    CONF_METER_POWER_INTERVAL,
     CONF_MODBUS_RESTRICTION,
     DEFAULT_AUTO_ENABLE_MODBUS,
     DEFAULT_METER_UNIT_ID,
@@ -60,6 +61,7 @@ from .flow_state import (
     _InvalidApiCredentials,
     _InvalidHost,
     _InvalidPort,
+    _MeterPowerIntervalTooLong,
     _MissingApiPassword,
     _PendingFlowState,
     _ScanIntervalTooShort,
@@ -101,6 +103,7 @@ _FORM_ERRORS: dict[type[Exception], tuple[str, str]] = {
     _InvalidPort: ("base", "invalid_port"),
     _InvalidHost: ("host", "invalid_host"),
     _ScanIntervalTooShort: ("base", "scan_interval_too_short"),
+    _MeterPowerIntervalTooLong: ("base", "meter_power_interval_too_long"),
     _MissingApiPassword: ("base", "missing_api_password"),
     _InvalidApiCredentials: ("base", "invalid_api_credentials"),
     _CannotResolveLocalIp: ("base", "cannot_resolve_local_ip"),
@@ -124,6 +127,11 @@ def _validate_static_input(data: dict[str, Any]) -> None:
         raise _InvalidPort
     if data[CONF_SCAN_INTERVAL] < MINIMUM_SCAN_INTERVAL:
         raise _ScanIntervalTooShort
+    meter_power_interval = data[CONF_METER_POWER_INTERVAL]
+    # The sensor shows the fast poll's reading while it succeeds; a slower one
+    # would hide the full poll's newer reading.
+    if meter_power_interval and meter_power_interval >= data[CONF_SCAN_INTERVAL]:
+        raise _MeterPowerIntervalTooLong
 
     all_addresses = [DEFAULT_METER_UNIT_ID, data[CONF_INVERTER_UNIT_ID]]
     if len(all_addresses) > len(set(all_addresses)):

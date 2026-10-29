@@ -117,6 +117,8 @@ class MeterInfo:
     common: Common
     phases: int
     meter: AcMeter
+    # Where the meter's model sits, for a second reader of some of its points.
+    model: SunSpecModel
 
 
 def _common(unit: ModbusUnit, chain: SunSpecModels) -> Common:
@@ -389,6 +391,7 @@ class FroniusInverter:
             common=common,
             phases=phases,
             meter=meter,
+            model=model,
         )
 
     async def async_identities_changed(self) -> bool:

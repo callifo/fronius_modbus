@@ -91,6 +91,41 @@ async def test_the_config_flow_creates_an_entry(hass, mock_modbus):
     assert result["data"]["modbus_restriction"] == "keep"
 
 
+async def test_a_new_entry_polls_the_meter_power_with_the_rest(hass, mock_modbus):
+    result = await run_flow(hass)
+
+    assert result["data"]["meter_power_interval"] == 0
+
+
+async def test_a_new_entry_keeps_a_fast_meter_power_interval(hass, mock_modbus):
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {**USER_INPUT, "meter_power_interval": 1}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+
+    assert result["data"]["meter_power_interval"] == 1
+
+
+async def test_a_meter_power_interval_not_below_the_update_interval_is_refused(
+    hass, mock_modbus
+):
+    """A slower fast poll would hide the full poll's newer reading."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {**USER_INPUT, "meter_power_interval": 10}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "meter_power_interval_too_long"}
+
+
 async def test_a_second_flow_for_the_same_host_aborts(hass, mock_modbus):
     MockConfigEntry(domain=DOMAIN, data={"host": HOST}, unique_id=HOST).add_to_hass(
         hass
@@ -1081,6 +1116,11 @@ async def test_an_ipv6_only_announcement_is_not_offered(hass):
         (config_flow._InvalidPort, "base", "invalid_port"),
         (config_flow._InvalidHost, "host", "invalid_host"),
         (config_flow._ScanIntervalTooShort, "base", "scan_interval_too_short"),
+        (
+            config_flow._MeterPowerIntervalTooLong,
+            "base",
+            "meter_power_interval_too_long",
+        ),
         (config_flow._MissingApiPassword, "base", "missing_api_password"),
         (config_flow._InvalidApiCredentials, "base", "invalid_api_credentials"),
         (config_flow._CannotResolveLocalIp, "base", "cannot_resolve_local_ip"),
@@ -1204,6 +1244,7 @@ async def test_a_reauth_failing_late_keeps_the_fresh_token(
         ({"host": "ab"}, config_flow._InvalidHost),
         ({"port": 70000}, config_flow._InvalidPort),
         ({"scan_interval": 4}, config_flow._ScanIntervalTooShort),
+        ({"meter_power_interval": 10}, config_flow._MeterPowerIntervalTooLong),
         ({"inverter_modbus_unit_id": 200}, config_flow._AddressesNotUnique),
     ],
 )

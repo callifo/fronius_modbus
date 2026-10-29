@@ -156,7 +156,8 @@ against the library's in-memory mock unit, `test_coordinator.py` and
 `test_entity_table.py` and `test_entity_writes.py` the entity layer,
 `test_web_control.py` the web side, and `test_config_flow.py` and
 `test_e2e.py` the parts that only exist once Home Assistant is driving the
-integration (`test_e2e.py` is marked `e2e`).
+integration (`test_e2e.py` is marked `e2e`, as is `test_meter_power.py`, the
+grid meter's power on its own interval).
 The `mock_modbus` fixture in `conftest.py` stands in for the connection Home
 Assistant's `modbus` integration shares - a fresh in-memory connection per
 (re)load, seeded from the captured Symo GEN24 in `tests/fixtures/`.

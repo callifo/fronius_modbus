@@ -1,4 +1,4 @@
-"""The two pollers: the Modbus device on the scan interval, the web API on its own."""
+"""The pollers: the device, the web API and the grid meter's power, each on its interval."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from dataclasses import dataclass, field, replace
 from datetime import timedelta
 import logging
 import time
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, NoReturn, cast
 
 from modbus_connection import (
     GatewayPathUnavailableError,
@@ -29,6 +29,7 @@ from .fronius_modbus_api.device import (
     REPORT_INVERTER,
     REPORT_MPPT,
     FroniusInverter,
+    MeterInfo,
     UpdateReport,
     meter_report_name,
 )
@@ -93,6 +94,16 @@ def assume_present[Subsystem](subsystem: Subsystem | None) -> Subsystem:
     return cast(Subsystem, subsystem)
 
 
+def _raise_poll_failure(err: ModbusError, what: str) -> NoReturn:
+    """Fail a poll: no answer is an expected outage, a refusal an error."""
+    failure = DeviceUnreachable if isinstance(err, NO_ANSWER) else UpdateFailed
+    text = error_text(err)
+    # A cause whose text was cut would bring it back in the coordinator's
+    # debug traceback.
+    cause = err if text == str(err) else None
+    raise failure(f"{what}: {text}") from cause
+
+
 # A link that stays up but stops answering: after this many timeouts in a row the
 # socket is recycled so the next poll opens a fresh one.
 TIMEOUTS_BEFORE_RECYCLE = 3
@@ -121,6 +132,7 @@ class FroniusRuntimeData:
     web: FroniusWebCoordinator | None
     web_control: FroniusWebControl | None
     meter_locations: dict[int, int] = field(default_factory=dict)
+    meter_power: FroniusMeterPowerCoordinator | None = None
     primary_meter_unit_id: int = 200
     # False while the meter topology could not be read: the meters beyond the
     # default one are then undecided, not gone (audit A04).
@@ -307,12 +319,7 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
             self._tolerate_until = 0.0
             await self.device.unit.disconnect()
         self._identity_check_due = True
-        failure = DeviceUnreachable if isinstance(err, NO_ANSWER) else UpdateFailed
-        text = error_text(err)
-        # A cause whose text was cut would bring it back in the coordinator's
-        # debug traceback.
-        cause = err if text == str(err) else None
-        raise failure(f"Modbus communication failure: {text}") from cause
+        _raise_poll_failure(err, "Modbus communication failure")
 
     def _log_sub_system_changes(self, report: UpdateReport) -> None:
         """Log each sub-system once when it drops out and once when it is back.
@@ -455,6 +462,48 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
         if meter is None:
             return None
         return grid_status(assume_present(self.device.inverter).hz, meter.hz)
+
+
+class FroniusMeterPowerCoordinator(DataUpdateCoordinator[float | None]):
+    """Polls one meter's total power alone, on an interval shorter than the device's.
+
+    A battery control that follows feed-in and draw needs it within seconds;
+    the full poll reads every model, and its values have to come from one poll.
+    """
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        entry: ConfigEntry,
+        meter: MeterInfo,
+        *,
+        interval: timedelta,
+    ) -> None:
+        """Bind a reader of the power and its scale factor to the meter's model."""
+        super().__init__(
+            hass,
+            _LOGGER,
+            config_entry=entry,
+            name=f"{entry.entry_id} meter power",
+            update_interval=interval,
+            # Every second an unchanged reading would rewrite the state.
+            always_update=False,
+        )
+        self.meter_unit_id = meter.unit_id
+        self._power = AcMeter(meter.meter.modbus_unit, meter.model)
+        # The phase powers sit between the power and its scale factor: with
+        # them the power is one read, the model header verified the other.
+        self._power.restrict_fields(("w", "wph_a", "wph_b", "wph_c"))
+
+    async def _async_update_data(self) -> float | None:
+        try:
+            await self._power.async_update(notify=False)
+        except SunSpecMapShiftError as err:
+            # The full poll finds the same shift and reloads the entry.
+            raise UpdateFailed(f"Meter power read failed: {err}") from err
+        except ModbusError as err:
+            _raise_poll_failure(err, "Meter power read failed")
+        return self._power.w
 
 
 class FroniusWebCoordinator(DataUpdateCoordinator["WebData"]):

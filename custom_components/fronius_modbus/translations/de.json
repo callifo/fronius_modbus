@@ -10,6 +10,7 @@
           "host": "Host",
           "scan_interval": "Aktualisierungsintervall (Sekunden)",
           "web_scan_interval": "Web-API-Aktualisierungsintervall (Sekunden)",
+          "meter_power_interval": "Aktualisierungsintervall Netzzähler-Leistung (Sekunden, 0 = mit dem Aktualisierungsintervall)",
           "modbus_restriction": "Modbus-IP-Beschränkung",
           "api_username": "Web-API-Zugriffsrolle"
         }
@@ -32,6 +33,7 @@
           "host": "Host",
           "scan_interval": "Aktualisierungsintervall (Sekunden)",
           "web_scan_interval": "Web-API-Aktualisierungsintervall (Sekunden)",
+          "meter_power_interval": "Aktualisierungsintervall Netzzähler-Leistung (Sekunden, 0 = mit dem Aktualisierungsintervall)",
           "modbus_restriction": "Modbus-IP-Beschränkung",
           "api_username": "Web-API-Zugriffsrolle"
         }
@@ -82,6 +84,7 @@
       "unsupported_hardware": "Nicht unterstützte Hardware. Siehe Protokoll.",
       "unknown": "Unbekannter Fehler",
       "scan_interval_too_short": "Das Mindestintervall für die Aktualisierung beträgt 5 Sekunden.",
+      "meter_power_interval_too_long": "Das Intervall der Netzzähler-Leistung muss kürzer als das Aktualisierungsintervall sein, oder 0.",
       "modbus_address_conflict": "Modbus-IDs sind nicht eindeutig",
       "missing_api_password": "Für die ausgewählte Web-API-Rolle wird ein Passwort benötigt.",
       "invalid_api_credentials": "Anmeldung für die ausgewählte Web-API-Rolle fehlgeschlagen.",
@@ -826,6 +829,7 @@
           "host": "Host",
           "scan_interval": "Aktualisierungsintervall (Sekunden)",
           "web_scan_interval": "Web-API-Aktualisierungsintervall (Sekunden)",
+          "meter_power_interval": "Aktualisierungsintervall Netzzähler-Leistung (Sekunden, 0 = mit dem Aktualisierungsintervall)",
           "modbus_restriction": "Modbus-IP-Beschränkung",
           "api_username": "Web-API-Zugriffsrolle"
         }
@@ -850,6 +854,7 @@
       "unsupported_hardware": "Nicht unterstützte Hardware. Siehe Protokoll.",
       "unknown": "Unbekannter Fehler",
       "scan_interval_too_short": "Das Mindestintervall für die Aktualisierung beträgt 5 Sekunden.",
+      "meter_power_interval_too_long": "Das Intervall der Netzzähler-Leistung muss kürzer als das Aktualisierungsintervall sein, oder 0.",
       "modbus_address_conflict": "Modbus-IDs sind nicht eindeutig",
       "missing_api_password": "Für die ausgewählte Web-API-Rolle wird ein Passwort benötigt.",
       "invalid_api_credentials": "Anmeldung für die ausgewählte Web-API-Rolle fehlgeschlagen.",

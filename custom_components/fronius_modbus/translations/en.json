@@ -10,6 +10,7 @@
           "host": "Host",
           "scan_interval": "Update interval (seconds)",
           "web_scan_interval": "Web API update interval (seconds)",
+          "meter_power_interval": "Grid meter power update interval (seconds, 0 = with the update interval)",
           "modbus_restriction": "Modbus IP restriction",
           "api_username": "Web API access role"
         }
@@ -32,6 +33,7 @@
           "host": "Host",
           "scan_interval": "Update interval (seconds)",
           "web_scan_interval": "Web API update interval (seconds)",
+          "meter_power_interval": "Grid meter power update interval (seconds, 0 = with the update interval)",
           "modbus_restriction": "Modbus IP restriction",
           "api_username": "Web API access role"
         }
@@ -82,6 +84,7 @@
       "unsupported_hardware": "Unsupported hardware. See logs.",
       "unknown": "Unknown error",
       "scan_interval_too_short": "Minimum update interval is 5 seconds.",
+      "meter_power_interval_too_long": "The grid meter power interval must be shorter than the update interval, or 0.",
       "modbus_address_conflict": "Modbus IDs are not unique",
       "missing_api_password": "A password is required for the selected Web API role.",
       "invalid_api_credentials": "Login failed for the selected Web API role.",
@@ -826,6 +829,7 @@
           "host": "Host",
           "scan_interval": "Update interval (seconds)",
           "web_scan_interval": "Web API update interval (seconds)",
+          "meter_power_interval": "Grid meter power update interval (seconds, 0 = with the update interval)",
           "modbus_restriction": "Modbus IP restriction",
           "api_username": "Web API access role"
         }
@@ -850,6 +854,7 @@
       "unsupported_hardware": "Unsupported hardware. See logs.",
       "unknown": "Unknown error",
       "scan_interval_too_short": "Minimum update interval is 5 seconds.",
+      "meter_power_interval_too_long": "The grid meter power interval must be shorter than the update interval, or 0.",
       "modbus_address_conflict": "Modbus IDs are not unique",
       "missing_api_password": "A password is required for the selected Web API role.",
       "invalid_api_credentials": "Login failed for the selected Web API role.",

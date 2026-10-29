@@ -21,10 +21,13 @@ from .const import (
     API_USERNAMES,
     CONF_API_PASSWORD,
     CONF_API_USERNAME,
+    CONF_METER_POWER_INTERVAL,
     CONF_MODBUS_RESTRICTION,
     CONF_WEB_SCAN_INTERVAL,
+    DEFAULT_METER_POWER_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_WEB_SCAN_INTERVAL,
+    MAXIMUM_METER_POWER_INTERVAL,
     MINIMUM_SCAN_INTERVAL,
     WEB_API_DISABLED,
     ModbusRestriction,
@@ -64,6 +67,14 @@ def settings_schema(defaults: dict[str, Any]) -> vol.Schema:
                 CONF_WEB_SCAN_INTERVAL,
                 default=defaults.get(CONF_WEB_SCAN_INTERVAL, DEFAULT_WEB_SCAN_INTERVAL),
             ): vol.All(vol.Coerce(int), vol.Range(min=MINIMUM_SCAN_INTERVAL, max=3600)),
+            vol.Required(
+                CONF_METER_POWER_INTERVAL,
+                default=defaults.get(
+                    CONF_METER_POWER_INTERVAL, DEFAULT_METER_POWER_INTERVAL
+                ),
+            ): vol.All(
+                vol.Coerce(int), vol.Range(min=0, max=MAXIMUM_METER_POWER_INTERVAL)
+            ),
             **_role_field(defaults),
             vol.Required(
                 CONF_MODBUS_RESTRICTION,

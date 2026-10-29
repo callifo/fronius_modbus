@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- An optional interval for the grid meter's power, from 1 to 60 seconds and shorter than the update interval: the primary meter's *Power* sensor is then read on its own, so a battery control that follows feed-in and draw sees a change within that time. Everything else stays on the update interval. Off by default; set it under *Configure*.
+
 ## 1.3.0
 
 Released 2026-10-22. First stable release of 1.3. It contains everything from 1.3.0b1 below, and the changes here on 1.3.0b1. No new entry migration; unique ids and entity ids do not change. The documentation moved to the wiki.

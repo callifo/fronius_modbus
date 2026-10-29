@@ -13,6 +13,9 @@ ENTITY_PREFIX = "fm"
 DEFAULT_SCAN_INTERVAL = 10
 DEFAULT_WEB_SCAN_INTERVAL = 60
 MINIMUM_SCAN_INTERVAL = 5
+# 0 leaves the grid meter's power to the full poll.
+DEFAULT_METER_POWER_INTERVAL = 0
+MAXIMUM_METER_POWER_INTERVAL = 60
 DEFAULT_PORT = 502
 DEFAULT_INVERTER_UNIT_ID = 1
 DEFAULT_METER_UNIT_ID = 200
@@ -34,6 +37,7 @@ CONF_API_PASSWORD = "api_password"
 CONF_AUTO_ENABLE_MODBUS = "auto_enable_modbus"
 CONF_MODBUS_RESTRICTION = "modbus_restriction"
 CONF_WEB_SCAN_INTERVAL = "web_scan_interval"
+CONF_METER_POWER_INTERVAL = "meter_power_interval"
 
 
 class ModbusRestriction(StrEnum):

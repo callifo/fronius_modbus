@@ -17,7 +17,7 @@ This is a fork of [callifo/fronius_modbus](https://github.com/callifo/fronius_mo
 
 ## Features
 
-- Inverter, battery and smart meter values over Modbus TCP (SunSpec), with the register map discovered at runtime: AC and DC power, energy, MPPT strings, battery state of charge, grid power per phase, household load, grid status.
+- Inverter, battery and smart meter values over Modbus TCP (SunSpec), with the register map discovered at runtime: AC and DC power, energy, MPPT strings, battery state of charge, grid power per phase, household load, grid status. The grid meter's power can be read on its own, as often as every second, for a battery control that follows feed-in and draw.
 - Battery control over Modbus: eight storage modes (such as *Charge from Grid*, *Block Discharging*), charge and discharge limits, grid charge power, storage reserve.
 - Inverter control over Modbus: AC limit, power factor, grid connection.
 - With a Web API login: the inverter's own battery management (SoC window, backup reserve, self-consumption optimisation, charge sources), the export soft limit (`technician` role), the Solar API switch, and the setup of the inverter's Modbus.
@@ -69,7 +69,7 @@ Copy the contents of the `custom_components` folder to your Home Assistant `conf
 
 ## Setup
 
-The setup asks for the inverter's host, the Web API access role (`customer`, `technician` or *Without the web API*), the two update intervals and the Modbus IP restriction. With a role it asks for that role's password; this is the local login of the inverter's web interface, not the Solar.web login. The password is not stored; the integration keeps a derived token that only Home Assistant can read.
+The setup asks for the inverter's host, the Web API access role (`customer`, `technician` or *Without the web API*), the update intervals and the Modbus IP restriction. With a role it asks for that role's password; this is the local login of the inverter's web interface, not the Solar.web login. The password is not stored; the integration keeps a derived token that only Home Assistant can read.
 
 With a role, the setup sets the inverter's Modbus itself. Without the web API, set it first in the inverter's web UI: Modbus TCP on, port 502, the SunSpec model type `int + SF`, inverter address 1 and meter address offset 200, and *Allow Control* on for the Modbus controls.
 

@@ -111,6 +111,21 @@ async def test_a_new_entry_keeps_a_fast_meter_power_interval(hass, mock_modbus):
     assert result["data"]["meter_power_interval"] == 1
 
 
+async def test_a_meter_power_interval_not_below_the_update_interval_is_refused(
+    hass, mock_modbus
+):
+    """A slower fast poll would hide the full poll's newer reading."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {**USER_INPUT, "meter_power_interval": 10}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "meter_power_interval_too_long"}
+
+
 async def test_a_second_flow_for_the_same_host_aborts(hass, mock_modbus):
     MockConfigEntry(domain=DOMAIN, data={"host": HOST}, unique_id=HOST).add_to_hass(
         hass

@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from .conftest import METER_UNIT_ID
-from .test_e2e import make_entry, setup_entry, state_of
+from .test_e2e import entity_id_for, make_entry, setup_entry, state_of
 
 pytestmark = [pytest.mark.e2e, pytest.mark.timeout(120)]
 
@@ -105,18 +105,26 @@ async def test_a_failed_fast_read_falls_back_to_the_full_poll(
 async def test_the_other_meter_sensors_stay_on_the_full_poll(hass, mock_modbus):
     entry = make_entry(hass, meter_power_interval=1)
     await setup_entry(hass, entry)
-    before = state_of(hass, entry, f"meter_{METER_UNIT_ID}_line_frequency")
+    meter = entry.runtime_data.device.meters[METER_UNIT_ID].meter
     holding = mock_modbus.unit(METER_UNIT_ID).holding
-    frequency = (
-        entry.runtime_data.device.meters[METER_UNIT_ID]
-        .meter.resolved_fields["hz"]
-        .address
-    )
-    holding[frequency] += 1
+    holding[meter.resolved_fields["hz"].address] += 1
 
     await _poll_fast(hass, entry)
 
-    assert state_of(hass, entry, f"meter_{METER_UNIT_ID}_line_frequency") == before
+    # The full poll's frequency, not the new register, and not the fast power.
+    key = f"meter_{METER_UNIT_ID}_line_frequency"
+    assert float(state_of(hass, entry, key)) == meter.hz
+
+
+async def test_an_unchanged_fast_reading_writes_no_state(hass, mock_modbus):
+    entry = make_entry(hass, meter_power_interval=1)
+    await setup_entry(hass, entry)
+    entity_id = entity_id_for(hass, entry, "sensor", POWER_KEY)
+    reported = hass.states.get(entity_id).last_reported
+
+    await _poll_fast(hass, entry)
+
+    assert hass.states.get(entity_id).last_reported == reported
 
 
 async def test_a_meter_that_does_not_answer_is_an_expected_outage(hass, mock_modbus):

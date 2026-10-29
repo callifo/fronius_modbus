@@ -1116,6 +1116,11 @@ async def test_an_ipv6_only_announcement_is_not_offered(hass):
         (config_flow._InvalidPort, "base", "invalid_port"),
         (config_flow._InvalidHost, "host", "invalid_host"),
         (config_flow._ScanIntervalTooShort, "base", "scan_interval_too_short"),
+        (
+            config_flow._MeterPowerIntervalTooLong,
+            "base",
+            "meter_power_interval_too_long",
+        ),
         (config_flow._MissingApiPassword, "base", "missing_api_password"),
         (config_flow._InvalidApiCredentials, "base", "invalid_api_credentials"),
         (config_flow._CannotResolveLocalIp, "base", "cannot_resolve_local_ip"),
@@ -1239,6 +1244,7 @@ async def test_a_reauth_failing_late_keeps_the_fresh_token(
         ({"host": "ab"}, config_flow._InvalidHost),
         ({"port": 70000}, config_flow._InvalidPort),
         ({"scan_interval": 4}, config_flow._ScanIntervalTooShort),
+        ({"meter_power_interval": 10}, config_flow._MeterPowerIntervalTooLong),
         ({"inverter_modbus_unit_id": 200}, config_flow._AddressesNotUnique),
     ],
 )

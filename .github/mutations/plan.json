@@ -2322,5 +2322,26 @@
     "old": "        if meter_power is None or not meter_power.last_update_success:\n",
     "new": "        if meter_power is None:\n",
     "tests": "failed_fast_read_falls_back"
+  },
+  {
+    "label": "meter power: only the power sensor follows the fast poll",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "            meter_power=suffix == \"power\",\n",
+    "new": "            meter_power=True,\n",
+    "tests": "other_meter_sensors_stay_on_the_full_poll"
+  },
+  {
+    "label": "meter power: an interval not below the update interval is refused",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "    if meter_power_interval and meter_power_interval >= data[CONF_SCAN_INTERVAL]:\n",
+    "new": "    if meter_power_interval and meter_power_interval > data[CONF_SCAN_INTERVAL]:\n",
+    "tests": "meter_power_interval_not_below_the_update_interval"
+  },
+  {
+    "label": "meter power: an unchanged reading writes no state",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "            always_update=False,\n",
+    "new": "            always_update=True,\n",
+    "tests": "unchanged_fast_reading_writes_no_state"
   }
 ]

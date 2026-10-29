@@ -3,7 +3,7 @@
 ## Unreleased
 
 ### Added
-- An optional interval for the grid meter's power, from 1 to 60 seconds: the primary meter's *Power* sensor is then read on its own, so a battery control that follows feed-in and draw sees a change within that time. Everything else stays on the update interval. Off by default; set it under *Configure*.
+- An optional interval for the grid meter's power, from 1 to 60 seconds and shorter than the update interval: the primary meter's *Power* sensor is then read on its own, so a battery control that follows feed-in and draw sees a change within that time. Everything else stays on the update interval. Off by default; set it under *Configure*.
 
 ## 1.3.0
 

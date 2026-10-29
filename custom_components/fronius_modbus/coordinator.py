@@ -486,6 +486,8 @@ class FroniusMeterPowerCoordinator(DataUpdateCoordinator[float | None]):
             config_entry=entry,
             name=f"{entry.entry_id} meter power",
             update_interval=interval,
+            # Every second an unchanged reading would rewrite the state.
+            always_update=False,
         )
         self.meter_unit_id = meter.unit_id
         self._power = AcMeter(meter.meter.modbus_unit, meter.model)

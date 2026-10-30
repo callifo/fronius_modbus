@@ -250,6 +250,15 @@ def _body_data(payload: Any, *path: str) -> tuple[dict[str, Any] | None, str | N
     return (node, ".".join(path)) if isinstance(node, dict) else (None, None)
 
 
+def _rtu_address(attributes: dict[str, Any]) -> int | None:
+    """A meter's RS485 address, or None when the answer gives no usable one."""
+    try:
+        rtu_addr = int(str(attributes.get("addr", "")).strip())
+    except TypeError, ValueError:
+        return None
+    return rtu_addr if rtu_addr > 0 else None
+
+
 def _parse_power_meter_info(
     payload: Any,
     meter_address_offset: int,
@@ -265,6 +274,7 @@ def _parse_power_meter_info(
         "primary_unit_id": None,
         "locations_by_unit_id": {},
         "payload_shape": payload_shape,
+        "incomplete": False,
     }
 
     meters: list[dict[str, Any]] = []
@@ -276,14 +286,13 @@ def _parse_power_meter_info(
             continue
 
         model = _clean_text(attributes.get("model"))
-        try:
-            rtu_addr = int(str(attributes.get("addr", "")).strip())
-        except TypeError, ValueError:
-            continue
-
-        if rtu_addr <= 0:
-            continue
         if not _is_power_meter_model(model):
+            continue
+        rtu_addr = _rtu_address(attributes)
+        if rtu_addr is None:
+            # A meter the answer names but cannot place; leaving it out
+            # silently would read as that meter being gone.
+            result["incomplete"] = True
             continue
 
         label = (_clean_text(attributes.get("label")) or "").lower()

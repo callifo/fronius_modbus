@@ -2378,5 +2378,19 @@
     "old": "        self._static_groups = {**self._static_groups, \"module\": modules}\n",
     "new": "        self._static_groups = {**self._static_groups, \"module\": repeating_group(5, MpptModule, stride=MPPT_MODULE_LENGTH)}\n",
     "tests": "module_count_beyond_the_model"
+  },
+  {
+    "label": "topology: a meter without a usable address leaves it unconfirmed",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "            result[\"incomplete\"] = True\n",
+    "new": "            pass\n",
+    "tests": "without_a_usable_address"
+  },
+  {
+    "label": "topology: an incomplete answer is not confirmed",
+    "path": "custom_components/fronius_modbus/meter_topology.py",
+    "old": "        confirmed=len(unit_ids) == len(reported) and not info.get(\"incomplete\"),\n",
+    "new": "        confirmed=len(unit_ids) == len(reported),\n",
+    "tests": "without_a_usable_address"
   }
 ]

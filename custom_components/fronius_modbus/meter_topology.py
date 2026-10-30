@@ -14,8 +14,9 @@ MAXIMUM_UNIT_ID = 247
 class MeterTopology:
     """Which meters the web API reports, and whether the list is confirmed.
 
-    Only a confirmed list may retire entities. A missing answer or a reported
-    unit outside the supported range leaves the list unconfirmed.
+    Only a confirmed list may retire entities. A missing answer, a meter it
+    names without a usable address, or a reported unit outside the supported
+    range leaves the list unconfirmed.
     """
 
     unit_ids: list[int]
@@ -46,5 +47,5 @@ def parse_meter_topology(info: dict | None) -> MeterTopology:
         },
         # A meter left out is not proof that it is gone: keep the topology
         # unconfirmed so it cannot retire entities.
-        confirmed=len(unit_ids) == len(reported),
+        confirmed=len(unit_ids) == len(reported) and not info.get("incomplete"),
     )

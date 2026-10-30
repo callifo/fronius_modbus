@@ -50,6 +50,10 @@ LINE_BUDGETS = {
     # 1625 - the description types, now descriptions.py; + the service event entities
     # 1560 - the MPPT module sensors, now mppt_entities.py
     "entities.py": 1560,
+    # 898 + a meter the answer names without a usable address marks the
+    # answer incomplete (audit R489-01); the parser shares _body_data,
+    # _clean_text and _as_int with the other payloads, so it stays here.
+    "froniuswebclient.py": 907,
 }
 
 # SonarSource's own default. Above it, a function is one somebody has to
@@ -61,7 +65,7 @@ COMPLEXITY_LIMIT = 15
 # improvement is written down.
 COMPLEXITY_BUDGETS = {
     "derived.py::LoadEstimator.update": 19,
-    "froniuswebclient.py::_parse_power_meter_info": 26,
+    "froniuswebclient.py::_parse_power_meter_info": 24,
     "migrations.py::async_migrate_v019_mppt_statistics": 19,
 }
 

@@ -381,6 +381,28 @@ def test_a_meter_beyond_the_modbus_range_is_left_out_and_unconfirmed():
     assert not topology.confirmed
 
 
+@pytest.mark.parametrize("addr", [None, "bad", "0", "-1"])
+def test_a_meter_without_a_usable_address_leaves_the_list_unconfirmed(addr):
+    """A meter the endpoint names but cannot place is no proof that it is gone."""
+    second = meter_node(addr, **{"meter-location": "1"})
+    if addr is None:
+        del second["attributes"]["addr"]
+
+    topology = _topology(meter_node("1", label="<primary>"), second)
+
+    assert topology.unit_ids == [200]
+    assert not topology.confirmed
+
+
+def test_a_node_that_is_no_meter_leaves_the_list_confirmed():
+    topology = _topology(
+        meter_node("1", label="<primary>"), meter_node("x", model="Inverter")
+    )
+
+    assert topology.unit_ids == [200]
+    assert topology.confirmed
+
+
 def test_a_primary_meter_beyond_the_modbus_range_falls_back_to_the_default():
     topology = _topology(meter_node("57", label="<primary>"), meter_node("2"))
 

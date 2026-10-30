@@ -176,6 +176,47 @@ def _relabel_module(holding: dict, module: int, label: str) -> None:
         holding[40253 + 11 + 20 * module + word] = (ord(pair[0]) << 8) | ord(pair[1])
 
 
+async def test_a_module_count_beyond_the_model_fails_the_mppt_read(
+    device, inverter_unit
+):
+    """N=5 on a four-module model read the storage model as a fifth module."""
+    await device.async_update()
+    inverter_unit.holding[device.mppt.resolved_fields["n"].address] = 5
+
+    report = await device.async_update()
+
+    assert REPORT_MPPT in report.failed
+    assert [module.id for module in device.mppt.module] == [1, 2, 3, 4]
+
+
+async def test_a_wrong_module_count_does_not_move_the_unlabelled_storage_paths(
+    device, inverter_unit
+):
+    for index in range(4):
+        _relabel_module(inverter_unit.holding, index, "")
+    await device.async_update()
+    inverter_unit.holding[device.mppt.resolved_fields["n"].address] = 5
+
+    report = await device.async_update()
+
+    assert REPORT_MPPT in report.failed
+    channels = device.mppt_channels
+    assert (channels.charge, channels.discharge) == (2, 3)
+
+
+async def test_an_unimplemented_module_count_fails_the_mppt_read(
+    device, inverter_unit
+):
+    """0xFFFF decoded to None and emptied the modules, reported as a success."""
+    await device.async_update()
+    inverter_unit.holding[device.mppt.resolved_fields["n"].address] = 0xFFFF
+
+    report = await device.async_update()
+
+    assert REPORT_MPPT in report.failed
+    assert len(device.mppt.module) == 4
+
+
 async def test_a_foreign_labelled_module_is_not_a_pv_channel(connection, symo_gen24):
     """The PV channels are the ones LABELLED as strings, not "whatever is left".
 

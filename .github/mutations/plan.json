@@ -2343,5 +2343,40 @@
     "old": "            always_update=False,\n",
     "new": "            always_update=True,\n",
     "tests": "unchanged_fast_reading_writes_no_state"
+  },
+  {
+    "label": "topology: a unit beyond Modbus is left out",
+    "path": "custom_components/fronius_modbus/meter_topology.py",
+    "old": "    unit_ids = [unit for unit in reported if 0 < unit <= MAXIMUM_UNIT_ID]\n",
+    "new": "    unit_ids = [unit for unit in reported if 0 < unit]\n",
+    "tests": "beyond_the_modbus_range"
+  },
+  {
+    "label": "topology: a meter left out leaves it unconfirmed",
+    "path": "custom_components/fronius_modbus/meter_topology.py",
+    "old": "        confirmed=len(unit_ids) == len(reported),\n",
+    "new": "        confirmed=True,\n",
+    "tests": "left_out_and_unconfirmed"
+  },
+  {
+    "label": "topology: a primary beyond Modbus falls back to the default",
+    "path": "custom_components/fronius_modbus/meter_topology.py",
+    "old": "    if primary_unit_id not in unit_ids:\n",
+    "new": "    if False:\n",
+    "tests": "primary_meter_beyond_the_modbus_range"
+  },
+  {
+    "label": "mppt: an N that disagrees with the length fails the read",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/sunspec_models.py",
+    "old": "        if self.n != len(self.module):\n",
+    "new": "        if False:\n",
+    "tests": "module_count"
+  },
+  {
+    "label": "mppt: the module count follows the model length",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/sunspec_models.py",
+    "old": "        self._static_groups = {**self._static_groups, \"module\": modules}\n",
+    "new": "        self._static_groups = {**self._static_groups, \"module\": repeating_group(5, MpptModule, stride=MPPT_MODULE_LENGTH)}\n",
+    "tests": "module_count_beyond_the_model"
   }
 ]

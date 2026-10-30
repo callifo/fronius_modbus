@@ -204,9 +204,7 @@ async def test_a_wrong_module_count_does_not_move_the_unlabelled_storage_paths(
     assert (channels.charge, channels.discharge) == (2, 3)
 
 
-async def test_an_unimplemented_module_count_fails_the_mppt_read(
-    device, inverter_unit
-):
+async def test_an_unimplemented_module_count_fails_the_mppt_read(device, inverter_unit):
     """0xFFFF decoded to None and emptied the modules, reported as a success."""
     await device.async_update()
     inverter_unit.holding[device.mppt.resolved_fields["n"].address] = 0xFFFF

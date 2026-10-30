@@ -2354,8 +2354,8 @@
   {
     "label": "topology: a meter left out leaves it unconfirmed",
     "path": "custom_components/fronius_modbus/meter_topology.py",
-    "old": "        confirmed=len(unit_ids) == len(reported),\n",
-    "new": "        confirmed=True,\n",
+    "old": "        confirmed=len(unit_ids) == len(reported) and not",
+    "new": "        confirmed=True and not",
     "tests": "left_out_and_unconfirmed"
   },
   {

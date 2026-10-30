@@ -311,7 +311,7 @@ class FroniusWebControl:
 
     @property
     def configured(self) -> bool:
-        """Whether the customer web API client is available."""
+        """Whether an authenticated web API client is available."""
         return self._client is not None
 
     @property

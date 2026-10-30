@@ -5,7 +5,7 @@
     "step": {
       "user": {
         "title": "Set up Fronius System",
-        "description": "Enter the host, choose the local Web API access role, and set the update intervals and Modbus IP restriction. Minimum interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand, with the SunSpec model type int + SF. Switching an existing entry to it removes those entities; their history stays.",
+        "description": "Enter the host, choose the local Web API access role, and set the update intervals and Modbus IP restriction. Minimum Modbus and Web API interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand, with the SunSpec model type int + SF. Switching an existing entry to it removes those entities; their history stays.",
         "data": {
           "host": "Host",
           "scan_interval": "Update interval (seconds)",
@@ -28,7 +28,7 @@
       },
       "reconfigure": {
         "title": "Review Fronius System",
-        "description": "Review the host, the local Web API access role, the update intervals and the Modbus IP restriction. Minimum interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand, with the SunSpec model type int + SF. Switching an existing entry to it removes those entities; their history stays.",
+        "description": "Review the host, the local Web API access role, the update intervals and the Modbus IP restriction. Minimum Modbus and Web API interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand, with the SunSpec model type int + SF. Switching an existing entry to it removes those entities; their history stays.",
         "data": {
           "host": "Host",
           "scan_interval": "Update interval (seconds)",
@@ -824,7 +824,7 @@
     "step": {
       "init": {
         "title": "Set up Fronius System",
-        "description": "Review the host, the local Web API access role, the update intervals and the Modbus IP restriction. Minimum interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand, with the SunSpec model type int + SF. Switching an existing entry to it removes those entities; their history stays.",
+        "description": "Review the host, the local Web API access role, the update intervals and the Modbus IP restriction. Minimum Modbus and Web API interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand, with the SunSpec model type int + SF. Switching an existing entry to it removes those entities; their history stays.",
         "data": {
           "host": "Host",
           "scan_interval": "Update interval (seconds)",

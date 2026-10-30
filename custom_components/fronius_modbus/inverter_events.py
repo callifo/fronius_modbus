@@ -154,7 +154,7 @@ class EventTracker:
     def batch(self) -> tuple[InverterEvent, ...]:
         """The pending entries a poll may publish.
 
-        None while the log does not answer: the event entity is unavailable
+        An empty tuple while the log does not answer: the event entity is unavailable
         then, and an entry fired into it would become no event state.
         """
         return self.pending if self.readable else ()

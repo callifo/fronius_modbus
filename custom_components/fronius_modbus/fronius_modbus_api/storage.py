@@ -67,8 +67,8 @@ DISCHARGE_LIMIT_MODES = {
     ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT,
     ExtendedMode.BLOCK_CHARGING,
 }
-# The rate each grid mode leaves to the user, as its grid power.
 _IMAGE_FIELDS = ("stor_ctl_mod", "in_w_rte", "out_w_rte")
+# The rate each grid mode leaves to the user, as its grid power.
 _GRID_POWER_FIELDS = {
     ExtendedMode.CHARGE_FROM_GRID: "out_w_rte",
     ExtendedMode.DISCHARGE_TO_GRID: "in_w_rte",

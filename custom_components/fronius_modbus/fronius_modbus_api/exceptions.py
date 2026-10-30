@@ -51,5 +51,9 @@ class ControlUnavailable(RuntimeError):
         self.placeholders = placeholders
 
 
+class InconsistentModelError(ModbusError):
+    """A model whose own points contradict the layout discovery found."""
+
+
 class IncompleteChainError(ModbusError):
     """The SunSpec chain ended in a refused read, so later models are undecided."""

@@ -10,9 +10,11 @@ part of the entity contract and live in the integration, not here.
 
 from __future__ import annotations
 
+from modbus_connection import ModbusUnit
 from modbus_connection.model import Component, repeating_group
 from modbus_connection.model.sunspec import (
     SunSpecComponent,
+    SunSpecModel,
     acc32,
     bitfield16,
     bitfield32,
@@ -21,6 +23,8 @@ from modbus_connection.model.sunspec import (
     string,
     uint16,
 )
+
+from .exceptions import InconsistentModelError
 
 INVERTER_MODEL_IDS = (103, 101)
 METER_MODEL_IDS = (203, 201, 202, 204)
@@ -131,11 +135,37 @@ class MpptModule(Component):
     dcwh = acc32(22, scale_register=5, unit="Wh")
 
 
+# Model 160: eight fixed points, then one block of twenty per module.
+MPPT_FIXED_LENGTH = 8
+MPPT_MODULE_LENGTH = 20
+
+
 class Mppt(SunSpecComponent):
-    """SunSpec model 160: multiple MPPT inverter extension."""
+    """SunSpec model 160: multiple MPPT inverter extension.
+
+    The module count follows from the model length discovery found, not from
+    N: a wrong N read the next model as a module, or emptied the modules. A
+    read whose N disagrees with the length fails instead.
+    """
 
     n = uint16(8)
-    module = repeating_group(uint16(8), MpptModule, stride=20)
+    module = repeating_group(0, MpptModule, stride=MPPT_MODULE_LENGTH)
+
+    def __init__(self, unit: ModbusUnit, model: SunSpecModel) -> None:
+        """Bind the module count to this model's length."""
+        count = max(0, (model.length - MPPT_FIXED_LENGTH) // MPPT_MODULE_LENGTH)
+        modules = repeating_group(count, MpptModule, stride=MPPT_MODULE_LENGTH)
+        modules.name = "module"
+        self._static_groups = {**self._static_groups, "module": modules}
+        super().__init__(unit, model)
+
+    async def async_update(self, *, notify: bool = True) -> None:
+        """Read the model; an N that disagrees with its length fails the read."""
+        await super().async_update(notify=notify)
+        if self.n != len(self.module):
+            raise InconsistentModelError(
+                f"model 160 names {self.n} modules, its length holds {len(self.module)}"
+            )
 
 
 class AcMeter(SunSpecComponent):

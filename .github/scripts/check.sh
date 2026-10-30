@@ -82,8 +82,7 @@ echo "== pytest =="
 # end-to-end tests against a real Home Assistant run here too.
 # --cov-fail-under: 73 % when the gate was adopted (2026-09-05), 89 % once the
 # web client and repair flows were covered, 90 % after the audit fixes of 2026-09-06.
-# web client and the repair flows were covered - the config flow is what is
-# left. It is a floor, not a target: raise it when coverage rises, never lower
+# It is a floor, not a target: raise it when coverage rises, never lower
 # it to get past a red run.
 # The Modbus libraries an installation runs: the ones core's modbus pins.
 "$PYTHON" .github/scripts/core_modbus_pins.py --check

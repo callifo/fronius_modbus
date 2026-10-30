@@ -37,7 +37,7 @@ def is_prerelease(pin: str | None) -> bool:
     """Whether a `homeassistant==...` requirement names a prerelease.
 
     Anything that is not an exact pin to a final version counts as one: no
-    pin, a range, a dev or local version - the uncertainty this script
+    pin, a range, or a dev version - the uncertainty this script
     exists to remove.
     """
     if not pin:

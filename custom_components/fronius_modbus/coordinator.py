@@ -326,14 +326,14 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
 
         The quality scale's log-when-unavailable, one level below the device:
         a meter that goes quiet is an expected outage (info), one that answers
-        with a refusal is worth a warning.
+        with a refusal or with inconsistent data is worth a warning.
         """
         for name in sorted(report.failed.keys() - self._failed):
             err = report.failed[name]
             if isinstance(err, NO_ANSWER):
                 _LOGGER.info("%s does not answer: %s", name, error_text(err))
             else:
-                _LOGGER.warning("%s refused the read: %s", name, error_text(err))
+                _LOGGER.warning("%s could not be read: %s", name, error_text(err))
         for name in sorted(self._failed & set(report.updated)):
             _LOGGER.info("%s answers again", name)
         self._failed = frozenset(report.failed)

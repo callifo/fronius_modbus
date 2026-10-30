@@ -31,6 +31,7 @@ from custom_components.fronius_modbus.froniuswebclient import (
     login,
     mint_token,
 )
+from custom_components.fronius_modbus.meter_topology import parse_meter_topology
 
 HOST = "192.0.2.10"
 REALM = "Webinterface area"
@@ -352,6 +353,61 @@ def test_nodes_that_are_not_power_meters_are_left_out():
     }
 
     assert _parse_power_meter_info(payload, 200)["unit_ids"] == []
+
+
+def _topology(*nodes):
+    payload = {"Body": {"Data": {str(i): node for i, node in enumerate(nodes, 1)}}}
+    return parse_meter_topology(_parse_power_meter_info(payload, 200))
+
+
+def test_the_highest_modbus_unit_is_a_meter():
+    topology = _topology(meter_node("1", label="<primary>"), meter_node("48"))
+
+    assert topology.unit_ids == [200, 247]
+    assert topology.confirmed
+
+
+def test_a_meter_beyond_the_modbus_range_is_left_out_and_unconfirmed():
+    """A unit above 247 is no Modbus address: polling it aborted the setup."""
+    topology = _topology(
+        meter_node("1", label="<primary>"),
+        meter_node("57", **{"meter-location": "1"}),
+    )
+
+    assert topology.unit_ids == [200]
+    assert topology.primary_unit_id == 200
+    assert topology.locations == {}
+    # Unconfirmed: the meter left out must not retire anything.
+    assert not topology.confirmed
+
+
+@pytest.mark.parametrize("addr", [None, "bad", "0", "-1"])
+def test_a_meter_without_a_usable_address_leaves_the_list_unconfirmed(addr):
+    """A meter the endpoint names but cannot place is no proof that it is gone."""
+    second = meter_node(addr, **{"meter-location": "1"})
+    if addr is None:
+        del second["attributes"]["addr"]
+
+    topology = _topology(meter_node("1", label="<primary>"), second)
+
+    assert topology.unit_ids == [200]
+    assert not topology.confirmed
+
+
+def test_a_node_that_is_no_meter_leaves_the_list_confirmed():
+    topology = _topology(
+        meter_node("1", label="<primary>"), meter_node("x", model="Inverter")
+    )
+
+    assert topology.unit_ids == [200]
+    assert topology.confirmed
+
+
+def test_a_primary_meter_beyond_the_modbus_range_falls_back_to_the_default():
+    topology = _topology(meter_node("57", label="<primary>"), meter_node("2"))
+
+    assert (topology.unit_ids, topology.primary_unit_id) == ([200], 200)
+    assert not topology.confirmed
 
 
 def test_an_unrecognized_power_meter_payload_has_no_shape():

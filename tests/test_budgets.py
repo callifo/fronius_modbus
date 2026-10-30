@@ -51,7 +51,7 @@ LINE_BUDGETS = {
     # 1560 - the MPPT module sensors, now mppt_entities.py
     "entities.py": 1560,
     # 898 + a meter the answer names without a usable address marks the
-    # answer incomplete (audit R489-01); the parser shares _body_data,
+    # answer incomplete; the parser shares _body_data,
     # _clean_text and _as_int with the other payloads, so it stays here.
     "froniuswebclient.py": 907,
 }

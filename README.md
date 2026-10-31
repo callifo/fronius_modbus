@@ -45,9 +45,9 @@ Entity IDs, unique IDs, history/statistics and existing options of [callifo/fron
 > [!IMPORTANT]
 > Enum states are translation keys now: `Auto` became `auto`, `Charge from Grid` became `charge_from_grid`, `On grid operating` became `on_grid_operating`, `Enabled`/`Disabled` became `enabled`/`disabled`. Update automations and templates that compare against the old texts; see the CHANGELOG for the rule.
 
-- **Minimum Home Assistant version: 2026.9.0** (upstream: 2024.4.0).
+- **Minimum Home Assistant version: 2026.9.0**.
 - The checkbox "Restrict Modbus to this IP" became the option **Modbus IP restriction**; checked becomes "restrict and allow this Home Assistant", unchecked becomes "keep". Allowing Home Assistant adds its address to the hosts already allowed while the inverter's restriction is on; while it is off, Home Assistant's address becomes the only allowed host.
-- The SoC window follows the inverter's own switch: `SoC Maximum` and the new `SoC Minimum (Web API)` are writable while the new `Web API SoC mode` is manual. Upstream ties them to `Self-consumption optimisation`.
+- The SoC window follows the inverter's own switch: `SoC Maximum` and the new `SoC Minimum (Web API)` are writable while the new `Web API SoC mode` is manual, instead of following `Self-consumption optimisation`.
 
 ## Installation
 

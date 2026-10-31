@@ -12,8 +12,8 @@ def soft_limit_location(active_power: dict[str, Any]) -> tuple[dict[str, Any], s
     """The object holding the soft limit's watts, and their key in it.
 
     Firmware 1.42 moved them from softLimit.powerLimit up to
-    activePower.exportLimit, which its new protection limit shares
-    (upstream #154); a write to the old place is refused there.
+    activePower.exportLimit; its new protection limit keeps its own value
+    (upstream #154). A write to the old place is refused there.
     """
     if EXPORT_LIMIT_KEY in active_power:
         return active_power, EXPORT_LIMIT_KEY

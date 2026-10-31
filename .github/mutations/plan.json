@@ -590,9 +590,16 @@
   {
     "label": "web client: a refused field in the answer is an error",
     "path": "custom_components/fronius_modbus/froniuswebclient.py",
-    "old": "        if refused:\n",
+    "old": "        if refusal := _refusal(response):\n",
     "new": "        if False:\n",
     "tests": "a_field_the_inverter_refuses_is_an_error"
+  },
+  {
+    "label": "web client: an error status keeps the inverter's refusal",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "on {path}{_refusal(response)}\",\n",
+    "new": "on {path}\",\n",
+    "tests": "a_write_rejected_with_an_error_status_names_what_the_inverter_refused"
   },
   {
     "label": "web client: flags compare in the inverter's spelling",

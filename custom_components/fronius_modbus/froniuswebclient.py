@@ -67,6 +67,18 @@ def _http(method: str, url: str, **options: Any) -> requests.Response:
         raise FroniusWebUnreachable(type(err).__name__) from err
 
 
+def _refusal(response: requests.Response) -> str:
+    """The fields an answer names as not taken; only these, never the whole body."""
+    try:
+        body = response.json()
+    except ValueError:
+        return ""
+    if not isinstance(body, dict):
+        return ""
+    refused = {key: body[key] for key in WRITE_REFUSALS if body.get(key)}
+    return f" refused {refused}" if refused else ""
+
+
 def _as_int(value: Any, fallback: int) -> int:
     try:
         return int(value)
@@ -565,8 +577,10 @@ class FroniusWebClient:
         try:
             response.raise_for_status()
         except requests.HTTPError as err:
+            # A bare status left owners without the inverter's reason.
             raise FroniusWebResponseError(
-                f"HTTP {response.status_code} on {path}", response.status_code
+                f"HTTP {response.status_code} on {path}{_refusal(response)}",
+                response.status_code,
             ) from err
         return response
 
@@ -583,16 +597,9 @@ class FroniusWebClient:
         so HTTP 200 alone does not say every field was taken.
         """
         response = self._request("post", path, payload=payload)
-        try:
-            body = response.json()
-        except ValueError:
-            return
-        if not isinstance(body, dict):
-            return
-        refused = {key: body[key] for key in WRITE_REFUSALS if body.get(key)}
-        if refused:
+        if refusal := _refusal(response):
             raise FroniusWebResponseError(
-                f"HTTP {response.status_code} on {path} refused {refused}",
+                f"HTTP {response.status_code} on {path}{refusal}",
                 response.status_code,
             )
 

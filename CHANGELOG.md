@@ -9,6 +9,7 @@
 - An invalid reported meter address could stop entry setup. Only Modbus units 1-247 are now kept; leaving out a unit makes the meter list unconfirmed, so no entity is removed because of it.
 - A smart meter the inverter's web interface listed without a usable address was left out as if it were gone, so a reload could remove the entities of a meter that still exists. Such an answer now leaves the meter list unconfirmed.
 - An MPPT model whose module count disagrees with its length, or reports none, read the following model as a module or dropped all modules, which could move the battery's charge and discharge paths. The module layout now follows the model length; a disagreeing count marks the MPPT read as failed until it fits again.
+- A setting the inverter's web interface rejected with an error status, such as `Export soft limit` answered with *400 Bad Request* (upstream #154), failed with the status alone. The error now names the fields the inverter reports as refused.
 
 ## 1.3.0
 

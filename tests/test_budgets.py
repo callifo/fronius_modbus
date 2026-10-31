@@ -53,7 +53,9 @@ LINE_BUDGETS = {
     # 898 + a meter the answer names without a usable address marks the
     # answer incomplete; the parser shares _body_data,
     # _clean_text and _as_int with the other payloads, so it stays here.
-    "froniuswebclient.py": 907,
+    # 907 + an error status keeps the fields the inverter names as refused,
+    # read by the same helper as the refusals in a 200 answer.
+    "froniuswebclient.py": 914,
 }
 
 # SonarSource's own default. Above it, a function is one somebody has to

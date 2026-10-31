@@ -1288,6 +1288,23 @@ async def test_an_export_limit_flag_in_no_on_form_shows_no_limit(hass, enabled):
     assert data.export_soft_limit_w is None
 
 
+async def test_the_export_soft_limit_reads_where_firmware_1_42_keeps_it(hass):
+    """Upstream #154: 1.42 moved the watts out of softLimit; the sensor read unknown."""
+
+    class Firmware142Client(FakeWebClient):
+        def get_export_limit_config(self):
+            active_power = {"exportLimit": 6000.0, "softLimit": {"enabled": True}}
+            return {"exportLimits": {"activePower": active_power}}
+
+    control = make_control(hass, client=Firmware142Client())
+    try:
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert data.export_soft_limit_w == 6000
+
+
 async def test_an_export_limit_block_of_the_wrong_shape_fails_no_refresh(hass):
     """A list where the limits object belongs took the whole web poll down."""
 

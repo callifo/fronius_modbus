@@ -590,9 +590,16 @@
   {
     "label": "web client: a refused field in the answer is an error",
     "path": "custom_components/fronius_modbus/froniuswebclient.py",
-    "old": "        if refused:\n",
+    "old": "        if refusal := _refusal(response):\n",
     "new": "        if False:\n",
     "tests": "a_field_the_inverter_refuses_is_an_error"
+  },
+  {
+    "label": "web client: an error status keeps the inverter's refusal",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "on {path}{_refusal(response)}\",\n",
+    "new": "on {path}\",\n",
+    "tests": "a_write_rejected_with_an_error_status_names_what_the_inverter_refused"
   },
   {
     "label": "web client: flags compare in the inverter's spelling",
@@ -1185,9 +1192,16 @@
   {
     "label": "web control: the export limit shows only a number",
     "path": "custom_components/fronius_modbus/web_control.py",
-    "old": "            self.data.export_soft_limit_w = _as_int(soft.get(\"powerLimit\"))\n",
-    "new": "            self.data.export_soft_limit_w = soft.get(\"powerLimit\")\n",
+    "old": "            self.data.export_soft_limit_w = _as_int(soft_limit_value(active_power))\n",
+    "new": "            self.data.export_soft_limit_w = soft_limit_value(active_power)\n",
     "tests": "export_limit_that_is_no_number_shows_no_limit"
+  },
+  {
+    "label": "export limit: firmware 1.42 keeps the watts beside the switches",
+    "path": "custom_components/fronius_modbus/export_limit.py",
+    "old": "    if EXPORT_LIMIT_KEY in active_power:\n",
+    "new": "    if False:\n",
+    "tests": "export_soft_limit_is_written_where_firmware_1_42_keeps_it or export_soft_limit_reads_where_firmware_1_42_keeps_it"
   },
   {
     "label": "component readings: the production limit follows the report",

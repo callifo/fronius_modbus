@@ -1170,6 +1170,32 @@ def test_a_field_the_inverter_refuses_is_an_error(client, inverter, refusal):
         client.set_backup_reserve(7)
 
 
+def test_a_write_rejected_with_an_error_status_names_what_the_inverter_refused(
+    client, inverter
+):
+    """A bare "HTTP 400" left owners and maintainers without the inverter's reason."""
+    path = "/api/config/limit_settings/powerLimits"
+    inverter.bodies[path] = {
+        "exportLimits": {
+            "activePower": {"softLimit": {"enabled": False, "powerLimit": 0}}
+        }
+    }
+    original_handle = inverter.handle
+
+    def reject_the_write(method, request_path, payload, headers):
+        status, body, extra = original_handle(method, request_path, payload, headers)
+        if method == "post":
+            return 400, {"validationErrors": ["softLimit.powerLimit"]}, extra
+        return status, body, extra
+
+    inverter.handle = reject_the_write
+
+    with pytest.raises(FroniusWebResponseError, match="softLimit.powerLimit") as err:
+        client.set_export_soft_limit(6000)
+
+    assert err.value.status_code == 400
+
+
 def test_a_solar_api_already_in_that_state_is_not_written(client, inverter):
     inverter.bodies["/api/config/solar_api"] = {
         "SolarAPIv1Enabled": False,
@@ -1187,6 +1213,45 @@ def test_an_export_limit_already_in_place_is_not_written(client, inverter):
             "activePower": {"softLimit": {"enabled": True, "powerLimit": 7000}}
         }
     }
+
+    assert client.set_export_soft_limit(7000) is False
+
+    assert posts(inverter) == []
+
+
+def power_limits_1_42(soft_enabled: bool, export_limit: float) -> dict:
+    """The shape firmware 1.42 answers: the watts sit beside the switches."""
+    return {
+        "exportLimits": {
+            "activePower": {
+                "activated": True,
+                "exportLimit": export_limit,
+                "hardLimit": {"enabled": False, "powerLimit": 0},
+                "protectionLimit": {"acPowerInstalled": 0.0, "enabled": False},
+                "softLimit": {"enabled": soft_enabled},
+            }
+        }
+    }
+
+
+def test_the_export_soft_limit_is_written_where_firmware_1_42_keeps_it(
+    client, inverter
+):
+    """Upstream #154: a powerLimit added under softLimit made 1.42 answer 400."""
+    path = "/api/config/limit_settings/powerLimits"
+    inverter.bodies[path] = power_limits_1_42(False, 0.0)
+
+    assert client.set_export_soft_limit(7000) is True
+
+    active_power = posted(inverter, path)["exportLimits"]["activePower"]
+    assert active_power["exportLimit"] == 7000
+    assert active_power["softLimit"] == {"enabled": True}
+
+
+def test_an_export_limit_in_place_on_firmware_1_42_is_not_written(client, inverter):
+    inverter.bodies["/api/config/limit_settings/powerLimits"] = power_limits_1_42(
+        True, 7000.0
+    )
 
     assert client.set_export_soft_limit(7000) is False
 

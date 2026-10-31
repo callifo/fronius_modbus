@@ -17,6 +17,7 @@ from requests.utils import parse_dict_header
 
 from .component_readings import flag_value, json_object, take_readings
 from .const import API_USERNAME, ModbusRestriction
+from .export_limit import soft_limit_location
 from .fronius_modbus_api.exceptions import ControlRefused
 from .web_errors import (
     ClientIpResolutionError,
@@ -897,18 +898,17 @@ class FroniusWebClient:
             return {}
 
     def set_export_soft_limit(self, power_w: int) -> bool:
-        """Set Export Limit Control (Soft Limit) in watts.
+        """Set the export soft limit in watts; whether it was written.
 
-        Reads the current config, patches only the softLimit fields, and writes back.
-        Mirrors read_export_limit.py: only modifies softLimit, leaves everything else unchanged.
+        Writes back the config just read, with only the switch and the watts patched.
         """
         config = self._get_json("/api/config/limit_settings/powerLimits")
-        soft = config["exportLimits"]["activePower"]["softLimit"]
-        if is_enabled(soft.get("enabled")) and _same(
-            soft.get("powerLimit"), int(power_w)
-        ):
+        active_power = config["exportLimits"]["activePower"]
+        soft = active_power["softLimit"]
+        holder, key = soft_limit_location(active_power)
+        if is_enabled(soft.get("enabled")) and _same(holder.get(key), int(power_w)):
             return False
         soft["enabled"] = True
-        soft["powerLimit"] = int(power_w)
+        holder[key] = int(power_w)
         self._post("/api/config/limit_settings/powerLimits", config)
         return True

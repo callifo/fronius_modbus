@@ -24,6 +24,7 @@ from .const import (
     SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX,
     TECHNICIAN_USERNAME,
 )
+from .export_limit import soft_limit_value
 from .fronius_modbus_api.exceptions import ControlRefused, ControlUnavailable
 from .froniuswebclient import FroniusWebAuthError, FroniusWebClient, is_enabled
 from .inverter_events import (
@@ -167,37 +168,18 @@ def _export_limit_summary(config: dict[str, Any] | None) -> dict[str, Any]:
     if not isinstance(config, dict) or not config:
         return {"available": False}
 
-    export_limits = config.get("exportLimits", {})
-    active_power = (
-        export_limits.get("activePower", {}) if isinstance(export_limits, dict) else {}
-    )
-    soft_limit = (
-        active_power.get("softLimit", {}) if isinstance(active_power, dict) else {}
-    )
-    hard_limit = (
-        active_power.get("hardLimit", {}) if isinstance(active_power, dict) else {}
-    )
-
+    export_limits = _config_part(config, "exportLimits") or {}
+    active_power = _config_part(export_limits, "activePower") or {}
+    soft_limit = _config_part(active_power, "softLimit") or {}
+    hard_limit = _config_part(active_power, "hardLimit") or {}
     return {
         "available": True,
-        "active_power_activated": active_power.get("activated")
-        if isinstance(active_power, dict)
-        else None,
-        "soft_limit_enabled": soft_limit.get("enabled")
-        if isinstance(soft_limit, dict)
-        else None,
-        "soft_limit_w": soft_limit.get("powerLimit")
-        if isinstance(soft_limit, dict)
-        else None,
-        "hard_limit_enabled": hard_limit.get("enabled")
-        if isinstance(hard_limit, dict)
-        else None,
-        "hard_limit_w": hard_limit.get("powerLimit")
-        if isinstance(hard_limit, dict)
-        else None,
-        "fail_safe_enabled": export_limits.get("failSafeModeEnabled")
-        if isinstance(export_limits, dict)
-        else None,
+        "active_power_activated": active_power.get("activated"),
+        "soft_limit_enabled": soft_limit.get("enabled"),
+        "soft_limit_w": soft_limit_value(active_power),
+        "hard_limit_enabled": hard_limit.get("enabled"),
+        "hard_limit_w": hard_limit.get("powerLimit"),
+        "fail_safe_enabled": export_limits.get("failSafeModeEnabled"),
     }
 
 
@@ -563,9 +545,10 @@ class FroniusWebControl:
         # limit, not a failed poll.
         config = export_limit_config if isinstance(export_limit_config, dict) else None
         limits = _config_part(config, "exportLimits")
-        soft = _config_part(_config_part(limits, "activePower"), "softLimit")
+        active_power = _config_part(limits, "activePower")
+        soft = _config_part(active_power, "softLimit")
         if soft is not None and flag_value(soft.get("enabled")) is True:
-            self.data.export_soft_limit_w = _as_int(soft.get("powerLimit"))
+            self.data.export_soft_limit_w = _as_int(soft_limit_value(active_power))
 
         self._async_sync_solar_api_warning()
         # Last: an auth failure above replaces the data, and these entries are

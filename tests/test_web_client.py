@@ -1219,6 +1219,45 @@ def test_an_export_limit_already_in_place_is_not_written(client, inverter):
     assert posts(inverter) == []
 
 
+def power_limits_1_42(soft_enabled: bool, export_limit: float) -> dict:
+    """The shape firmware 1.42 answers: the watts sit beside the switches."""
+    return {
+        "exportLimits": {
+            "activePower": {
+                "activated": True,
+                "exportLimit": export_limit,
+                "hardLimit": {"enabled": False, "powerLimit": 0},
+                "protectionLimit": {"acPowerInstalled": 0.0, "enabled": False},
+                "softLimit": {"enabled": soft_enabled},
+            }
+        }
+    }
+
+
+def test_the_export_soft_limit_is_written_where_firmware_1_42_keeps_it(
+    client, inverter
+):
+    """Upstream #154: a powerLimit added under softLimit made 1.42 answer 400."""
+    path = "/api/config/limit_settings/powerLimits"
+    inverter.bodies[path] = power_limits_1_42(False, 0.0)
+
+    assert client.set_export_soft_limit(7000) is True
+
+    active_power = posted(inverter, path)["exportLimits"]["activePower"]
+    assert active_power["exportLimit"] == 7000
+    assert active_power["softLimit"] == {"enabled": True}
+
+
+def test_an_export_limit_in_place_on_firmware_1_42_is_not_written(client, inverter):
+    inverter.bodies["/api/config/limit_settings/powerLimits"] = power_limits_1_42(
+        True, 7000.0
+    )
+
+    assert client.set_export_soft_limit(7000) is False
+
+    assert posts(inverter) == []
+
+
 def test_the_modbus_control_reset_is_a_bare_command(client, inverter):
     assert client.reset_modbus_control() is True
 

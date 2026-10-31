@@ -1170,6 +1170,32 @@ def test_a_field_the_inverter_refuses_is_an_error(client, inverter, refusal):
         client.set_backup_reserve(7)
 
 
+def test_a_write_rejected_with_an_error_status_names_what_the_inverter_refused(
+    client, inverter
+):
+    """A bare "HTTP 400" left owners and maintainers without the inverter's reason."""
+    path = "/api/config/limit_settings/powerLimits"
+    inverter.bodies[path] = {
+        "exportLimits": {
+            "activePower": {"softLimit": {"enabled": False, "powerLimit": 0}}
+        }
+    }
+    original_handle = inverter.handle
+
+    def reject_the_write(method, request_path, payload, headers):
+        status, body, extra = original_handle(method, request_path, payload, headers)
+        if method == "post":
+            return 400, {"validationErrors": ["softLimit.powerLimit"]}, extra
+        return status, body, extra
+
+    inverter.handle = reject_the_write
+
+    with pytest.raises(FroniusWebResponseError, match="softLimit.powerLimit") as err:
+        client.set_export_soft_limit(6000)
+
+    assert err.value.status_code == 400
+
+
 def test_a_solar_api_already_in_that_state_is_not_written(client, inverter):
     inverter.bodies["/api/config/solar_api"] = {
         "SolarAPIv1Enabled": False,

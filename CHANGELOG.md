@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 1.4.0b1
+
+Released 2026-10-31. A beta on 1.3.0: an optional fast read of the grid meter's power for battery controls that follow feed-in and draw, the export soft limit on inverter firmware 1.42, and safer handling of unusual meter and MPPT answers. No new entry migration; unique ids and entity ids do not change.
 
 ### Added
 - An optional interval for the grid meter's power, from 1 to 60 seconds and shorter than the update interval: the primary meter's *Power* sensor is then read on its own, so a battery control that follows feed-in and draw sees a change within that time. Everything else stays on the update interval. Off by default; set it under *Configure*.

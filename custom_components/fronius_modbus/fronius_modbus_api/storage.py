@@ -133,6 +133,13 @@ def _registers_fit(
     return in_fits and out_fits
 
 
+def _mode_left() -> ControlRefused:
+    return ControlRefused(
+        "storage_mode_left",
+        "The inverter is no longer in the selected storage mode; select it again",
+    )
+
+
 def _watts_to_percent(watts: float, maximum_w: float) -> float:
     if maximum_w <= 0:
         return 0.0
@@ -180,7 +187,7 @@ class StorageControl:
         if self._extended_mode is None:
             self._extended_mode = derived
             return
-        if self._holds_selected(mode, in_rate, out_rate):
+        if self._holds_selected(self.extended_mode, mode, in_rate, out_rate):
             self._unconfirmed_polls = None
             return
         if self._unconfirmed_polls is not None:
@@ -202,7 +209,9 @@ class StorageControl:
         self._unconfirmed_polls = None
         self._written = {}
 
-    def _holds_selected(self, mode: int, in_rate: float, out_rate: float) -> bool:
+    def _holds_selected(
+        self, selected: ExtendedMode, mode: int, in_rate: float, out_rate: float
+    ) -> bool:
         """Whether an image, as the device applies it, is the selected mode's.
 
         An image that derives to it is. One that only fits it is shared with
@@ -211,7 +220,6 @@ class StorageControl:
         Home Assistant wrote: evcc's hold charge writes the same registers
         (callifo 141). Nothing written since a restart: the registers decide.
         """
-        selected = self.extended_mode
         # Another controller may write the same mode on another base mode
         # (evcc holds with StorCtl_Mod 2 where this integration writes 3).
         if _derive_extended_mode(mode, in_rate, out_rate) is selected:
@@ -401,6 +409,9 @@ class StorageControl:
         async with self._write_lock:
             if not allowed():
                 raise refusal
+            # Admitted for this mode: a poll during the awaits below may take
+            # another one, which need not allow this limit (checked before the write).
+            selected = self.extended_mode
             value = await written_value(self._storage, field_name, percent())
             mode, in_rate, out_rate = await self._image_for_a_rate()
             # A rate StorCtl_Mod keeps off is ignored by the device; another
@@ -429,7 +440,11 @@ class StorageControl:
                     "The grid power exceeds the combined limit the inverter holds; "
                     "select the storage mode again",
                 )
-            await self._write_changed(field_name, value)
+            holding = await registers_holding(self._storage, {field_name: value})
+            if self.extended_mode is not selected:
+                raise _mode_left()
+            if field_name not in holding:
+                await self._storage.write(field_name, value)
             if switched_on != mode:
                 await self._storage.write("stor_ctl_mod", switched_on)
             # A poll that read the registers before this write judges the
@@ -455,7 +470,7 @@ class StorageControl:
         # Unreadable for a moment right after a write: the power just set stays.
         if image is None:
             return field_name, self._written.get(field_name, 0.0)
-        if self._holds_selected(*image):
+        if self._holds_selected(mode, *image):
             return field_name, image[1 if field_name == "in_w_rte" else 2]
         return None, None
 
@@ -470,12 +485,8 @@ class StorageControl:
         image = await self._live_image()
         if image is None:
             return _MODE_TABLE[self.extended_mode]
-        if not self._holds_selected(*image):
-            raise ControlRefused(
-                "storage_mode_left",
-                "The inverter is no longer in the selected storage mode; "
-                "select it again",
-            )
+        if not self._holds_selected(self.extended_mode, *image):
+            raise _mode_left()
         return image
 
     async def _live_image(self) -> tuple[int, float, float] | None:

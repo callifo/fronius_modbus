@@ -1151,3 +1151,201 @@ async def test_a_limit_written_into_a_rate_that_is_off_switches_it_on(
     await control._storage.async_update()
     control.sync_from_device()
     assert control.extended_mode is mode
+
+
+# A mode with a rate left to the user, its setter, the register, and the mode
+# its image reads as when that rate is 0: the image both modes share.
+SHARED_AT_ZERO = [
+    (
+        ExtendedMode.PV_CHARGE_LIMIT,
+        "set_charge_limit_w",
+        IN_W_RTE,
+        ExtendedMode.BLOCK_CHARGING,
+    ),
+    (
+        ExtendedMode.DISCHARGE_TO_GRID,
+        "set_grid_discharge_power_w",
+        IN_W_RTE,
+        ExtendedMode.BLOCK_CHARGING,
+    ),
+    (
+        ExtendedMode.DISCHARGE_LIMIT,
+        "set_discharge_limit_w",
+        OUT_W_RTE,
+        ExtendedMode.BLOCK_DISCHARGING,
+    ),
+    (
+        ExtendedMode.CHARGE_FROM_GRID,
+        "set_grid_charge_power_w",
+        OUT_W_RTE,
+        ExtendedMode.BLOCK_DISCHARGING,
+    ),
+    (
+        ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT,
+        "set_charge_limit_w",
+        IN_W_RTE,
+        ExtendedMode.BLOCK_CHARGING,
+    ),
+    (
+        ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT,
+        "set_discharge_limit_w",
+        OUT_W_RTE,
+        ExtendedMode.BLOCK_DISCHARGING,
+    ),
+]
+
+
+async def _poll(control) -> None:
+    await control._storage.async_update()
+    control.sync_from_device()
+
+
+@pytest.mark.parametrize(("mode", "setter", "address", "shared"), SHARED_AT_ZERO)
+async def test_a_rate_another_controller_sets_to_zero_leaves_the_mode(
+    control, inverter_unit, caplog, mode, setter, address, shared
+):
+    """callifo 141: evcc's hold charge after a 2500 W PV charge limit kept showing the limit.
+
+    At 0 the image is both modes; Home Assistant had written another rate, so
+    someone else wrote this one.
+    """
+    await control.set_mode(mode)
+    await getattr(control, setter)(2560)
+    await _poll(control)
+    inverter_unit.holding[address] = 0
+
+    await _poll(control)
+
+    assert control.extended_mode is shared
+    assert "Storage mode changed outside Home Assistant" in caplog.text
+
+
+@pytest.mark.parametrize(("mode", "setter", "address", "shared"), SHARED_AT_ZERO)
+async def test_a_rate_home_assistant_set_to_zero_keeps_the_mode(
+    control, mode, setter, address, shared
+):
+    """Home Assistant's own 0 W reads like the other mode; the choice must survive."""
+    await control.set_mode(mode)
+    await getattr(control, setter)(0)
+
+    for _ in range(MODE_WRITE_GRACE_POLLS + 1):
+        await _poll(control)
+
+    assert control.extended_mode is mode
+
+
+async def test_a_mode_change_half_written_is_not_taken_for_another_controller(
+    control, inverter_unit
+):
+    """A poll between StorCtl_Mod and the rate of a mode change sees the image of the old mode."""
+    await control.set_mode(ExtendedMode.BLOCK_CHARGING)
+    await _poll(control)
+    await control.set_mode(ExtendedMode.PV_CHARGE_LIMIT)
+    inverter_unit.holding[IN_W_RTE] = 0
+
+    await _poll(control)
+    assert control.extended_mode is ExtendedMode.PV_CHARGE_LIMIT
+    inverter_unit.holding[IN_W_RTE] = 10000
+    await _poll(control)
+    assert control.extended_mode is ExtendedMode.PV_CHARGE_LIMIT
+
+
+async def test_after_a_restart_a_rate_set_to_zero_leaves_the_mode(inverter_unit):
+    """Nothing written by Home Assistant since the restart: the registers decide."""
+    control = await _control_on(
+        inverter_unit, {STOR_CTL_MOD: 1, IN_W_RTE: 5000, OUT_W_RTE: 10000}
+    )
+    assert control.extended_mode is ExtendedMode.PV_CHARGE_LIMIT
+    inverter_unit.holding[IN_W_RTE] = 0
+
+    await _poll(control)
+
+    assert control.extended_mode is ExtendedMode.BLOCK_CHARGING
+
+
+async def test_a_rate_another_controller_changes_keeps_the_mode_until_it_is_zero(
+    control, inverter_unit
+):
+    """1500 W instead of 2500 W is still a PV charge limit; 0 then is evcc's hold."""
+    await control.set_mode(ExtendedMode.PV_CHARGE_LIMIT)
+    await control.set_charge_limit_w(2560)
+    await _poll(control)
+    inverter_unit.holding[IN_W_RTE] = 1500
+
+    await _poll(control)
+    assert control.extended_mode is ExtendedMode.PV_CHARGE_LIMIT
+    inverter_unit.holding[IN_W_RTE] = 0
+    await _poll(control)
+    assert control.extended_mode is ExtendedMode.BLOCK_CHARGING
+
+
+async def test_a_limit_is_refused_after_another_controller_took_the_shared_image(
+    control, inverter_unit, writes
+):
+    """Written before the next poll noticed, the limit replaced evcc's hold charge."""
+    await control.set_mode(ExtendedMode.PV_CHARGE_LIMIT)
+    await control.set_charge_limit_w(2560)
+    await _poll(control)
+    inverter_unit.holding[IN_W_RTE] = 0
+    del writes[:]
+
+    with pytest.raises(ControlRefused) as refused:
+        await control.set_charge_limit_w(1000)
+
+    assert refused.value.key == "storage_mode_left"
+    assert writes == []
+
+
+async def test_a_grid_power_kept_at_reselection_counts_as_home_assistant_s(
+    control, inverter_unit
+):
+    """Selecting Discharge to Grid again keeps the power another controller set.
+
+    Taken over as the mode's own, a later 0 from outside is outside again.
+    """
+    await control.set_mode(ExtendedMode.DISCHARGE_TO_GRID)
+    await _poll(control)
+    inverter_unit.holding[IN_W_RTE] = (-2000) & 0xFFFF
+    await _poll(control)
+    await control.set_mode(ExtendedMode.DISCHARGE_TO_GRID)
+    await _poll(control)
+    inverter_unit.holding[IN_W_RTE] = 0
+
+    await _poll(control)
+
+    assert control.extended_mode is ExtendedMode.BLOCK_CHARGING
+
+
+async def test_a_poll_read_before_a_limit_write_keeps_the_mode(control):
+    """The poll read the old 0 W, the limit went out, then the poll was judged.
+
+    Against the limit just written, Home Assistant's own image looked foreign.
+    """
+    await control.set_mode(ExtendedMode.PV_CHARGE_LIMIT)
+    await control.set_charge_limit_w(0)
+    await _poll(control)
+    await control._storage.async_update()
+    await control.set_charge_limit_w(2560)
+
+    control.sync_from_device()
+    assert control.extended_mode is ExtendedMode.PV_CHARGE_LIMIT
+    await _poll(control)
+    assert control.extended_mode is ExtendedMode.PV_CHARGE_LIMIT
+
+
+async def test_a_failed_mode_write_leaves_the_record_of_the_last_one(
+    control, inverter_unit
+):
+    """A mode change that failed half way must not count as written by Home Assistant."""
+    await control.set_mode(ExtendedMode.PV_CHARGE_LIMIT)
+    await control.set_charge_limit_w(2560)
+    await _poll(control)
+    inverter_unit.fail_write(IN_W_RTE, ServerDeviceFailureError())
+    with pytest.raises(ServerDeviceFailureError):
+        await control.set_mode(ExtendedMode.DISCHARGE_TO_GRID)
+    inverter_unit.fail_write(IN_W_RTE, None)
+    inverter_unit.holding[IN_W_RTE] = 0
+
+    await _poll(control)
+
+    assert control.extended_mode is ExtendedMode.BLOCK_CHARGING

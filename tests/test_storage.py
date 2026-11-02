@@ -389,10 +389,18 @@ ZERO_LIMITS = [
     for mode in sorted(modes)
 ]
 BLOCK_MODES = (ExtendedMode.BLOCK_CHARGING, ExtendedMode.BLOCK_DISCHARGING)
+# The modes this integration writes with both rates switched on (StorCtl_Mod 3).
+BOTH_RATES_ON = {
+    ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT,
+    ExtendedMode.BLOCK_CHARGING,
+    ExtendedMode.BLOCK_DISCHARGING,
+}
+ZERO_LIMITS_BOTH_ON = [row for row in ZERO_LIMITS if row[0] in BOTH_RATES_ON]
+ZERO_LIMITS_OTHER_OFF = [row for row in ZERO_LIMITS if row[0] not in BOTH_RATES_ON]
 
 
 @pytest.mark.parametrize("watts", [0, 0.1])
-@pytest.mark.parametrize(("mode", "setter", "other"), ZERO_LIMITS)
+@pytest.mark.parametrize(("mode", "setter", "other"), ZERO_LIMITS_BOTH_ON)
 async def test_a_zero_limit_that_blocks_both_ways_is_refused(
     control, writes, inverter_unit, mode, setter, other, watts
 ):
@@ -412,6 +420,26 @@ async def test_a_zero_limit_that_blocks_both_ways_is_refused(
 
     assert refused.value.key == "limit_blocks_both_ways"
     assert writes == []
+
+
+@pytest.mark.parametrize(("mode", "setter", "other"), ZERO_LIMITS_OTHER_OFF)
+async def test_a_zero_limit_beside_a_rate_that_is_off_is_written(
+    control, writes, inverter_unit, mode, setter, other
+):
+    """StorCtl_Mod 1 and 2 switch the other rate off, and the device takes (1, 0, 0).
+
+    Refused as "both ways blocked", a 0 W PV charge or discharge limit could
+    not be set after another controller had left the other rate at 0.
+    """
+    await control.set_mode(mode)
+    inverter_unit.holding[other] = 0
+    del writes[:]
+
+    await getattr(control, setter)(0)
+
+    assert [event.address for event in writes] == [
+        IN_W_RTE if setter == "set_charge_limit_w" else OUT_W_RTE
+    ]
 
 
 @pytest.mark.parametrize(("mode", "setter", "other"), ZERO_LIMITS)
@@ -828,7 +856,10 @@ async def test_a_rate_over_an_image_that_fits_the_mode_is_written(
     for setter, address in SETTERS_IN[control.extended_mode]:
         del writes[:]
         await getattr(control, setter)(2560)
-        assert [event.address for event in writes] == [address]
+        switched_on = _rate_on(stor_ctl_mod, address)
+        assert [event.address for event in writes] == (
+            [address] if switched_on else [address, STOR_CTL_MOD]
+        )
 
 
 # A mode, and the image of another mode on the same StorCtl_Mod.
@@ -948,3 +979,174 @@ async def test_a_grid_power_inside_a_combined_window_is_written(
     await getattr(control, setter)(2560)
 
     assert _words(writes, address) == [(-2500) & 0xFFFF]
+
+
+def _rate_on(stor_ctl_mod: int, address: int) -> bool:
+    """Whether StorCtl_Mod switches the rate at ``address`` on (bit 0 InWRte, bit 1 OutWRte)."""
+    return bool(stor_ctl_mod & (1 if address == IN_W_RTE else 2))
+
+
+def _raw(percent: float) -> int:
+    return round(percent * 100) & 0xFFFF
+
+
+# (StorCtl_Mod, InWRte %, OutWRte %) measured on a GEN24 (fw 1.42.9-1) with an
+# outside writer, and their mirrors: the rate StorCtl_Mod keeps off is ignored.
+OFF_RATE_IMAGES = [
+    ((2, -10, 0), ExtendedMode.BLOCK_DISCHARGING),
+    ((1, 0, -10), ExtendedMode.BLOCK_CHARGING),
+    ((2, -100, 0), ExtendedMode.BLOCK_DISCHARGING),
+    ((1, 0, -50), ExtendedMode.BLOCK_CHARGING),
+    ((1, 50, -10), ExtendedMode.PV_CHARGE_LIMIT),
+    ((2, -50, 50), ExtendedMode.DISCHARGE_LIMIT),
+    ((1, -20, -30), ExtendedMode.DISCHARGE_TO_GRID),
+    ((2, -20, -30), ExtendedMode.CHARGE_FROM_GRID),
+    ((1, 0, 0), ExtendedMode.BLOCK_CHARGING),
+    ((2, 0, 0), ExtendedMode.BLOCK_DISCHARGING),
+]
+
+
+@pytest.mark.parametrize(("image", "expected"), OFF_RATE_IMAGES)
+async def test_a_rate_storctl_mod_keeps_off_does_not_decide_the_mode(
+    inverter_unit, image, expected
+):
+    """evcc's hold after discharge read as Discharge to Grid, holdcharge after charge as Charge from Grid.
+
+    StorCtl_Mod is a bitfield: bit 0 switches InWRte on, bit 1 OutWRte. The
+    device ignores the other rate (measured), and evcc leaves it as it was.
+    """
+    stor_ctl_mod, in_rate, out_rate = image
+    control = await _control_on(
+        inverter_unit,
+        {
+            STOR_CTL_MOD: stor_ctl_mod,
+            IN_W_RTE: _raw(in_rate),
+            OUT_W_RTE: _raw(out_rate),
+        },
+    )
+
+    assert control.extended_mode is expected
+
+
+@pytest.mark.parametrize(("image", "expected"), OFF_RATE_IMAGES)
+async def test_a_rate_that_is_off_shows_as_no_limit(inverter_unit, image, expected):
+    """A limit or grid power the device ignores is no limit; it showed the stale register."""
+    stor_ctl_mod, in_rate, out_rate = image
+    control = await _control_on(
+        inverter_unit,
+        {
+            STOR_CTL_MOD: stor_ctl_mod,
+            IN_W_RTE: _raw(in_rate),
+            OUT_W_RTE: _raw(out_rate),
+        },
+    )
+
+    if not stor_ctl_mod & 1:
+        assert (control.charge_limit_pct, control.grid_discharge_power_pct) == (
+            100.0,
+            0.0,
+        )
+    if not stor_ctl_mod & 2:
+        assert (control.discharge_limit_pct, control.grid_charge_power_pct) == (
+            100.0,
+            0.0,
+        )
+
+
+# evcc's battery modes (fronius-gen24 template, evcc 25a8e25): the registers it
+# writes, in order. The rate it leaves out keeps whatever the last writer left.
+EVCC_SEQUENCES = {
+    "normal": [(STOR_CTL_MOD, 0), (OUT_W_RTE, 100), (IN_W_RTE, 100)],
+    "hold": [(STOR_CTL_MOD, 2), (OUT_W_RTE, 0)],
+    "charge": [(STOR_CTL_MOD, 2), (OUT_W_RTE, -50)],
+    "holdcharge": [(STOR_CTL_MOD, 1), (IN_W_RTE, 0)],
+    "discharge": [
+        (STOR_CTL_MOD, 0),
+        (IN_W_RTE, -100),
+        (OUT_W_RTE, 100),
+        (STOR_CTL_MOD, 3),
+    ],
+}
+EVCC_MEANS = {
+    "normal": ExtendedMode.AUTO,
+    "hold": ExtendedMode.BLOCK_DISCHARGING,
+    "charge": ExtendedMode.CHARGE_FROM_GRID,
+    "holdcharge": ExtendedMode.BLOCK_CHARGING,
+    "discharge": ExtendedMode.DISCHARGE_TO_GRID,
+}
+
+
+def _after(image: tuple[int, float, float], sequence) -> tuple[int, float, float]:
+    registers = {STOR_CTL_MOD: image[0], IN_W_RTE: image[1], OUT_W_RTE: image[2]}
+    registers.update(sequence)
+    return registers[STOR_CTL_MOD], registers[IN_W_RTE], registers[OUT_W_RTE]
+
+
+# Where evcc starts from: where each of its own modes leaves the registers,
+# and every image this integration writes for a mode.
+EVCC_STARTS = {
+    **{
+        f"evcc {name}": _after((0, 100, 100), sequence)
+        for name, sequence in EVCC_SEQUENCES.items()
+    },
+    **{f"ha {mode.name}": storage_module._MODE_TABLE[mode] for mode in ExtendedMode},
+}
+
+
+@pytest.mark.parametrize("start", sorted(EVCC_STARTS))
+@pytest.mark.parametrize("evcc_mode", sorted(EVCC_SEQUENCES))
+async def test_every_evcc_mode_reads_as_its_mode_whatever_came_before(
+    inverter_unit, start, evcc_mode
+):
+    """evcc writes one rate per mode, so the other is what the last writer left.
+
+    Judged by both, the mode depended on the one before: hold after discharge
+    read as Discharge to Grid.
+    """
+    stor_ctl_mod, in_rate, out_rate = _after(
+        EVCC_STARTS[start], EVCC_SEQUENCES[evcc_mode]
+    )
+    control = await _control_on(
+        inverter_unit,
+        {
+            STOR_CTL_MOD: stor_ctl_mod,
+            IN_W_RTE: _raw(in_rate),
+            OUT_W_RTE: _raw(out_rate),
+        },
+    )
+
+    assert control.extended_mode is EVCC_MEANS[evcc_mode]
+
+
+# A block mode another controller holds with one rate only, the limit the
+# integration leaves to the user there, and the rate that limit is written to.
+ONE_RATE_BLOCK_MODES = [
+    ((1, 0, 100), "set_discharge_limit_w", OUT_W_RTE),
+    ((2, 100, 0), "set_charge_limit_w", IN_W_RTE),
+]
+
+
+@pytest.mark.parametrize(("image", "setter", "address"), ONE_RATE_BLOCK_MODES)
+async def test_a_limit_written_into_a_rate_that_is_off_switches_it_on(
+    inverter_unit, writes, image, setter, address
+):
+    """Under evcc's hold or holdcharge the limit went into a register the device ignores."""
+    stor_ctl_mod, in_rate, out_rate = image
+    control = await _control_on(
+        inverter_unit,
+        {
+            STOR_CTL_MOD: stor_ctl_mod,
+            IN_W_RTE: _raw(in_rate),
+            OUT_W_RTE: _raw(out_rate),
+        },
+    )
+    mode = control.extended_mode
+    del writes[:]
+
+    await getattr(control, setter)(5120)
+
+    assert [event.address for event in writes] == [address, STOR_CTL_MOD]
+    assert _words(writes, STOR_CTL_MOD) == [3]
+    await control._storage.async_update()
+    control.sync_from_device()
+    assert control.extended_mode is mode

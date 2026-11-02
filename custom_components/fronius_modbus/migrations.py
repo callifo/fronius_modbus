@@ -165,6 +165,40 @@ def async_mark_reported(
         )
 
 
+# callifo 0.3.3 read three module temperatures under keys of its own; the
+# same channels are module_temperature_<n> here.
+_CALLIFO_MODULE_TEMPERATURE_KEYS = {
+    "ac_mod_temperature": "module_temperature_1",
+    "dc_mod_temperature": "module_temperature_3",
+    "batt_mod_temperature": "module_temperature_4",
+}
+
+
+@callback
+def async_migrate_callifo_module_temperatures(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> None:
+    """Move callifo's module temperature ids onto this integration's keys.
+
+    Before the registered and reported keys are read, and marked as reported:
+    callifo created the sensor from a reading, and a module dark at the update
+    must not be retired with its history.
+    """
+    registry = er.async_get(hass)
+    prefix = entity_prefix(entry.entry_id)
+    moved = []
+    for callifo_key, key in _CALLIFO_MODULE_TEMPERATURE_KEYS.items():
+        entity_id = registry.async_get_entity_id(
+            Platform.SENSOR, DOMAIN, f"{prefix}_{callifo_key}"
+        )
+        taken = registry.async_get_entity_id(Platform.SENSOR, DOMAIN, f"{prefix}_{key}")
+        if entity_id is None or taken is not None:
+            continue
+        registry.async_update_entity(entity_id, new_unique_id=f"{prefix}_{key}")
+        moved.append(key)
+    async_mark_reported(hass, entry, moved)
+
+
 def _migration_issue_id(entry: ConfigEntry) -> str:
     return f"{MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX}{entry.entry_id}"
 

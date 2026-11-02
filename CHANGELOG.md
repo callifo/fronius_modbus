@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- Updating from callifo 0.3.3 or later replaced the `AC Module Temperature`, `DC Module Temperature` and `Battery Module Temperature` sensors with new ones under new entity ids; their history stayed behind. They now continue as `AC module 1 temperature`, `DC module temperature (3)` and `DC or battery module temperature` with their entity ids, also when the update comes while the inverter does not report the module.
+
 ## 1.4.0b1
 
 Released 2026-10-31. A beta on 1.3.0: an optional fast read of the grid meter's power for battery controls that follow feed-in and draw, the export soft limit on inverter firmware 1.42, and safer handling of unusual meter and MPPT answers. No new entry migration; unique ids and entity ids do not change.

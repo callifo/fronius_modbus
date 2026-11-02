@@ -5,6 +5,7 @@
 ### Fixed
 - With another controller such as evcc, the storage mode could show the wrong mode: StorCtl_Mod switches only one rate on in its charge and discharge modes, and the inverter ignores the other, but the integration judged both. evcc's hold after discharging showed *Discharge to Grid*, its hold charge after charging *Charge from Grid*; the limit and grid power numbers showed the ignored register. They now follow only the rates the inverter applies.
 - In those one-rate block modes, a charge or discharge limit set in Home Assistant went into the rate the inverter ignores and had no effect; setting it now also switches that rate on. A 0 W limit beside a rate that is off is no longer refused as blocking both ways.
+- A storage mode another controller left by setting only a rate to 0 kept showing (upstream #141): for example evcc's hold charge after a PV charge limit set in Home Assistant still showed the PV charge limit until a restart. Such an image is shared by two modes; it now counts as the selected mode only while it holds what Home Assistant wrote, so Home Assistant's own 0 W keeps its mode and another controller's switches it. A limit set in Home Assistant in that moment, before the next update, is refused instead of overwriting the other controller's setting.
 
 ## 1.4.0b1
 

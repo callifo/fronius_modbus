@@ -413,7 +413,17 @@ async def test_a_zero_limit_that_blocks_both_ways_is_refused(
     0.1 W passed the check to become a 0 in the register (reaudit AC-01).
     """
     await control.set_mode(mode)
-    inverter_unit.holding[other] = 0
+    # Home Assistant's own 0 on the other side; written past it, it is another
+    # controller's, and the image no longer the selected mode's.
+    other_setter = (
+        "set_discharge_limit_w"
+        if setter == "set_charge_limit_w"
+        else "set_charge_limit_w"
+    )
+    if mode is ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT:
+        await getattr(control, other_setter)(0)
+    else:
+        inverter_unit.holding[other] = 0
     del writes[:]
 
     with pytest.raises(ControlRefused) as refused:
@@ -644,7 +654,11 @@ def no_comparison(monkeypatch):
     async def nothing_holds(_component, _wanted):
         return set()
 
+    async def as_given(_component, _name, value):
+        return value
+
     monkeypatch.setattr(storage_module, "registers_holding", nothing_holds)
+    monkeypatch.setattr(storage_module, "written_value", as_given)
 
 
 @pytest.mark.usefixtures("no_comparison")
@@ -670,7 +684,8 @@ async def test_a_rate_queued_behind_a_mode_switch_is_judged_by_the_new_mode():
     )
     control.sync_from_device()
     mode_task = asyncio.create_task(control.set_mode(ExtendedMode.BLOCK_CHARGING))
-    await entered.wait()
+    # A mode switch that fails before its first write must fail the test, not hang it.
+    await asyncio.wait_for(entered.wait(), timeout=5)
     rate_task = asyncio.create_task(control.set_charge_limit_w(5000))
     await asyncio.sleep(0)
     release.set()
@@ -1349,3 +1364,35 @@ async def test_a_failed_mode_write_leaves_the_record_of_the_last_one(
     await _poll(control)
 
     assert control.extended_mode is ExtendedMode.BLOCK_CHARGING
+
+
+async def test_a_mode_taken_from_the_registers_owns_no_rate_of_home_assistant(
+    control, inverter_unit
+):
+    """Discharge to Grid at 0 W, then evcc's PV charge limit, then its hold charge.
+
+    Home Assistant's 0 W from before matched evcc's hold charge, so the PV
+    charge limit evcc had left stayed on show.
+    """
+    await control.set_mode(ExtendedMode.DISCHARGE_TO_GRID)
+    await _poll(control)
+    inverter_unit.holding[IN_W_RTE] = 5000
+    await _poll(control)
+    assert control.extended_mode is ExtendedMode.PV_CHARGE_LIMIT
+    inverter_unit.holding[IN_W_RTE] = 0
+
+    await _poll(control)
+
+    assert control.extended_mode is ExtendedMode.BLOCK_CHARGING
+
+
+async def test_discharge_to_grid_selected_again_at_zero_watts_keeps_its_mode(control):
+    """Selecting it again keeps the 0 W it holds; that 0 W is still Home Assistant's own."""
+    await control.set_mode(ExtendedMode.DISCHARGE_TO_GRID)
+    await _poll(control)
+    await control.set_mode(ExtendedMode.DISCHARGE_TO_GRID)
+
+    for _ in range(MODE_WRITE_GRACE_POLLS + 1):
+        await _poll(control)
+
+    assert control.extended_mode is ExtendedMode.DISCHARGE_TO_GRID

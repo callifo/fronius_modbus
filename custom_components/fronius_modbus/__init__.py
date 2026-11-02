@@ -208,6 +208,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
         # web entities come up unavailable while Modbus entities still load.
         await web.async_refresh()
 
+    migrations.async_migrate_callifo_module_temperatures(hass, entry)
     entry.runtime_data = FroniusRuntimeData(
         device=device,
         modbus=modbus,
@@ -222,6 +223,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
     )
 
     await migrations.async_migrate_v019_mppt_statistics(hass, entry)
+    migrations.async_migrate_callifo_lowercase_keys(hass, entry)
     await migrations.async_migrate_name_based_unique_ids(hass, entry)
     await migrations.async_remove_unexpected_entities(hass, entry)
     await migrations.async_remove_legacy_devices(hass, entry)

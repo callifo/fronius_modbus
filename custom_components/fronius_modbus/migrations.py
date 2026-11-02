@@ -165,6 +165,64 @@ def async_mark_reported(
         )
 
 
+# callifo 0.3.3 read three module temperatures under keys of its own; the
+# same channels are module_temperature_<n> here.
+_CALLIFO_MODULE_TEMPERATURE_KEYS = {
+    "ac_mod_temperature": "module_temperature_1",
+    "dc_mod_temperature": "module_temperature_3",
+    "batt_mod_temperature": "module_temperature_4",
+}
+
+
+@callback
+def async_migrate_callifo_module_temperatures(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> None:
+    """Move callifo's module temperature ids onto this integration's keys.
+
+    Before the registered and reported keys are read, and marked as reported:
+    callifo created the sensor from a reading, and a module dark at the update
+    must not be retired with its history.
+    """
+    registry = er.async_get(hass)
+    prefix = entity_prefix(entry.entry_id)
+    moved = []
+    for callifo_key, key in _CALLIFO_MODULE_TEMPERATURE_KEYS.items():
+        entity_id = registry.async_get_entity_id(
+            Platform.SENSOR, DOMAIN, f"{prefix}_{callifo_key}"
+        )
+        taken = registry.async_get_entity_id(Platform.SENSOR, DOMAIN, f"{prefix}_{key}")
+        if entity_id is None or taken is not None:
+            continue
+        registry.async_update_entity(entity_id, new_unique_id=f"{prefix}_{key}")
+        moved.append(key)
+    async_mark_reported(hass, entry, moved)
+
+
+@callback
+def async_migrate_callifo_lowercase_keys(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> None:
+    """Move the unique ids callifo 0.3.4-rc2 wrote in lowercase onto these keys.
+
+    An entity that update left under the original id keeps it, with its
+    history; the lowercase twin beside it is left to the cleanup.
+    """
+    registry = er.async_get(hass)
+    by_lowercase = {
+        unique_id.lower(): unique_id
+        for unique_id in expected_unique_ids(entry, entry.runtime_data)
+        if unique_id != unique_id.lower()
+    }
+    for entity_entry in _entity_entries_for_config_entry(registry, entry):
+        target = by_lowercase.get(entity_entry.unique_id or "")
+        if target is None:
+            continue
+        if registry.async_get_entity_id(entity_entry.domain, DOMAIN, target):
+            continue
+        registry.async_update_entity(entity_entry.entity_id, new_unique_id=target)
+
+
 def _migration_issue_id(entry: ConfigEntry) -> str:
     return f"{MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX}{entry.entry_id}"
 

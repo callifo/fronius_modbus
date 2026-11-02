@@ -1028,6 +1028,46 @@ async def test_a_power_module_missing_from_one_answer_keeps_its_entity(
     assert er.async_get(hass).async_get(module_2) is not None
 
 
+# callifo 0.3.3 named three of the module temperatures after their module.
+CALLIFO_MODULE_TEMPERATURES = [
+    ("ac_mod_temperature", "module_temperature_1", "MODULE_TEMPERATURE_MEAN_01_F32"),
+    ("dc_mod_temperature", "module_temperature_3", "MODULE_TEMPERATURE_MEAN_03_F32"),
+    ("batt_mod_temperature", "module_temperature_4", "MODULE_TEMPERATURE_MEAN_04_F32"),
+]
+
+
+@pytest.mark.parametrize("reported_now", [True, False], ids=["lit", "dark"])
+@pytest.mark.parametrize(("callifo_key", "key", "channel"), CALLIFO_MODULE_TEMPERATURES)
+async def test_a_callifo_module_temperature_keeps_its_entity_at_the_update(
+    hass, mock_modbus, monkeypatch, callifo_key, key, channel, reported_now
+):
+    """Updating from callifo 0.3.3 removed these sensors and created new ones.
+
+    Their history stayed behind under the old entity id, also when the update
+    came while the inverter did not report the module.
+    """
+    mock_modbus.add_unit(201, like=METER_UNIT_ID)
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientAnsweringEmpty)
+    # Another module answers: a module missing from it is unreported, not unknown.
+    other = {"MODULE_TEMPERATURE_MEAN_02_F32": 35.0}
+    readings = other | {channel: 40.0} if reported_now else other
+    monkeypatch.setattr(_WebClientAnsweringEmpty, "readings", readings)
+    entry = make_entry(hass)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+    registry = er.async_get(hass)
+    prefix = entity_prefix(entry.entry_id)
+    callifo_entity = registry.async_get_or_create(
+        "sensor", DOMAIN, f"{prefix}_{callifo_key}", config_entry=entry
+    )
+
+    await setup_entry(hass, entry)
+
+    assert (
+        registry.async_get_entity_id("sensor", DOMAIN, f"{prefix}_{key}")
+        == callifo_entity.entity_id
+    )
+
+
 async def test_a_reconfigure_reloads_the_entry_once(hass, mock_modbus, monkeypatch):
     """Audit F24-10: the update listener and an explicit call both reloaded it."""
     entry = make_entry(hass)
@@ -1671,6 +1711,86 @@ async def test_both_twins_of_a_legacy_unique_id_keep_their_entity_ids(
 
     for (domain, key), entity_id in originals.items():
         assert entity_id_for(hass, entry, domain, key) == entity_id
+
+
+# The keys callifo 0.3.4-rc2 wrote in lowercase, and with them its unique ids.
+CALLIFO_LOWERCASED = [
+    ("select", "Conn"),
+    *(
+        ("sensor", key)
+        for key in (
+            "A",
+            "AphA",
+            "AphB",
+            "AphC",
+            "Conn",
+            "OutPFSet_Ena",
+            "PhVphA",
+            "PhVphB",
+            "PhVphC",
+            "PPVphAB",
+            "PPVphBC",
+            "PPVphCA",
+            "VArPct_Ena",
+            "WMaxLim_Ena",
+            "MaxChaRte",
+            "MaxDisChaRte",
+            "WHRtg",
+        )
+    ),
+    *(
+        ("sensor", f"meter_{METER_UNIT_ID}_{key}")
+        for key in (
+            "A",
+            "AphA",
+            "AphB",
+            "AphC",
+            "PPV",
+            "PhVphA",
+            "PhVphB",
+            "PhVphC",
+            "WphA",
+            "WphB",
+            "WphC",
+        )
+    ),
+]
+
+
+@pytest.mark.parametrize(("domain", "key"), CALLIFO_LOWERCASED)
+async def test_an_entity_from_callifo_0_3_4_rc2_keeps_its_entity_id(
+    hass, mock_modbus, monkeypatch, domain, key
+):
+    """callifo 0.3.4-rc2 lowercased these unique ids; the update replaced the entity."""
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    entry = make_entry(hass)
+    registry = er.async_get(hass)
+    prefix = entity_prefix(entry.entry_id)
+    callifo_entity = registry.async_get_or_create(
+        domain, DOMAIN, f"{prefix}_{key.lower()}", config_entry=entry
+    )
+
+    await setup_entry(hass, entry)
+
+    assert entity_id_for(hass, entry, domain, key) == callifo_entity.entity_id
+
+
+async def test_an_update_through_callifo_0_3_4_rc2_keeps_the_original_entity(
+    hass, mock_modbus, monkeypatch
+):
+    """0.3.4-rc2 left the 0.3.3 entity and created a second one beside it."""
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    entry = make_entry(hass)
+    registry = er.async_get(hass)
+    prefix = entity_prefix(entry.entry_id)
+    original = registry.async_get_or_create(
+        "sensor", DOMAIN, f"{prefix}_AphA", config_entry=entry
+    )
+    registry.async_get_or_create("sensor", DOMAIN, f"{prefix}_apha", config_entry=entry)
+
+    await setup_entry(hass, entry)
+
+    assert entity_id_for(hass, entry, "sensor", "AphA") == original.entity_id
 
 
 async def test_every_power_number_spans_the_rated_power(hass, mock_modbus, monkeypatch):

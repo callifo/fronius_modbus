@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- A brand icon, shown on the integration's pages in Home Assistant.
+
+### Fixed
+- Updating from callifo 0.3.3 or later replaced the `AC Module Temperature`, `DC Module Temperature` and `Battery Module Temperature` sensors with new ones under new entity ids; their history stayed behind. They now continue as `AC module 1 temperature`, `DC module temperature (3)` and `DC or battery module temperature` with their entity ids, also when the update comes while the inverter does not report the module.
+- Updating from the callifo 0.3.4-rc2 pre-release replaced several sensors and the `Inverter connection` select with new ones under new entity ids, because that version wrote their unique ids in lowercase: the AC currents, voltages and per-phase power of the inverter and the meters, the inverter's control status sensors and the storage ratings. They now continue under their entity ids; where 0.3.4-rc2 had left the earlier entity beside its own, the earlier one is kept with its history.
+
 ## 1.4.0b1
 
 Released 2026-10-31. A beta on 1.3.0: an optional fast read of the grid meter's power for battery controls that follow feed-in and draw, the export soft limit on inverter firmware 1.42, and safer handling of unusual meter and MPPT answers. No new entry migration; unique ids and entity ids do not change.

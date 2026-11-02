@@ -75,6 +75,20 @@ _GRID_POWER_FIELDS = {
 }
 
 
+def _effective_rates(mode: int, in_rate: float, out_rate: float) -> tuple[float, float]:
+    """The rates the device applies: one StorCtl_Mod keeps off limits nothing.
+
+    StorCtl_Mod is a bitfield, bit 0 switching InWRte on and bit 1 OutWRte. The
+    device ignores the other rate (measured on a GEN24, fw 1.42.9-1), and
+    another controller such as evcc leaves it at whatever was written last.
+    """
+    if not mode & MODE_CHARGE:
+        in_rate = FULL_RATE_PCT
+    if not mode & MODE_DISCHARGE:
+        out_rate = FULL_RATE_PCT
+    return in_rate, out_rate
+
+
 def _derive_extended_mode(mode: int, in_rate: float, out_rate: float) -> ExtendedMode:
     if mode == MODE_AUTO:
         return ExtendedMode.AUTO
@@ -165,6 +179,7 @@ class StorageControl:
         )
         if mode is None or in_rate is None or out_rate is None:
             return
+        in_rate, out_rate = _effective_rates(mode, in_rate, out_rate)
         derived = _derive_extended_mode(mode, in_rate, out_rate)
         if self._extended_mode is None:
             self._extended_mode = derived
@@ -218,28 +233,40 @@ class StorageControl:
         return mode
 
     @property
+    def _rates(self) -> tuple[float, float] | None:
+        """InWRte and OutWRte as the device applies them, or None before the first update."""
+        mode, in_rate, out_rate = (
+            self._storage.stor_ctl_mod,
+            self._storage.in_w_rte,
+            self._storage.out_w_rte,
+        )
+        if mode is None or in_rate is None or out_rate is None:
+            return None
+        return _effective_rates(mode, in_rate, out_rate)
+
+    @property
     def discharge_limit_pct(self) -> float | None:
         """The positive share of OutWRte, or None before the first update."""
-        rate = self._storage.out_w_rte
-        return None if rate is None else max(rate, 0.0)
+        rates = self._rates
+        return None if rates is None else max(rates[1], 0.0)
 
     @property
     def grid_charge_power_pct(self) -> float | None:
         """The negative share of OutWRte, as a positive percent, or None before the first update."""
-        rate = self._storage.out_w_rte
-        return None if rate is None else max(-rate, 0.0)
+        rates = self._rates
+        return None if rates is None else max(-rates[1], 0.0)
 
     @property
     def charge_limit_pct(self) -> float | None:
         """The positive share of InWRte, or None before the first update."""
-        rate = self._storage.in_w_rte
-        return None if rate is None else max(rate, 0.0)
+        rates = self._rates
+        return None if rates is None else max(rates[0], 0.0)
 
     @property
     def grid_discharge_power_pct(self) -> float | None:
         """The negative share of InWRte, as a positive percent, or None before the first update."""
-        rate = self._storage.in_w_rte
-        return None if rate is None else max(-rate, 0.0)
+        rates = self._rates
+        return None if rates is None else max(-rates[0], 0.0)
 
     @property
     def soc_minimum(self) -> int | None:
@@ -353,6 +380,11 @@ class StorageControl:
                 raise refusal
             value = await written_value(self._storage, field_name, percent())
             mode, in_rate, out_rate = await self._image_for_a_rate()
+            # A rate StorCtl_Mod keeps off is ignored by the device; another
+            # controller's one-rate block mode leaves the user's limit there.
+            switched_on = mode | (
+                MODE_CHARGE if field_name == "in_w_rte" else MODE_DISCHARGE
+            )
             if field_name == "in_w_rte":
                 in_rate = value
             else:
@@ -368,13 +400,15 @@ class StorageControl:
             # In the combined mode it also refuses a negative rate beyond the
             # other one (Fronius register map); another controller's image can
             # hold a grid mode there (reaudit CX-01).
-            if mode == MODE_CHARGE_AND_DISCHARGE and -in_rate > out_rate:
+            if switched_on == MODE_CHARGE_AND_DISCHARGE and -in_rate > out_rate:
                 raise ControlRefused(
                     "grid_power_beyond_window",
                     "The grid power exceeds the combined limit the inverter holds; "
                     "select the storage mode again",
                 )
             await self._write_changed(field_name, value)
+            if switched_on != mode:
+                await self._storage.write("stor_ctl_mod", switched_on)
 
     async def _grid_power_kept(self, mode: ExtendedMode) -> str | None:
         """The grid power field selecting ``mode`` again leaves as set, if any.
@@ -421,8 +455,8 @@ class StorageControl:
         image = [await register_value(self._storage, name) for name in _IMAGE_FIELDS]
         if None in image:
             return None
-        mode, in_rate, out_rate = image
-        return int(mode), float(in_rate), float(out_rate)
+        mode = int(image[0])
+        return mode, *_effective_rates(mode, float(image[1]), float(image[2]))
 
     async def _write_changed(self, field_name: str, value: float) -> None:
         if not await registers_holding(self._storage, {field_name: value}):

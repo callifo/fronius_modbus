@@ -2270,15 +2270,15 @@
   {
     "label": "storage: a grid power beyond a combined window is refused",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "            if mode == MODE_CHARGE_AND_DISCHARGE and -in_rate > out_rate:\n",
+    "old": "            if switched_on == MODE_CHARGE_AND_DISCHARGE and -in_rate > out_rate:\n",
     "new": "            if False:\n",
     "tests": "beyond_a_combined_window"
   },
   {
     "label": "storage: the combined window's own bound is legal",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "            if mode == MODE_CHARGE_AND_DISCHARGE and -in_rate > out_rate:\n",
-    "new": "            if mode == MODE_CHARGE_AND_DISCHARGE and -in_rate >= out_rate:\n",
+    "old": "            if switched_on == MODE_CHARGE_AND_DISCHARGE and -in_rate > out_rate:\n",
+    "new": "            if switched_on == MODE_CHARGE_AND_DISCHARGE and -in_rate >= out_rate:\n",
     "tests": "inside_a_combined_window"
   },
   {
@@ -2406,5 +2406,40 @@
     "old": "        confirmed=len(unit_ids) == len(reported) and not info.get(\"incomplete\"),\n",
     "new": "        confirmed=len(unit_ids) == len(reported),\n",
     "tests": "without_a_usable_address"
+  },
+  {
+    "label": "storage: InWRte off under StorCtl_Mod limits nothing",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "    if not mode & MODE_CHARGE:\n        in_rate = FULL_RATE_PCT\n",
+    "new": "    if False:\n        in_rate = FULL_RATE_PCT\n",
+    "tests": "rate_storctl_mod_keeps_off_does_not_decide_the_mode or rate_that_is_off_shows_as_no_limit"
+  },
+  {
+    "label": "storage: OutWRte off under StorCtl_Mod limits nothing",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "    if not mode & MODE_DISCHARGE:\n        out_rate = FULL_RATE_PCT\n",
+    "new": "    if False:\n        out_rate = FULL_RATE_PCT\n",
+    "tests": "rate_storctl_mod_keeps_off_does_not_decide_the_mode or rate_that_is_off_shows_as_no_limit"
+  },
+  {
+    "label": "storage: the poll judges the rates the device applies",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        in_rate, out_rate = _effective_rates(mode, in_rate, out_rate)\n        derived = ",
+    "new": "        derived = ",
+    "tests": "every_evcc_mode_reads_as_its_mode_whatever_came_before"
+  },
+  {
+    "label": "storage: a limit written into a rate that is off switches it on",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            if switched_on != mode:\n",
+    "new": "            if False:\n",
+    "tests": "limit_written_into_a_rate_that_is_off_switches_it_on"
+  },
+  {
+    "label": "storage: a rate write judges the live rates the device applies",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        return mode, *_effective_rates(mode, float(image[1]), float(image[2]))\n",
+    "new": "        return mode, float(image[1]), float(image[2])\n",
+    "tests": "zero_limit_beside_a_rate_that_is_off_is_written"
   }
 ]

@@ -75,7 +75,8 @@ async def test_auto_on_the_device_reads_as_auto(control):
         (1, 10000, 0, ExtendedMode.BLOCK_CHARGING),
         (1, 10000, 10000, ExtendedMode.PV_CHARGE_LIMIT),
         (2, -3000 & 0xFFFF, 10000, ExtendedMode.CHARGE_FROM_GRID),
-        (2, 10000, -3000 & 0xFFFF, ExtendedMode.DISCHARGE_TO_GRID),
+        # Discharge to Grid is StorCtl_Mod 1: on 2 the device ignores InWRte.
+        (1, 10000, -3000 & 0xFFFF, ExtendedMode.DISCHARGE_TO_GRID),
         (3, 0, 10000, ExtendedMode.BLOCK_DISCHARGING),
         (2, 10000, 10000, ExtendedMode.DISCHARGE_LIMIT),
         (3, 10000, 10000, ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT),

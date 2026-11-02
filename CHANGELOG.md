@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- With another controller such as evcc, the storage mode could show the wrong mode: StorCtl_Mod switches only one rate on in its charge and discharge modes, and the inverter ignores the other, but the integration judged both. evcc's hold after discharging showed *Discharge to Grid*, its hold charge after charging *Charge from Grid*; the limit and grid power numbers showed the ignored register. They now follow only the rates the inverter applies.
+- In those one-rate block modes, a charge or discharge limit set in Home Assistant went into the rate the inverter ignores and had no effect; setting it now also switches that rate on. A 0 W limit beside a rate that is off is no longer refused as blocking both ways.
+
 ## 1.4.0b1
 
 Released 2026-10-31. A beta on 1.3.0: an optional fast read of the grid meter's power for battery controls that follow feed-in and draw, the export soft limit on inverter firmware 1.42, and safer handling of unusual meter and MPPT answers. No new entry migration; unique ids and entity ids do not change.

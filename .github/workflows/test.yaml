@@ -36,7 +36,7 @@ jobs:
       # a build nobody changed. Raise it deliberately, together with the local
       # run.
       - name: Install Ruff
-        run: pip install "ruff==0.16.9"
+        run: pip install "ruff==0.17.3"
       - name: Lint
         run: ruff check .
       # The formatting only stays put if something checks it.
@@ -121,7 +121,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install "$PHCC_SPEC" -r requirements.txt
-          pip install "mypy==2.3.1"
+          pip install "mypy==2.4.1"
       - name: Type check
         run: mypy
 

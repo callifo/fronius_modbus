@@ -1437,3 +1437,77 @@ async def test_a_limit_admitted_before_a_poll_took_another_mode_writes_nothing(
 
     assert refused.value.key == "storage_mode_left"
     assert writes == []
+
+
+# Registers a restart finds each shared-image mode on, with its free rate not 0.
+RESTART_IMAGES = {
+    ExtendedMode.PV_CHARGE_LIMIT: (1, 50, 100),
+    ExtendedMode.DISCHARGE_TO_GRID: (1, -20, 100),
+    ExtendedMode.DISCHARGE_LIMIT: (2, 100, 50),
+    ExtendedMode.CHARGE_FROM_GRID: (2, 100, -20),
+    ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT: (3, 50, 50),
+}
+
+
+@pytest.mark.parametrize(("mode", "setter", "address", "shared"), SHARED_AT_ZERO)
+async def test_after_a_restart_home_assistant_s_own_zero_keeps_the_mode(
+    inverter_unit, mode, setter, address, shared
+):
+    """Home Assistant's 0 W is its own also when it wrote nothing before it.
+
+    Remembering only the rate written, the other one had no counterpart and the
+    image went to the block mode after the grace polls.
+    """
+    stor_ctl_mod, in_rate, out_rate = RESTART_IMAGES[mode]
+    control = await _control_on(
+        inverter_unit,
+        {
+            STOR_CTL_MOD: stor_ctl_mod,
+            IN_W_RTE: _raw(in_rate),
+            OUT_W_RTE: _raw(out_rate),
+        },
+    )
+    assert control.extended_mode is mode
+
+    await getattr(control, setter)(0)
+    for _ in range(MODE_WRITE_GRACE_POLLS + 1):
+        await _poll(control)
+
+    assert control.extended_mode is mode
+
+
+# The rate another controller changes in the combined mode, and the setter
+# Home Assistant then brings the other rate to 0 W with.
+COUNTERPART_CHANGES = [
+    (OUT_W_RTE, "set_charge_limit_w"),
+    (IN_W_RTE, "set_discharge_limit_w"),
+]
+
+
+@pytest.mark.parametrize(("changed", "setter"), COUNTERPART_CHANGES)
+async def test_a_zero_limit_beside_a_rate_another_controller_changed_keeps_the_mode(
+    control, inverter_unit, changed, setter
+):
+    """The other rate is whatever the registers held when Home Assistant wrote its 0 W."""
+    await control.set_mode(ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT)
+    await _poll(control)
+    inverter_unit.holding[changed] = 5000
+    await _poll(control)
+
+    await getattr(control, setter)(0)
+    for _ in range(MODE_WRITE_GRACE_POLLS + 1):
+        await _poll(control)
+
+    assert control.extended_mode is ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT
+
+
+async def test_a_rounded_limit_beside_a_zero_one_stays_home_assistant_s(control):
+    """2441 W of 10240 W is 23.84 % in the register; remembered unrounded, it is no match."""
+    await control.set_mode(ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT)
+    await control.set_charge_limit_w(0)
+    await control.set_discharge_limit_w(2441)
+
+    for _ in range(MODE_WRITE_GRACE_POLLS + 1):
+        await _poll(control)
+
+    assert control.extended_mode is ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT

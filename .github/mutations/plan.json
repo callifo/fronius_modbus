@@ -114,8 +114,8 @@
   {
     "label": "storage: a rate write reads back inside the write lock",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "            await self._write_changed(field_name, value)\n",
-    "new": "            await self._write_changed(field_name, value)\n            await self._storage.async_update()\n",
+    "old": "            if field_name not in holding:\n                await self._storage.write(field_name, value)\n",
+    "new": "            if field_name not in holding:\n                await self._storage.write(field_name, value)\n            await self._storage.async_update()\n",
     "tests": "a_rate_write_succeeds_when_the_read_right_after_it_is_refused"
   },
   {
@@ -2158,7 +2158,7 @@
   {
     "label": "storage: a re-selected grid mode keeps its power only while the image fits",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "        if self._holds_selected(*image):\n            return field_name,",
+    "old": "        if self._holds_selected(mode, *image):\n            return field_name,",
     "new": "        if True:\n            return field_name,",
     "tests": "over_a_non_grid_rate_restores_it"
   },
@@ -2186,8 +2186,8 @@
   {
     "label": "storage: a rate in a mode the inverter left is refused",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "        if not self._holds_selected(*image):\n            raise ControlRefused(",
-    "new": "        if False:\n            raise ControlRefused(",
+    "old": "        if not self._holds_selected(self.extended_mode, *image):\n            raise _mode_left()\n",
+    "new": "        if False:\n            raise _mode_left()\n",
     "tests": "left_the_mode or both_limits_of_another_controller"
   },
   {
@@ -2249,15 +2249,15 @@
   {
     "label": "storage: a rate image is judged whole, not by StorCtl_Mod",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "        if not self._holds_selected(*image):\n            raise ControlRefused(",
-    "new": "        if image[0] != _MODE_TABLE[self.extended_mode][0]:\n            raise ControlRefused(",
+    "old": "        if not self._holds_selected(self.extended_mode, *image):\n            raise _mode_left()\n",
+    "new": "        if image[0] != _MODE_TABLE[self.extended_mode][0]:\n            raise _mode_left()\n",
     "tests": "fits_the_mode_is_written"
   },
   {
     "label": "storage: a rate over another mode on the same base is refused",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "        if not self._holds_selected(*image):\n            raise ControlRefused(",
-    "new": "        if image[0] != _MODE_TABLE[self.extended_mode][0] and not self._holds_selected(*image):\n            raise ControlRefused(",
+    "old": "        if not self._holds_selected(self.extended_mode, *image):\n            raise _mode_left()\n",
+    "new": "        if image[0] != _MODE_TABLE[self.extended_mode][0] and not self._holds_selected(self.extended_mode, *image):\n            raise _mode_left()\n",
     "tests": "another_mode_on_the_same_base_is_refused"
   },
   {
@@ -2480,8 +2480,8 @@
   {
     "label": "storage: a rate write judges ownership of a shared image",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "        if not self._holds_selected(*image):\n            raise ControlRefused(",
-    "new": "        if not _registers_fit(self.extended_mode, *image):\n            raise ControlRefused(",
+    "old": "        if not self._holds_selected(self.extended_mode, *image):\n            raise _mode_left()\n",
+    "new": "        if not _registers_fit(self.extended_mode, *image):\n            raise _mode_left()\n",
     "tests": "took_the_shared_image"
   },
   {
@@ -2490,5 +2490,26 @@
     "old": "        self._unconfirmed_polls = None\n        self._written = {}\n",
     "new": "        self._unconfirmed_polls = None\n",
     "tests": "owns_no_rate_of_home_assistant"
+  },
+  {
+    "label": "storage: a limit write a poll overtook writes nothing",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            if self.extended_mode is not selected:\n                raise _mode_left()\n",
+    "new": "",
+    "tests": "admitted_before_a_poll_took_another_mode"
+  },
+  {
+    "label": "storage: Home Assistant owns the whole image a limit write leaves",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            self._written = {\"in_w_rte\": in_rate, \"out_w_rte\": out_rate}\n",
+    "new": "            self._written = {field_name: value}\n",
+    "tests": "restart_home_assistant_s_own_zero or rate_another_controller_changed_keeps"
+  },
+  {
+    "label": "storage: the memory holds a limit as its register holds it",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            value = await written_value(self._storage, field_name, percent())\n",
+    "new": "            value = percent()\n",
+    "tests": "rounded_limit_beside_a_zero_one"
   }
 ]

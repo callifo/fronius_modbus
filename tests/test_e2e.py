@@ -1713,6 +1713,86 @@ async def test_both_twins_of_a_legacy_unique_id_keep_their_entity_ids(
         assert entity_id_for(hass, entry, domain, key) == entity_id
 
 
+# The keys callifo 0.3.4-rc2 wrote in lowercase, and with them its unique ids.
+CALLIFO_LOWERCASED = [
+    ("select", "Conn"),
+    *(
+        ("sensor", key)
+        for key in (
+            "A",
+            "AphA",
+            "AphB",
+            "AphC",
+            "Conn",
+            "OutPFSet_Ena",
+            "PhVphA",
+            "PhVphB",
+            "PhVphC",
+            "PPVphAB",
+            "PPVphBC",
+            "PPVphCA",
+            "VArPct_Ena",
+            "WMaxLim_Ena",
+            "MaxChaRte",
+            "MaxDisChaRte",
+            "WHRtg",
+        )
+    ),
+    *(
+        ("sensor", f"meter_{METER_UNIT_ID}_{key}")
+        for key in (
+            "A",
+            "AphA",
+            "AphB",
+            "AphC",
+            "PPV",
+            "PhVphA",
+            "PhVphB",
+            "PhVphC",
+            "WphA",
+            "WphB",
+            "WphC",
+        )
+    ),
+]
+
+
+@pytest.mark.parametrize(("domain", "key"), CALLIFO_LOWERCASED)
+async def test_an_entity_from_callifo_0_3_4_rc2_keeps_its_entity_id(
+    hass, mock_modbus, monkeypatch, domain, key
+):
+    """callifo 0.3.4-rc2 lowercased these unique ids; the update replaced the entity."""
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    entry = make_entry(hass)
+    registry = er.async_get(hass)
+    prefix = entity_prefix(entry.entry_id)
+    callifo_entity = registry.async_get_or_create(
+        domain, DOMAIN, f"{prefix}_{key.lower()}", config_entry=entry
+    )
+
+    await setup_entry(hass, entry)
+
+    assert entity_id_for(hass, entry, domain, key) == callifo_entity.entity_id
+
+
+async def test_an_update_through_callifo_0_3_4_rc2_keeps_the_original_entity(
+    hass, mock_modbus, monkeypatch
+):
+    """0.3.4-rc2 left the 0.3.3 entity and created a second one beside it."""
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    entry = make_entry(hass)
+    registry = er.async_get(hass)
+    prefix = entity_prefix(entry.entry_id)
+    original = registry.async_get_or_create(
+        "sensor", DOMAIN, f"{prefix}_AphA", config_entry=entry
+    )
+    registry.async_get_or_create("sensor", DOMAIN, f"{prefix}_apha", config_entry=entry)
+
+    await setup_entry(hass, entry)
+
+    assert entity_id_for(hass, entry, "sensor", "AphA") == original.entity_id
+
+
 async def test_every_power_number_spans_the_rated_power(hass, mock_modbus, monkeypatch):
     """Audit F08: the export limit stopped at 15 kW and the target feed-in at 20 kW."""
     await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)

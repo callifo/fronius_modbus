@@ -812,7 +812,7 @@ async def test_a_mode_another_controller_wrote_is_adopted_once_not_every_poll(
     assert control.extended_mode is expected
 
     caplog.clear()
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.INFO):
         await control._storage.async_update()
         control.sync_from_device()
     assert control.extended_mode is expected
@@ -1511,3 +1511,48 @@ async def test_a_rounded_limit_beside_a_zero_one_stays_home_assistant_s(control)
         await _poll(control)
 
     assert control.extended_mode is ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT
+
+
+def _storage_lines(caplog, start: str) -> list[int]:
+    return [
+        record.levelno
+        for record in caplog.records
+        if record.name == storage_module.__name__
+        and record.getMessage().startswith(start)
+    ]
+
+
+async def test_another_controller_s_mode_change_is_no_warning(
+    control, inverter_unit, caplog
+):
+    """evcc switches modes many times a day; each switch was a warning in the log.
+
+    Another controller changing the mode is normal operation; the select's
+    history shows it. A mode Home Assistant wrote that the inverter did not
+    take stays a warning.
+    """
+    caplog.set_level(logging.INFO)
+    inverter_unit.holding[STOR_CTL_MOD] = 2
+    inverter_unit.holding[OUT_W_RTE] = 0
+
+    await _poll(control)
+
+    assert _storage_lines(caplog, "Storage mode changed outside") == [logging.INFO]
+
+
+async def test_a_mode_the_inverter_did_not_take_is_a_warning(
+    control, inverter_unit, caplog
+):
+    caplog.set_level(logging.INFO)
+    written = []
+    inverter_unit.on_write(written.append)
+    await control.set_mode(ExtendedMode.BLOCK_DISCHARGING)
+    for event in written:
+        inverter_unit.holding[event.address] = (
+            0 if event.address == STOR_CTL_MOD else 10000
+        )
+
+    for _ in range(MODE_WRITE_GRACE_POLLS):
+        await _poll(control)
+
+    assert _storage_lines(caplog, "The inverter did not take") == [logging.WARNING]

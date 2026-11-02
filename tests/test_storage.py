@@ -1396,3 +1396,44 @@ async def test_discharge_to_grid_selected_again_at_zero_watts_keeps_its_mode(con
         await _poll(control)
 
     assert control.extended_mode is ExtendedMode.DISCHARGE_TO_GRID
+
+
+# A limit mode, its setter and register, and each await a rate write passes
+# before its first write: a poll may run in any of them.
+LIMIT_LOSES_ITS_MODE = [
+    (ExtendedMode.PV_CHARGE_LIMIT, "set_charge_limit_w", IN_W_RTE),
+    (ExtendedMode.DISCHARGE_LIMIT, "set_discharge_limit_w", OUT_W_RTE),
+]
+PRE_WRITE_AWAITS = ["written_value", "registers_holding"]
+
+
+@pytest.mark.parametrize("stage", PRE_WRITE_AWAITS)
+@pytest.mark.parametrize(("mode", "setter", "address"), LIMIT_LOSES_ITS_MODE)
+async def test_a_limit_admitted_before_a_poll_took_another_mode_writes_nothing(
+    control, inverter_unit, writes, monkeypatch, mode, setter, address, stage
+):
+    """Admitted in the limit mode, the write went out after a poll had taken evcc's hold.
+
+    Judged by the mode selected at that moment, the image was the new block
+    mode's, which allows no such limit.
+    """
+    await control.set_mode(mode)
+    await getattr(control, setter)(2560)
+    await _poll(control)
+    real = getattr(storage_module, stage)
+
+    async def poll_first(*args):
+        # evcc's hold lands and a poll takes it while the write waits here.
+        monkeypatch.setattr(storage_module, stage, real)
+        inverter_unit.holding[address] = 0
+        await _poll(control)
+        return await real(*args)
+
+    monkeypatch.setattr(storage_module, stage, poll_first)
+    del writes[:]
+
+    with pytest.raises(ControlRefused) as refused:
+        await getattr(control, setter)(1000)
+
+    assert refused.value.key == "storage_mode_left"
+    assert writes == []

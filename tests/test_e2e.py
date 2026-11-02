@@ -1048,7 +1048,8 @@ async def test_a_callifo_module_temperature_keeps_its_entity_at_the_update(
     """
     mock_modbus.add_unit(201, like=METER_UNIT_ID)
     monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientAnsweringEmpty)
-    other = {"DEVICE_TEMPERATURE_AMBIENTMEAN_01_F32": 35.0}
+    # Another module answers: a module missing from it is unreported, not unknown.
+    other = {"MODULE_TEMPERATURE_MEAN_02_F32": 35.0}
     readings = other | {channel: 40.0} if reported_now else other
     monkeypatch.setattr(_WebClientAnsweringEmpty, "readings", readings)
     entry = make_entry(hass)

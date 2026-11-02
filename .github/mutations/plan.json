@@ -2420,5 +2420,19 @@
     "old": "    async_mark_reported(hass, entry, moved)\n",
     "new": "    pass\n",
     "tests": "callifo_module_temperature_keeps_its_entity_at_the_update"
+  },
+  {
+    "label": "migrations: callifo's lowercased ids move to their keys",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "        registry.async_update_entity(entity_entry.entity_id, new_unique_id=target)\n",
+    "new": "        pass\n",
+    "tests": "entity_from_callifo_0_3_4_rc2_keeps_its_entity_id"
+  },
+  {
+    "label": "migrations: an original id beside a lowercased one stays",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "        if registry.async_get_entity_id(entity_entry.domain, DOMAIN, target):\n",
+    "new": "        if False:\n",
+    "tests": "update_through_callifo_0_3_4_rc2_keeps_the_original_entity"
   }
 ]

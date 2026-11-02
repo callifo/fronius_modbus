@@ -199,6 +199,30 @@ def async_migrate_callifo_module_temperatures(
     async_mark_reported(hass, entry, moved)
 
 
+@callback
+def async_migrate_callifo_lowercase_keys(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> None:
+    """Move the unique ids callifo 0.3.4-rc2 wrote in lowercase onto these keys.
+
+    An entity that update left under the original id keeps it, with its
+    history; the lowercase twin beside it is left to the cleanup.
+    """
+    registry = er.async_get(hass)
+    by_lowercase = {
+        unique_id.lower(): unique_id
+        for unique_id in expected_unique_ids(entry, entry.runtime_data)
+        if unique_id != unique_id.lower()
+    }
+    for entity_entry in _entity_entries_for_config_entry(registry, entry):
+        target = by_lowercase.get(entity_entry.unique_id or "")
+        if target is None:
+            continue
+        if registry.async_get_entity_id(entity_entry.domain, DOMAIN, target):
+            continue
+        registry.async_update_entity(entity_entry.entity_id, new_unique_id=target)
+
+
 def _migration_issue_id(entry: ConfigEntry) -> str:
     return f"{MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX}{entry.entry_id}"
 

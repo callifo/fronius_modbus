@@ -2539,5 +2539,12 @@
     "old": "        if registry.async_get_entity_id(entity_entry.domain, DOMAIN, target):\n",
     "new": "        if False:\n",
     "tests": "update_through_callifo_0_3_4_rc2_keeps_the_original_entity"
+  },
+  {
+    "label": "storage: another controller's mode change is no warning",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            _LOGGER.info(\n                \"Storage mode changed outside Home Assistant: %s -> %s\",\n",
+    "new": "            _LOGGER.warning(\n                \"Storage mode changed outside Home Assistant: %s -> %s\",\n",
+    "tests": "controller_s_mode_change_is_no_warning"
   }
 ]

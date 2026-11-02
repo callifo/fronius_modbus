@@ -200,7 +200,9 @@ class StorageControl:
                 derived.name,
             )
         else:
-            _LOGGER.warning(
+            # Normal with a second controller such as evcc, which switches
+            # many times a day; the select's history keeps every change.
+            _LOGGER.info(
                 "Storage mode changed outside Home Assistant: %s -> %s",
                 self._extended_mode.name,
                 derived.name,

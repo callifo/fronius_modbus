@@ -5,6 +5,9 @@
 ### Added
 - A brand icon, shown on the integration's pages in Home Assistant.
 
+### Changed
+- A storage mode another controller such as evcc sets is logged at info instead of as a warning: with evcc it is normal operation, many times a day. The select's history keeps every change; a mode Home Assistant wrote that the inverter does not take stays a warning.
+
 ### Fixed
 - Updating from callifo 0.3.3 or later replaced the `AC Module Temperature`, `DC Module Temperature` and `Battery Module Temperature` sensors with new ones under new entity ids; their history stayed behind. They now continue as `AC module 1 temperature`, `DC module temperature (3)` and `DC or battery module temperature` with their entity ids, also when the update comes while the inverter does not report the module.
 - Updating from the callifo 0.3.4-rc2 pre-release replaced several sensors and the `Inverter connection` select with new ones under new entity ids, because that version wrote their unique ids in lowercase: the AC currents, voltages and per-phase power of the inverter and the meters, the inverter's control status sensors and the storage ratings. They now continue under their entity ids; where 0.3.4-rc2 had left the earlier entity beside its own, the earlier one is kept with its history.

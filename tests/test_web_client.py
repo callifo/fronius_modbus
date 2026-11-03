@@ -1237,7 +1237,7 @@ def power_limits_1_42(soft_enabled: bool, export_limit: float) -> dict:
 def test_the_export_soft_limit_is_written_where_firmware_1_42_keeps_it(
     client, inverter
 ):
-    """Upstream #154: a powerLimit added under softLimit made 1.42 answer 400."""
+    """Issue 154: a powerLimit added under softLimit made 1.42 answer 400."""
     path = "/api/config/limit_settings/powerLimits"
     inverter.bodies[path] = power_limits_1_42(False, 0.0)
 
@@ -1340,7 +1340,7 @@ def _float_map_client(sunspec_mode="float", slave_mode="tcp"):
 
 
 def test_a_float_map_is_not_switched_without_consent():
-    """Another device may read the float map (a Bosch energy manager at SolarEdge #345).
+    """Another device may read the float map (a Bosch energy manager at SolarEdge issue 345).
 
     Switching it to int + SF stops that device; the setup did it silently.
     """

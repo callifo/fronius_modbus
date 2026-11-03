@@ -272,7 +272,7 @@ STORAGE_HEADER_ADDRESS = 40343
 
 
 async def test_a_refused_model_header_keeps_the_models_found_before_it(connection):
-    """Upstream #105: one refused header failed the whole chain, and setup then
+    """Redpomodoro issue 105: one refused header failed the whole chain, and setup then
 
     reported "cannot connect" although Modbus was answering fine.
     """

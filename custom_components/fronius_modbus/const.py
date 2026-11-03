@@ -147,7 +147,7 @@ THROTTLE_REASONS = (
     "several",
 )
 # No longer reported: both meant a limit that was switched on, not one that held
-# the output (#26). Kept so the states in history keep their label.
+# the output. Kept so the states in history keep their label.
 LEGACY_THROTTLE_REASONS = ("active_power_control", "export_limit")
 
 GRID_STATUS = {

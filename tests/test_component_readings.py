@@ -338,7 +338,7 @@ def test_the_rows_kept_on_upgrade_are_rows_that_follow_the_report():
     ],
 )
 def test_a_float_reading_shows_the_digits_it_has(key, precision):
-    """Discussion #6: a fan showed 37.254902 %; the endpoints send raw float32 values."""
+    """A fan showed 37.254902 %; the endpoints send raw float32 values."""
     reading = next(r for r in COMPONENT_READINGS if r.key == key)
 
     description = entities._component_sensor(reading)

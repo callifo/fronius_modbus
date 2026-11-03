@@ -630,7 +630,7 @@ class FroniusWebControl:
         """Hand the entities the state a write just produced.
 
         The delayed refresh confirms it some ten seconds later; until then the
-        entity would show the write undone (discussion #6).
+        entity would show the write undone.
         """
         if self._coordinator is not None:
             self._coordinator.async_set_updated_data(replace(self.data))

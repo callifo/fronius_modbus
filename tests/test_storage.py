@@ -109,7 +109,7 @@ async def test_charge_from_grid_writes_mode_then_rates(control, writes, inverter
 async def test_block_charging_after_grid_charging_raises_the_discharge_rate_first(
     control, writes
 ):
-    """Upstream #126: both rates at or below zero for an instant is refused (exception 3)."""
+    """Issue 126: both rates at or below zero for an instant is refused (exception 3)."""
     await control.set_mode(ExtendedMode.CHARGE_FROM_GRID)
     await control.set_grid_charge_power_w(2560)
     await control._storage.async_update()
@@ -157,7 +157,7 @@ GRID_POWER_SETTERS = {
 async def test_a_mode_change_before_the_next_poll_passes_no_refused_window(
     control, inverter_unit, start, then
 ):
-    """Upstream #126 again: the order came from the last poll, which a second change outran."""
+    """Issue 126 again: the order came from the last poll, which a second change outran."""
     refused = _refused_windows(inverter_unit)
 
     await control.set_mode(start)
@@ -209,7 +209,7 @@ async def test_reselecting_a_grid_mode_keeps_the_power_just_written(
 
 
 def _ignored_mode(_address):
-    """The inverter kept AUTO as if the mode write never happened (upstream #127)."""
+    """The inverter kept AUTO as if the mode write never happened (issue 127)."""
     return {STOR_CTL_MOD: 0, IN_W_RTE: 10000, OUT_W_RTE: 10000}
 
 
@@ -755,7 +755,7 @@ EVCC_IMAGES = [
 async def test_a_mode_another_controller_wrote_is_adopted_once_not_every_poll(
     control, caplog, label, stor_ctl_mod, out_w_rte, in_w_rte, expected
 ):
-    """callifo #138: evcc's images map to our modes but not to the images we write.
+    """Discussion 138: evcc's images map to our modes but not to the images we write.
 
     Judging them against our own write image made every poll an "outside change".
     """

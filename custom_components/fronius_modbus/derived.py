@@ -33,7 +33,7 @@ def throttle_reason(
 
     A limit that is set is no throttling: only one the output has reached is.
     The component endpoint says so for a percentage limit and for one in watts
-    apart; the Modbus signals only say a limit is switched on (#26). A GEN24
+    apart; the Modbus signals only say a limit is switched on. A GEN24
     left the operating state at normal while it throttled; other firmware
     may not.
     """

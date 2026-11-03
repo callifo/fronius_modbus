@@ -753,7 +753,7 @@ async def test_a_write_without_a_customer_login_is_an_error_not_a_silent_no_op(h
 
 
 async def test_the_technician_role_is_the_single_client_with_that_username(hass):
-    """Upstream #130: no second client; the role of the one login decides what is exposed."""
+    """Pull request 130: no second client; the role of the one login decides what is exposed."""
 
     class FakeTechnicianClient(FakeWebClient):
         def set_export_soft_limit(self, watts):
@@ -983,7 +983,7 @@ async def test_different_controls_do_not_supersede_each_other(control):
 
 
 async def test_every_battery_write_shows_its_value_right_away(hass):
-    """Discussion #6: a select snapped back to the old value until the delayed refresh.
+    """A select snapped back to the old value until the delayed refresh.
 
     The control's own data was updated at once, the coordinator's copy only ten
     seconds later, so the entity showed the write undone for that long.
@@ -1289,7 +1289,7 @@ async def test_an_export_limit_flag_in_no_on_form_shows_no_limit(hass, enabled):
 
 
 async def test_the_export_soft_limit_reads_where_firmware_1_42_keeps_it(hass):
-    """Upstream #154: 1.42 moved the watts out of softLimit; the sensor read unknown."""
+    """Issue 154: 1.42 moved the watts out of softLimit; the sensor read unknown."""
 
     class Firmware142Client(FakeWebClient):
         def get_export_limit_config(self):

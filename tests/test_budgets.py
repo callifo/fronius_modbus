@@ -37,8 +37,8 @@ LINE_BUDGETS = {
     # the value_fn factories that replaced the loop-bound lambda defaults.
     # +29: the translation-key map that keeps hassfest happy (upstream data keys
     # are not valid translation keys), table file, ~85 % declarative
-    # 1832 + the throttling sensor (callifo #112)
-    # 1888 + the backup reserve, the SoC mode, the web SoC minimum (callifo #136), the capacity note
+    # 1832 + the throttling sensor (issue 112)
+    # 1888 + the backup reserve, the SoC mode, the web SoC minimum (issue 136), the capacity note
     # 1909 + translated write errors (quality scale exception-translations)
     # 1842 - the icons, now in icons.json (quality scale icon-translations)
     # 1850 + the translated error for an unreachable web interface

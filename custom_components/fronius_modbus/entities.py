@@ -758,7 +758,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         exists_fn=_storage_present,
         # A rating in Wh is stored energy, not energy flow: that device class
         # allows the measurement state class the 0.3 statistics were recorded
-        # with, where the energy device class does not (discussion #6).
+        # with, where the energy device class does not.
         device_class=SensorDeviceClass.ENERGY_STORAGE,
         state_class=SensorStateClass.MEASUREMENT,
         unit="Wh",

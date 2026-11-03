@@ -677,7 +677,7 @@ async def test_minor_version_11_entries_turn_the_checkbox_into_a_choice(
 async def test_minor_version_10_entries_take_the_role_of_their_stored_token(
     hass, mock_modbus
 ):
-    """Upstream #130: an entry that had a technician token keeps technician access after the migration."""
+    """Pull request 130: an entry that had a technician token keeps technician access after the migration."""
     entry = make_entry(hass, minor_version=10)
     await async_get_token_store(hass).async_save_token(
         HOST, realm="r", token="t", user="technician"
@@ -1619,7 +1619,7 @@ async def test_the_inverter_events_reach_home_assistant(hass, mock_modbus, monke
     await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
     await setup_entry(hass, entry)
 
-    # The active AFCI event is of the service level (#39).
+    # The active AFCI event is of the service level.
     assert state_of(hass, entry, "active_event") == "OK"
     assert state_of(hass, entry, "active_events") == "0"
     event_id = entity_id_for(hass, entry, "event", "inverter_event")
@@ -1645,7 +1645,7 @@ async def test_the_inverter_events_reach_home_assistant(hass, mock_modbus, monke
 async def test_service_events_reach_only_the_service_entities(
     hass, mock_modbus, monkeypatch
 ):
-    """#39: a customer finds no service event in the web interface; HA keeps them apart."""
+    """A customer finds no service event in the web interface; HA keeps them apart."""
     mock_modbus.add_unit(201, like=METER_UNIT_ID)
     monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientWithEvents)
     monkeypatch.setattr(_WebClientWithEvents, "log", list(_WebClientWithEvents.log))

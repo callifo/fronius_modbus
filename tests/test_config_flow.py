@@ -170,7 +170,7 @@ async def test_a_web_server_error_during_setup_shows_cannot_connect(
 async def test_the_technician_role_mints_and_stores_a_technician_token(
     hass, mock_modbus, monkeypatch
 ):
-    """Upstream #130: one role per entry; the password belongs to the selected role."""
+    """Pull request 130: one role per entry; the password belongs to the selected role."""
     minted = []
     monkeypatch.setattr(
         config_flow,
@@ -1471,7 +1471,7 @@ def _float_map(monkeypatch) -> list[tuple]:
 async def test_a_float_map_is_switched_only_after_the_user_agrees(
     hass, mock_modbus, monkeypatch
 ):
-    """Another device may read the float map (a Bosch energy manager at SolarEdge #345).
+    """Another device may read the float map (a Bosch energy manager, SolarEdge issue 345).
 
     The setup switched it to int + SF without a word; that device stopped.
     """

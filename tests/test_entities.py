@@ -503,7 +503,7 @@ def with_limit_flags(
 async def test_an_export_limit_holding_the_inverter_is_a_throttle_reason(
     hass, entry, connection
 ):
-    """#26: held at a 400 W export limit, the sensor said "not throttled" all day."""
+    """Held at a 400 W export limit, the sensor said "not throttled" all day."""
     runtime = await make_runtime(hass, entry, connection)
     with_limit_flags(runtime, absolute=1.0, relative=0.0)
     description = _description(entities.sensor_descriptions(runtime), "throttle_reason")
@@ -627,7 +627,7 @@ METER_EXPORTED_ADDRESS = 40107
 async def test_a_zero_accumulator_is_no_reading_not_a_reset(
     hass, entry, connection, caplog
 ):
-    """callifo #125: after a firmware update the meter served 0 Wh for a while.
+    """Issue 125: after a firmware update the meter served 0 Wh for a while.
 
     Upstream's guard refused it on every poll and logged each time; a guard that
     adopted it after three polls would hand the energy dashboard a false reset.
@@ -887,7 +887,7 @@ async def test_the_leading_active_event_shows_its_text_and_the_rest_as_attribute
 async def test_a_service_event_alone_leaves_the_customer_sensors_ok(
     hass, entry, connection
 ):
-    """#39: the web interface shows its customer login no service event.
+    """The web interface shows its customer login no service event.
 
     The sensor showed one active since August the owner found nowhere.
     """

@@ -168,7 +168,7 @@ def test_a_reached_percentage_limit_is_the_ac_limit():
 
 
 def test_a_reached_limit_in_watts_is_the_feed_in_limit():
-    """Measured in #26: an export limit held at 400 W set only the absolute flag."""
+    """Measured: an export limit held at 400 W set only the absolute flag."""
     assert _reason(absolute_reached=True) == "feed_in_limit"
 
 
@@ -194,7 +194,7 @@ def test_a_found_reason_stands_even_while_another_source_is_silent():
 
 
 def test_the_limit_reason_is_named_after_the_ac_limit_it_reads():
-    """Discussion #6: "Export limit" read as the grid feed-in limit, which the
+    """The sensor "Export limit" read as the grid feed-in limit, which the
     inverter reports in none of these signals; the reason is the AC limit."""
     root = pathlib.Path(__file__).parent.parent / "custom_components/fronius_modbus"
     for language in ("en", "de"):

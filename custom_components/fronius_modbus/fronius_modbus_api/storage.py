@@ -145,7 +145,7 @@ class StorageControl:
         self._extended_mode: ExtendedMode | None = None
         # Polls that did not confirm the last set_mode() yet; a write the
         # device silently refused must not be reported as done forever
-        # (upstream #127), so the device wins after MODE_WRITE_GRACE_POLLS.
+        # (issue 127), so the device wins after MODE_WRITE_GRACE_POLLS.
         self._unconfirmed_polls: int | None = None
         # Two automations firing together must not interleave mode and rate writes.
         self._write_lock = asyncio.Lock()
@@ -257,7 +257,7 @@ class StorageControl:
             # The higher rate goes first: every mode has one at full, which
             # keeps the window valid whatever the other still holds. With both
             # at or below zero for an instant the firmware refuses the second
-            # write (exception 3, upstream #126). Ordered by the target alone:
+            # write (exception 3, issue 126). Ordered by the target alone:
             # the last poll may not hold what the previous write left.
             rate_writes = sorted(
                 [("in_w_rte", in_rate), ("out_w_rte", out_rate)],
@@ -358,7 +358,7 @@ class StorageControl:
             else:
                 out_rate = value
             # With both at or below 0 the firmware refuses the write
-            # (exception 3, upstream #126), so say why instead.
+            # (exception 3, issue 126), so say why instead.
             if in_rate <= 0 and out_rate <= 0:
                 raise ControlRefused(
                     "limit_blocks_both_ways",

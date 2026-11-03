@@ -26,7 +26,7 @@ YES, NO = "yes", "no"
 # worth showing. Durations are left to the unit they are shown in.
 DISPLAY_PRECISION = {"%": 0, "W": 0, "°C": 1, "V": 1, "Hz": 2}
 # Set while the output is held at a limit: one in watts, such as an export
-# limit, or a percentage one, such as the Modbus AC limit (measured, #26).
+# limit, or a percentage one, such as the Modbus AC limit (measured).
 ABSOLUTE_LIMIT_REACHED = "ACBRIDGE_VALUE_POWERACTIVE_PRODUCTION_LIMIT_REACHED_U8"
 RELATIVE_LIMIT_REACHED = (
     "ACBRIDGE_VALUE_POWERACTIVE_RELATIVE_PRODUCTION_LIMIT_REACHED_U8"
@@ -186,7 +186,7 @@ COMPONENT_READINGS: tuple[ComponentReading, ...] = (
         diagnostic=True,
         enabled=False,
     ),
-    # Seen set only while an export limit curtailed PV (#26); undocumented.
+    # Seen set only while an export limit curtailed PV; undocumented.
     ComponentReading(
         "surplus_power_available",
         "inverter",

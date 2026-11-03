@@ -2422,13 +2422,6 @@
     "tests": "rate_storctl_mod_keeps_off_does_not_decide_the_mode or rate_that_is_off_shows_as_no_limit"
   },
   {
-    "label": "storage: the poll judges the rates the device applies",
-    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "        in_rate, out_rate = _effective_rates(mode, in_rate, out_rate)\n        derived = ",
-    "new": "        derived = ",
-    "tests": "every_evcc_mode_reads_as_its_mode_whatever_came_before"
-  },
-  {
     "label": "storage: a limit written into a rate that is off switches it on",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
     "old": "            if switched_on != mode:\n",
@@ -2548,10 +2541,10 @@
     "tests": "poll_during_a_limit_write_takes_no_mode"
   },
   {
-    "label": "storage: the core mode reads only the active rates",
+    "label": "storage: every reader of the polled rates sees only the active ones",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "            return None\n        in_rate, out_rate = _effective_rates(mode, in_rate, out_rate)\n        if out_rate < 0 or (",
-    "new": "            return None\n        if out_rate < 0 or (",
-    "tests": "core_mode_ignores_a_rate_storctl_mod_keeps_off"
+    "old": "        return mode, *_effective_rates(mode, in_rate, out_rate)\n\n    @property\n    def _rates",
+    "new": "        return mode, in_rate, out_rate\n\n    @property\n    def _rates",
+    "tests": "every_evcc_mode_reads_as_its_mode_whatever_came_before or core_mode_ignores_a_rate_storctl_mod_keeps_off"
   }
 ]

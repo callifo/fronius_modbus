@@ -181,14 +181,10 @@ class StorageControl:
         """
         if self._write_lock.locked():
             return
-        mode, in_rate, out_rate = (
-            self._storage.stor_ctl_mod,
-            self._storage.in_w_rte,
-            self._storage.out_w_rte,
-        )
-        if mode is None or in_rate is None or out_rate is None:
+        image = self._applied_image
+        if image is None:
             return
-        in_rate, out_rate = _effective_rates(mode, in_rate, out_rate)
+        mode, in_rate, out_rate = image
         derived = _derive_extended_mode(mode, in_rate, out_rate)
         if self._extended_mode is None:
             self._extended_mode = derived
@@ -244,14 +240,10 @@ class StorageControl:
     @property
     def control_mode(self) -> int | None:
         """The SunSpec mode, normalised the way the sensor always showed it."""
-        mode, in_rate, out_rate = (
-            self._storage.stor_ctl_mod,
-            self._storage.in_w_rte,
-            self._storage.out_w_rte,
-        )
-        if mode is None or in_rate is None or out_rate is None:
+        image = self._applied_image
+        if image is None:
             return None
-        in_rate, out_rate = _effective_rates(mode, in_rate, out_rate)
+        mode, in_rate, out_rate = image
         if out_rate < 0 or (
             mode == MODE_DISCHARGE and self._storage.cha_gri_set == 1 and out_rate == 0
         ):
@@ -265,8 +257,13 @@ class StorageControl:
         return mode
 
     @property
-    def _rates(self) -> tuple[float, float] | None:
-        """InWRte and OutWRte as the device applies them, or None before the first update."""
+    def _applied_image(self) -> tuple[int, float, float] | None:
+        """StorCtl_Mod, InWRte and OutWRte of the last poll as the device applies them.
+
+        Every reader of the polled rates goes through here: a rate StorCtl_Mod
+        keeps off is ignored by the device, and the core mode, read on its own,
+        named the direction of such a rate.
+        """
         mode, in_rate, out_rate = (
             self._storage.stor_ctl_mod,
             self._storage.in_w_rte,
@@ -274,7 +271,13 @@ class StorageControl:
         )
         if mode is None or in_rate is None or out_rate is None:
             return None
-        return _effective_rates(mode, in_rate, out_rate)
+        return mode, *_effective_rates(mode, in_rate, out_rate)
+
+    @property
+    def _rates(self) -> tuple[float, float] | None:
+        """InWRte and OutWRte as the device applies them, or None before the first update."""
+        image = self._applied_image
+        return None if image is None else image[1:]
 
     @property
     def discharge_limit_pct(self) -> float | None:

@@ -387,8 +387,8 @@
   {
     "label": "device: a recovered meter's first read goes through the report",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
-    "old": "                self._polled = (*self._polled, name)\n                await self._async_update_component(name, report)",
-    "new": "                self._polled = (*self._polled, name)\n                await self._component(name).async_update()\n                report.updated.append(name)",
+    "old": "            if unit_id in self.meters:\n                await self._async_update_component(name, report)",
+    "new": "            if unit_id in self.meters:\n                await self._component(name).async_update()\n                report.updated.append(name)",
     "tests": "a_recovered_meters_first_bad_read_stays_in_its_report"
   },
   {
@@ -2438,8 +2438,8 @@
   {
     "label": "device: the meters are read right after the inverter",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
-    "old": "            REPORT_INVERTER,\n            *(meter_report_name(unit_id) for unit_id in meters),\n            *(\n                name\n                for name, component in components.items()\n                if component is not None and name != REPORT_INVERTER\n            ),\n",
-    "new": "            REPORT_INVERTER,\n            *(\n                name\n                for name, component in components.items()\n                if component is not None and name != REPORT_INVERTER\n            ),\n            *(meter_report_name(unit_id) for unit_id in meters),\n",
+    "old": "            REPORT_INVERTER,\n            *(meter_report_name(unit_id) for unit_id in self.meters),\n            *self._polled_models,\n",
+    "new": "            REPORT_INVERTER,\n            *self._polled_models,\n            *(meter_report_name(unit_id) for unit_id in self.meters),\n",
     "tests": "right_after_the_inverter or too_far_apart"
   }
 ]

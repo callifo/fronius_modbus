@@ -242,7 +242,24 @@ class FroniusInverter:
         # Meter units whose probe did not answer: neither present nor absent
         # yet, probed again on every poll (audit F03).
         self._undecided_meters: dict[int, ModbusUnit] = {}
-        self._polled: tuple[str, ...] = ()
+        # The inverter's models after its AC block, in chain order.
+        self._polled_models: tuple[str, ...] = ()
+
+    @property
+    def _polled(self) -> tuple[str, ...]:
+        """Everything one poll reads, in read order.
+
+        The load adds the primary meter to the inverter's AC power, so the
+        meters are read right after the inverter, also one found after setup:
+        a load step between the two reads showed in the sum.
+        """
+        if not self.is_set_up:
+            return ()
+        return (
+            REPORT_INVERTER,
+            *(meter_report_name(unit_id) for unit_id in self.meters),
+            *self._polled_models,
+        )
 
     @property
     def unit(self) -> ModbusUnit:
@@ -306,16 +323,10 @@ class FroniusInverter:
         self.meters = meters
         self._meter_addresses = addresses
         self._undecided_meters = undecided
-        # The load adds the primary meter to the inverter's AC power, so the two
-        # are read back to back: a load step between them showed in the sum.
-        self._polled = (
-            REPORT_INVERTER,
-            *(meter_report_name(unit_id) for unit_id in meters),
-            *(
-                name
-                for name, component in components.items()
-                if component is not None and name != REPORT_INVERTER
-            ),
+        self._polled_models = tuple(
+            name
+            for name, component in components.items()
+            if component is not None and name != REPORT_INVERTER
         )
         self.discovery_complete = complete
 
@@ -519,7 +530,6 @@ class FroniusInverter:
                 )
                 continue
             if unit_id in self.meters:
-                self._polled = (*self._polled, name)
                 await self._async_update_component(name, report)
 
     async def async_read_raw(self) -> dict[int, dict[str, dict[int, int | bool]]]:

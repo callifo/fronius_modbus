@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Moved
+- Development continues in [callifo/fronius_modbus](https://github.com/callifo/fronius_modbus): the 1.x code from the Varitras/fronius_modbus fork replaces 0.3.x there, with the history of both. The domain stays the same, so entries, entities and history are kept.
+
 ### Added
 - A brand icon, shown on the integration's pages in Home Assistant.
 

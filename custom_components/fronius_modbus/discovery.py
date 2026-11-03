@@ -140,7 +140,7 @@ async def async_follow_host(
         return
     token_store = async_get_token_store(hass)
     # From the ownership check to the entry update nothing may await: another
-    # flow took the address in between (audit R3B-01, R3B-02).
+    # flow took the address in between.
     await token_store.async_ready()
     if hass.config_entries.async_get_entry(entry.entry_id) is None:
         return

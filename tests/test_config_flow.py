@@ -154,7 +154,7 @@ async def test_an_unreachable_inverter_shows_cannot_connect(hass, mock_modbus):
 async def test_a_web_server_error_during_setup_shows_cannot_connect(
     hass, mock_modbus, monkeypatch
 ):
-    """Own reaudit: a 500 while enabling Modbus stopped being an OSError and crashed the flow."""
+    """A 500 while enabling Modbus stopped being an OSError and crashed the flow."""
 
     def refuse(self, *_args):
         raise FroniusWebResponseError("HTTP 500 on /api/config/modbus", 500)
@@ -252,7 +252,7 @@ async def _configure(hass, entry, scan_interval=10):
         # A new password alone changes nothing in the entry: no listener fires.
         (True, 10, 1),
         # A changed entry reloads through its update listener; one more
-        # reload here would run it twice (audit F24-10).
+        # reload here would run it twice.
         (True, 20, 0),
         # An entry that is not loaded has no listener at all.
         (False, 10, 1),
@@ -262,7 +262,7 @@ async def _configure(hass, entry, scan_interval=10):
 async def test_configure_reloads_what_no_listener_reloads(
     hass, monkeypatch, loaded, scan_interval, reloads
 ):
-    """Audit F04: Configure stored a new token, and the entry kept the old one."""
+    """Configure stored a new token, and the entry kept the old one."""
     entry = make_entry(hass)
     monkeypatch.setattr(
         config_flow, "_validate_input", AsyncMock(return_value={"title": "Fronius"})
@@ -281,7 +281,7 @@ async def test_configure_reloads_what_no_listener_reloads(
 
 
 async def test_a_title_the_owner_gave_survives_every_settings_flow(hass, monkeypatch):
-    """Audit F18: Configure, Reconfigure and Reauth put the generated title back."""
+    """Configure, Reconfigure and Reauth put the generated title back."""
     entry = make_entry(hass)
     hass.config_entries.async_update_entry(entry, title="Garage roof")
     monkeypatch.setattr(
@@ -317,7 +317,7 @@ async def test_a_generated_title_follows_the_host(hass, monkeypatch):
 async def test_changing_only_the_host_spelling_keeps_the_stored_token(
     hass, monkeypatch
 ):
-    """Audit A06: the host comparison was case-sensitive, the token key never is."""
+    """The host comparison was case-sensitive, the token key never is."""
     named_host = "inverter.example"
     entry = make_entry(hass)
     await async_get_token_store(hass).async_save_token(
@@ -337,7 +337,7 @@ async def test_changing_only_the_host_spelling_keeps_the_stored_token(
 
 
 async def test_a_token_whose_setup_fails_is_not_kept(hass, mock_modbus):
-    """Audit RA24-01: the minted token was saved before the inverter was checked.
+    """The minted token was saved before the inverter was checked.
 
     A failed setup left a password-equivalent credential with no entry.
     """
@@ -386,10 +386,10 @@ async def test_a_token_for_a_host_already_set_up_is_not_kept(
 async def test_a_duplicate_flow_leaves_the_existing_entrys_token_alone(
     hass, monkeypatch
 ):
-    """Reaudit RE26-04: the aborted flow had already replaced the entry's token.
+    """The aborted flow had already replaced the entry's token.
 
     The entry appears while the inverter is checked: a host taken before is
-    refused ahead of the login (audit FA0FB-02, RR770-01).
+    refused ahead of the login.
     """
     store = async_get_token_store(hass)
     await store.async_save_token(HOST, realm="r", token="old")
@@ -418,7 +418,7 @@ async def test_a_duplicate_flow_leaves_the_existing_entrys_token_alone(
 async def test_a_role_switch_failing_after_the_update_keeps_the_new_token(
     hass, monkeypatch
 ):
-    """Own reaudit R26-02: the entry already used the new role when its token went."""
+    """The entry already used the new role when its token went."""
     entry = make_entry(hass)
     monkeypatch.setattr(
         config_flow, "_validate_input", AsyncMock(return_value={"title": "Fronius"})
@@ -455,7 +455,7 @@ async def test_a_role_switch_failing_after_the_update_keeps_the_new_token(
 
 
 async def test_a_late_failure_does_not_bring_back_a_stale_token(hass, monkeypatch):
-    """Audit D8AE-02: the stale target-role token came back over the fresh one."""
+    """The stale target-role token came back over the fresh one."""
     entry = make_entry(hass)
     await async_get_token_store(hass).async_save_token(
         HOST, realm="r", token="stale", user="technician"
@@ -545,7 +545,7 @@ def _other_entry(hass) -> MockConfigEntry:
 async def test_a_duplicate_setup_leaves_the_inverter_alone(
     hass, mock_modbus, monkeypatch
 ):
-    """Audit FA0FB-02: the duplicate was found only after Modbus was set up on it.
+    """The duplicate was found only after Modbus was set up on it.
 
     With a stored token the settings step validates at once, without a
     password step to recheck the host.
@@ -570,7 +570,7 @@ async def test_a_duplicate_setup_leaves_the_inverter_alone(
 async def test_moving_to_a_host_taken_leaves_the_inverter_alone(
     hass, mock_modbus, monkeypatch
 ):
-    """Audit FA0FB-02: reconfigure and options moved Modbus settings before refusing."""
+    """Reconfigure and options moved Modbus settings before refusing."""
     make_entry(hass)
     await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
     other = _other_entry(hass)
@@ -608,7 +608,7 @@ async def test_moving_to_a_host_taken_leaves_the_inverter_alone(
 
 
 async def test_a_reconfigure_failing_late_keeps_the_fresh_token(hass, monkeypatch):
-    """Audit D8AE-02, reconfigure: the entry used the fresh token when the stale one came back."""
+    """The entry used the fresh token when the stale one came back."""
     entry = make_entry(hass)
     store = async_get_token_store(hass)
     await store.async_save_token(HOST, realm="r", token="stale", user="technician")
@@ -654,7 +654,7 @@ async def test_a_reconfigure_failing_late_keeps_the_fresh_token(hass, monkeypatc
 async def test_a_host_taken_during_the_password_step_leaves_the_inverter_alone(
     hass, mock_modbus, monkeypatch
 ):
-    """Audit RR770-01: the password step validated, and set up Modbus, without a recheck."""
+    """The password step validated, and set up Modbus, without a recheck."""
     contacted = _record_contact(monkeypatch)
     applied = _record_modbus_setup(monkeypatch)
     result = await hass.config_entries.flow.async_init(
@@ -678,7 +678,7 @@ async def test_a_host_taken_during_the_password_step_leaves_the_inverter_alone(
 async def test_a_move_to_a_host_taken_during_the_password_step_is_refused(
     hass, mock_modbus, monkeypatch
 ):
-    """Audit RR770-01: reconfigure and options rechecked the host only after validation."""
+    """Reconfigure and options rechecked the host only after validation."""
     other = _other_entry(hass)
     contacted = _record_contact(monkeypatch)
     applied = _record_modbus_setup(monkeypatch)
@@ -717,7 +717,7 @@ async def test_a_move_to_a_host_taken_during_the_password_step_is_refused(
 async def test_an_aborted_setup_does_not_hand_its_token_to_another_entry(
     hass, monkeypatch
 ):
-    """Audit RR770-02: a competing entry on the same role kept the aborted flow's token."""
+    """A competing entry on the same role kept the aborted flow's token."""
 
     async def validate_while_taken(hass, settings, **_kwargs):
         make_entry(hass)
@@ -734,7 +734,7 @@ async def test_an_aborted_setup_does_not_hand_its_token_to_another_entry(
 async def test_a_host_taken_while_the_token_is_minted_leaves_the_inverter_alone(
     hass, mock_modbus, monkeypatch
 ):
-    """Audit R730-01: the claim was not held through minting and validation."""
+    """The claim was not held through minting and validation."""
     applied = _record_modbus_setup(monkeypatch)
 
     async def mint_while_taken(hass, host, password, username):
@@ -794,7 +794,7 @@ async def test_an_unreachable_modbus_without_the_web_api_says_so(hass, mock_modb
 async def test_turning_the_web_api_on_applies_the_saved_restriction(
     hass, mock_modbus, monkeypatch
 ):
-    """Audit R6D-01: the restriction chosen without the web API was never written."""
+    """The restriction chosen without the web API was never written."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -962,7 +962,7 @@ async def test_a_moved_inverter_is_followed_to_its_new_address(hass):
 
 
 async def test_a_moved_inverter_keeps_the_title_its_owner_gave(hass):
-    """Reaudit Z-02: following the address silently replaced a renamed entry's title."""
+    """Following the address silently replaced a renamed entry's title."""
     entry = make_entry(hass)
     hass.config_entries.async_update_entry(entry, title="Garage inverter")
     with_inverter_device(hass, entry)
@@ -997,7 +997,7 @@ async def test_an_ipv6_discovery_does_not_replace_an_ipv4_host(hass, inverters):
 
 
 async def test_a_manual_setup_is_not_blocked_by_an_open_card(hass, mock_modbus):
-    """Reaudit Z-01: the card held the host, and adding it by hand aborted as in progress."""
+    """The card held the host, and adding it by hand aborted as in progress."""
     card = await discover(hass, discovered())
 
     result = await run_flow(hass)
@@ -1023,7 +1023,7 @@ async def test_a_discovered_inverter_is_set_up_from_its_card(hass, mock_modbus):
 
 
 async def test_an_address_taken_while_the_token_moves_is_not_shared(hass, monkeypatch):
-    """Audit R3B-01: another flow took the address during the token save; both held it."""
+    """Another flow took the address during the token save; both held it."""
     entry = make_entry(hass)
     store = async_get_token_store(hass)
     await store.async_save_token(HOST, realm="r", token="t")
@@ -1052,7 +1052,7 @@ async def test_an_address_taken_while_the_token_moves_is_not_shared(hass, monkey
 
 
 async def test_two_announcements_leave_the_token_under_one_address(hass, monkeypatch):
-    """Audit R3B-02: overlapping follows left a password-equivalent token at an unused host."""
+    """Overlapping follows left a password-equivalent token at an unused host."""
     entry = make_entry(hass)
     store = async_get_token_store(hass)
     await store.async_save_token(HOST, realm="r", token="t")
@@ -1101,7 +1101,7 @@ async def test_two_announcements_read_at_once_leave_one_address(hass, monkeypatc
 
 
 async def test_an_ipv6_only_announcement_is_not_offered(hass):
-    """Audit R3B-03: the web client cannot reach an unbracketed IPv6 host."""
+    """The web client cannot reach an unbracketed IPv6 host."""
     result = await discover(hass, discovered(host="2001:db8::10"))
 
     assert result["type"] is FlowResultType.ABORT
@@ -1178,7 +1178,7 @@ async def test_a_reauth_can_leave_the_web_api_off(hass, mock_modbus):
 async def test_an_entry_deleted_during_the_reauth_keeps_no_token(
     hass, mock_modbus, monkeypatch
 ):
-    """Audit R6D-03, carried over from the repair: success was reported for a gone entry."""
+    """Success was reported for a gone entry."""
     entry = make_entry(hass)
     validate = config_flow._validate_input
 
@@ -1202,7 +1202,7 @@ async def test_an_entry_deleted_during_the_reauth_keeps_no_token(
 async def test_a_reauth_failing_late_keeps_the_fresh_token(
     hass, mock_modbus, monkeypatch
 ):
-    """Audit D8AE-02, carried over from the repair: the stale token came back."""
+    """The stale token came back."""
     entry = make_entry(hass)
     store = async_get_token_store(hass)
     await store.async_save_token(HOST, realm="r", token="stale", user="technician")
@@ -1256,7 +1256,7 @@ def test_a_setting_out_of_bounds_is_refused_before_the_inverter(change, error):
 
 
 async def test_an_entry_removed_while_following_keeps_no_token(hass, monkeypatch):
-    """Reaudit RB99, baseline risk: the token moved to the new host of a gone entry."""
+    """The token moved to the new host of a gone entry."""
     entry = make_entry(hass)
     store = async_get_token_store(hass)
     await store.async_save_token(HOST, realm="r", token="t")
@@ -1274,7 +1274,7 @@ async def test_an_entry_removed_while_following_keeps_no_token(hass, monkeypatch
 
 
 async def test_a_reauth_keeps_settings_changed_while_it_ran(hass, mock_modbus):
-    """Reaudit RB99, inherited risk: the finished login wrote back its older snapshot."""
+    """The finished login wrote back its older snapshot."""
     entry = make_entry(hass)
     result = await entry.start_reauth_flow(hass)
     result = await hass.config_entries.flow.async_configure(

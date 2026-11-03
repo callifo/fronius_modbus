@@ -292,7 +292,7 @@ async def test_the_refresh_names_the_active_events_in_the_language_of_home_assis
 
 
 async def test_a_text_file_that_failed_once_is_read_again(hass):
-    """Audit F15: one failed read of the language file kept English texts until reload."""
+    """One failed read of the language file kept English texts until reload."""
     hass.config.language = "de"
     client = FakeClientWithEvents()
     german = client.texts.pop("de")
@@ -308,7 +308,7 @@ async def test_a_text_file_that_failed_once_is_read_again(hass):
 
 
 async def test_the_event_texts_are_read_once_when_a_language_has_no_file(hass):
-    """Reaudit W-05: the caching of the texts was untested.
+    """The caching of the texts was untested.
 
     A file the firmware lacks counted as failed would fetch the English texts,
     some 64 KB, on every poll.
@@ -466,7 +466,7 @@ async def test_a_log_entry_survives_an_auth_failure_in_the_same_poll(hass, monke
 
 
 async def test_a_lost_login_keeps_the_public_readings_of_its_poll(hass):
-    """Audit F14: the auth failure reset the data the public reads had just filled."""
+    """The auth failure reset the data the public reads had just filled."""
     client = FakeClientWithEvents()
     control = make_control(hass, client=client)
 
@@ -573,7 +573,7 @@ async def test_auto_mode_with_a_manual_soc_mode_still_reads_as_auto(hass):
 
 
 async def test_switching_to_manual_keeps_the_target_on_the_inverter(control):
-    """Audit F24-01: the cached target went along and undid one set since the poll."""
+    """The cached target went along and undid one set since the poll."""
     await control.async_refresh()
     await control.set_battery_mode(1)
     assert control._client.calls[-1] == ("battery", 1, None)
@@ -605,7 +605,7 @@ async def test_charge_from_grid_implies_charge_from_ac(control):
 async def test_a_charge_source_sends_only_itself_and_what_it_implies(
     control, request_, sent
 ):
-    """Audit F24-01: the other flag came from the cache and could undo a fresh change."""
+    """The other flag came from the cache and could undo a fresh change."""
     await control.async_refresh()
     await control.set_charge_sources(**request_)
     assert control._client.calls[-1] == sent
@@ -727,7 +727,7 @@ async def test_a_firmware_update_clears_the_solar_api_warning_on_the_next_refres
 
 
 async def test_concurrent_soc_writes_are_applied_one_after_the_other(hass):
-    """Audit F10: two read-modify-write SoC updates composed from the same old tuple lost one change."""
+    """Two read-modify-write SoC updates composed from the same old tuple lost one change."""
     control = make_control(hass)
     try:
         await control.async_refresh()
@@ -743,7 +743,7 @@ async def test_concurrent_soc_writes_are_applied_one_after_the_other(hass):
 
 
 async def test_a_write_without_a_customer_login_is_an_error_not_a_silent_no_op(hass):
-    """Audit F16: setters returned quietly after the login had been rejected."""
+    """Setters returned quietly after the login had been rejected."""
     control = make_control(hass, client=None)
     try:
         with pytest.raises(RuntimeError, match="not configured"):
@@ -876,7 +876,7 @@ def _hold_the_first_write(control) -> asyncio.Event:
 
 
 async def test_a_write_that_ends_after_unload_schedules_no_refresh(control):
-    """Audit F12: a write in flight at unload started a refresh of the unloaded entry."""
+    """A write in flight at unload started a refresh of the unloaded entry."""
     await control.async_refresh()
     control.shutdown()
 
@@ -888,7 +888,7 @@ async def test_a_write_that_ends_after_unload_schedules_no_refresh(control):
 async def test_a_battery_write_is_confirmed_by_a_refresh_shortly_after(
     hass, monkeypatch
 ):
-    """Audit F16: the confirming refresh was untested.
+    """The confirming refresh was untested.
 
     Without it a value the inverter refused stayed on screen until the next web poll.
     """
@@ -913,7 +913,7 @@ async def test_a_battery_write_is_confirmed_by_a_refresh_shortly_after(
 
 
 async def test_unloading_cancels_a_pending_confirmation_refresh(control):
-    """Audit F16: a refresh still waiting at unload would poll an unloaded entry."""
+    """A refresh still waiting at unload would poll an unloaded entry."""
     await control.async_refresh()
     await control.set_backup_reserve(30)
     pending = control._delayed_refresh_task
@@ -1010,7 +1010,7 @@ async def test_every_battery_write_shows_its_value_right_away(hass):
 
 
 async def test_a_soc_minimum_the_inverter_refuses_is_not_written_to_modbus_first(hass):
-    """Reaudit RE26-02: a stale poll passed, Modbus took the minimum, the web API refused it."""
+    """A stale poll passed, Modbus took the minimum, the web API refused it."""
     client = FakeWebClient()
     client.battery.update(
         BAT_M0_SOC_MODE="manual", BAT_M0_SOC_MIN=20, BAT_M0_SOC_MAX=90
@@ -1033,7 +1033,7 @@ async def test_a_soc_minimum_the_inverter_refuses_is_not_written_to_modbus_first
 
 
 async def test_a_soc_maximum_a_stale_poll_would_refuse_reaches_the_inverter(hass):
-    """Reaudit RE26-02: the polled minimum 50 refused a maximum the inverter would take."""
+    """The polled minimum 50 refused a maximum the inverter would take."""
     client = FakeWebClient()
     client.battery.update(
         BAT_M0_SOC_MODE="manual", BAT_M0_SOC_MIN=50, BAT_M0_SOC_MAX=90
@@ -1049,7 +1049,7 @@ async def test_a_soc_maximum_a_stale_poll_would_refuse_reaches_the_inverter(hass
 
 
 async def test_a_web_refusal_after_modbus_says_modbus_is_set(hass):
-    """Audit FA0FB-04: the error named the web failure, not the minimum Modbus already held."""
+    """The error named the web failure, not the minimum Modbus already held."""
     client = FakeWebClient()
     client.battery.update(BAT_M0_SOC_MODE="manual")
     control = make_control(hass, client=client)
@@ -1084,7 +1084,7 @@ async def test_a_web_refusal_after_modbus_says_modbus_is_set(hass):
 async def test_a_malformed_modbus_config_leaves_the_other_web_values(
     hass, modbus_config
 ):
-    """Audit FA0FB-06: an AttributeError in its display failed the whole web poll."""
+    """An AttributeError in its display failed the whole web poll."""
     client = FakeWebClient()
     client.get_modbus_config = lambda: modbus_config
     client.battery.update(BAT_M0_SOC_MIN=20)
@@ -1097,7 +1097,7 @@ async def test_a_malformed_modbus_config_leaves_the_other_web_values(
 
 
 async def test_a_failed_storage_read_keeps_the_battery_identity(hass):
-    """Audit FA0FB-07: the parser's placeholder replaced a known BYD/HVS/serial."""
+    """The parser's placeholder replaced a known BYD/HVS/serial."""
     client = FakeWebClient()
     control = make_control(hass, client=client)
     try:
@@ -1129,7 +1129,7 @@ async def test_a_failed_storage_read_keeps_the_battery_identity(hass):
     ],
 )
 async def test_a_malformed_modbus_flag_shows_as_unknown(hass, modbus_config, unknown):
-    """Audit RR770-03: an unreadable Modbus flag showed as "disabled"."""
+    """An unreadable Modbus flag showed as "disabled"."""
     client = FakeWebClient()
     client.get_modbus_config = lambda: modbus_config
     control = make_control(hass, client=client)
@@ -1155,7 +1155,7 @@ async def test_a_malformed_modbus_flag_shows_as_unknown(hass, modbus_config, unk
 async def test_a_modbus_flag_value_that_means_nothing_shows_as_unknown(
     hass, flag, shown
 ):
-    """Audit R730-03: a list read as on, an unknown word as off."""
+    """A list read as on, an unknown word as off."""
     client = FakeWebClient()
     client.get_modbus_config = lambda: {
         "slave": {"ctr": {"on": flag, "restriction": {"on": flag}}}
@@ -1169,7 +1169,7 @@ async def test_a_modbus_flag_value_that_means_nothing_shows_as_unknown(
 
 
 async def test_a_web_switch_in_no_known_form_shows_as_unknown(hass):
-    """Own reaudit E-01: `[1]` showed as on and "garbage" as off."""
+    """`[1]` showed as on and "garbage" as off."""
     client = FakeWebClient()
     client.battery.update(HYB_BM_CHARGEFROMAC=[1], HYB_EVU_CHARGEFROMGRID="garbage")
     client.get_solar_api_config = lambda: {"SolarAPIv1Enabled": [1]}
@@ -1272,7 +1272,7 @@ async def test_a_lost_login_keeps_the_public_reads(hass):
 
 @pytest.mark.parametrize("enabled", ["off", [1]])
 async def test_an_export_limit_flag_in_no_on_form_shows_no_limit(hass, enabled):
-    """Audit R6D-05: "off" and a list read as an active export limit."""
+    """An "off" and a list read as an active export limit."""
 
     class FlagClient(FakeWebClient):
         def get_export_limit_config(self):
@@ -1323,7 +1323,7 @@ async def test_an_export_limit_block_of_the_wrong_shape_fails_no_refresh(hass):
 
 
 async def test_an_infinite_battery_value_fails_no_refresh(hass):
-    """Audit R6D-06: int(inf) raised OverflowError and took the web poll down."""
+    """An int(inf) raised OverflowError and took the web poll down."""
     client = FakeWebClient()
     client.battery["BAT_M0_SOC_MAX"] = float("inf")
     control = make_control(hass, client=client)

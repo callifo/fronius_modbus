@@ -149,7 +149,7 @@ def test_the_minimum_job_actually_checks_the_version_it_installed():
 
 
 def test_both_test_jobs_run_the_modbus_libraries_core_pins():
-    """Audit F29: the minimum job ran modbus-connection 4.12 where 2026.9 pins 4.10.
+    """The minimum job ran modbus-connection 4.12 where 2026.9 pins 4.10.
 
     The integration shares core's Modbus connection, so an installation runs
     the library releases core pins. The workflow installs them and both the
@@ -165,7 +165,7 @@ def test_both_test_jobs_run_the_modbus_libraries_core_pins():
 
 
 def test_the_test_job_has_the_gitleaks_its_allowlist_tests_need():
-    """Audit F30: without the binary the allowlist tests skipped in CI, every run.
+    """Without the binary the allowlist tests skipped in CI, every run.
 
     The gitleaks job scans with the change's own rules, so a widened allowlist
     passes it; only these tests hold the rules to a known token.

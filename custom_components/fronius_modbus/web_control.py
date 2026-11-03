@@ -103,7 +103,7 @@ def _implied_charge_sources(
 
     Grid charging needs AC charging, so switching AC off takes grid with it
     and switching grid on takes AC with it. The other flag is left alone: taken
-    from the last poll, it undid a change made since (audit F24-01).
+    from the last poll, it undid a change made since.
     """
     if from_ac is False:
         return False, False
@@ -150,7 +150,7 @@ class WebData:
     event_log_readable: bool = False
 
 
-# What the web API answers without a login: a lost login keeps it (audit F14).
+# What the web API answers without a login: a lost login keeps it.
 _PUBLIC_FIELDS = (
     "inverter_readings",
     "inverter_endpoint_missing",
@@ -225,7 +225,7 @@ def _config_part(config: dict[str, Any] | None, key: str) -> dict[str, Any] | No
 
 
 def _flag_state(part: dict[str, Any] | None) -> str | None:
-    """An unreadable flag is unknown, not "disabled" (audit RR770-03, R730-03)."""
+    """An unreadable flag is unknown, not "disabled"."""
     if part is None:
         return None
     value = part.get("on")
@@ -265,7 +265,7 @@ class FroniusWebControl:
         self._storage_present = storage_present
         self._inverter_firmware = inverter_firmware
         self._on_battery_write = on_battery_write
-        # One write at a time (audit F10): concurrent read-modify-write of the
+        # One write at a time: concurrent read-modify-write of the
         # SoC tuple or the charge-source pair lost one of the two changes.
         self._write_lock = asyncio.Lock()
         self._tickets: dict[str, int] = {}
@@ -273,7 +273,7 @@ class FroniusWebControl:
         self._coordinator: Any = None
         self._delayed_refresh_task: asyncio.Task | None = None
         # A write still in flight at unload must not start a refresh of the
-        # unloaded entry once it returns (audit F12).
+        # unloaded entry once it returns.
         self._shut_down = False
         self._event_tracker = EventTracker()
         self._event_texts: dict[str, str] | None = None
@@ -453,7 +453,7 @@ class FroniusWebControl:
         self.data.storage_readings = storage_info.get("readings")
         self.data.storage_endpoint_missing = bool(storage_info.get("missing"))
         # Without the device node the identity is the parser's placeholder,
-        # not a reading (audit FA0FB-07).
+        # not a reading.
         if self.data.storage_readings is None:
             return
         self.data.storage_manufacturer = storage_info.get("manufacturer")
@@ -462,7 +462,7 @@ class FroniusWebControl:
 
     def _apply_web_modbus_config(self, modbus_config: dict[str, Any]) -> None:
         # Shown only: a part of the wrong shape is unknown, not a failed poll
-        # that takes every other web value down with it (audit FA0FB-06).
+        # that takes every other web value down with it.
         slave = _config_part(modbus_config, "slave")
         ctr = _config_part(slave, "ctr")
         restriction = _config_part(ctr, "restriction")
@@ -586,7 +586,6 @@ class FroniusWebControl:
                 EVENT_TEXTS_PATH.format(language=candidate)
             )
             # A file that failed is asked again; one the firmware lacks is not
-            # (audit F15).
             answered = answered and answer is not None
             merged |= event_texts(answer)
         if answered:
@@ -668,7 +667,7 @@ class FroniusWebControl:
         """Only the limit asked for; the window is checked against the inverter.
 
         A check against the last poll refused a window the inverter would take
-        and passed one it refuses (reaudit RE26-02).
+        and passed one it refuses.
         """
         if soc_min is not None and not SOC_LOWEST <= soc_min <= SOC_HIGHEST:
             raise ControlRefused(
@@ -693,9 +692,9 @@ class FroniusWebControl:
 
         Both writes and the check that guards them happen under this lock. A
         check outside it went stale when a concurrent maximum change landed in
-        between, and Modbus then took a reserve the web API refuses (audit A05).
+        between, and Modbus then took a reserve the web API refuses.
         The window is read from the inverter before Modbus is written: checked
-        only at the web write, Modbus already held a refused minimum (RE26-02).
+        only at the web write, Modbus already held a refused minimum.
         """
         client = self._client
         if client is None or not self.soc_mode_is_manual:
@@ -710,7 +709,7 @@ class FroniusWebControl:
             await self._set_api_soc_manual(soc_min=soc_min, control_name="SoC Minimum")
         except (RuntimeError, ValueError, OSError) as err:
             # Modbus holds the new minimum and keeps it; the owner has to know
-            # the two minimums now differ (audit FA0FB-04).
+            # the two minimums now differ.
             raise ControlUnavailable(
                 "soc_minimum_web_failed",
                 f"The Modbus reserve is set, but the web API refused it: {err}",
@@ -741,8 +740,7 @@ class FroniusWebControl:
         """Send the one limit asked for; the other stays as the inverter holds it.
 
         The client checks the window against a fresh read. Sending the cached
-        other limit undid one set in the inverter UI since the last poll
-        (audit F24-01).
+        other limit undid one set in the inverter UI since the last poll.
         """
         if not self._client:
             raise ControlUnavailable("web_api_not_configured", WEB_API_NOT_CONFIGURED)
@@ -770,7 +768,7 @@ class FroniusWebControl:
         if not self._client:
             raise ControlUnavailable("web_api_not_configured", WEB_API_NOT_CONFIGURED)
 
-        # The mode alone: the target stays as the inverter holds it (audit F24-01).
+        # The mode alone: the target stays as the inverter holds it.
         written = await self._async_web_job(
             self._client.set_battery_config, mode, raise_on_auth_failure=True
         )

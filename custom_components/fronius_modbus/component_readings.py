@@ -349,7 +349,7 @@ def reported(reading: ComponentReading, readings: dict[str, Any] | None) -> bool
     """Whether a sensor exists for an answered or unread component.
 
     Existence follows the component, not the field: an answer without a value
-    retired the sensor and the owner's entity id (audit R25-01). Rows that
+    retired the sensor and the owner's entity id. Rows that
     follow the report exist when reported, and also when the answer names none
     of their group, which is no answer about them.
     """
@@ -375,8 +375,7 @@ def reported_rows(component: Component, readings: dict[str, Any] | None) -> set[
     """The report-following rows an answer names; only these count as seen.
 
     A row made while unread or while none of them was named is a placeholder,
-    and keeping it would show a module or a field the device lacks (own
-    reaudit R26-01).
+    and keeping it would show a module or a field the device lacks.
     """
     if readings is None:
         return set()
@@ -423,7 +422,7 @@ def _as_number(value: Any) -> float | None:
     """A number, or numeric text as attributes carry it ("467.2"); else unknown.
 
     A value Home Assistant cannot show as a number would be refused on every
-    update (audit R25-02); "nan" and "inf" parse, but are no reading (RE26-05).
+    update; "nan" and "inf" parse, but are no reading.
     """
     if isinstance(value, bool):
         return None

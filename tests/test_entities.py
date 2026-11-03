@@ -226,7 +226,7 @@ async def test_an_invalid_soc_minimum_writes_nothing(hass, entry, connection):
 async def test_a_concurrent_maximum_cannot_slip_between_check_and_write(
     hass, entry, connection
 ):
-    """Audit A05: the check ran outside the web lock, so Modbus took a refused minimum."""
+    """The check ran outside the web lock, so Modbus took a refused minimum."""
     runtime = await make_runtime(hass, entry, connection)
     web_control = make_control(hass)
     web_control._client.battery.update(HYB_EM_MODE=1, BAT_M0_SOC_MODE="manual")
@@ -334,7 +334,7 @@ async def test_an_absent_first_meter_does_not_renumber_the_second(
 
 
 async def test_an_enum_value_outside_its_options_reads_unknown(runtime, entry):
-    """Audit F21: StActCtl bit 3 read "bit 3 undefined", and every state write failed."""
+    """StActCtl bit 3 read "bit 3 undefined", and every state write failed."""
     description = replace(
         _description(entities.sensor_descriptions(runtime), "inverter_controls"),
         value_fn=lambda r: bitmask_to_string(1 << 3, INVERTER_CONTROLS, "normal"),
@@ -346,7 +346,7 @@ async def test_an_enum_value_outside_its_options_reads_unknown(runtime, entry):
 
 
 async def test_the_inverter_controls_are_no_storage_mode(runtime):
-    """Audit F20: the inverter's StActCtl showed as "Core storage control mode"."""
+    """The inverter's StActCtl showed as "Core storage control mode"."""
     descriptions = entities.sensor_descriptions(runtime)
     inverter = _description(descriptions, "inverter_controls")
     storage = _description(descriptions, "control_mode")
@@ -357,7 +357,7 @@ async def test_the_inverter_controls_are_no_storage_mode(runtime):
 
 
 async def test_every_enum_sensor_value_is_one_of_its_options(runtime):
-    """Audit F04: the zero-flag control state read "Normal" while the options said "normal"."""
+    """The zero-flag control state read "Normal" while the options said "normal"."""
     offenders = [
         (description.key, description.value_fn(runtime))
         for description in entities.sensor_descriptions(runtime)
@@ -371,7 +371,7 @@ async def test_every_enum_sensor_value_is_one_of_its_options(runtime):
 async def test_storage_rate_numbers_follow_the_storage_report(
     runtime, entry, inverter_unit
 ):
-    """Audit F15: the rate numbers stayed available while every storage register read failed."""
+    """The rate numbers stayed available while every storage register read failed."""
     address = runtime.device.storage.resolved_fields["model_id"].address
     inverter_unit.fail_read(address, ModbusTimeoutError())
     await runtime.modbus.async_refresh()
@@ -384,7 +384,7 @@ async def test_storage_rate_numbers_follow_the_storage_report(
 
 
 async def test_a_total_sensor_follows_a_large_but_sustained_gap(hass, entry, runtime):
-    """Audit F05: after a gap above the step limit every later reading was rejected forever."""
+    """After a gap above the step limit every later reading was rejected forever."""
     sensor = _total_sensor(runtime, entry, hass)
     original = sensor.native_value
     for increment in range(1, entity_base.TOTAL_INCREASING_RESET_POLLS + 1):
@@ -393,7 +393,7 @@ async def test_a_total_sensor_follows_a_large_but_sustained_gap(hass, entry, run
 
 
 async def test_reading_a_total_sensor_does_not_count_as_a_poll(hass, entry, runtime):
-    """Audit F06: three property reads of one bad sample were taken for three polls."""
+    """Three property reads of one bad sample were taken for three polls."""
     sensor = _total_sensor(runtime, entry, hass)
     original = sensor.native_value
     _report(sensor, 120.0)
@@ -406,7 +406,7 @@ async def test_reading_a_total_sensor_does_not_count_as_a_poll(hass, entry, runt
 async def test_web_controls_go_unavailable_when_the_customer_login_is_rejected(
     hass, entry, runtime
 ):
-    """Audit F16: after a rejected login the switches stayed available and did nothing."""
+    """After a rejected login the switches stayed available and did nothing."""
     control = make_control(hass)
     runtime.web_control = control
     runtime.web = FroniusWebCoordinator(
@@ -438,7 +438,7 @@ INVERTER_HEADER_ADDRESS = 40069
 async def test_failed_polls_do_not_confirm_a_bad_energy_sample(
     hass, entry, runtime, inverter_unit
 ):
-    """Audit A02: a failed read keeps the last decoded value, which confirmed itself."""
+    """A failed read keeps the last decoded value, which confirmed itself."""
     sensor = _total_sensor(runtime, entry, hass)
     original = sensor.native_value
 
@@ -459,7 +459,7 @@ TOLERATED_OUTAGE_SECONDS = 30
 async def test_a_retained_poll_does_not_confirm_a_bad_energy_sample(
     hass, entry, runtime, inverter_unit
 ):
-    """Audit B05: inside the tolerance window the old poll was served again as a fresh one."""
+    """Inside the tolerance window the old poll was served again as a fresh one."""
     sensor = _total_sensor(runtime, entry, hass)
     original = sensor.native_value
 
@@ -656,7 +656,7 @@ async def test_a_zero_accumulator_is_no_reading_not_a_reset(
 
 
 async def test_an_unreachable_web_interface_is_a_translated_error():
-    """Audit R24-02: FroniusWebUnreachable is an OSError, which no write mapped.
+    """FroniusWebUnreachable is an OSError, which no write mapped.
 
     A web control used while the inverter's web server was down ended in an
     untranslated error with a traceback.
@@ -674,7 +674,7 @@ async def test_an_unreachable_web_interface_is_a_translated_error():
 async def test_grid_charging_that_the_web_api_refuses_is_an_error(
     hass, entry, connection
 ):
-    """Audit F24-02: the web failure was only a warning; the user saw success.
+    """The web failure was only a warning; the user saw success.
 
     The Modbus mode is already switched when the web charge flags fail, so the
     error says that the mode is set and grid charging is not.
@@ -704,7 +704,7 @@ async def test_grid_charging_that_the_web_api_refuses_is_an_error(
 async def test_grid_charging_without_the_web_login_is_an_error(
     hass, entry, connection, web_control_kept
 ):
-    """README audit: with the login lost, or never there, the charge sources
+    """With the login lost, or never there, the charge sources
     were skipped without a word, and grid charging could stay at about 500 W.
     """
     runtime = await make_runtime(hass, entry, connection)

@@ -57,7 +57,7 @@ def _left_out(
     """Whether a sensor waits for its first value.
 
     A string in the dark sends no value; a restart then deleted the sensor the
-    owner had (Codex C-03), so a registered one stays.
+    owner had, so a registered one stays.
     """
     value = getattr(runtime.device.mppt_module(index), attribute, None)
     return value is None and key not in runtime.registered_keys

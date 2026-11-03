@@ -92,7 +92,7 @@ async def setup_entry(hass, entry: MockConfigEntry) -> None:
 async def log_in_to_the_web_api(hass, mock_modbus, monkeypatch) -> None:
     """A working web login with a confirmed two-meter topology.
 
-    Cleanup waits for one (audit A24-01), so a test of any other cleanup gate
+    Cleanup waits for one, so a test of any other cleanup gate
     needs it to reach that gate at all.
     """
     mock_modbus.add_unit(201, like=METER_UNIT_ID)
@@ -282,7 +282,7 @@ async def test_minor_version_9_entries_migrate_to_the_current_shape(hass, mock_m
 async def test_a_string_dark_at_the_first_setup_gets_its_sensor_once_lit(
     hass, mock_modbus, monkeypatch, symo_gen24
 ):
-    """Reaudit W-03: set up at night, a string got no power sensor until a reload."""
+    """Set up at night, a string got no power sensor until a reload."""
     await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
     probe = make_entry(hass)
     await setup_entry(hass, probe)
@@ -314,7 +314,7 @@ async def test_a_string_dark_at_the_first_setup_gets_its_sensor_once_lit(
 async def test_a_string_lit_while_the_platforms_set_up_gets_its_sensor(
     hass, mock_modbus, monkeypatch, symo_gen24
 ):
-    """Reaudit AC-02: the strings left out were taken after the platform setup.
+    """The strings left out were taken after the platform setup.
 
     A poll that lit the string in between left nothing to wait for, so the
     sensor came only with the next restart.
@@ -372,7 +372,7 @@ LEGACY_MPPT_IDS = [
 async def test_a_dark_mppt_at_the_upgrade_keeps_its_legacy_sensors(
     hass, mock_modbus, monkeypatch, symo_gen24, legacy_id, key, field, missing
 ):
-    """Reaudit RC-02: a sensor still under a legacy id counted as never registered.
+    """A sensor still under a legacy id counted as never registered.
 
     Dark at the first start after the upgrade, it was neither migrated nor
     kept, and the cleanup deleted it with the name the owner had given it.
@@ -408,7 +408,7 @@ LEGACY_DEVICE_IDENTIFIERS = (
 async def test_a_pre_web_api_entry_is_upgraded_and_loses_its_legacy_devices(
     hass, mock_modbus, monkeypatch
 ):
-    """Audit F27: no test started from an entry of 0.3.0 or older (minor 8)."""
+    """No test started from an entry of 0.3.0 or older (minor 8)."""
     await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
     entry = make_entry(
         hass,
@@ -441,7 +441,7 @@ async def test_a_pre_web_api_entry_is_upgraded_and_loses_its_legacy_devices(
 
 
 async def test_a_pre_web_api_entry_keeps_a_title_the_owner_gave(hass):
-    """Reaudit RC-03: the upgrade put the generated title over the owner's."""
+    """The upgrade put the generated title over the owner's."""
     entry = make_entry(hass, minor_version=8)
     hass.config_entries.async_update_entry(entry, title="Garage roof")
 
@@ -613,7 +613,7 @@ async def test_a_failed_mppt_read_at_startup_keeps_the_mppt_entities(hass, mock_
 async def test_a_meter_that_times_out_at_setup_keeps_its_entities(
     hass, mock_modbus, monkeypatch
 ):
-    """Audit F03: the cleanup after a timed-out meter probe removed the meter's registry entries."""
+    """The cleanup after a timed-out meter probe removed the meter's registry entries."""
     await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
     entry = make_entry(hass)
     registry = er.async_get(hass)
@@ -630,7 +630,7 @@ async def test_a_meter_that_times_out_at_setup_keeps_its_entities(
 
 
 async def test_mppt_entities_appear_once_the_first_read_succeeds(hass, mock_modbus):
-    """Audit F03: a failed model-160 read at setup left the MPPT entities missing until a manual reload."""
+    """A failed model-160 read at setup left the MPPT entities missing until a manual reload."""
     entry = make_entry(hass)
     mock_modbus.fail_read(
         INVERTER_UNIT_ID, MPPT_REGISTER_ADDRESS, ServerDeviceFailureError()
@@ -654,7 +654,7 @@ async def test_minor_version_11_entries_turn_the_checkbox_into_a_choice(
 ):
     """An unchecked box used to write "off"; it migrates to "keep", never to "off".
 
-    Lifting a restriction is now a choice of its own (audit A24-02).
+    Lifting a restriction is now a choice of its own.
     """
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -691,7 +691,7 @@ async def test_minor_version_10_entries_take_the_role_of_their_stored_token(
 async def test_a_minor_version_10_entry_keeps_the_role_its_owner_chose(
     hass, mock_modbus
 ):
-    """README audit: callifo 0.3.2 and later store the chosen role, and a technician
+    """Callifo 0.3.2 and later store the chosen role, and a technician
     token left on the host made a customer entry technician and dropped its
     customer token."""
     entry = make_entry(hass, minor_version=10, api_username="customer")
@@ -709,7 +709,7 @@ async def test_a_minor_version_10_entry_keeps_the_role_its_owner_chose(
 async def test_a_callifo_0_3_1_entry_with_a_technician_token_keeps_technician(
     hass, mock_modbus
 ):
-    """Reaudit G-01: callifo 0.3.1 (minor 9) wrote customer as a constant, and
+    """Callifo 0.3.1 (minor 9) wrote customer as a constant, and
     the technician token beside it was its export limit access; taking that
     constant for a choice dropped the access and deleted the token."""
     entry = make_entry(hass, minor_version=9, api_username="customer")
@@ -737,7 +737,7 @@ STORAGE_HEADER_ADDRESS = 40343
 
 
 async def test_a_refused_chain_keeps_the_storage_entities(hass, mock_modbus):
-    """Audit A03: an incomplete scan looked like an absent battery, so cleanup removed it."""
+    """An incomplete scan looked like an absent battery, so cleanup removed it."""
     entry = make_entry(hass)
     await setup_entry(hass, entry)
     entity_id = entity_id_for(hass, entry, "sensor", "soc")
@@ -793,7 +793,7 @@ class _RecordingWebClient(_FakeWebClientWithTopology):
 async def test_a_switch_and_a_button_run_their_own_action(
     hass, mock_modbus, monkeypatch
 ):
-    """Audit F10: no test turned a switch on or off or pressed a button."""
+    """No test turned a switch on or off or pressed a button."""
     await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
     monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _RecordingWebClient)
     monkeypatch.setattr(_RecordingWebClient, "calls", [])
@@ -822,7 +822,7 @@ async def test_a_switch_and_a_button_run_their_own_action(
 async def test_a_topology_outage_keeps_the_second_meters_entities(
     hass, mock_modbus, monkeypatch
 ):
-    """Audit A04: one failed topology read fell back to a single meter and deleted the rest."""
+    """One failed topology read fell back to a single meter and deleted the rest."""
     mock_modbus.add_unit(201, like=METER_UNIT_ID)
     monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _FakeWebClientWithTopology)
     monkeypatch.setattr(
@@ -864,7 +864,7 @@ async def test_a_reload_retires_no_live_meter_device(hass, mock_modbus, monkeypa
 async def test_a_confirmed_single_meter_topology_is_applied(
     hass, mock_modbus, monkeypatch
 ):
-    """Audit B04: a confirmed answer about the meter we already poll never reached the runtime."""
+    """A confirmed answer about the meter we already poll never reached the runtime."""
     monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _FakeWebClientWithTopology)
     monkeypatch.setattr(_FakeWebClientWithTopology, "topology", None)
     entry = make_entry(hass)
@@ -905,7 +905,7 @@ class _WebClientLosingItsLogin(_FakeWebClientWithTopology):
 
     def get_power_meter_info(self, *_args, **_kwargs):
         # Like the real client: the public topology read never raises, an
-        # unanswered one is None (audit F13).
+        # unanswered one is None.
         if self.lost_at == "get_power_meter_info":
             return None
         return self.topology
@@ -918,7 +918,7 @@ class _WebClientLosingItsLogin(_FakeWebClientWithTopology):
 async def test_a_lost_web_login_retires_no_web_entity(
     hass, mock_modbus, monkeypatch, lose_login
 ):
-    """Audit A24-01: a login lost at setup read as "no web API", and cleanup deleted its entities.
+    """A login lost at setup read as "no web API", and cleanup deleted its entities.
 
     The owner's chosen entity id went with them. A lost login is "not seen", like
     a failed poll, whichever way it goes missing.
@@ -955,7 +955,7 @@ async def test_a_rejected_technician_token_is_the_one_deleted(
     """The topology read deleted the customer token whatever role had been rejected.
 
     The rejected technician token survived and was offered again on every start.
-    The first protected read is where a rejected login shows (audit F13).
+    The first protected read is where a rejected login shows.
     """
     monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientLosingItsLogin)
     monkeypatch.setattr(_WebClientLosingItsLogin, "lost_at", "get_modbus_config")
@@ -980,7 +980,7 @@ class _WebClientAnsweringEmpty(_FakeWebClientWithTopology):
 async def test_an_empty_component_answer_retires_no_entity(
     hass, mock_modbus, monkeypatch
 ):
-    """Audit R25-01: the cleanup at the next start removed 28 entities, this one among them."""
+    """The cleanup at the next start removed 28 entities, this one among them."""
     mock_modbus.add_unit(201, like=METER_UNIT_ID)
     monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientAnsweringEmpty)
     entry = make_entry(hass)
@@ -1003,7 +1003,7 @@ async def test_an_empty_component_answer_retires_no_entity(
 async def test_a_power_module_missing_from_one_answer_keeps_its_entity(
     hass, mock_modbus, monkeypatch
 ):
-    """Reaudit RE26-03: an answer naming module 1 only retired module 2 at the next start."""
+    """An answer naming module 1 only retired module 2 at the next start."""
     mock_modbus.add_unit(201, like=METER_UNIT_ID)
     monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientAnsweringEmpty)
     monkeypatch.setattr(
@@ -1069,7 +1069,7 @@ async def test_a_callifo_module_temperature_keeps_its_entity_at_the_update(
 
 
 async def test_a_reconfigure_reloads_the_entry_once(hass, mock_modbus, monkeypatch):
-    """Audit F24-10: the update listener and an explicit call both reloaded it."""
+    """The update listener and an explicit call both reloaded it."""
     entry = make_entry(hass)
     await setup_entry(hass, entry)
     reload = hass.config_entries.async_reload
@@ -1093,7 +1093,7 @@ async def test_a_reconfigure_reloads_the_entry_once(hass, mock_modbus, monkeypat
 async def test_diagnostics_still_answer_while_the_inverter_is_offline(
     hass, mock_modbus
 ):
-    """Audit F24-08: the fresh register read raised, so no diagnostics at all.
+    """The fresh register read raised, so no diagnostics at all.
 
     An outage is when the last poll and its report are needed most.
     """
@@ -1111,7 +1111,7 @@ async def test_diagnostics_still_answer_while_the_inverter_is_offline(
 async def test_a_placeholder_power_module_is_not_kept(
     hass, mock_modbus, monkeypatch, first_answer
 ):
-    """Own reaudit R26-01: a module made while unread or unnamed stayed as if reported."""
+    """A module made while unread or unnamed stayed as if reported."""
     mock_modbus.add_unit(201, like=METER_UNIT_ID)
     monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientAnsweringEmpty)
     monkeypatch.setattr(_WebClientAnsweringEmpty, "readings", first_answer)
@@ -1149,7 +1149,7 @@ class _WebClientLosingTheEndpoint(_WebClientAnsweringEmpty):
 async def test_a_single_404_keeps_the_registered_component_sensors(
     hass, mock_modbus, monkeypatch
 ):
-    """Audit FA0FB-03: one 404 read as firmware without the endpoint retired them."""
+    """One 404 read as firmware without the endpoint retired them."""
     mock_modbus.add_unit(201, like=METER_UNIT_ID)
     monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientLosingTheEndpoint)
     monkeypatch.setattr(
@@ -1172,7 +1172,7 @@ async def test_a_single_404_keeps_the_registered_component_sensors(
 async def test_a_module_registered_before_the_marker_survives_the_upgrade(
     hass, mock_modbus, monkeypatch
 ):
-    """Audit D8AE-01: an unmarked real module fell on the first upgraded partial answer."""
+    """An unmarked real module fell on the first upgraded partial answer."""
     mock_modbus.add_unit(201, like=METER_UNIT_ID)
     monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientAnsweringEmpty)
     monkeypatch.setattr(
@@ -1692,7 +1692,7 @@ LEGACY_TWINS = [
 async def test_both_twins_of_a_legacy_unique_id_keep_their_entity_ids(
     hass, mock_modbus, monkeypatch
 ):
-    """Audit F05: only one twin per key was migrated; the other was deleted."""
+    """Only one twin per key was migrated; the other was deleted."""
     await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
     entry = make_entry(hass)
     registry = er.async_get(hass)
@@ -1794,7 +1794,7 @@ async def test_an_update_through_callifo_0_3_4_rc2_keeps_the_original_entity(
 
 
 async def test_every_power_number_spans_the_rated_power(hass, mock_modbus, monkeypatch):
-    """Audit F08: the export limit stopped at 15 kW and the target feed-in at 20 kW."""
+    """The export limit stopped at 15 kW and the target feed-in at 20 kW."""
     await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
     entry = make_entry(hass)
     await setup_entry(hass, entry)
@@ -1821,7 +1821,7 @@ async def test_every_power_number_spans_the_rated_power(hass, mock_modbus, monke
 async def test_a_dark_mppt_at_a_restart_keeps_its_sensors(
     hass, mock_modbus, monkeypatch, symo_gen24, field, suffix, missing
 ):
-    """Codex C-03: a string in the dark sends no value, and a reload deleted its sensor."""
+    """A string in the dark sends no value, and a reload deleted its sensor."""
     await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
     entry = make_entry(hass)
     await setup_entry(hass, entry)
@@ -1843,7 +1843,7 @@ async def test_a_dark_mppt_at_a_restart_keeps_its_sensors(
 async def test_configure_reloads_a_loaded_entry_once_per_run(
     hass, mock_modbus, monkeypatch
 ):
-    """Audit F04: a new password alone reloaded nothing; a change must not reload twice."""
+    """A new password alone reloaded nothing; a change must not reload twice."""
     await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
     entry = make_entry(hass)
     await setup_entry(hass, entry)
@@ -1894,7 +1894,7 @@ async def test_configure_reloads_a_loaded_entry_once_per_run(
 async def test_an_outage_names_no_host_in_logs_or_diagnostics(
     hass, mock_modbus, caplog
 ):
-    """Audit F07: the coordinator's name and the library's connect error carried the host."""
+    """The coordinator's name and the library's connect error carried the host."""
     caplog.set_level(logging.DEBUG, "custom_components.fronius_modbus")
     entry = make_entry(hass)
     await setup_entry(hass, entry)
@@ -1919,7 +1919,7 @@ async def test_an_outage_names_no_host_in_logs_or_diagnostics(
 async def test_the_owner_can_delete_a_device_the_inverter_no_longer_reports(
     hass, mock_modbus
 ):
-    """Audit F32: an empty device of a removed meter stayed, with no Delete button."""
+    """An empty device of a removed meter stayed, with no Delete button."""
     entry = make_entry(hass)
     await setup_entry(hass, entry)
     registry = dr.async_get(hass)

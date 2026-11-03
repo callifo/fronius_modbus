@@ -14,7 +14,7 @@ class _PendingFlowState:
     previous_host: str | None
     apply_modbus_config: bool
     # Set when the password step is shown although a token exists (Configure):
-    # an empty password then keeps this token (audit F11).
+    # an empty password then keeps this token.
     existing_token: dict[str, str] | None = None
     # Set while the model type question is open: the token that logged in,
     # and whether this flow minted it, so the answer finishes like the step

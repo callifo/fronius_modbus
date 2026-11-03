@@ -120,7 +120,7 @@ class TotalGuard:
     A single lower or far-too-high sample is a bad reading and is ignored.
     ``confirmations`` consecutive samples that agree with each other are the
     device telling the truth - a counter reset after a hardware swap, or a
-    large but genuine gap while Home Assistant was offline (audit F05/F06) -
+    large but genuine gap while Home Assistant was offline -
     and are accepted. Property reads never advance this state: only observe()
     does.
     """
@@ -152,7 +152,7 @@ class TotalGuard:
             self._last_suspect = None
             return None
         # Only samples that agree with each other confirm a new range: a spike
-        # between two low readings is no reset (audit F24-03).
+        # between two low readings is no reset.
         continues = self._last_suspect is not None and self._plausible_after(
             self._last_suspect, reading
         )

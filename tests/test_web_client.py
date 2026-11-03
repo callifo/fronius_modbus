@@ -169,7 +169,7 @@ def test_a_401_without_a_challenge_is_reported_as_an_auth_failure(client, invert
 
 
 def test_a_client_without_credentials_never_answers_a_challenge(inverter):
-    """Audit E2-01: a no-login entry sent an empty-password login on every poll."""
+    """A no-login entry sent an empty-password login on every poll."""
     client = FroniusWebClient(host=HOST, password="")
 
     with pytest.raises(FroniusWebAuthError):
@@ -179,7 +179,7 @@ def test_a_client_without_credentials_never_answers_a_challenge(inverter):
 
 
 def test_a_rejected_login_is_not_tried_again(inverter):
-    """Audit E2-02: after a lost login the client kept retrying the rejected token."""
+    """After a lost login the client kept retrying the rejected token."""
     inverter.always_401 = True
     client = FroniusWebClient(host=HOST, token={"realm": REALM, "token": "stale"})
 
@@ -200,7 +200,7 @@ def test_the_hash_mode_follows_the_version_the_inverter_reports(inverter):
 
 
 def test_a_refused_login_reads_the_hash_mode_again(inverter):
-    """Audit F11: a remembered mode outlived a device that changed it, until a restart."""
+    """A remembered mode outlived a device that changed it, until a restart."""
     inverter.hashing_version = 1
     inverter.always_401 = True
     assert not froniuswebclient.login(HOST, "customer", password="secret")
@@ -222,7 +222,7 @@ def test_an_unreadable_status_page_falls_back_to_sha256(monkeypatch):
 def test_a_timed_out_status_page_is_not_remembered_as_the_hash_mode(
     inverter, monkeypatch
 ):
-    """Audit A07: the sha256 fallback was cached, so md5 devices never logged in again."""
+    """The sha256 fallback was cached, so md5 devices never logged in again."""
     inverter.hashing_version = 1
     answered = requests.adapters.HTTPAdapter.send
     attempts = []
@@ -543,7 +543,7 @@ def warnings(caplog) -> list[str]:
 def test_a_failing_readable_endpoint_is_warned_about_once(
     client, inverter, caplog, read, path
 ):
-    """Its values stay unknown, but not silently: that hid a server error (audit A24-05)."""
+    """Its values stay unknown, but not silently: that hid a server error."""
     inverter.statuses[path] = 500
 
     with caplog.at_level(logging.DEBUG):
@@ -622,7 +622,7 @@ def test_an_unavailable_export_limit_config_reads_as_empty(client, inverter):
 
 
 def test_a_failing_export_limit_endpoint_is_not_an_empty_config(client, inverter):
-    """Audit A24-05: an HTTP 500 read as "no export limit" and the refresh succeeded."""
+    """An HTTP 500 read as "no export limit" and the refresh succeeded."""
     inverter.statuses["/api/config/limit_settings/powerLimits"] = 500
 
     with pytest.raises(FroniusWebResponseError):
@@ -698,7 +698,7 @@ PRE_RESTRICTED = {"on": True, "restriction": {"on": True, "ip": "192.0.2.50"}}
 
 
 def test_an_existing_restriction_is_not_lifted(client, inverter):
-    """Audit A24-02: setup without the checkbox wrote restriction.on=false.
+    """Setup without the checkbox wrote restriction.on=false.
 
     A restricted Modbus server then answered every host on the network.
     """
@@ -1050,7 +1050,7 @@ def test_the_inverters_own_spelling_counts_as_the_same_value(client, inverter):
 
 
 def test_a_config_read_that_is_no_object_still_writes_everything(client, inverter):
-    """Audit R24-01: a list instead of an object raised AttributeError, an unknown error."""
+    """A list instead of an object raised AttributeError, an unknown error."""
     inverter.bodies[BATTERIES] = ["unexpected"]
 
     client.set_backup_reserve(7)
@@ -1102,7 +1102,7 @@ DEVICE_CHANGED = BATTERY_CONFIG | {
     ],
 )
 def test_a_battery_write_sends_only_what_was_asked(client, inverter, write, sent):
-    """Audit F24-01: cached companions undid a change made since the last poll.
+    """Cached companions undid a change made since the last poll.
 
     Changing the maximum re-sent a stale minimum, switching AC charging re-sent
     a stale grid flag, and selecting manual mode re-sent a stale target.
@@ -1304,7 +1304,7 @@ def test_the_login_request_names_the_user_it_authenticates(inverter, monkeypatch
 
 
 def test_assisted_setup_converts_an_existing_float_register_map():
-    """Audit F13: a TCP map that only differed in sunspecMode counted as ready, then failed the probe."""
+    """A TCP map that only differed in sunspecMode counted as ready, then failed the probe."""
     client = FroniusWebClient("192.0.2.10")
     client.get_modbus_config = lambda: {
         "slave": {
@@ -1393,7 +1393,7 @@ def test_the_backup_reserve_is_written_alone(client, inverter):
     assert posted(inverter, "/api/config/batteries") == {"HYB_BACKUP_RESERVED": 30}
 
 
-# -- the transport boundary (audit E01/E04) -----------------------------------------
+# -- the transport boundary -----------------------------------------
 
 
 def test_a_transport_error_leaves_the_host_behind(client, monkeypatch):
@@ -1433,7 +1433,7 @@ def test_a_server_error_is_an_answer_not_an_outage(client, inverter):
 
 
 def test_the_login_is_behind_the_same_boundary(monkeypatch):
-    """Reaudit R02: the login called requests itself, and the config flow logged its text."""
+    """The login called requests itself, and the config flow logged its text."""
 
     def refuse(adapter, request, **_kwargs):
         raise requests.ConnectionError(f"Max retries exceeded with url: {request.url}")
@@ -1453,7 +1453,7 @@ def test_the_login_is_behind_the_same_boundary(monkeypatch):
     ],
 )
 def test_a_modbus_config_of_the_wrong_shape_is_a_response_error(config):
-    """Audit F24-11: an AttributeError reached the config flow as an unknown error."""
+    """An AttributeError reached the config flow as an unknown error."""
     client = FroniusWebClient("192.0.2.10")
     client.get_modbus_config = lambda: config
 
@@ -1472,7 +1472,7 @@ def test_a_modbus_config_of_the_wrong_shape_is_a_response_error(config):
 def test_an_empty_wrong_type_in_the_modbus_config_is_not_written_back_with_defaults(
     config,
 ):
-    """Reaudit RE26-01: `[]`, `0` and `""` became `{}` and a POST with defaults followed."""
+    """`[]`, `0` and `""` became `{}` and a POST with defaults followed."""
     client = FroniusWebClient("192.0.2.10")
     client.get_modbus_config = lambda: config
     client._post = lambda *_args, **_kwargs: pytest.fail(
@@ -1484,7 +1484,7 @@ def test_an_empty_wrong_type_in_the_modbus_config_is_not_written_back_with_defau
 
 
 def test_an_unreadable_soc_window_is_not_written(client, inverter):
-    """Audit FA0FB-04: an HTTP 500 read passed the window check as an empty config."""
+    """An HTTP 500 read passed the window check as an empty config."""
     inverter.statuses[BATTERIES] = 500
 
     with pytest.raises(FroniusWebResponseError):
@@ -1500,7 +1500,7 @@ def test_an_unreadable_soc_window_is_not_written(client, inverter):
 
 @pytest.mark.parametrize("master", [[], "rtu", 0])
 def test_a_malformed_master_is_not_written_back(master):
-    """Audit FA0FB-05: `master` went into the Modbus setup POST unchecked."""
+    """`master` went into the Modbus setup POST unchecked."""
     client = FroniusWebClient("192.0.2.10")
     client.get_modbus_config = lambda: {"master": master, "slave": {"mode": "rtu"}}
     client._post = lambda *_args, **_kwargs: pytest.fail("posted a malformed master")
@@ -1515,7 +1515,7 @@ def test_a_malformed_master_is_not_written_back(master):
         {"BAT_M0_SOC_MIN": 20, "BAT_M0_SOC_MAX": "30"},
         {"BAT_M0_SOC_MIN": 20},
         {"BAT_M0_SOC_MIN": 20, "BAT_M0_SOC_MAX": True},
-        # Audit R730-04: the JSON decoder turns NaN and Infinity into floats.
+        # The JSON decoder turns NaN and Infinity into floats.
         {"BAT_M0_SOC_MIN": 20, "BAT_M0_SOC_MAX": float("nan")},
         {"BAT_M0_SOC_MIN": 20, "BAT_M0_SOC_MAX": float("inf")},
     ],
@@ -1523,7 +1523,7 @@ def test_a_malformed_master_is_not_written_back(master):
 def test_a_soc_window_without_a_numeric_limit_is_unreadable(
     client, inverter, battery_config
 ):
-    """Audit RR770-04: a text or missing maximum passed the check before Modbus."""
+    """A text or missing maximum passed the check before Modbus."""
     inverter.bodies[BATTERIES] = battery_config
 
     with pytest.raises(FroniusWebResponseError, match="SoC window"):
@@ -1532,7 +1532,7 @@ def test_a_soc_window_without_a_numeric_limit_is_unreadable(
 
 @pytest.mark.parametrize("held", [[1], "garbage", 2])
 def test_a_flag_the_inverter_holds_in_no_known_form_is_written(client, inverter, held):
-    """Own reaudit E-01: an unreadable flag compared as already set, nothing was sent."""
+    """An unreadable flag compared as already set, nothing was sent."""
     inverter.bodies[BATTERIES] = {"HYB_BM_CHARGEFROMAC": held}
 
     assert client.set_battery_charge_sources(charge_from_ac=False) is True
@@ -1541,7 +1541,7 @@ def test_a_flag_the_inverter_holds_in_no_known_form_is_written(client, inverter,
 
 
 def test_modbus_control_in_no_known_form_is_switched_on():
-    """Own reaudit E-01: `on: [1]` read as on, and Modbus control stayed as it was."""
+    """`on: [1]` read as on, and Modbus control stayed as it was."""
     client = FroniusWebClient("192.0.2.10")
     client.get_modbus_config = lambda: {
         "slave": {
@@ -1562,7 +1562,7 @@ def test_modbus_control_in_no_known_form_is_switched_on():
 
 
 def test_an_export_limit_switched_on_in_no_known_form_is_written(client, inverter):
-    """Own reaudit E-01: `enabled: [1]` read as on, the limit counted as in place."""
+    """`enabled: [1]` read as on, the limit counted as in place."""
     inverter.bodies["/api/config/limit_settings/powerLimits"] = {
         "exportLimits": {
             "activePower": {"softLimit": {"enabled": [1], "powerLimit": 7000}}
@@ -1573,5 +1573,5 @@ def test_an_export_limit_switched_on_in_no_known_form_is_written(client, inverte
 
 
 def test_an_infinite_modbus_setting_reads_as_its_fallback():
-    """Audit R6D-06, the client's own converter: int(inf) raised OverflowError."""
+    """The client's own converter: int(inf) raised OverflowError."""
     assert froniuswebclient._as_int(float("inf"), 502) == 502

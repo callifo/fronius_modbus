@@ -195,7 +195,7 @@ GRID_POWERS = [
 async def test_reselecting_a_grid_mode_keeps_the_power_just_written(
     control, mode, setter, address
 ):
-    """Reaudit RC-01: the power came from the last poll.
+    """The power came from the last poll.
 
     An automation that selected its grid mode again before the next poll put
     the power back to what that poll had seen.
@@ -230,12 +230,12 @@ def _auto_with_the_rates_left(_address):
 async def test_reselecting_a_grid_mode_over_a_non_grid_rate_restores_it(
     control, inverter_unit, mode, setter, address, left, poll
 ):
-    """Reaudit D-02: "the same mode again" was judged by the mode last chosen.
+    """Selecting "the same mode again" was judged by the mode last chosen.
 
     With a positive rate in the power register, only StorCtl_Mod went out and
     the image was Discharge Limit or PV Charge Limit instead of the grid mode.
     Judged by the power register alone, AUTO with the rates left brought the
-    power of the earlier visit back (reaudit E-01).
+    power of the earlier visit back.
     """
     await control.set_mode(mode)
     await getattr(control, setter)(2560)
@@ -284,7 +284,7 @@ async def _auto_from_the_device(control):
 async def test_entering_a_grid_mode_starts_at_zero_watts(
     control, mode, setter, address, leave
 ):
-    """Reaudit RC-01: a power set in a mode left since came back.
+    """A power set in a mode left since came back.
 
     The README promises 0 W after the change; the last poll still held it.
     """
@@ -355,7 +355,7 @@ async def test_a_limit_is_refused_outside_its_mode(control):
 async def test_a_discharge_limit_writes_the_discharge_rate_from_its_own_maximum(
     control, writes
 ):
-    """Audit F25: no test set a discharge limit, so a write to InWRte passed."""
+    """No test set a discharge limit, so a write to InWRte passed."""
     control.max_discharge_rate_w = 5120
     await control.set_mode(ExtendedMode.DISCHARGE_LIMIT)
     del writes[:]
@@ -368,7 +368,7 @@ async def test_a_discharge_limit_writes_the_discharge_rate_from_its_own_maximum(
 async def test_a_discharge_limit_cannot_overwrite_the_grid_charge_power(
     control, writes
 ):
-    """Audit F25: in Charge from Grid the negative OutWRte is the grid charge power."""
+    """In Charge from Grid the negative OutWRte is the grid charge power."""
     await control.set_mode(ExtendedMode.CHARGE_FROM_GRID)
     await control.set_grid_charge_power_w(2560)
     del writes[:]
@@ -396,12 +396,12 @@ BLOCK_MODES = (ExtendedMode.BLOCK_CHARGING, ExtendedMode.BLOCK_DISCHARGING)
 async def test_a_zero_limit_that_blocks_both_ways_is_refused(
     control, writes, inverter_unit, mode, setter, other, watts
 ):
-    """Reaudit W-02: both rates at 0 W is an image the firmware refuses.
+    """Both rates at 0 W is an image the firmware refuses.
 
     The write went out and came back as a bare Modbus error instead of a
     reason. The other side was read from the mode table, so in PV Charge and
-    Discharge Limit a second 0 W limit still went out (reaudit D-01), and
-    0.1 W passed the check to become a 0 in the register (reaudit AC-01).
+    Discharge Limit a second 0 W limit still went out, and
+    0.1 W passed the check to become a 0 in the register.
     """
     await control.set_mode(mode)
     inverter_unit.holding[other] = 0
@@ -438,7 +438,7 @@ async def test_a_zero_limit_is_judged_by_the_mode_when_the_other_side_cannot_be_
 async def test_a_zero_limit_is_written_while_the_other_side_is_open(
     control, writes, inverter_unit, mode, setter, other
 ):
-    """The refusal is for both sides at 0 W, not for a mode (reaudit D-01)."""
+    """The refusal is for both sides at 0 W, not for a mode."""
     await control.set_mode(mode)
     inverter_unit.holding[other] = 10000
     del writes[:]
@@ -458,7 +458,7 @@ RATE_SETTERS = [(mode, setter) for mode, setter, _ in ZERO_LIMITS] + [
 async def test_a_rate_is_refused_once_the_inverter_left_the_mode(
     control, writes, inverter_unit, mode, setter
 ):
-    """Reaudit AC-01: a rate was judged by the mode last chosen.
+    """A rate was judged by the mode last chosen.
 
     A schedule or another controller changed the mode between two polls; the
     rate went into that mode's image instead.
@@ -478,7 +478,7 @@ async def test_a_rate_is_refused_once_the_inverter_left_the_mode(
 async def test_a_grid_power_is_refused_over_both_limits_of_another_controller(
     control, writes, inverter_unit, mode, setter, address
 ):
-    """Reaudit AC-01: StorCtl_Mod 3 with a negative rate beyond the other is a
+    """StorCtl_Mod 3 with a negative rate beyond the other is a
     window the firmware refuses."""
     await control.set_mode(mode)
     inverter_unit.holding.update({STOR_CTL_MOD: 3, IN_W_RTE: 2500, OUT_W_RTE: 2500})
@@ -620,7 +620,7 @@ def no_comparison(monkeypatch):
 
 @pytest.mark.usefixtures("no_comparison")
 async def test_a_rate_queued_behind_a_mode_switch_is_judged_by_the_new_mode():
-    """Audit F02: validated before the lock, a charge limit undid a fresh charging block."""
+    """Validated before the lock, a charge limit undid a fresh charging block."""
     entered = asyncio.Event()
     release = asyncio.Event()
 
@@ -651,7 +651,7 @@ async def test_a_rate_queued_behind_a_mode_switch_is_judged_by_the_new_mode():
 
 
 def test_forced_discharge_is_recognised_at_startup():
-    """Audit F08: mode 1 with a negative InWRte read as a PV charge limit."""
+    """Mode 1 with a negative InWRte read as a PV charge limit."""
     storage = SimpleNamespace(stor_ctl_mod=1, in_w_rte=-50.0, out_w_rte=100.0)
     control = StorageControl(
         storage, max_charge_rate_w=10000, max_discharge_rate_w=10000
@@ -681,7 +681,7 @@ async def test_every_written_mode_is_read_back_as_itself(inverter_unit, mode):
 
 
 async def test_a_mode_changed_outside_home_assistant_is_adopted(control):
-    """Audit F07 / upstream #127: the select kept showing the mode it had written."""
+    """Upstream issue 127: the select kept showing the mode it had written."""
     await control.set_mode(ExtendedMode.BLOCK_CHARGING)
     await control._storage.async_update()
     control.sync_from_device()
@@ -693,7 +693,7 @@ async def test_a_mode_changed_outside_home_assistant_is_adopted(control):
 
 
 async def test_a_mode_the_inverter_refuses_is_given_up_after_the_grace_polls(control):
-    """Audit F07: a silently refused mode write was reported as done forever."""
+    """A silently refused mode write was reported as done forever."""
     storage = control._storage
     written = []
     storage.modbus_unit.on_write(written.append)
@@ -728,7 +728,7 @@ ZERO_WATT_LOOKALIKES = [
 async def test_a_mode_at_zero_watts_keeps_its_mode_across_polls(control, mode, setter):
     """At 0 W these registers derive to a block mode; the choice must survive.
 
-    Audit F26: only Charge from Grid was covered, so Discharge to Grid and the
+    Only Charge from Grid was covered, so Discharge to Grid and the
     limit modes could flip to a block mode after the grace polls unnoticed.
     """
     await control.set_mode(mode)
@@ -815,7 +815,7 @@ async def _control_on(inverter_unit, image):
 async def test_a_rate_over_an_image_that_fits_the_mode_is_written(
     inverter_unit, writes, stor_ctl_mod, out_w_rte, in_w_rte
 ):
-    """Reaudit G-02: the refusal judges the whole image, not StorCtl_Mod alone.
+    """The refusal judges the whole image, not StorCtl_Mod alone.
 
     Compared with the mode's own table image, every rate under evcc or after a
     restart was refused although the image is that mode.
@@ -844,7 +844,7 @@ SAME_BASE_FOREIGN_IMAGES = [
 async def test_a_rate_over_another_mode_on_the_same_base_is_refused(
     control, writes, inverter_unit, mode, image
 ):
-    """Reaudit G-02: a schedule left StorCtl_Mod as it was and changed a rate.
+    """A schedule left StorCtl_Mod as it was and changed a rate.
 
     Judged by StorCtl_Mod alone, a discharge limit replaced the grid charging
     the inverter was doing.
@@ -876,7 +876,7 @@ IN_OUT_W_RTE_SF = STORAGE_HEADER + 25
 async def test_a_rate_is_written_as_asked_when_its_scale_is_refused_once(
     control, writes, inverter_unit, monkeypatch, mode, word
 ):
-    """Reaudit G-03: the first read right after a write may be refused.
+    """The first read right after a write may be refused.
 
     The rate is then judged as asked, not as the register would round it,
     and written all the same.
@@ -924,7 +924,7 @@ COMBINED_GRID_IMAGES = [
 async def test_a_grid_power_beyond_a_combined_window_is_refused(
     inverter_unit, writes, mode, setter, address, image
 ):
-    """Reaudit CX-01: on StorCtl_Mod 3 the firmware refuses a negative rate
+    """On StorCtl_Mod 3 the firmware refuses a negative rate
     beyond the other one; the power went out and came back as a bare error."""
     control = await _control_on(inverter_unit, image)
     assert control.extended_mode is mode

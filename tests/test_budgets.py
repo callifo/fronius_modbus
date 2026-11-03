@@ -41,10 +41,10 @@ LINE_BUDGETS = {
     # 1888 + the backup reserve, the SoC mode, the web SoC minimum (callifo #136), the capacity note
     # 1909 + translated write errors (quality scale exception-translations)
     # 1842 - the icons, now in icons.json (quality scale icon-translations)
-    # 1850 + the translated error for an unreachable web interface (R24-02)
+    # 1850 + the translated error for an unreachable web interface
     # 1910 + the component sensor builder; the table is component_readings.py
     # 1889 - the two web temperatures, now rows of that table
-    # 1900 + a power module kept once registered (RE26-03)
+    # 1900 + a power module kept once registered
     # 1625 - the base entity and the device info, now entity_base.py
     # 1680 + the inverter event entities
     # 1625 - the description types, now descriptions.py; + the service event entities

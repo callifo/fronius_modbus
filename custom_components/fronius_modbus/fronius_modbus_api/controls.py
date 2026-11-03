@@ -110,7 +110,7 @@ class InverterControls:
                 return False
             try:
                 # Inside the guard from here: the device may have applied the
-                # disable before this call is cancelled (audit A01/B01).
+                # disable before this call is cancelled.
                 await self._controls.write(enable_field, DISABLED)
                 await self._controls.write(value_field, value)
                 await self._sleep(APPLY_TOGGLE_DELAY_SECONDS)
@@ -118,7 +118,7 @@ class InverterControls:
             except BaseException as err:
                 # The limit was live before this call. No failed write, not even
                 # a value the device cannot scale (FA0FB-01), and no cancelled
-                # service call may leave it switched off (audit F01/A01).
+                # service call may leave it switched off.
                 await self._restore_enable(enable_field, err)
                 raise
             return True

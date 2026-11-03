@@ -54,7 +54,7 @@ _LOGGER = logging.getLogger(__name__)
 
 # The one answer that establishes an absence: the unit responds, but serves no
 # registers at the marker address. A gateway error means the meter did not
-# answer at all - which is also what a switched-off meter does (audit D01) - and
+# answer at all - which is also what a switched-off meter does - and
 # every other error is a failure, so both leave the question open.
 ABSENCE_ERRORS = (IllegalDataAddressError,)
 REPORT_DISCOVERY = "discovery"
@@ -155,7 +155,7 @@ async def _scan(unit: ModbusUnit) -> tuple[SunSpecModels, bool]:
     """The SunSpec chain and whether it ended in the end marker rather than a refusal.
 
     An incomplete chain is not a device without those models: the caller has to
-    keep it as undecided and look again (audit A03).
+    keep it as undecided and look again.
     """
     complete = True
     try:
@@ -230,17 +230,17 @@ class FroniusInverter:
         self.mppt: Mppt | None = None
         self.storage: Storage | None = None
         # False while the chain ended in a refused header: the models behind it
-        # are undecided, not absent, so discovery is retried (audit A03).
+        # are undecided, not absent, so discovery is retried.
         self.discovery_complete = False
         # Each optional model's last component and the address it was built
         # for; an unchanged block keeps its component, so the controls and the
-        # storage wrapper keep reading what the poll refreshes (audit B02).
+        # storage wrapper keep reading what the poll refreshes.
         self._components_by_model: dict[int, tuple[int, Any]] = {}
         # Where each meter's model sat when its component was built.
         self._meter_addresses: dict[int, int] = {}
         self.meters: dict[int, MeterInfo] = {}
         # Meter units whose probe did not answer: neither present nor absent
-        # yet, probed again on every poll (audit F03).
+        # yet, probed again on every poll.
         self._undecided_meters: dict[int, ModbusUnit] = {}
         # The inverter's models after its AC block, in chain order.
         self._polled_models: tuple[str, ...] = ()
@@ -284,8 +284,7 @@ class FroniusInverter:
 
         Everything is built beside the live state and published only when it is
         whole. A failure halfway through leaves the entities on the objects they
-        already read, and leaves discovery with its obligation to try again
-        (audit B03/C02).
+        already read, and leaves discovery with its obligation to try again.
         """
         chain, complete = await _scan(self._unit)
         inverter_model = chain.first(*INVERTER_MODEL_IDS)
@@ -337,7 +336,7 @@ class FroniusInverter:
 
         Remembered per model rather than read off the live attribute: a model
         missing from one incomplete scan must come back as the same object, or
-        the control built on it reads a component nothing polls (audit B02/C01).
+        the control built on it reads a component nothing polls.
         """
         model = chain.first(model_id)
         if model is None:
@@ -347,7 +346,7 @@ class FroniusInverter:
             if address == model.address:
                 return component
             # Building a replacement here would leave every control that holds
-            # the old component writing to the old registers (audit D03). The
+            # the old component writing to the old registers. The
             # coordinator answers a moved map by reloading the entry.
             raise SunSpecMapShiftError(
                 f"SunSpec model {model_id} moved from register {address} to "
@@ -368,7 +367,7 @@ class FroniusInverter:
         """Probe one meter unit and file it as present, absent or undecided.
 
         Its map address goes where the meter goes: into the provisional maps of
-        a rediscovery, published with them or not at all (audit F24-07).
+        a rediscovery, published with them or not at all.
         """
         try:
             meter = await self._async_probe_meter(unit_id, meter_unit, addresses)
@@ -376,7 +375,7 @@ class FroniusInverter:
             raise
         except ModbusError as err:
             # Only "no such device" is an absence. A timeout, a busy meter or a
-            # device failure leave the question open (audit F03/C03): try again
+            # device failure leave the question open: try again
             # on every poll, and say so in the report.
             _LOGGER.debug(
                 "Meter on unit %s did not answer yet: %s", unit_id, error_text(err)
@@ -410,7 +409,7 @@ class FroniusInverter:
         identity = await _read_identity(common)
         phases = 1 if model.model_id == SINGLE_PHASE_METER_MODEL_ID else 3
         # An unchanged meter keeps its component, so a poll that fails right
-        # after a rediscovery still shows the last readings (audit D02).
+        # after a rediscovery still shows the last readings.
         known = self.meters.get(unit_id)
         moved = self._meter_addresses.get(unit_id) != model.address
         addresses[unit_id] = model.address
@@ -493,7 +492,7 @@ class FroniusInverter:
         """Refresh one component and file the outcome under its report name.
 
         A meter that fails is that meter's failure, never the poll's - the
-        retry path once read a recovered meter outside this (audit E03).
+        retry path once read a recovered meter outside this.
         """
         started = self._monotonic()
         try:
@@ -503,7 +502,7 @@ class FroniusInverter:
         except ModbusTimeoutError as err:
             # The first sub-system to time out with nothing answered yet means
             # the link is down. The incomplete chain's note is no answer; it
-            # stood in every report and hid every outage (audit F06).
+            # stood in every report and hid every outage.
             failed = report.failed.keys() - {REPORT_DISCOVERY}
             if not report.updated and not failed:
                 raise

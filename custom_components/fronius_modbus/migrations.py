@@ -52,7 +52,7 @@ _SINGLE_ROLE_MINOR_VERSION = 11
 # Entries below this minor version store the restriction as a checkbox.
 _RESTRICTION_CHOICE_MINOR_VERSION = 12
 # Minor 13 marks the power modules the device reported; one registered before
-# cannot be told from a placeholder and is kept (audit D8AE-01).
+# cannot be told from a placeholder and is kept.
 _REPORTED_MARK_MINOR_VERSION = 13
 # Minor 14 makes these rows follow the report too. The owner chose to keep the
 # ones already registered rather than have them cleaned up automatically.
@@ -118,7 +118,7 @@ def registered_keys(hass: HomeAssistant, entry: ConfigEntry) -> frozenset[str]:
 
     An id from before the per-entry scheme counts under the key it migrates to:
     the migrations run after this is read, and a sensor dark at the first start
-    after an upgrade counted as never registered and was deleted (reaudit RC-02).
+    after an upgrade counted as never registered and was deleted.
     """
     prefix = f"{entity_prefix(entry.entry_id)}_"
     legacy_prefix = _legacy_entity_unique_id(entry, "")
@@ -360,7 +360,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         new_data[CONF_RECONFIGURE_REQUIRED] = True
         new_options[CONF_RECONFIGURE_REQUIRED] = True
         # Up to 0.3.0 the generated title was the name alone; any other title
-        # is the owner's (reaudit RC-03).
+        # is the owner's.
         if title == str(_entry_value(entry, CONF_NAME, "")):
             title = entry_title({**entry.data, **entry.options})
 
@@ -371,7 +371,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if entry.minor_version < _RESTRICTION_CHOICE_MINOR_VERSION:
         # An unchecked box wrote "off"; it becomes "keep", since lifting a
-        # restriction has to be chosen (audit A24-02).
+        # restriction has to be chosen.
         choice = ModbusRestriction.KEEP
         if _entry_value(entry, _LEGACY_RESTRICT_TO_THIS_IP, False):
             choice = ModbusRestriction.HOME_ASSISTANT
@@ -395,7 +395,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         title=title,
     )
     if drops_a_role:
-        # One role kept means the other role's token is unused now (audit F24-04).
+        # One role kept means the other role's token is unused now.
         await async_forget_unused_tokens(hass, str(_entry_value(entry, CONF_HOST, "")))
 
     return True
@@ -539,7 +539,7 @@ async def async_migrate_name_based_unique_ids(
     """Move old name-based unique ids to stable per-entry ids.
 
     Per registry entry, not per id: up to 0.3.0 a sensor and a control shared
-    one unique id, and moving the first left its twin to be deleted (audit F05).
+    one unique id, and moving the first left its twin to be deleted.
     """
     registry = er.async_get(hass)
     entity_entries = _entity_entries_for_config_entry(registry, entry)
@@ -579,8 +579,8 @@ def _retirement_blocked(entry: ConfigEntry, what: str) -> bool:
 
     The one gate in front of every destructive cleanup: a failed poll, a failed
     web refresh, a missing web login or an unread meter topology all mean
-    "not seen", never "gone"
-    (audit A03/A04). Without it a single outage takes entities and their
+    "not seen", never "gone".
+    Without it a single outage takes entities and their
     history with it. An entry set up without the web API has no login to miss.
     """
     runtime = entry.runtime_data
@@ -592,8 +592,8 @@ def _retirement_blocked(entry: ConfigEntry, what: str) -> bool:
     elif not web_api_disabled(entry) and (
         runtime.web_control is None or not runtime.web_control.configured
     ):
-        # A lost login leaves the web entities unread, not gone (audit A24-01:
-        # an auth failure at setup retired them).
+        # A lost login leaves the web entities unread, not gone: an auth
+        # failure at setup retired them.
         reason = "the web API login is missing"
     elif not runtime.topology_confirmed:
         reason = "the meter topology could not be read"
@@ -612,8 +612,8 @@ async def async_remove_legacy_devices(
         return
     device_registry = dr.async_get(hass)
     # The legacy meter pattern also matches the identifiers this version builds,
-    # so a reload retired live meter devices - and their entities with them
-    # (sibling of audit A03/A04). Never retire what the runtime just registered.
+    # so a reload retired live meter devices - and their entities with them.
+    # Never retire what the runtime just registered.
     current = expected_device_identifiers(entry.runtime_data, entry)
 
     removed_devices = 0

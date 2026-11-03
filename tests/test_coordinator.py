@@ -175,7 +175,7 @@ async def test_the_link_is_recycled_when_the_window_expires_failing(
 
 
 async def test_derived_values_need_a_fresh_inverter_reading(coordinator, inverter_unit):
-    """Audit F14: a failed inverter block still produced load and grid status from stale power."""
+    """A failed inverter block still produced load and grid status from stale power."""
     await coordinator.async_refresh()
     address = coordinator.device.inverter.resolved_fields["model_id"].address
     inverter_unit.fail_read(address, ServerDeviceFailureError())
@@ -280,7 +280,7 @@ NAMEPLATE_MAX_DIS_CHA_RTE_ADDRESS = 40146
 async def test_the_nameplate_rates_replace_the_fallback_once_read(
     coordinator, inverter_unit, monkeypatch
 ):
-    """Audit F09: a first poll without model 120 fixed the storage control on 11000 W."""
+    """A first poll without model 120 fixed the storage control on 11000 W."""
     inverter_unit.load_raw({"holding": {STORAGE_WCHAMAX_ADDRESS: 0}})
     original_update = Nameplate.async_update
     calls = {"failed": False}
@@ -334,7 +334,7 @@ MPPT_HEADER_ADDRESS = 40260
 async def test_a_sub_system_answering_for_the_first_time_reloads_the_entry(
     coordinator, inverter_unit, hass, entry, monkeypatch
 ):
-    """Audit F03: MPPT entities built from a failed first read never appeared."""
+    """MPPT entities built from a failed first read never appeared."""
     inverter_unit.fail_read(MPPT_HEADER_ADDRESS, ServerDeviceFailureError())
     await coordinator.async_refresh()
     assert "mppt" in coordinator.data.report.failed
@@ -358,7 +358,7 @@ CONTROLS_HEADER_ADDRESS = 40227
 async def test_rediscovery_keeps_the_controls_reading_the_polled_component(
     coordinator, inverter_unit
 ):
-    """Audit B02: every retry built new components while the wrappers kept the old ones."""
+    """Every retry built new components while the wrappers kept the old ones."""
     inverter_unit.fail_read(STORAGE_HEADER_ADDRESS, IllegalDataAddressError())
     await coordinator.async_refresh()
 
@@ -371,7 +371,7 @@ async def test_rediscovery_keeps_the_controls_reading_the_polled_component(
 async def test_rediscovery_keeps_the_storage_control_reading_the_polled_component(
     coordinator, inverter_unit
 ):
-    """Audit B02: the storage wrapper kept a component nothing polls any more."""
+    """The storage wrapper kept a component nothing polls any more."""
     # The chain's end marker, right behind the storage model: storage itself
     # answers, only the walk cannot finish.
     inverter_unit.fail_read(CHAIN_END_ADDRESS, IllegalDataAddressError())
@@ -387,7 +387,7 @@ async def test_rediscovery_keeps_the_storage_control_reading_the_polled_componen
 async def test_a_model_that_returns_after_one_scan_keeps_its_control(
     coordinator, inverter_unit
 ):
-    """Audit C01: a model missing from one scan came back as a new component."""
+    """A model missing from one scan came back as a new component."""
     inverter_unit.fail_read(CHAIN_END_ADDRESS, IllegalDataAddressError())
     await coordinator.async_refresh()
 
@@ -423,7 +423,7 @@ def _insert_a_model_before_the_controls(unit) -> None:
 async def test_a_model_that_moves_during_a_retry_is_not_published(
     coordinator, inverter_unit, hass, entry, monkeypatch
 ):
-    """Audit D03: a new component at a new address left the controls on the old registers."""
+    """A new component at a new address left the controls on the old registers."""
     inverter_unit.fail_read(CHAIN_END_ADDRESS, IllegalDataAddressError())
     await coordinator.async_refresh()
     controls_component = coordinator.device.controls

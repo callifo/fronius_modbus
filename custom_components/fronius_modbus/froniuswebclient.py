@@ -60,7 +60,7 @@ def _http(method: str, url: str, **options: Any) -> requests.Response:
     """The one call into requests; a guard in the tests keeps it that way.
 
     Requests puts the URL, and with it the host, into its error text, and
-    that text used to reach the config flow's log through the login (R02).
+    that text used to reach the config flow's log through the login.
     """
     try:
         return requests.request(method, url, **options)
@@ -91,7 +91,7 @@ def is_enabled(value: Any) -> bool:
     """Whether a flag reads as on; a form the inverter does not use is not on.
 
     Read as on, `[1]` counted as Modbus control already switched on, and the
-    write that switches it on was skipped (own reaudit E-01).
+    write that switches it on was skipped.
     """
     return flag_value(value) is True
 
@@ -189,7 +189,7 @@ def _without_descriptions(node: Any) -> Any:
 def _config_object(payload: Any, path: str) -> dict[str, Any]:
     """A config as it is written back: without descriptions, and an object.
 
-    Anything else is a failed read, not a crash further down (audit R24-01).
+    Anything else is a failed read, not a crash further down.
     """
     config = _without_descriptions(payload)
     if not isinstance(config, dict):
@@ -200,16 +200,16 @@ def _config_object(payload: Any, path: str) -> dict[str, Any]:
 
 
 def _nested_object(config: dict[str, Any], key: str, path: str) -> dict[str, Any]:
-    """A nested part of a config, checked like the whole (audit F24-11).
+    """A nested part of a config, checked like the whole.
 
     Only an absent part defaults to empty; a present `[]`, `0` or `""` would
-    otherwise be written back with defaults (reaudit RE26-01).
+    otherwise be written back with defaults.
     """
     return _config_object(config.get(key, {}), path)
 
 
 def _is_number(value: Any) -> bool:
-    """A finite number: NaN compares false with anything (audit R730-04)."""
+    """A finite number: NaN compares false with anything."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return False
     return math.isfinite(value)
@@ -223,7 +223,7 @@ def _same(current: Any, wanted: Any) -> bool:
     if current is None:
         return False
     if isinstance(wanted, bool):
-        # An unknown form is never what is wanted: it is written (E-01).
+        # An unknown form is never what is wanted: it is written.
         return flag_value(current) == wanted
     if isinstance(wanted, str) and isinstance(current, str):
         return current.casefold() == wanted.casefold()
@@ -356,7 +356,7 @@ def _hash_mode(base_url: str, user: str, timeout: float) -> str:
     """The digest hash this device declares for `user`, remembered once answered.
 
     A transport failure returns the fallback without remembering it: caching
-    that answer left md5 devices unable to log in until a restart (audit A07).
+    that answer left md5 devices unable to log in until a restart.
     """
     remembered = _HASH_MODES.get((base_url, user))
     if remembered is not None:
@@ -409,7 +409,7 @@ class XHeaderDigestAuth(AuthBase):
         if response.status_code != 401 or "Authorization" in response.request.headers:
             return response
         # Without a password or token the answer would be an empty-password
-        # login on every poll of a no-login entry (audit E2-01).
+        # login on every poll of a no-login entry.
         if not self.password and self.token is None:
             return response
 
@@ -434,8 +434,8 @@ class XHeaderDigestAuth(AuthBase):
         retried.request = prepared
         if retried.status_code == 401:
             # Refused: the client lives on for the public reads, and would send
-            # the same refused login on every poll (audit E2-02). The device may
-            # have changed its hash too; the next login asks it again (audit F11).
+            # the same refused login on every poll. The device may
+            # have changed its hash too; the next login asks it again.
             self.password = ""
             self.token = None
             _HASH_MODES.pop((self.base_url or "", self.username), None)
@@ -672,7 +672,7 @@ class FroniusWebClient:
         The component endpoints differ between firmware versions, and one of
         them failing must not take the controls down with it. A failure is
         still logged once, and its end: a swallowed HTTP 500 read as "no
-        value" (audit A24-05). A switched-off device and a rejected login are
+        value". A switched-off device and a rejected login are
         not this read's to handle.
         """
         try:
@@ -736,7 +736,7 @@ class FroniusWebClient:
         switch_sunspec_mode: bool = False,
     ) -> bool:
         config = _config_object(self.get_modbus_config(), MODBUS_PATH)
-        # Checked like the slave: it is written back as read (audit FA0FB-05).
+        # Checked like the slave: it is written back as read.
         master = _config_object(
             config.get("master", MASTER_RTUIF["master"]), MODBUS_PATH
         )
@@ -753,7 +753,7 @@ class FroniusWebClient:
         if (
             serves_tcp
             # The integration reads the integer+SF models only; a float map
-            # would pass every other check and then fail the probe (audit F13).
+            # would pass every other check and then fail the probe.
             and slave.get("sunspecMode") == SUNSPEC_MODE_INT
             and is_enabled(ctr.get("on"))
             and _as_int(slave.get("port"), port) == int(port)
@@ -836,7 +836,7 @@ class FroniusWebClient:
         """The SoC limit asked for, checked against the window the inverter holds now.
 
         The other limit is not sent: taken from the last poll it undid a change
-        made in the inverter UI since (audit F24-01).
+        made in the inverter UI since.
         """
         current = self.check_soc_window(soc_min, soc_max)
         limits = {"BAT_M0_SOC_MIN": soc_min, "BAT_M0_SOC_MAX": soc_max}
@@ -849,15 +849,15 @@ class FroniusWebClient:
         """Refuse a limit that would invert the window the inverter holds now.
 
         A config that cannot be read is an error, not an empty window: read as
-        empty it passed, and Modbus took a minimum the web API then refused
-        (audit FA0FB-04). Returns the config read.
+        empty it passed, and Modbus took a minimum the web API then refused.
+        Returns the config read.
         """
         current = _config_object(self._get_json(BATTERIES_PATH), BATTERIES_PATH)
         lower = soc_min if soc_min is not None else current.get("BAT_M0_SOC_MIN")
         upper = soc_max if soc_max is not None else current.get("BAT_M0_SOC_MAX")
         if not (_is_number(lower) and _is_number(upper)):
             # Unknown is not "fits": Modbus would take a minimum the web API
-            # may refuse (audit RR770-04).
+            # may refuse.
             raise FroniusWebResponseError(
                 f"HTTP 200 on {BATTERIES_PATH} answered no SoC window", HTTPStatus.OK
             )
@@ -892,7 +892,7 @@ class FroniusWebClient:
             return self._get_json("/api/config/limit_settings/powerLimits")
         except FroniusWebResponseError as err:
             # Firmware without the endpoint answers 404; any other status is a
-            # failure the refresh has to report (audit A24-05).
+            # failure the refresh has to report.
             if err.status_code != HTTPStatus.NOT_FOUND:
                 raise
             return {}

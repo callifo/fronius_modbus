@@ -20,7 +20,7 @@ def _claim_host(
 
     The unique id is the host; a reconfigure or options change that moves the
     host has to move the id with it, or duplicate detection keeps guarding the
-    old host and lets a second entry for the new one through (audit F12).
+    old host and lets a second entry for the new one through.
     """
     unique_id = entry_unique_id(settings)
     holder = hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, unique_id)
@@ -73,7 +73,7 @@ async def _async_reload_unless_listened(
     """Reload the entry unless its update listener already does.
 
     A change to a loaded entry reloads it through that listener; a second call
-    here reloaded it twice (audit F24-10). A new token alone changes nothing in
+    here reloaded it twice. A new token alone changes nothing in
     the entry, and an entry that is not loaded has no listener: both need it.
     """
     if changed and loaded:

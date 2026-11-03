@@ -268,7 +268,7 @@
   {
     "label": "controls: the disable write is inside the restore guard",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/controls.py",
-    "old": "            try:\n                # Inside the guard from here: the device may have applied the\n                # disable before this call is cancelled (audit A01/B01).\n                await self._controls.write(enable_field, DISABLED)\n",
+    "old": "            try:\n                # Inside the guard from here: the device may have applied the\n                # disable before this call is cancelled.\n                await self._controls.write(enable_field, DISABLED)\n",
     "new": "            await self._controls.write(enable_field, DISABLED)\n            try:\n",
     "tests": "cancelled_disable_write_leaves_the_control_enabled"
   },
@@ -1010,8 +1010,8 @@
   {
     "label": "config flow: the password step rechecks the host",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "                # was open (audit RR770-01).\n                await claim_host(state.settings)\n",
-    "new": "                # was open (audit RR770-01).\n",
+    "old": "                # was open.\n                await claim_host(state.settings)\n",
+    "new": "                # was open.\n",
     "tests": "during_the_password_step"
   },
   {
@@ -1297,8 +1297,8 @@
   {
     "label": "reauth: a reauth whose entry is gone aborts",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "            # then taken back (audit R6D-03).\n            raise data_entry_flow.AbortFlow(\"entry_not_found\")\n        # The form asked",
-    "new": "            # then taken back (audit R6D-03).\n            return self.async_abort(reason=\"reauth_successful\")\n        # The form asked",
+    "old": "            # then taken back.\n            raise data_entry_flow.AbortFlow(\"entry_not_found\")\n        # The form asked",
+    "new": "            # then taken back.\n            return self.async_abort(reason=\"reauth_successful\")\n        # The form asked",
     "tests": "entry_deleted_during_the_reauth_keeps_no_token"
   },
   {

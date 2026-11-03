@@ -234,7 +234,7 @@ async def test_a_foreign_labelled_module_is_not_a_pv_channel(connection, symo_ge
 async def test_a_meter_that_does_not_answer_at_setup_is_retried_on_the_next_poll(
     connection,
 ):
-    """Audit F03: a discovery timeout was filed as "no meter" for the life of the entry."""
+    """A discovery timeout was filed as "no meter" for the life of the entry."""
     meter_unit = connection.for_unit(METER_UNIT_ID)
     meter_unit.fail_requests(ModbusTimeoutError())
     device = FroniusInverter(
@@ -254,7 +254,7 @@ async def test_a_meter_that_does_not_answer_at_setup_is_retried_on_the_next_poll
 
 
 async def test_a_unit_without_a_sunspec_map_is_absent_for_good(connection):
-    """Only "answered, but nothing here" settles it; a gateway error does not (audit D01)."""
+    """Only "answered, but nothing here" settles it; a gateway error does not."""
     absent = connection.for_unit(201)
     absent.fail_requests(IllegalDataAddressError())
     device = FroniusInverter(
@@ -300,7 +300,7 @@ async def test_a_unit_that_refuses_every_read_is_still_no_meter(connection):
 
 
 async def test_an_incomplete_chain_is_rescanned_until_it_is_complete(connection):
-    """Audit A03: models behind a refused header stayed hidden for the life of the entry."""
+    """Models behind a refused header stayed hidden for the life of the entry."""
     unit = connection.for_unit(INVERTER_UNIT_ID)
     unit.fail_read(STORAGE_HEADER_ADDRESS, IllegalDataAddressError())
     device = FroniusInverter(unit, INVERTER_UNIT_ID, {})
@@ -326,7 +326,7 @@ INVERTER_HEADER_ADDRESS = 40069
 
 
 async def test_a_silent_link_behind_an_incomplete_chain_is_a_timeout(connection):
-    """Audit F06: the chain's note made every outage a report, so nothing recycled the link."""
+    """The chain's note made every outage a report, so nothing recycled the link."""
     unit = connection.for_unit(INVERTER_UNIT_ID)
     unit.fail_read(CHAIN_END_ADDRESS, IllegalDataAddressError())
     device = FroniusInverter(unit, INVERTER_UNIT_ID, {})
@@ -342,7 +342,7 @@ async def test_a_silent_link_behind_an_incomplete_chain_is_a_timeout(connection)
 async def test_a_failed_identity_read_does_not_finish_incomplete_discovery(
     connection, monkeypatch
 ):
-    """Audit B03: completion was published from the scan, before the models were installed."""
+    """Completion was published from the scan, before the models were installed."""
     unit = connection.for_unit(INVERTER_UNIT_ID)
     unit.fail_read(STORAGE_HEADER_ADDRESS, IllegalDataAddressError())
     device = FroniusInverter(unit, INVERTER_UNIT_ID, {})
@@ -371,7 +371,7 @@ async def test_a_failed_identity_read_does_not_finish_incomplete_discovery(
 
 
 async def test_a_busy_meter_is_undecided_rather_than_absent(connection):
-    """Audit C03: a busy or failing meter was filed as absent and never probed again."""
+    """A busy or failing meter was filed as absent and never probed again."""
     meter_unit = connection.for_unit(METER_UNIT_ID)
     meter_unit.fail_requests(ServerDeviceBusyError())
     device = FroniusInverter(
@@ -392,7 +392,7 @@ async def test_a_busy_meter_is_undecided_rather_than_absent(connection):
 async def test_a_failed_meter_probe_during_a_retry_keeps_the_poll_coherent(
     connection, monkeypatch
 ):
-    """Audit C02: setup cleared the meters before probing, leaving a polled name without one."""
+    """Setup cleared the meters before probing, leaving a polled name without one."""
     inverter_unit = connection.for_unit(INVERTER_UNIT_ID)
     meter_unit = connection.for_unit(METER_UNIT_ID)
     inverter_unit.fail_read(CHAIN_END_ADDRESS, IllegalDataAddressError())
@@ -417,7 +417,7 @@ async def test_a_failed_meter_probe_during_a_retry_keeps_the_poll_coherent(
 
 
 async def test_an_aborted_rediscovery_keeps_the_previous_meters(connection):
-    """Audit C02: the meters were cleared before probing, so an abort left them gone."""
+    """The meters were cleared before probing, so an abort left them gone."""
     inverter_unit = connection.for_unit(INVERTER_UNIT_ID)
     meter_unit = connection.for_unit(METER_UNIT_ID)
     inverter_unit.fail_read(CHAIN_END_ADDRESS, IllegalDataAddressError())
@@ -437,7 +437,7 @@ async def test_an_aborted_rediscovery_keeps_the_previous_meters(connection):
 
 
 async def test_a_gateway_outage_on_a_meter_is_retried(connection):
-    """Audit D01: a switched-off meter answers 0x0B, which was taken for "no meter"."""
+    """A switched-off meter answers 0x0B, which was taken for "no meter"."""
     meter_unit = connection.for_unit(METER_UNIT_ID)
     meter_unit.fail_requests(GatewayTargetError())
     device = FroniusInverter(
@@ -456,7 +456,7 @@ async def test_a_gateway_outage_on_a_meter_is_retried(connection):
 
 
 async def test_a_component_that_did_not_move_keeps_its_readings(connection):
-    """Audit D02: a rediscovery installed empty components over the last readings."""
+    """A rediscovery installed empty components over the last readings."""
     inverter_unit = connection.for_unit(INVERTER_UNIT_ID)
     # The chain stays incomplete, so every poll rediscovers.
     inverter_unit.fail_read(CHAIN_END_ADDRESS, IllegalDataAddressError())
@@ -475,7 +475,7 @@ async def test_a_component_that_did_not_move_keeps_its_readings(connection):
 async def test_a_recovered_meters_first_bad_read_stays_in_its_report(
     connection, monkeypatch
 ):
-    """Audit E03: the retry path updated the meter outside the per-component catch."""
+    """The retry path updated the meter outside the per-component catch."""
     meter_unit = connection.for_unit(METER_UNIT_ID)
     meter_unit.fail_requests(ServerDeviceBusyError())
     device = FroniusInverter(
@@ -509,7 +509,7 @@ async def test_a_recovered_meters_first_bad_read_stays_in_its_report(
 async def test_an_aborted_rediscovery_leaves_the_meter_addresses_alone(
     connection, symo_gen24
 ):
-    """Audit F24-07: a probe wrote the new address before the rediscovery committed.
+    """A probe wrote the new address before the rediscovery committed.
 
     Meter 200 had moved and meter 201 aborted the rediscovery. The retry saw an
     unchanged address and kept the component bound to the old registers.

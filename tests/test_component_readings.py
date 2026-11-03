@@ -175,7 +175,7 @@ def test_a_channel_the_device_does_not_report_makes_no_sensor():
 
 
 def test_an_answer_without_a_value_keeps_its_sensor():
-    """Audit R25-01: an answered read without a field retired the sensor.
+    """An answered read without a field retired the sensor.
 
     The cleanup at the next start removed 28 entities, the long-standing
     inverter temperature among them, with the owner's entity ids.
@@ -237,14 +237,14 @@ def test_an_answer_naming_the_limits_but_no_module_has_no_modules():
 
 
 def test_firmware_without_the_endpoints_gets_no_component_sensors():
-    """Audit F24-06: a 404 made every component sensor, 19 of them enabled, stay unknown."""
+    """A 404 made every component sensor, 19 of them enabled, stay unknown."""
     readings = WebData(inverter_endpoint_missing=True, storage_endpoint_missing=True)
 
     assert component_sensors(runtime_with(readings)) == {}
 
 
 def test_readings_not_yet_read_keep_every_sensor():
-    """Not read is not absent: the stale-entity cleanup would retire them (audit A24-01)."""
+    """Not read is not absent: the stale-entity cleanup would retire them."""
     sensors = component_sensors(runtime_with(WebData()))
 
     assert "module_temperature_2" in sensors
@@ -287,7 +287,7 @@ def test_a_failed_readable_read_leaves_the_readings_unread():
     ],
 )
 def test_a_sensor_with_a_unit_shows_only_a_number(value, shown):
-    """Audit R25-02: the old temperature parser took numbers only; a dict reached HA."""
+    """The old temperature parser took numbers only; a dict reached HA."""
     reading = next(r for r in COMPONENT_READINGS if r.key == "inverter_temperature")
 
     assert component_value(reading, {reading.fields[0]: value}) == shown
@@ -305,7 +305,7 @@ def test_a_sensor_with_a_unit_shows_only_a_number(value, shown):
     ],
 )
 def test_a_flag_is_set_only_by_a_true_value(value, shown):
-    """Audit R25-02: the text "0" read as "yes"."""
+    """The text "0" read as "yes"."""
     reading = next(r for r in COMPONENT_READINGS if r.key == "grid_valid")
 
     assert component_value(reading, {reading.fields[0]: value}) == shown
@@ -313,7 +313,7 @@ def test_a_flag_is_set_only_by_a_true_value(value, shown):
 
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), "nan", "-inf"])
 def test_a_value_that_is_no_finite_number_shows_nothing(value):
-    """Reaudit RE26-05: "nan" reached HA as a temperature and read as "yes" for a flag."""
+    """A "nan" reached HA as a temperature and read as "yes" for a flag."""
     temperature = next(r for r in COMPONENT_READINGS if r.key == "inverter_temperature")
     grid_valid = next(r for r in COMPONENT_READINGS if r.key == "grid_valid")
 

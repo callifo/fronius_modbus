@@ -194,8 +194,7 @@ async def _async_prepare_web_api(
 
     ``claim_host`` runs right before the Modbus settings are written: another
     entry can take the host while the token is minted or the login runs, and
-    the settings would then change on an inverter this flow does not own
-    (audit R730-01).
+    the settings would then change on an inverter this flow does not own.
     """
     client = FroniusWebClient(
         host=data[CONF_HOST],
@@ -423,7 +422,7 @@ class TokenFlowMixin:
                 settings = _expand_settings_input(user_input, defaults)
                 _validate_static_input(settings)
                 # Before the login: validation may already write the Modbus
-                # settings of a host another entry owns (audit FA0FB-02).
+                # settings of a host another entry owns.
                 await claim_host(settings)
                 apply_modbus_config = (
                     force_apply_modbus_config
@@ -504,7 +503,7 @@ class TokenFlowMixin:
         if user_input is not None:
             try:
                 # Again: another entry may have taken the host while this form
-                # was open (audit RR770-01).
+                # was open.
                 await claim_host(state.settings)
                 password = str(user_input.get(CONF_API_PASSWORD, "")).strip()
                 username = state.settings[CONF_API_USERNAME]
@@ -548,11 +547,11 @@ class TokenFlowMixin:
         """Keep a minted token only for a checked inverter and a finished flow.
 
         Saved first, a failed check or an aborted flow left a password-equivalent
-        credential with no entry (audit RA24-01). The entry's setup reads it, so
+        credential with no entry. The entry's setup reads it, so
         it is saved before the entry is created; if that fails, the token held
-        before comes back: an aborted duplicate replaced the entry's own
-        (reaudit RE26-04). A flow can fail after updating its own entry; that
-        entry then logs in with the new token, which stays (R26-02, D8AE-02).
+        before comes back: an aborted duplicate replaced the entry's own.
+        A flow can fail after updating its own entry; that
+        entry then logs in with the new token, which stays.
         """
         if minted is None:
             return await on_success(state.settings, info, state.previous_host)
@@ -586,7 +585,7 @@ class TokenFlowMixin:
         """Put back what the store held before this flow's token.
 
         The token this flow minted goes, even when another entry uses the
-        same host and role: that entry did not log in with it (audit RR770-02).
+        same host and role: that entry did not log in with it.
         """
         store = async_get_token_store(self.hass)
         if previous is None:
@@ -620,7 +619,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
     async def _async_claim_new_host(self, settings: dict[str, Any]) -> None:
         unique_id = entry_unique_id(settings)
         # A card for this host gives way to the owner adding it by hand; two
-        # flows adding it by hand still stop each other (reaudit Z-01).
+        # flows adding it by hand still stop each other.
         for card in self._async_in_progress(match_context={"unique_id": unique_id}):
             if card["context"]["source"] == config_entries.SOURCE_ZEROCONF:
                 self.hass.config_entries.flow.async_abort(card["flow_id"])
@@ -658,7 +657,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
             await async_follow_host(self.hass, entry, host, serial)
             return self.async_abort(reason="already_configured")
         # The web client builds its URLs from the bare host, which an IPv6
-        # address cannot be (audit R3B-03).
+        # address cannot be.
         if discovery_info.ip_address.version != 4:
             return self.async_abort(reason="not_ipv4_address")
         await self.async_set_unique_id(entry_unique_id({CONF_HOST: host}))
@@ -748,7 +747,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
         entry = self._flow_entry()
         if entry is None:
             # An abort, not a success: the token minted for the gone entry is
-            # then taken back (audit R6D-03).
+            # then taken back.
             raise data_entry_flow.AbortFlow("entry_not_found")
         # The form asked for the role alone: the rest is what the entry holds
         # now, not what it held when the flow began.
@@ -843,7 +842,7 @@ class FroniusModbusOptionsFlow(TokenFlowMixin, config_entries.OptionsFlow):
             previous_host=defaults[CONF_HOST],
             previous_settings=defaults,
             # Configure is the one place to add or replace the passwords, so
-            # the password step is always offered here (audit F11).
+            # the password step is always offered here.
             always_ask_password=True,
             claim_host=self._async_claim_host,
             on_success=self._async_finish_options,

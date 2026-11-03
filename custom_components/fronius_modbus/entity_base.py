@@ -139,8 +139,7 @@ class FroniusEntity(
         """Whether the last poll actually refreshed the report this entity reads.
 
         The one owner of that question: `available` hides a stale entity, and a
-        total sensor must not take a stale cached value for a fresh sample
-        (audit A02).
+        total sensor must not take a stale cached value for a fresh sample.
         """
         # Home Assistant types the attribute as a plain EntityDescription, and
         # a narrower annotation here collides with the platform base classes.
@@ -155,7 +154,7 @@ class FroniusEntity(
                 or description.report_name in coordinator.data.report.updated
             )
         # A rejected login clears the client but the coordinator keeps
-        # succeeding on what is left (audit F16): the entities of that login
+        # succeeding on what is left: the entities of that login
         # must not stay operable.
         if not _web_client_present(self._runtime, description.web_client):
             return False
@@ -168,7 +167,7 @@ class FroniusEntity(
 
         Availability is happy with retained data - that is what the tolerance
         window around a web write is for - but a value the device did not send
-        again is no evidence about the device (audit B05).
+        again is no evidence about the device.
         """
         if not self._source_refreshed:
             return False
@@ -209,7 +208,7 @@ class FroniusEntity(
             ) from err
         except FroniusWebUnreachable as err:
             # An OSError, so the switched-off device reads like a Modbus
-            # outage everywhere else; no write mapped it (audit R24-02).
+            # outage everywhere else; no write mapped it.
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="web_api_unreachable",
@@ -258,7 +257,7 @@ class FroniusTotalSensor(FroniusEntity, RestoreSensor):
         description = cast(FroniusDescription, self.entity_description)
         # A failed read leaves the component holding what it decoded last, so
         # feeding it again would let one bad reading confirm itself over two
-        # failed polls (audit A02). Only a refreshed source is an observation.
+        # failed polls. Only a refreshed source is an observation.
         reading = description.value_fn(self._runtime) if self._source_sampled else None
         verdict = self._guard.observe(reading)
         if verdict is None:

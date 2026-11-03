@@ -1,6 +1,7 @@
 """Tests for household load and grid status derivation."""
 
 import json
+import logging
 import pathlib
 
 import pytest
@@ -117,7 +118,7 @@ def test_three_far_higher_polls_are_a_genuine_gap():
     [(10.0, 100000.0, 10.0), (100000.0, 10.0, 100000.0), (10.0, 5000.0, 20.0)],
 )
 def test_contradicting_samples_confirm_nothing(readings):
-    """Audit F24-03: 10, 100000, 10 counted as three confirmations and reset the total.
+    """10, 100000, 10 counted as three confirmations and reset the total.
 
     A spike between two low readings contradicts a real reset; only samples
     that agree with each other may move the accepted range.
@@ -168,7 +169,7 @@ def test_a_reached_percentage_limit_is_the_ac_limit():
 
 
 def test_a_reached_limit_in_watts_is_the_feed_in_limit():
-    """Measured in #26: an export limit held at 400 W set only the absolute flag."""
+    """Measured: an export limit held at 400 W set only the absolute flag."""
     assert _reason(absolute_reached=True) == "feed_in_limit"
 
 
@@ -194,7 +195,7 @@ def test_a_found_reason_stands_even_while_another_source_is_silent():
 
 
 def test_the_limit_reason_is_named_after_the_ac_limit_it_reads():
-    """Discussion #6: "Export limit" read as the grid feed-in limit, which the
+    """The sensor "Export limit" read as the grid feed-in limit, which the
     inverter reports in none of these signals; the reason is the AC limit."""
     root = pathlib.Path(__file__).parent.parent / "custom_components/fronius_modbus"
     for language in ("en", "de"):
@@ -227,3 +228,11 @@ def test_the_production_limit_pair_is_a_power_limit_apart_from_the_battery_s():
         assert sensors["storage_power_limit"]["name"] not in pair
         # WMax is the fixed nameplate setting; this value drops with an AC limit.
         assert sensors["max_power"]["name"] not in pair
+
+
+def test_a_feed_in_pair_too_far_apart_says_so_in_the_debug_log(caplog):
+    """Load went unknown on a slow link with no word why."""
+    with caplog.at_level(logging.DEBUG, logger="custom_components.fronius_modbus"):
+        assert _load(sample_window_s=0.75) is None
+
+    assert "750 ms" in caplog.text

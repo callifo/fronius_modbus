@@ -99,7 +99,7 @@ foreach ($value in @('"10.1.0"', '236.69966666666724', '"tokenFormatVersion":"1"
 $short = (ConvertTo-ExportBodies @('{"zip":1}', '{"count":1,"name":"1 of 1"}') $true '')[1]
 Assert-True ($short -ceq '{"count":1,"name":"1 of 1"}') "a short sensitive value does not take every match: $short"
 
-# Audit F09: words learned from a field description and from a sensitive
+# Words learned from a field description and from a sensitive
 # object's settings were cut out of every answer, keys included.
 $schema = ConvertTo-ExportBodies @(
     '{"psk":"synthetic-psk-value","_psk_meta":{"valueType":"String","displayType":"Password"}}',
@@ -127,7 +127,7 @@ foreach ($secret in @('2001:db8', 'FE80', '0042:8329')) {
     Assert-True (-not $ipv6.Contains($secret)) "the IPv6 address $secret is redacted: $ipv6"
 }
 
-# Audit F23: a Datamanager names its serial UniqueIdentifier (GetLoggerInfo).
+# A Datamanager names its serial UniqueIdentifier (GetLoggerInfo).
 $logger = Protect-One '{"Body":{"LoggerInfo":{"UniqueIdentifier":"240.100013","ProductID":"fronius-datamanager-card"}}}'
 Assert-True (-not $logger.Contains('240.100013')) "the Datamanager serial is redacted: $logger"
 Assert-True ($logger.Contains('fronius-datamanager-card')) "the product beside it stays: $logger"
@@ -188,7 +188,7 @@ $export = New-ExportText $null $true ([ordered]@{ port = 502; units = $units }) 
 Assert-True (Test-ValidJson $export) 'the whole export is valid JSON'
 Assert-True ($export.Contains('[1,2,3,4,5')) 'register values are no text to redact'
 
-# -- the Modbus wire (audit F31, Codex C-04) -----------------------------------------
+# -- the Modbus wire -----------------------------------------
 
 function New-FakeStream([byte[]]$Reply) {
     # What the tool writes is kept in Sent; its reads are served from Reply.
@@ -246,7 +246,7 @@ $script:Connects = 0
 }
 Assert-True ($script:Connects -eq 1) "an exception reply keeps the connection: $($script:Connects) connects"
 
-# -- the login (audit F31) -------------------------------------------------------------
+# -- the login -------------------------------------------------------------
 
 $versions = '{"authenticationOptions":{"digest":{"customerHashingVersion":2,"technicianHashingVersion":1}}}'
 Assert-True ((Get-SecretHasher $versions 'technician') -is [System.Security.Cryptography.MD5]) 'hashing version 1 logs in with MD5'
@@ -272,7 +272,7 @@ $script:Requests = New-Object System.Collections.Generic.List[object]
         $response.Content = New-Object System.Net.Http.StringContent ''
         return $response
     }
-    # The answer of /api/status/common decides the hashing (reaudit W-06).
+    # The answer of /api/status/common decides the hashing.
     $script:LoginStatus = Invoke-Login @{ status = 200; body = $versions }
 }
 $header = [string]$script:Requests[$script:Requests.Count - 1][1]
@@ -285,7 +285,7 @@ Assert-True ($field.uri -eq '/api/commands/Login') "the login signs its path wit
 Assert-True ($field.response -eq $expected) "the digest answers the challenge: $header"
 Assert-True ($script:LoginStatus -eq 200) "the login reports its status: $($script:LoginStatus)"
 
-# -- the dump's login (reaudit D-04) -----------------------------------------------------
+# -- the dump's login -----------------------------------------------------
 
 function Invoke-TestDump([int]$LoginStatus, [hashtable]$Answers) {
     # Runs the dump against faked answers up to the file and keeps what it would export.
@@ -334,11 +334,11 @@ Assert-True ([string]::IsNullOrEmpty($script:Export.Role)) "a refused login is e
 $withLogin = Get-PathsReadWithLogin
 Assert-True ($withLogin.Count -eq 0) "a refused login reads nothing with it: $($withLogin -join ', ')"
 
-# Enter at the role question: the customer login (reaudit G-09).
+# Enter at the role question: the customer login.
 Invoke-TestDump 200 @{ 'need a login' = 'y' }
 Assert-True ($script:Export.Role -eq 'customer') "Enter at the role question logs in as customer: $($script:Export.Role)"
 
-# Enter at every question: the file is meant for an issue (reaudit E-02).
+# Enter at every question: the file is meant for an issue.
 Invoke-TestDump 200 @{}
 Assert-True ([string]::IsNullOrEmpty($script:Export.Role) -and (Get-PathsReadWithLogin).Count -eq 0) "Enter logs in nowhere: $($script:Export.Role)"
 Assert-True ($script:Export.Modbus -eq 'synthetic registers') "Enter reads the registers too: $($script:Export.Modbus)"
@@ -347,7 +347,7 @@ Invoke-TestDump 200 @{ 'Modbus TCP' = 'n'; 'Replace serial' = 'n' }
 Assert-True ($null -eq $script:Export.Modbus) "n reads no registers: $($script:Export.Modbus)"
 Assert-True ($script:Export.Redact -eq $false) "n turns the replacement off: $($script:Export.Redact)"
 
-# -- read only (Codex C-04) -------------------------------------------------------------
+# -- read only -------------------------------------------------------------
 
 # The login is the one command the tool calls, and it is not on these lists.
 $commands = @($PublicPaths + $LoginPaths) | Where-Object { $_ -like '/api/commands/*' }

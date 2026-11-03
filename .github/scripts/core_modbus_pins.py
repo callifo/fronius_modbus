@@ -3,8 +3,7 @@
 This integration shares core's Modbus connection, so an installation runs the
 modbus-connection, tmodbus and pymodbus releases core pins, whatever newer one
 PyPI offers. A test run against a newer one tests a library no user has: the
-minimum job ran modbus-connection 4.12 where Home Assistant 2026.9 pins 4.10
-(audit F29).
+minimum job ran modbus-connection 4.12 where Home Assistant 2026.9 pins 4.10.
 
     python core_modbus_pins.py          prints the pins, for pip install
     python core_modbus_pins.py --check  fails unless they are what is installed

@@ -178,7 +178,7 @@ async def test_an_unreachable_web_api_is_not_logged_as_an_error(hass, caplog):
 
 
 async def test_a_web_server_error_is_still_an_error(hass, caplog):
-    """Audit E04: requests' HTTPError is an OSError, so a 500 read as an outage."""
+    """Requests' HTTPError is an OSError, so a 500 read as an outage."""
     await _web_refresh_failing_with(
         hass, FroniusWebResponseError("HTTP 500", 500), caplog
     )
@@ -207,7 +207,7 @@ def _requests_calls_outside_the_boundary(tree: ast.Module) -> list[int]:
 
 
 def test_requests_is_called_in_one_place():
-    """Reaudit R02: a second call site bypassed the boundary that strips the host."""
+    """A second call site bypassed the boundary that strips the host."""
     offences = [
         f"{source.name}:{line}"
         for source in sorted(PACKAGE.rglob("*.py"))

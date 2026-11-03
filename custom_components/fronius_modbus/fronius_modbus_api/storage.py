@@ -79,8 +79,8 @@ def _derive_extended_mode(mode: int, in_rate: float, out_rate: float) -> Extende
     if mode == MODE_AUTO:
         return ExtendedMode.AUTO
     # A negative rate is the grid modes' signature and must win over the
-    # plain charge/discharge branches (audit F08: forced discharge after a
-    # restart read as a PV charge limit).
+    # plain charge/discharge branches: forced discharge after a restart read
+    # as a PV charge limit.
     if out_rate < 0:
         return ExtendedMode.CHARGE_FROM_GRID
     if in_rate < 0:
@@ -145,7 +145,7 @@ class StorageControl:
         self._extended_mode: ExtendedMode | None = None
         # Polls that did not confirm the last set_mode() yet; a write the
         # device silently refused must not be reported as done forever
-        # (upstream #127), so the device wins after MODE_WRITE_GRACE_POLLS.
+        # (issue 127), so the device wins after MODE_WRITE_GRACE_POLLS.
         self._unconfirmed_polls: int | None = None
         # Two automations firing together must not interleave mode and rate writes.
         self._write_lock = asyncio.Lock()
@@ -257,7 +257,7 @@ class StorageControl:
             # The higher rate goes first: every mode has one at full, which
             # keeps the window valid whatever the other still holds. With both
             # at or below zero for an instant the firmware refuses the second
-            # write (exception 3, upstream #126). Ordered by the target alone:
+            # write (exception 3, issue 126). Ordered by the target alone:
             # the last poll may not hold what the previous write left.
             rate_writes = sorted(
                 [("in_w_rte", in_rate), ("out_w_rte", out_rate)],
@@ -346,8 +346,8 @@ class StorageControl:
         refusal: ControlRefused,
     ) -> None:
         # Decided under the lock: a mode switch queued ahead of this write
-        # would otherwise be validated against the mode it is replacing
-        # (audit F02), and the rate maximum may change with it.
+        # would otherwise be validated against the mode it is replacing, and
+        # the rate maximum may change with it.
         async with self._write_lock:
             if not allowed():
                 raise refusal
@@ -358,7 +358,7 @@ class StorageControl:
             else:
                 out_rate = value
             # With both at or below 0 the firmware refuses the write
-            # (exception 3, upstream #126), so say why instead (reaudit W-02).
+            # (exception 3, issue 126), so say why instead.
             if in_rate <= 0 and out_rate <= 0:
                 raise ControlRefused(
                     "limit_blocks_both_ways",
@@ -367,7 +367,7 @@ class StorageControl:
                 )
             # In the combined mode it also refuses a negative rate beyond the
             # other one (Fronius register map); another controller's image can
-            # hold a grid mode there (reaudit CX-01).
+            # hold a grid mode there.
             if mode == MODE_CHARGE_AND_DISCHARGE and -in_rate > out_rate:
                 raise ControlRefused(
                     "grid_power_beyond_window",
@@ -380,10 +380,10 @@ class StorageControl:
         """The grid power field selecting ``mode`` again leaves as set, if any.
 
         Entering a grid mode starts its power at 0 W. The last poll may not
-        hold a power written since, nor the one of a mode left since (reaudit
-        RC-01), and the mode last chosen may not be what the registers hold:
+        hold a power written since, nor the one of a mode left since, and the
+        mode last chosen may not be what the registers hold:
         another controller, a schedule or an ignored write leaves another
-        image there (reaudit D-02, E-01).
+        image there.
         """
         field_name = _GRID_POWER_FIELDS.get(mode)
         if field_name is None or mode is not self._extended_mode:
@@ -398,8 +398,8 @@ class StorageControl:
         """The image a rate write lands in: the live one, while it is the selected mode's.
 
         A limit mode leaves both sides to the user, so its table says nothing
-        about them (reaudit D-01), and a schedule or another controller may
-        have changed the mode since the last poll (reaudit AC-01). Unreadable
+        about them, and a schedule or another controller may
+        have changed the mode since the last poll. Unreadable
         for a moment right after a write, the mode's table stands in.
         """
         image = await self._live_image()

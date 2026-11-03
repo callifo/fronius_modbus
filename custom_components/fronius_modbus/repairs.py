@@ -109,7 +109,7 @@ async def async_create_fix_flow(
 
     if issue_id.startswith(MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX):
         # Left by an earlier version on an entry not set up since, such as a
-        # disabled one: the reauthentication replaced it (audit RB99-01).
+        # disabled one: the reauthentication replaced it.
         return ConfirmRepairFlow()
 
     raise ValueError(f"Unknown issue: {issue_id}")

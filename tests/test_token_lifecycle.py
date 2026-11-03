@@ -2,7 +2,7 @@
 
 The Digest token alone authenticates to the inverter, so it may exist only for
 a host and role some entry still logs in with, and only readable by Home
-Assistant itself (audit A24-03, A24-04).
+Assistant itself.
 """
 
 import asyncio
@@ -55,7 +55,7 @@ async def save_both_roles(hass, host: str = HOST) -> None:
 
 
 def test_the_token_file_is_private(hass, monkeypatch):
-    """Audit A24-03: the default Store wrote the token world-readable (0644)."""
+    """The default Store wrote the token world-readable (0644)."""
     created: list[dict] = []
 
     class RecordingStore[T](token_store.Store[T]):
@@ -154,7 +154,7 @@ async def test_an_entry_not_yet_migrated_keeps_both_roles(hass):
 
 
 async def test_the_role_a_migration_drops_takes_its_token_with_it(hass):
-    """Audit F24-04: an entry of both roles kept technician, and the customer token stayed."""
+    """An entry of both roles kept technician, and the customer token stayed."""
     entry = make_entry(hass)
     await save_both_roles(hass)
 

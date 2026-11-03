@@ -19,7 +19,7 @@ async def _async_registers(runtime: FroniusRuntimeData) -> dict[str, Any]:
     """Every raw register, or what kept them from being read.
 
     An offline inverter is when the last poll and its report are needed most;
-    a failed read must not take them with it (audit F24-08).
+    a failed read must not take them with it.
     """
     try:
         raw = await runtime.device.async_read_raw()

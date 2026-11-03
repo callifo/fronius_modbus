@@ -98,9 +98,9 @@ def _async_reload_when_a_string_lights_up(
     """Reload once an MPPT string dark at setup sends its first value.
 
     Its sensors were left out for want of a value; without the reload they
-    came only with the next restart (reaudit W-03). ``left_out`` is taken
+    came only with the next restart. ``left_out`` is taken
     before the platforms set up: a poll during their setup lit a string
-    unseen (reaudit AC-02).
+    unseen.
     """
     if not left_out:
         return
@@ -267,7 +267,7 @@ async def async_remove_config_entry_device(
     """Let the owner delete a device the inverter no longer reports.
 
     Cleanup never deletes a device on doubt, so one short answer cannot take a
-    meter with its history; the owner decides instead (audit F32).
+    meter with its history; the owner decides instead.
     """
     del hass
     if entry.state is not ConfigEntryState.LOADED:

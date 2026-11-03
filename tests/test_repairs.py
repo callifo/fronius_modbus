@@ -126,7 +126,7 @@ async def make_entry(hass, mock_modbus, *, with_token: bool) -> MockConfigEntry:
 async def test_a_leftover_login_repair_on_a_disabled_entry_can_be_dismissed(
     hass, repairs_client
 ):
-    """Audit RB99-01: a disabled entry is never set up, so its old item stayed and failed."""
+    """A disabled entry is never set up, so its old item stayed and failed."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         data=ENTRY_DATA,

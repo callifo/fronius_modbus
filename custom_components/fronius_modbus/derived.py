@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from typing import NamedTuple
 
 from .const import GRID_STATUS, THROTTLE_REASONS
+
+_LOGGER = logging.getLogger(__name__)
 
 GRID_FREQUENCY_HZ = 50.0
 METER_GRID_BAND_HZ = 0.2
@@ -33,7 +36,7 @@ def throttle_reason(
 
     A limit that is set is no throttling: only one the output has reached is.
     The component endpoint says so for a percentage limit and for one in watts
-    apart; the Modbus signals only say a limit is switched on (#26). A GEN24
+    apart; the Modbus signals only say a limit is switched on. A GEN24
     left the operating state at normal while it throttled; other firmware
     may not.
     """
@@ -103,6 +106,10 @@ def household_load(
     if meter_location != METER_LOCATION_FEED_IN or inverter_power_w is None:
         return None
     if sample_window_s > LOAD_SAMPLE_WINDOW_S:
+        _LOGGER.debug(
+            "No load: the inverter and meter reads lay %.0f ms apart",
+            sample_window_s * 1000,
+        )
         return None
     return round(meter_power_w + inverter_power_w, 2)
 
@@ -120,7 +127,7 @@ class TotalGuard:
     A single lower or far-too-high sample is a bad reading and is ignored.
     ``confirmations`` consecutive samples that agree with each other are the
     device telling the truth - a counter reset after a hardware swap, or a
-    large but genuine gap while Home Assistant was offline (audit F05/F06) -
+    large but genuine gap while Home Assistant was offline -
     and are accepted. Property reads never advance this state: only observe()
     does.
     """
@@ -152,7 +159,7 @@ class TotalGuard:
             self._last_suspect = None
             return None
         # Only samples that agree with each other confirm a new range: a spike
-        # between two low readings is no reset (audit F24-03).
+        # between two low readings is no reset.
         continues = self._last_suspect is not None and self._plausible_after(
             self._last_suspect, reading
         )

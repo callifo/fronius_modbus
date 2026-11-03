@@ -346,8 +346,8 @@ class StorageControl:
         refusal: ControlRefused,
     ) -> None:
         # Decided under the lock: a mode switch queued ahead of this write
-        # would otherwise be validated against the mode it is replacing
-        # , and the rate maximum may change with it.
+        # would otherwise be validated against the mode it is replacing, and
+        # the rate maximum may change with it.
         async with self._write_lock:
             if not allowed():
                 raise refusal

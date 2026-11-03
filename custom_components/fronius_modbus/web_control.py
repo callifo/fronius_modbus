@@ -585,7 +585,7 @@ class FroniusWebControl:
             answer = await self._async_public_read(
                 EVENT_TEXTS_PATH.format(language=candidate)
             )
-            # A file that failed is asked again; one the firmware lacks is not
+            # A file that failed is asked again; one the firmware lacks is not.
             answered = answered and answer is not None
             merged |= event_texts(answer)
         if answered:

@@ -117,7 +117,7 @@ class InverterControls:
                 await self._controls.write(enable_field, ENABLED)
             except BaseException as err:
                 # The limit was live before this call. No failed write, not even
-                # a value the device cannot scale (FA0FB-01), and no cancelled
+                # a value the device cannot scale, and no cancelled
                 # service call may leave it switched off.
                 await self._restore_enable(enable_field, err)
                 raise

@@ -163,9 +163,9 @@ async def _scan(unit: ModbusUnit) -> tuple[SunSpecModels, bool]:
     except IllegalDataAddressError:
         # Some devices refuse a read past their map instead of answering the
         # end marker, which took the whole chain down and left setup reporting
-        # "cannot connect" although Modbus was fine (redpomodoro issue 105). Keep what
-        # the device did serve; if that is not even a Fronius, report the
-        # refusal itself, which is what an absent unit answers.
+        # "cannot connect" although Modbus was fine (redpomodoro issue 105).
+        # Keep what the device did serve; if that is not even a Fronius,
+        # report the refusal itself, which is what an absent unit answers.
         chain = await _scan_until_refused(unit)
         if chain.first(COMMON_MODEL_ID) is None:
             raise

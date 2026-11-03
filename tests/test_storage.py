@@ -567,6 +567,7 @@ async def test_a_negative_discharge_rate_reads_as_charging(inverter_unit):
     A negative discharge rate is how charging from the grid is expressed; showing
     the raw mode there would say "discharge" while the battery fills.
     """
+    inverter_unit.holding[STOR_CTL_MOD] = 2
     inverter_unit.holding[OUT_W_RTE] = -3000 & 0xFFFF
     chain = await scan(inverter_unit, 40000)
     storage = Storage(inverter_unit, chain.first(STORAGE_MODEL_ID))
@@ -577,6 +578,35 @@ async def test_a_negative_discharge_rate_reads_as_charging(inverter_unit):
     control.sync_from_device()
 
     assert control.control_mode == 1
+
+
+@pytest.mark.parametrize(
+    ("image", "core_mode"),
+    [
+        ((1, -20, -30), 2),
+        ((0, 100, -50), 0),
+        ((0, -50, 100), 0),
+    ],
+)
+async def test_the_core_mode_ignores_a_rate_storctl_mod_keeps_off(
+    inverter_unit, image, core_mode
+):
+    """A negative rate the inverter ignores still named the direction.
+
+    evcc leaves the rate it does not write as it was: (1, -20, -30) is
+    Discharge to Grid, and the sensor said charging.
+    """
+    stor_ctl_mod, in_rate, out_rate = image
+    control = await _control_on(
+        inverter_unit,
+        {
+            STOR_CTL_MOD: stor_ctl_mod,
+            IN_W_RTE: _raw(in_rate),
+            OUT_W_RTE: _raw(out_rate),
+        },
+    )
+
+    assert control.control_mode == core_mode
 
 
 async def test_charging_from_the_grid_reads_as_charging(control, inverter_unit):
@@ -1398,45 +1428,137 @@ async def test_discharge_to_grid_selected_again_at_zero_watts_keeps_its_mode(con
     assert control.extended_mode is ExtendedMode.DISCHARGE_TO_GRID
 
 
-# A limit mode, its setter and register, and each await a rate write passes
-# before its first write: a poll may run in any of them.
+# A limit mode, its setter and register, and the block mode evcc's hold of
+# that register leaves.
 LIMIT_LOSES_ITS_MODE = [
-    (ExtendedMode.PV_CHARGE_LIMIT, "set_charge_limit_w", IN_W_RTE),
-    (ExtendedMode.DISCHARGE_LIMIT, "set_discharge_limit_w", OUT_W_RTE),
+    (
+        ExtendedMode.PV_CHARGE_LIMIT,
+        "set_charge_limit_w",
+        IN_W_RTE,
+        ExtendedMode.BLOCK_CHARGING,
+    ),
+    (
+        ExtendedMode.DISCHARGE_LIMIT,
+        "set_discharge_limit_w",
+        OUT_W_RTE,
+        ExtendedMode.BLOCK_DISCHARGING,
+    ),
 ]
-PRE_WRITE_AWAITS = ["written_value", "registers_holding"]
+# Each await a rate write passes before its register write reaches the device.
+# The live read sits between the first and the second; the last is the
+# component's own scale read inside the write.
+WRITE_AWAITS = ["written_value", "registers_holding", "component_write"]
 
 
-@pytest.mark.parametrize("stage", PRE_WRITE_AWAITS)
-@pytest.mark.parametrize(("mode", "setter", "address"), LIMIT_LOSES_ITS_MODE)
-async def test_a_limit_admitted_before_a_poll_took_another_mode_writes_nothing(
-    control, inverter_unit, writes, monkeypatch, mode, setter, address, stage
-):
-    """Admitted in the limit mode, the write went out after a poll had taken evcc's hold.
+def _inside(stage, control, inverter_unit, monkeypatch, action):
+    """Run ``action`` once, while the next rate write waits at ``stage``."""
+    if stage == "component_write":
+        real_write = control._storage.write
+        real_read = inverter_unit.read_holding_registers
+        entered = False
 
-    Judged by the mode selected at that moment, the image was the new block
-    mode's, which allows no such limit.
-    """
+        async def write(field_name, value):
+            nonlocal entered
+            entered = True
+            return await real_write(field_name, value)
+
+        async def read(address, count):
+            if entered:
+                monkeypatch.setattr(inverter_unit, "read_holding_registers", real_read)
+                await action()
+            return await real_read(address, count)
+
+        monkeypatch.setattr(control._storage, "write", write)
+        monkeypatch.setattr(inverter_unit, "read_holding_registers", read)
+        return
+    real = getattr(storage_module, stage)
+
+    async def first(*args):
+        monkeypatch.setattr(storage_module, stage, real)
+        await action()
+        return await real(*args)
+
+    monkeypatch.setattr(storage_module, stage, first)
+
+
+async def _limit_on(control, mode, setter):
     await control.set_mode(mode)
     await getattr(control, setter)(2560)
     await _poll(control)
-    real = getattr(storage_module, stage)
 
-    async def poll_first(*args):
-        # evcc's hold lands and a poll takes it while the write waits here.
-        monkeypatch.setattr(storage_module, stage, real)
+
+@pytest.mark.parametrize("stage", WRITE_AWAITS)
+@pytest.mark.parametrize(("mode", "setter", "address", "blocked"), LIMIT_LOSES_ITS_MODE)
+async def test_a_poll_during_a_limit_write_takes_no_mode(
+    control, inverter_unit, monkeypatch, mode, setter, address, blocked, stage
+):
+    """A poll inside a write took evcc's hold, and the write then went out under it.
+
+    What the select showed and whether the limit went out depended on which
+    await the poll fell into; the library's own scale read was one more.
+    """
+    await _limit_on(control, mode, setter)
+    seen = []
+
+    async def evcc_holds_and_a_poll_runs():
         inverter_unit.holding[address] = 0
         await _poll(control)
-        return await real(*args)
+        seen.append(control.extended_mode)
 
-    monkeypatch.setattr(storage_module, stage, poll_first)
+    _inside(stage, control, inverter_unit, monkeypatch, evcc_holds_and_a_poll_runs)
+
+    with contextlib.suppress(ControlRefused):
+        await getattr(control, setter)(1000)
+
+    assert seen == [mode]
+
+
+@pytest.mark.parametrize(("mode", "setter", "address", "blocked"), LIMIT_LOSES_ITS_MODE)
+async def test_a_hold_before_the_live_read_refuses_the_limit(
+    control, inverter_unit, writes, monkeypatch, mode, setter, address, blocked
+):
+    """evcc's hold landed before the write read the registers: evcc's mode stays."""
+    await _limit_on(control, mode, setter)
+
+    async def evcc_holds():
+        inverter_unit.holding[address] = 0
+
+    _inside("written_value", control, inverter_unit, monkeypatch, evcc_holds)
     del writes[:]
 
     with pytest.raises(ControlRefused) as refused:
         await getattr(control, setter)(1000)
+    await _poll(control)
 
     assert refused.value.key == "storage_mode_left"
     assert writes == []
+    assert control.extended_mode is blocked
+
+
+@pytest.mark.parametrize("stage", WRITE_AWAITS[1:])
+@pytest.mark.parametrize(("mode", "setter", "address", "blocked"), LIMIT_LOSES_ITS_MODE)
+async def test_a_hold_after_the_live_read_is_overwritten_by_the_limit(
+    control, inverter_unit, writes, monkeypatch, mode, setter, address, blocked, stage
+):
+    """evcc's hold landed after the live read: Home Assistant writes last, its mode stays.
+
+    A poll that saw the hold in between refused the limit or switched the
+    select to evcc's mode, which the registers no longer held.
+    """
+    await _limit_on(control, mode, setter)
+
+    async def evcc_holds_and_a_poll_runs():
+        inverter_unit.holding[address] = 0
+        await _poll(control)
+
+    _inside(stage, control, inverter_unit, monkeypatch, evcc_holds_and_a_poll_runs)
+    del writes[:]
+
+    await getattr(control, setter)(1000)
+    await _poll(control)
+
+    assert _words(writes, address) != []
+    assert control.extended_mode is mode
 
 
 # Registers a restart finds each shared-image mode on, with its free rate not 0.

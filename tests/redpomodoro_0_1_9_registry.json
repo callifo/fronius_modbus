@@ -1,0 +1,362 @@
+[
+ {
+  "domain": "number",
+  "unique_id": "fm_charge_limit",
+  "object_id": "byd_battery_box_premium_hv_pv_charge_limit",
+  "device": "Fronius_battery_storage"
+ },
+ {
+  "domain": "number",
+  "unique_id": "fm_discharge_limit",
+  "object_id": "byd_battery_box_premium_hv_discharge_limit",
+  "device": "Fronius_battery_storage"
+ },
+ {
+  "domain": "number",
+  "unique_id": "fm_grid_charge_power",
+  "object_id": "byd_battery_box_premium_hv_grid_charge_power",
+  "device": "Fronius_battery_storage"
+ },
+ {
+  "domain": "number",
+  "unique_id": "fm_grid_discharge_power",
+  "object_id": "byd_battery_box_premium_hv_grid_discharge_power",
+  "device": "Fronius_battery_storage"
+ },
+ {
+  "domain": "number",
+  "unique_id": "fm_minimum_reserve",
+  "object_id": "byd_battery_box_premium_hv_minimum_reserve",
+  "device": "Fronius_battery_storage"
+ },
+ {
+  "domain": "select",
+  "unique_id": "fm_ext_control_mode",
+  "object_id": "byd_battery_box_premium_hv_storage_control_mode",
+  "device": "Fronius_battery_storage"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_Conn",
+  "object_id": "fronius_symo_gen24_10_0_connection_control",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_MaxChaRte",
+  "object_id": "byd_battery_box_premium_hv_maximum_charge_rate",
+  "device": "Fronius_battery_storage"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_MaxDisChaRte",
+  "object_id": "byd_battery_box_premium_hv_maximum_discharge_rate",
+  "device": "Fronius_battery_storage"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_OutPFSet_Ena",
+  "object_id": "fronius_symo_gen24_10_0_fixed_power_factor",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_PPVphAB",
+  "object_id": "fronius_symo_gen24_10_0_ac_voltage_l1_l2",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_PPVphBC",
+  "object_id": "fronius_symo_gen24_10_0_ac_voltage_l2_l3",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_PPVphCA",
+  "object_id": "fronius_symo_gen24_10_0_ac_voltage_l3_l1",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_PhVphA",
+  "object_id": "fronius_symo_gen24_10_0_ac_voltage_l1_n",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_PhVphB",
+  "object_id": "fronius_symo_gen24_10_0_ac_voltage_l2_n",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_PhVphC",
+  "object_id": "fronius_symo_gen24_10_0_ac_voltage_l3_n",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_VArPct_Ena",
+  "object_id": "fronius_symo_gen24_10_0_limit_var_control",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_WHRtg",
+  "object_id": "byd_battery_box_premium_hv_capacity",
+  "device": "Fronius_battery_storage"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_WMaxLim_Ena",
+  "object_id": "fronius_symo_gen24_10_0_throttle_control",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_acenergy",
+  "object_id": "fronius_symo_gen24_10_0_ac_energy",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_acpower",
+  "object_id": "fronius_symo_gen24_10_0_ac_power",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_charge_status",
+  "object_id": "byd_battery_box_premium_hv_charge_status",
+  "device": "Fronius_battery_storage"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_charging_power",
+  "object_id": "byd_battery_box_premium_hv_charging_power",
+  "device": "Fronius_battery_storage"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_control_mode",
+  "object_id": "byd_battery_box_premium_hv_core_storage_control_mode",
+  "device": "Fronius_battery_storage"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_discharging_power",
+  "object_id": "byd_battery_box_premium_hv_discharging_power",
+  "device": "Fronius_battery_storage"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_ecp_connection",
+  "object_id": "fronius_symo_gen24_10_0_electrical_connection",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_events2",
+  "object_id": "fronius_symo_gen24_10_0_events",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_grid_charging",
+  "object_id": "byd_battery_box_premium_hv_grid_charging",
+  "device": "Fronius_battery_storage"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_grid_status",
+  "object_id": "fronius_symo_gen24_10_0_grid_status",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_i_unit_id",
+  "object_id": "fronius_symo_gen24_10_0_modbus_id",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_inverter_controls",
+  "object_id": "fronius_symo_gen24_10_0_control_mode",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_line_frequency",
+  "object_id": "fronius_symo_gen24_10_0_line_frequency",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_load",
+  "object_id": "fronius_symo_gen24_10_0_load",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_m1_PPV",
+  "object_id": "fronius_smart_meter_ts_65a_3_primary_meter_1_ac_voltage_line_to_line",
+  "device": "Fronius_meter1"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_m1_PhVphA",
+  "object_id": "fronius_smart_meter_ts_65a_3_primary_meter_1_ac_voltage_l1_n",
+  "device": "Fronius_meter1"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_m1_PhVphB",
+  "object_id": "fronius_smart_meter_ts_65a_3_primary_meter_1_ac_voltage_l2_n",
+  "device": "Fronius_meter1"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_m1_PhVphC",
+  "object_id": "fronius_smart_meter_ts_65a_3_primary_meter_1_ac_voltage_l3_n",
+  "device": "Fronius_meter1"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_m1_exported",
+  "object_id": "fronius_smart_meter_ts_65a_3_primary_meter_1_exported",
+  "device": "Fronius_meter1"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_m1_imported",
+  "object_id": "fronius_smart_meter_ts_65a_3_primary_meter_1_imported",
+  "device": "Fronius_meter1"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_m1_line_frequency",
+  "object_id": "fronius_smart_meter_ts_65a_3_primary_meter_1_line_frequency",
+  "device": "Fronius_meter1"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_m1_power",
+  "object_id": "fronius_smart_meter_ts_65a_3_primary_meter_1_power",
+  "device": "Fronius_meter1"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_m1_unit_id",
+  "object_id": "fronius_smart_meter_ts_65a_3_primary_meter_1_modbus_id",
+  "device": "Fronius_meter1"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_max_charge",
+  "object_id": "byd_battery_box_premium_hv_max_charging_power",
+  "device": "Fronius_battery_storage"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_max_power",
+  "object_id": "fronius_symo_gen24_10_0_maximum_power",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_minimum_reserve",
+  "object_id": "byd_battery_box_premium_hv_minimum_reserve",
+  "device": "Fronius_battery_storage"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_mppt1_lfte",
+  "object_id": "fronius_symo_gen24_10_0_mppt1_lifetime_energy",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_mppt1_power",
+  "object_id": "fronius_symo_gen24_10_0_mppt1_power",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_mppt2_lfte",
+  "object_id": "fronius_symo_gen24_10_0_mppt2_lifetime_energy",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_mppt2_power",
+  "object_id": "fronius_symo_gen24_10_0_mppt2_power",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_mppt3_lfte",
+  "object_id": "fronius_symo_gen24_10_0_storage_charging_lifetime_energy",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_mppt3_power",
+  "object_id": "fronius_symo_gen24_10_0_storage_charging_power",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_mppt4_lfte",
+  "object_id": "fronius_symo_gen24_10_0_storage_discharging_lifetime_energy",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_mppt4_power",
+  "object_id": "fronius_symo_gen24_10_0_storage_discharging_power",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_pv_connection",
+  "object_id": "fronius_symo_gen24_10_0_pv_connection",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_pv_power",
+  "object_id": "fronius_symo_gen24_10_0_pv_power",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_soc",
+  "object_id": "byd_battery_box_premium_hv_state_of_charge",
+  "device": "Fronius_battery_storage"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_statusvendor",
+  "object_id": "fronius_symo_gen24_10_0_status",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_storage_connection",
+  "object_id": "fronius_symo_gen24_10_0_storage_connection",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_storage_power",
+  "object_id": "fronius_symo_gen24_10_0_storage_power",
+  "device": "Fronius_inverter"
+ },
+ {
+  "domain": "sensor",
+  "unique_id": "fm_tempcab",
+  "object_id": "fronius_symo_gen24_10_0_temperature",
+  "device": "Fronius_inverter"
+ }
+]

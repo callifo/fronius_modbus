@@ -1,7 +1,9 @@
 """End-to-end: a real Home Assistant sets the entry up on the mocked shared connection."""
 
 from dataclasses import replace
+import json
 import logging
+import pathlib
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -1937,3 +1939,171 @@ async def test_the_owner_can_delete_a_device_the_inverter_no_longer_reports(
     assert not await fronius_modbus.async_remove_config_entry_device(
         hass, entry, inverter
     )
+
+
+# What redpomodoro 0.1.9 left in a real registry: domain, unique id, entity id, device.
+REDPOMODORO_REGISTRY = json.loads(
+    pathlib.Path(__file__)
+    .with_name("redpomodoro_0_1_9_registry.json")
+    .read_text(encoding="utf-8")
+)
+REDPOMODORO_RENAMED = {
+    "minimum_reserve": "soc_minimum",
+    "tempcab": "inverter_temperature",
+}
+# The MPPT rows have a migration of their own, which also renames them.
+REDPOMODORO_OWN_MIGRATION = {
+    old_id for old_id, *_ in migrations._V019_MPPT_UNIQUE_ID_MAPPINGS
+}
+REDPOMODORO_NO_SUCCESSOR = {"fm_storage_power"}
+# A web sensor now: it has its successor only with a login.
+REDPOMODORO_NEEDS_THE_LOGIN = {"fm_tempcab"}
+
+
+def _redpomodoro_key(unique_id: str) -> str:
+    key = unique_id.removeprefix("fm_")
+    if key.startswith("m1_"):
+        return f"meter_{METER_UNIT_ID}_{key.removeprefix('m1_')}"
+    return REDPOMODORO_RENAMED.get(key, key)
+
+
+def _redpomodoro_entry(hass):
+    """An entry as 0.1.9 left it, with its devices and entities."""
+    entry = make_entry(hass, minor_version=1, **{CONF_METER_UNIT_ID: METER_UNIT_ID})
+    hass.config_entries.async_update_entry(entry, title="Fronius", unique_id=None)
+    device_registry = dr.async_get(hass)
+    devices = {
+        identifier: device_registry.async_get_or_create(
+            config_entry_id=entry.entry_id, identifiers={(DOMAIN, identifier)}
+        ).id
+        for identifier in LEGACY_DEVICE_IDENTIFIERS
+    }
+    registry = er.async_get(hass)
+    for row in REDPOMODORO_REGISTRY:
+        registry.async_get_or_create(
+            row["domain"],
+            DOMAIN,
+            row["unique_id"],
+            config_entry=entry,
+            device_id=devices[row["device"]],
+            suggested_object_id=row["object_id"],
+        )
+    return entry, devices
+
+
+def _rows_that_move(*left_out: set[str]) -> list[dict]:
+    skipped = set().union(REDPOMODORO_OWN_MIGRATION, *left_out)
+    return [row for row in REDPOMODORO_REGISTRY if row["unique_id"] not in skipped]
+
+
+async def test_a_0_1_9_entry_keeps_its_entity_ids_and_history(hass, mock_modbus):
+    """Only the MPPT sensors moved: the rest stayed behind beside new `_2` entities.
+
+    The cleanup then deleted the old rows at the first start with a login.
+    """
+    entry, _ = _redpomodoro_entry(hass)
+
+    await setup_entry(hass, entry)
+
+    registry = er.async_get(hass)
+    prefix = entity_prefix(entry.entry_id)
+    rows = _rows_that_move(REDPOMODORO_NO_SUCCESSOR, REDPOMODORO_NEEDS_THE_LOGIN)
+    moved = {
+        f"{row['domain']}.{row['object_id']}": f"{prefix}_{_redpomodoro_key(row['unique_id'])}"
+        for row in rows
+    }
+    found = {
+        entity_id: registry.async_get(entity_id).unique_id
+        for entity_id in moved
+        if registry.async_get(entity_id) is not None
+    }
+    assert found == moved
+    entity_ids = {
+        candidate.entity_id
+        for candidate in er.async_entries_for_config_entry(registry, entry.entry_id)
+    }
+    assert [
+        e for e in entity_ids if e.removesuffix("_2") in moved and e not in moved
+    ] == []
+
+
+async def test_a_0_1_9_entry_keeps_its_devices(hass, mock_modbus):
+    """Each device showed up twice, and the old one held the owner's area and name."""
+    entry, devices = _redpomodoro_entry(hass)
+
+    await setup_entry(hass, entry)
+
+    device_registry = dr.async_get(hass)
+    key = instance_key(entry.entry_id)
+    assert {
+        old: device_registry.async_get(device_id).identifiers
+        for old, device_id in devices.items()
+    } == {
+        "Fronius_inverter": {(DOMAIN, f"{key}_inverter")},
+        "Fronius_battery_storage": {(DOMAIN, f"{key}_battery_storage")},
+        "Fronius_meter1": {(DOMAIN, f"{key}_meter_{METER_UNIT_ID}")},
+    }
+    assert len(dr.async_entries_for_config_entry(device_registry, entry.entry_id)) == 3
+
+
+async def test_a_0_1_9_entry_keeps_its_entities_through_the_first_login(
+    hass, mock_modbus, monkeypatch
+):
+    """With a login the cleanup is no longer held back, and took every old row with it."""
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    entry, _ = _redpomodoro_entry(hass)
+
+    await setup_entry(hass, entry)
+
+    registry = er.async_get(hass)
+    left = [
+        row["object_id"]
+        for row in _rows_that_move(
+            REDPOMODORO_NO_SUCCESSOR, REDPOMODORO_NEEDS_THE_LOGIN
+        )
+        if registry.async_get(f"{row['domain']}.{row['object_id']}") is None
+    ]
+    assert left == []
+
+
+async def test_a_0_1_9_row_without_a_successor_stays_until_there_is_a_login(
+    hass, mock_modbus
+):
+    """Unread is not gone: without a login nothing is retired, so its history stays visible."""
+    entry, _ = _redpomodoro_entry(hass)
+
+    await setup_entry(hass, entry)
+
+    registry = er.async_get(hass)
+    assert (
+        registry.async_get_entity_id("sensor", DOMAIN, "fm_storage_power") is not None
+    )
+    assert registry.async_get_entity_id("sensor", DOMAIN, "fm_tempcab") is not None
+
+
+def test_a_0_1_9_id_counts_as_registered_under_the_key_it_moves_to(hass):
+    """Read before the migration: a sensor dark at the first start counted as never there."""
+    entry, _ = _redpomodoro_entry(hass)
+
+    keys = migrations.registered_keys(hass, entry, METER_UNIT_ID)
+
+    assert {"soc_minimum", f"meter_{METER_UNIT_ID}_power", "acpower"} <= keys
+
+
+async def test_a_second_start_changes_nothing_on_a_0_1_9_entry(hass, mock_modbus):
+    """Current ids start with `fm_` too, and must not be read as 0.1.9 ids."""
+    entry, _ = _redpomodoro_entry(hass)
+    await setup_entry(hass, entry)
+    registry = er.async_get(hass)
+
+    def ids():
+        return {
+            candidate.entity_id: candidate.unique_id
+            for candidate in er.async_entries_for_config_entry(registry, entry.entry_id)
+        }
+
+    first = ids()
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert ids() == first

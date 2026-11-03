@@ -41,7 +41,7 @@ Released 2026-10-22. First stable release of 1.3. It contains everything from 1.
 
 ## 1.3.0b1
 
-A beta on 1.2.0 with the fixes of a full audit and its re-audits. Storage writes now judge the inverter's live registers and refuse, with a reason, what the firmware would refuse; updates from callifo keep entities, names, titles and the chosen role; enabling Modbus TCP keeps an RS485 client served; the README lists every entity. No new entry migration; unique ids and entity ids do not change.
+A beta on 1.2.0 with a broad round of fixes. Storage writes now judge the inverter's live registers and refuse, with a reason, what the firmware would refuse; updates from callifo keep entities, names, titles and the chosen role; enabling Modbus TCP keeps an RS485 client served; the README lists every entity. No new entry migration; unique ids and entity ids do not change.
 
 ### Added
 - A device the inverter no longer reports, such as a removed meter or battery, can be deleted on its device page. The integration still deletes none on its own: one short answer must not take a device with its history.
@@ -194,7 +194,7 @@ If discovery or the new login behaves unexpectedly on your setup, please open an
 
 ## 1.2.0b2
 
-An audit round on 1.2.0b1, a write policy, and new sensors. The integration writes only what
+Fixes on 1.2.0b1, a write policy, and new sensors. The integration writes only what
 differs from what the inverter holds and keeps the inverter settings it does not own, and it
 shows what the inverter's component endpoints add beyond Modbus. A pre-release because the
 Modbus restriction checkbox becomes a choice and entries migrate to a new minor version;
@@ -269,7 +269,7 @@ write bursts are coalesced instead of hidden behind sliders.
 
 ## 1.1.1
 
-An audit round on 1.1.0: log hygiene on the web side, two sentinel and retry edge cases, and
+Fixes on 1.1.0: log hygiene on the web side, two sentinel and retry edge cases, and
 reproducible CI pins. No entity changes.
 
 ### Fixed
@@ -304,7 +304,7 @@ below; upgrading from 0.3.x follows the migration notes under 1.0.0b1.
 
 ## 1.0.0b3
 
-Four independent audit rounds worked off, plus the single-role Web API login. Entries migrate on
+A broad round of fixes, plus the single-role Web API login. Entries migrate on
 their own; an entry that had a technician token keeps technician access.
 
 ### Changed
@@ -327,7 +327,7 @@ their own; an entry that had a technician token keeps technician access.
 
 ## 1.0.0b2
 
-Fixes from an independent audit of 1.0.0b1 plus two upstream issues; no entity, unique id or option changes.
+Fixes on 1.0.0b1 plus two upstream issues; no entity, unique id or option changes.
 
 ### Fixed
 - The idle inverter-control state read `Normal` while its option list said `normal`, so Home Assistant refused the sensor (regression in 1.0.0b1).

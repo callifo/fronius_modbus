@@ -2492,13 +2492,6 @@
     "tests": "owns_no_rate_of_home_assistant"
   },
   {
-    "label": "storage: a limit write a poll overtook writes nothing",
-    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "            if self.extended_mode is not selected:\n                raise _mode_left()\n",
-    "new": "",
-    "tests": "admitted_before_a_poll_took_another_mode"
-  },
-  {
     "label": "storage: Home Assistant owns the whole image a limit write leaves",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
     "old": "            self._written = {\"in_w_rte\": in_rate, \"out_w_rte\": out_rate}\n",
@@ -2546,5 +2539,19 @@
     "old": "            _LOGGER.info(\n                \"Storage mode changed outside Home Assistant: %s -> %s\",\n",
     "new": "            _LOGGER.warning(\n                \"Storage mode changed outside Home Assistant: %s -> %s\",\n",
     "tests": "controller_s_mode_change_is_no_warning"
+  },
+  {
+    "label": "storage: a poll during a write takes no mode",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        if self._write_lock.locked():\n            return\n",
+    "new": "",
+    "tests": "poll_during_a_limit_write_takes_no_mode"
+  },
+  {
+    "label": "storage: the core mode reads only the active rates",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            return None\n        in_rate, out_rate = _effective_rates(mode, in_rate, out_rate)\n        if out_rate < 0 or (",
+    "new": "            return None\n        if out_rate < 0 or (",
+    "tests": "core_mode_ignores_a_rate_storctl_mod_keeps_off"
   }
 ]

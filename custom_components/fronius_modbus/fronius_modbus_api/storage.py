@@ -174,7 +174,13 @@ class StorageControl:
         (schedule, restart, another controller) replaces the chosen one. A
         register image that still fits the chosen mode keeps it, because the
         grid modes share images with the block modes.
+
+        A poll that runs while a write holds the lock judges nothing: the
+        write was admitted for the mode chosen, and the next poll sees the
+        registers it left.
         """
+        if self._write_lock.locked():
+            return
         mode, in_rate, out_rate = (
             self._storage.stor_ctl_mod,
             self._storage.in_w_rte,
@@ -245,6 +251,7 @@ class StorageControl:
         )
         if mode is None or in_rate is None or out_rate is None:
             return None
+        in_rate, out_rate = _effective_rates(mode, in_rate, out_rate)
         if out_rate < 0 or (
             mode == MODE_DISCHARGE and self._storage.cha_gri_set == 1 and out_rate == 0
         ):
@@ -411,9 +418,6 @@ class StorageControl:
         async with self._write_lock:
             if not allowed():
                 raise refusal
-            # Admitted for this mode: a poll during the awaits below may take
-            # another one, which need not allow this limit (checked before the write).
-            selected = self.extended_mode
             value = await written_value(self._storage, field_name, percent())
             mode, in_rate, out_rate = await self._image_for_a_rate()
             # A rate StorCtl_Mod keeps off is ignored by the device; another
@@ -443,8 +447,6 @@ class StorageControl:
                     "select the storage mode again",
                 )
             holding = await registers_holding(self._storage, {field_name: value})
-            if self.extended_mode is not selected:
-                raise _mode_left()
             if field_name not in holding:
                 await self._storage.write(field_name, value)
             if switched_on != mode:

@@ -198,7 +198,12 @@ def _set_power(device, inverter_unit, meter_unit, *, inverter_w, meter_w):
         }
     )
     meter_unit.load_raw(
-        {"holding": {meter_w_field.address: meter_w & 0xFFFF, meter_w_field.scale_address: 0}}
+        {
+            "holding": {
+                meter_w_field.address: meter_w & 0xFFFF,
+                meter_w_field.scale_address: 0,
+            }
+        }
     )
 
 
@@ -210,7 +215,9 @@ async def test_other_generation_behind_the_meter_gives_a_negative_load(
     The sum is the household's net demand; clamped to 0 W it hid that surplus.
     """
     await coordinator._async_update_data()
-    _set_power(coordinator.device, inverter_unit, meter_unit, inverter_w=500, meter_w=-1300)
+    _set_power(
+        coordinator.device, inverter_unit, meter_unit, inverter_w=500, meter_w=-1300
+    )
 
     poll = await coordinator._async_update_data()
 
@@ -225,7 +232,9 @@ async def test_an_inverter_at_0_w_while_the_house_exports_is_a_reading(
     Taken for a misread inverter, it showed the last load once and then nothing.
     """
     await coordinator._async_update_data()
-    _set_power(coordinator.device, inverter_unit, meter_unit, inverter_w=0, meter_w=-1500)
+    _set_power(
+        coordinator.device, inverter_unit, meter_unit, inverter_w=0, meter_w=-1500
+    )
 
     first = await coordinator._async_update_data()
     second = await coordinator._async_update_data()
@@ -250,9 +259,7 @@ def _coordinator_on_a_clock(hass, entry, connection, step_seconds):
     )
 
 
-@pytest.mark.parametrize(
-    ("step_seconds", "load_w"), [(0.1, 3105.1), (0.2, None)]
-)
+@pytest.mark.parametrize(("step_seconds", "load_w"), [(0.1, 3105.1), (0.2, None)])
 async def test_a_load_from_reads_too_far_apart_is_unknown(
     hass, entry, connection, step_seconds, load_w
 ):

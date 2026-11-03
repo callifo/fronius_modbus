@@ -5,7 +5,12 @@
 ### Added
 - A brand icon, shown on the integration's pages in Home Assistant.
 
+### Changed
+- **`Load` can be negative.** With other generation behind the grid meter that the inverter does not see, such as a balcony inverter or an AC-coupled battery, it is the household's consumption minus that generation, and negative while that generation exports; it used to stop at 0 W. Automations, templates and energy calculations that expect 0 W or more need a look.
+- `Load` no longer repeats the previous reading when the inverter reports about 0 W while the house exports, and is no longer unknown when a negative sum comes with battery charging: with other generation behind the meter, both are real readings.
+
 ### Fixed
+- A load step between the inverter read and the meter read showed in `Load` as a spike, because the other inverter models were read in between. The meter is now read right after the inverter, and `Load` is unknown for an update in which the two reads lie more than half a second apart.
 - Updating from callifo 0.3.3 or later replaced the `AC Module Temperature`, `DC Module Temperature` and `Battery Module Temperature` sensors with new ones under new entity ids; their history stayed behind. They now continue as `AC module 1 temperature`, `DC module temperature (3)` and `DC or battery module temperature` with their entity ids, also when the update comes while the inverter does not report the module.
 - Updating from the callifo 0.3.4-rc2 pre-release replaced several sensors and the `Inverter connection` select with new ones under new entity ids, because that version wrote their unique ids in lowercase: the AC currents, voltages and per-phase power of the inverter and the meters, the inverter's control status sensors and the storage ratings. They now continue under their entity ids; where 0.3.4-rc2 had left the earlier entity beside its own, the earlier one is kept with its history.
 

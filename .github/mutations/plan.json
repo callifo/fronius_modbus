@@ -56,11 +56,11 @@
     "tests": "raw_diagnostics_drop_the_serial_number"
   },
   {
-    "label": "derived: a negative load while the battery charges hard is unavailable",
+    "label": "derived: a negative load at the feed-in point keeps its sign",
     "path": "custom_components/fronius_modbus/derived.py",
-    "old": "        if candidate < 0 and charge_may_explain_it:",
-    "new": "        if False:",
-    "tests": "strong_charging_makes_a_negative_load_unavailable"
+    "old": "    return round(meter_power_w + inverter_power_w, 2)\n",
+    "new": "    return round(max(meter_power_w + inverter_power_w, 0.0), 2)\n",
+    "tests": "negative_load or keeps_its_sign"
   },
   {
     "label": "coordinator: three timeouts recycle the link",
@@ -1533,11 +1533,11 @@
     "tests": "a_modbus_outage_without_a_reached_limit_is_no_answer"
   },
   {
-    "label": "derived: an unknown charge is no 0 W",
+    "label": "derived: a pair read further apart than the window is no load",
     "path": "custom_components/fronius_modbus/derived.py",
-    "old": "            storage_charge_power_w is None\n            or storage_charge_power_w >= LOAD_STORAGE_CHARGE_MIN_W\n",
-    "new": "            storage_charge_power_w is not None\n            and storage_charge_power_w >= LOAD_STORAGE_CHARGE_MIN_W\n",
-    "tests": "negative_load_with_an_unknown_charge_is_no_reading"
+    "old": "    if sample_window_s > LOAD_SAMPLE_WINDOW_S:\n",
+    "new": "    if sample_window_s >= LOAD_SAMPLE_WINDOW_S:\n",
+    "tests": "window_apart_is_one_moment or too_far_apart"
   },
   {
     "label": "token store: concurrent first loads share one dictionary",
@@ -2434,5 +2434,12 @@
     "old": "        if registry.async_get_entity_id(entity_entry.domain, DOMAIN, target):\n",
     "new": "        if False:\n",
     "tests": "update_through_callifo_0_3_4_rc2_keeps_the_original_entity"
+  },
+  {
+    "label": "device: the meters are read right after the inverter",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "            REPORT_INVERTER,\n            *(meter_report_name(unit_id) for unit_id in meters),\n            *(\n                name\n                for name, component in components.items()\n                if component is not None and name != REPORT_INVERTER\n            ),\n",
+    "new": "            REPORT_INVERTER,\n            *(\n                name\n                for name, component in components.items()\n                if component is not None and name != REPORT_INVERTER\n            ),\n            *(meter_report_name(unit_id) for unit_id in meters),\n",
+    "tests": "right_after_the_inverter or too_far_apart"
   }
 ]

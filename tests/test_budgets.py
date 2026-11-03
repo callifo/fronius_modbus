@@ -66,7 +66,6 @@ COMPLEXITY_LIMIT = 15
 # adoption - the point of the guard is that nothing gets worse and every
 # improvement is written down.
 COMPLEXITY_BUDGETS = {
-    "derived.py::LoadEstimator.update": 19,
     "froniuswebclient.py::_parse_power_meter_info": 24,
     "migrations.py::async_migrate_v019_mppt_statistics": 19,
 }

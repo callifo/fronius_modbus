@@ -6,9 +6,10 @@ import pathlib
 import pytest
 
 from custom_components.fronius_modbus.derived import (
-    LoadEstimator,
+    LOAD_SAMPLE_WINDOW_S,
     TotalGuard,
     grid_status,
+    household_load,
     throttle_reason,
 )
 
@@ -22,70 +23,60 @@ def test_grid_status_from_both_frequencies():
     assert grid_status(None, 50.0) is None
 
 
-def _update(estimator, **overrides):
+def _load(**overrides):
     values = {
         "meter_power_w": -2000.0,
         "inverter_power_w": 3000.0,
         "meter_location": 0,
-        "pv_power_w": 3100.0,
-        "storage_charge_power_w": 0.0,
-        "storage_present": True,
+        "sample_window_s": 0.01,
     }
     values.update(overrides)
-    return estimator.update(**values)
+    return household_load(**values)
 
 
 def test_load_at_the_feed_in_point_is_meter_plus_inverter():
     """At a feed-in meter, load is meter power plus inverter power."""
-    assert _update(LoadEstimator()) == 1000.0
+    assert _load() == 1000.0
+
+
+def test_load_at_the_feed_in_point_keeps_its_sign():
+    """Other generation behind the meter exporting more than the house uses."""
+    assert _load(meter_power_w=-2000.0, inverter_power_w=500.0) == -1500.0
 
 
 def test_load_needs_a_meter_location():
     """Without a known meter location, load cannot be derived."""
-    assert _update(LoadEstimator(), meter_location=None) is None
+    assert _load(meter_location=None) is None
 
 
-def test_a_consumption_meter_reports_its_own_power():
-    """A consumption-location meter reports load directly."""
-    assert _update(LoadEstimator(), meter_location=1, meter_power_w=-450.0) == 450.0
+def test_load_needs_a_meter_reading():
+    assert _load(meter_power_w=None) is None
 
 
-def test_an_inverter_glitch_keeps_the_last_good_value_once():
-    """A single-poll inverter glitch reuses the last good load, then goes unavailable."""
-    estimator = LoadEstimator()
-    assert _update(estimator) == 1000.0
-    assert _update(estimator, inverter_power_w=0.0) == 1000.0
-    assert _update(estimator, inverter_power_w=0.0) is None
+def test_load_at_the_feed_in_point_needs_the_inverter():
+    assert _load(inverter_power_w=None) is None
 
 
-def test_strong_charging_makes_a_negative_load_unavailable():
-    """Heavy battery charging that would yield a negative load is unavailable instead."""
-    assert (
-        _update(
-            LoadEstimator(),
-            meter_power_w=-5000.0,
-            inverter_power_w=3000.0,
-            storage_charge_power_w=2500.0,
-        )
-        is None
-    )
+def test_a_meter_at_another_location_gives_no_load():
+    """An external generator meter (location 3) measures no household demand."""
+    assert _load(meter_location=3) is None
 
 
-def test_a_negative_load_with_an_unknown_charge_is_no_reading():
-    """The MPPT block did not answer, so the charge that may explain it is unknown.
+@pytest.mark.parametrize("location", [1, 256, 511])
+def test_a_consumption_meter_reports_its_own_power_signed(location):
+    """A consumption-path meter reports load directly, generation in that path included."""
+    assert _load(meter_location=location, meter_power_w=-450.0) == 450.0
+    assert _load(meter_location=location, meter_power_w=200.0) == -200.0
 
-    Taken for 0 W, it let the negative load pass as a measured 0 W.
-    """
-    assert (
-        _update(
-            LoadEstimator(),
-            meter_power_w=-5000.0,
-            inverter_power_w=3000.0,
-            pv_power_w=None,
-            storage_charge_power_w=None,
-        )
-        is None
-    )
+
+def test_a_feed_in_pair_read_up_to_the_window_apart_is_one_moment():
+    assert _load(sample_window_s=LOAD_SAMPLE_WINDOW_S) == 1000.0
+    assert _load(sample_window_s=LOAD_SAMPLE_WINDOW_S + 0.001) is None
+
+
+def test_a_consumption_meter_needs_no_pair():
+    """Its reading alone is the load, so the inverter's read time does not matter."""
+    assert _load(meter_location=1, meter_power_w=-450.0, sample_window_s=5.0) == 450.0
 
 
 def _guard(value=1000.0):

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 import logging
+import time
 from typing import Any, NamedTuple, cast
 
 from modbus_connection import (
@@ -102,10 +103,14 @@ class DeviceIdentity(NamedTuple):
 
 @dataclass
 class UpdateReport:
-    """What one poll managed to refresh."""
+    """What one poll managed to refresh, and when each refreshed part was read.
+
+    `read_spans` holds the monotonic start and end of each read in `updated`.
+    """
 
     updated: list[str] = field(default_factory=list)
     failed: dict[str, ModbusError] = field(default_factory=dict)
+    read_spans: dict[str, tuple[float, float]] = field(default_factory=dict)
 
 
 @dataclass
@@ -198,11 +203,17 @@ class FroniusInverter:
     """A Fronius inverter: components at the addresses the SunSpec chain reports."""
 
     def __init__(
-        self, unit: ModbusUnit, unit_id: int, meter_units: Mapping[int, ModbusUnit]
+        self,
+        unit: ModbusUnit,
+        unit_id: int,
+        meter_units: Mapping[int, ModbusUnit],
+        *,
+        monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         """Bind to the inverter's unit and the units to probe for meters."""
         self._unit = unit
         self._unit_id = unit_id
+        self._monotonic = monotonic
         self._meter_units = dict(meter_units)
         # The configured order, kept apart from `meters`: that one holds only
         # the meters that answered, so numbering displays off it would renumber
@@ -295,9 +306,17 @@ class FroniusInverter:
         self.meters = meters
         self._meter_addresses = addresses
         self._undecided_meters = undecided
-        self._polled = tuple(
-            name for name, component in components.items() if component is not None
-        ) + tuple(meter_report_name(unit_id) for unit_id in meters)
+        # The load adds the primary meter to the inverter's AC power, so the two
+        # are read back to back: a load step between them showed in the sum.
+        self._polled = (
+            REPORT_INVERTER,
+            *(meter_report_name(unit_id) for unit_id in meters),
+            *(
+                name
+                for name, component in components.items()
+                if component is not None and name != REPORT_INVERTER
+            ),
+        )
         self.discovery_complete = complete
 
     def _optional(
@@ -465,6 +484,7 @@ class FroniusInverter:
         A meter that fails is that meter's failure, never the poll's - the
         retry path once read a recovered meter outside this (audit E03).
         """
+        started = self._monotonic()
         try:
             await self._component(name).async_update()
         except ModbusConnectionError:
@@ -481,6 +501,7 @@ class FroniusInverter:
             report.failed[name] = err
         else:
             report.updated.append(name)
+            report.read_spans[name] = (started, self._monotonic())
 
     async def _async_retry_undecided_meters(self, report: UpdateReport) -> None:
         for unit_id, meter_unit in list(self._undecided_meters.items()):

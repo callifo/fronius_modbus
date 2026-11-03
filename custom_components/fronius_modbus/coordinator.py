@@ -23,11 +23,10 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .component_readings import limits_reached
 from .const import web_api_disabled
-from .derived import LoadEstimator, grid_status, throttle_reason
+from .derived import grid_status, household_load, throttle_reason
 from .fronius_modbus_api.controls import InverterControls
 from .fronius_modbus_api.device import (
     REPORT_INVERTER,
-    REPORT_MPPT,
     FroniusInverter,
     MeterInfo,
     UpdateReport,
@@ -252,7 +251,6 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
         self.inverter_controls: InverterControls | None = None
         self._primary_meter_unit_id = primary_meter_unit_id
         self._meter_locations = meter_locations
-        self._load = LoadEstimator()
         self._failed: frozenset[str] = frozenset()
         # Sub-systems the platforms were built for: the ones that had answered
         # by the first refresh. One that answers only later has no entities
@@ -440,16 +438,15 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
         meter = self._primary_meter_fresh(report)
         if meter is None:
             return None
-        mppt_fresh = REPORT_MPPT in report.updated
-        charge = self.device.mppt_channels.charge if mppt_fresh else None
-        charge_module = None if charge is None else self.device.mppt_module(charge)
-        return self._load.update(
+        inverter_started, _ = report.read_spans[REPORT_INVERTER]
+        _, meter_finished = report.read_spans[
+            meter_report_name(self._primary_meter_unit_id)
+        ]
+        return household_load(
             meter_power_w=meter.w,
             inverter_power_w=assume_present(self.device.inverter).w,
             meter_location=self._meter_locations.get(self._primary_meter_unit_id),
-            pv_power_w=self.device.pv_power_w if mppt_fresh else None,
-            storage_charge_power_w=None if charge_module is None else charge_module.dcw,
-            storage_present=self.device.storage is not None,
+            sample_window_s=meter_finished - inverter_started,
         )
 
     def _operating_state(self, report: UpdateReport) -> int | None:

@@ -1,6 +1,7 @@
 """Tests for household load and grid status derivation."""
 
 import json
+import logging
 import pathlib
 
 import pytest
@@ -227,3 +228,11 @@ def test_the_production_limit_pair_is_a_power_limit_apart_from_the_battery_s():
         assert sensors["storage_power_limit"]["name"] not in pair
         # WMax is the fixed nameplate setting; this value drops with an AC limit.
         assert sensors["max_power"]["name"] not in pair
+
+
+def test_a_feed_in_pair_too_far_apart_says_so_in_the_debug_log(caplog):
+    """Load went unknown on a slow link with no word why."""
+    with caplog.at_level(logging.DEBUG, logger="custom_components.fronius_modbus"):
+        assert _load(sample_window_s=0.75) is None
+
+    assert "750 ms" in caplog.text

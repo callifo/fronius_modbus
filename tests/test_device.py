@@ -553,3 +553,28 @@ async def test_the_meters_are_read_right_after_the_inverter(connection):
 
     in_read_order = sorted(report.read_spans, key=lambda name: report.read_spans[name])
     assert in_read_order[:2] == [REPORT_INVERTER, meter_report_name(METER_UNIT_ID)]
+
+
+async def test_a_meter_found_after_setup_is_still_read_right_after_the_inverter(
+    connection,
+):
+    """A meter that answers only on a later poll joined the read order last.
+
+    As the primary meter it was then read after every other model on each poll.
+    """
+    meter_unit = connection.for_unit(METER_UNIT_ID)
+    meter_unit.fail_requests(ModbusTimeoutError())
+    device = FroniusInverter(
+        connection.for_unit(INVERTER_UNIT_ID),
+        INVERTER_UNIT_ID,
+        {METER_UNIT_ID: meter_unit},
+        monotonic=SteppingClock(1.0).monotonic,
+    )
+    await device.async_update()
+    meter_unit.fail_requests(None)
+    await device.async_update()
+
+    report = await device.async_update()
+
+    in_read_order = sorted(report.read_spans, key=lambda name: report.read_spans[name])
+    assert in_read_order[:2] == [REPORT_INVERTER, meter_report_name(METER_UNIT_ID)]

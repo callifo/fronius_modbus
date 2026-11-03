@@ -91,9 +91,9 @@ class FakeInverter:
 @pytest.fixture(autouse=True)
 def _no_cached_hash_mode():
     """The hash mode is memoized per host; a fresh inverter must not inherit it."""
-    froniuswebclient._forget_hash_modes()
+    froniuswebclient._HASH_MODES.clear()
     yield
-    froniuswebclient._forget_hash_modes()
+    froniuswebclient._HASH_MODES.clear()
 
 
 @pytest.fixture
@@ -194,7 +194,7 @@ def test_the_hash_mode_follows_the_version_the_inverter_reports(inverter):
     inverter.hashing_version = 1
     assert froniuswebclient._hash_mode(f"http://{HOST}", "customer", 4.0) == "md5"
 
-    froniuswebclient._forget_hash_modes()
+    froniuswebclient._HASH_MODES.clear()
     inverter.hashing_version = 2
     assert froniuswebclient._hash_mode(f"http://{HOST}", "customer", 4.0) == "sha256"
 

@@ -347,11 +347,6 @@ def _parse_power_meter_info(
 _HASH_MODES: dict[tuple[str, str], str] = {}
 
 
-def _forget_hash_modes() -> None:
-    """Drop what was learned about the devices; for tests."""
-    _HASH_MODES.clear()
-
-
 def _hash_mode(base_url: str, user: str, timeout: float) -> str:
     """The digest hash this device declares for `user`, remembered once answered.
 

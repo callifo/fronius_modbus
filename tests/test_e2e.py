@@ -442,6 +442,30 @@ async def test_a_pre_web_api_entry_is_upgraded_and_loses_its_legacy_devices(
     assert identifiers.isdisjoint(LEGACY_DEVICE_IDENTIFIERS)
 
 
+async def test_a_legacy_device_beside_the_current_one_goes(
+    hass, mock_modbus, monkeypatch
+):
+    """Whoever updated before the devices moved has both; the old one is empty."""
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    entry = make_entry(hass, minor_version=14)
+    device_registry = dr.async_get(hass)
+    key = instance_key(entry.entry_id)
+    for identifier in ("Fronius_inverter", f"{key}_inverter"):
+        device_registry.async_get_or_create(
+            config_entry_id=entry.entry_id, identifiers={(DOMAIN, identifier)}
+        )
+
+    await setup_entry(hass, entry)
+
+    identifiers = {
+        identifier
+        for device in dr.async_entries_for_config_entry(device_registry, entry.entry_id)
+        for _, identifier in device.identifiers
+    }
+    assert "Fronius_inverter" not in identifiers
+    assert f"{key}_inverter" in identifiers
+
+
 async def test_a_pre_web_api_entry_keeps_a_title_the_owner_gave(hass):
     """The upgrade put the generated title over the owner's."""
     entry = make_entry(hass, minor_version=8)
@@ -2022,9 +2046,10 @@ async def test_a_0_1_9_entry_keeps_its_entity_ids_and_history(hass, mock_modbus)
         candidate.entity_id
         for candidate in er.async_entries_for_config_entry(registry, entry.entry_id)
     }
-    assert [
-        e for e in entity_ids if e.removesuffix("_2") in moved and e not in moved
-    ] == []
+    twins = {e for e in entity_ids if e.removesuffix("_2") in moved and e not in moved}
+    # The one real `_2`: `Status` is a new sensor, and 0.1.9 named the vendor
+    # status that, so its entity id is taken.
+    assert {e.rsplit("_", 2)[-2] for e in twins} <= {"status"}
 
 
 async def test_a_0_1_9_entry_keeps_its_devices(hass, mock_modbus):

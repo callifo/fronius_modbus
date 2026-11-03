@@ -96,6 +96,13 @@ _V019_MPPT_UNIQUE_ID_MAPPINGS = (
     ("fm_mppt3_lfte", "storage_charge_lfte", "storage_charge_lfte", None),
     ("fm_mppt4_lfte", "storage_discharge_lfte", "storage_discharge_lfte", None),
 )
+# redpomodoro 0.1.9 wrote its unique ids as fm_<key>. These keys changed since,
+# and its one meter was m1; every other key stayed.
+_V019_RENAMED_KEYS = {
+    "minimum_reserve": "soc_minimum",
+    "tempcab": "inverter_temperature",
+}
+_V019_METER_KEY_PREFIX = "m1_"
 
 
 def _entry_value(entry: ConfigEntry, key: str, default=None):
@@ -113,7 +120,21 @@ def _marked_reported(entity_entry: er.RegistryEntry) -> bool:
     return bool(entity_entry.options.get(DOMAIN, {}).get(REPORTED_OPTION))
 
 
-def registered_keys(hass: HomeAssistant, entry: ConfigEntry) -> frozenset[str]:
+def _v019_key(unique_id: str, primary_meter_unit_id: int) -> str:
+    """The key a unique id of 0.1.9 continues under.
+
+    Any later id reads as a key no entity has, so it is never expected.
+    """
+    key = unique_id.removeprefix(f"{ENTITY_PREFIX}_")
+    if key.startswith(_V019_METER_KEY_PREFIX):
+        meter_key = key.removeprefix(_V019_METER_KEY_PREFIX)
+        return f"meter_{primary_meter_unit_id}_{meter_key}"
+    return _V019_RENAMED_KEYS.get(key, key)
+
+
+def registered_keys(
+    hass: HomeAssistant, entry: ConfigEntry, primary_meter_unit_id: int
+) -> frozenset[str]:
     """The description keys of every entity the registry holds for this entry.
 
     An id from before the per-entry scheme counts under the key it migrates to:
@@ -132,6 +153,8 @@ def registered_keys(hass: HomeAssistant, entry: ConfigEntry) -> frozenset[str]:
             keys.add(unique_id.removeprefix(legacy_prefix))
         elif unique_id in v019_keys:
             keys.add(v019_keys[unique_id])
+        else:
+            keys.add(_v019_key(unique_id, primary_meter_unit_id))
     return frozenset(keys)
 
 
@@ -532,6 +555,72 @@ async def async_migrate_v019_mppt_statistics(
         )
 
 
+def _move_unique_id(
+    registry: er.EntityRegistry,
+    entity_entry: er.RegistryEntry,
+    new_unique_id: str,
+    expected: set[str],
+    taken: set[tuple[str, str | None]],
+) -> bool:
+    """Give a registry entry its new id, if it is expected and free on its platform."""
+    target = (entity_entry.domain, new_unique_id)
+    if new_unique_id not in expected or target in taken:
+        return False
+    registry.async_update_entity(entity_entry.entity_id, new_unique_id=new_unique_id)
+    taken.add(target)
+    return True
+
+
+@callback
+def async_migrate_v019_unique_ids(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Move the unique ids of 0.1.9 onto this entry's keys.
+
+    Before the cleanup: it takes what it does not expect, so at the first start
+    with a login the old rows went, and new entities took over beside their
+    history. A row whose target is not expected yet stays for a later start.
+    """
+    registry = er.async_get(hass)
+    entity_entries = _entity_entries_for_config_entry(registry, entry)
+    taken = {(candidate.domain, candidate.unique_id) for candidate in entity_entries}
+    expected = expected_unique_ids(entry, entry.runtime_data)
+    primary_meter_unit_id = entry.runtime_data.primary_meter_unit_id
+    for entity_entry in entity_entries:
+        key = _v019_key(entity_entry.unique_id or "", primary_meter_unit_id)
+        _move_unique_id(
+            registry, entity_entry, _entity_unique_id(entry, key), expected, taken
+        )
+
+
+@callback
+def async_migrate_v019_devices(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Give the devices of 0.1.9 this entry's identifiers.
+
+    A new device beside the old one lost the owner's area and name, and every
+    automation that names the device.
+    """
+    runtime = entry.runtime_data
+    device_registry = dr.async_get(hass)
+    name = str(_entry_value(entry, CONF_NAME, "Fronius"))
+    key = _entry_instance_key(entry)
+    moves = {
+        f"{name}_inverter": f"{key}_inverter",
+        f"{name}_battery_storage": f"{key}_battery_storage",
+        f"{name}_meter1": f"{key}_meter_{runtime.primary_meter_unit_id}",
+    }
+    current = expected_device_identifiers(runtime, entry)
+    devices = dr.async_entries_for_config_entry(device_registry, entry.entry_id)
+    present = {identifier for device in devices for identifier in device.identifiers}
+    for device in devices:
+        for old, new in moves.items():
+            target = (DOMAIN, new)
+            if (
+                (DOMAIN, old) in device.identifiers
+                and new in current
+                and target not in present
+            ):
+                device_registry.async_update_device(device.id, new_identifiers={target})
+
+
 async def async_migrate_name_based_unique_ids(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -554,17 +643,9 @@ async def async_migrate_name_based_unique_ids(
             continue
         key = old_unique_id.removeprefix(legacy_prefix)
         new_unique_id = f"{entity_prefix(entry.entry_id)}_{key}"
-        if (
-            new_unique_id not in expected
-            or (entity_entry.domain, new_unique_id) in taken
-        ):
-            continue
-
-        registry.async_update_entity(
-            entity_entry.entity_id, new_unique_id=new_unique_id
+        migrated += _move_unique_id(
+            registry, entity_entry, new_unique_id, expected, taken
         )
-        taken.add((entity_entry.domain, new_unique_id))
-        migrated += 1
 
     if migrated:
         _LOGGER.info(

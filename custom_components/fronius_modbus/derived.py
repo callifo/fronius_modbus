@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from typing import NamedTuple
 
 from .const import GRID_STATUS, THROTTLE_REASONS
+
+_LOGGER = logging.getLogger(__name__)
 
 GRID_FREQUENCY_HZ = 50.0
 METER_GRID_BAND_HZ = 0.2
@@ -103,6 +106,10 @@ def household_load(
     if meter_location != METER_LOCATION_FEED_IN or inverter_power_w is None:
         return None
     if sample_window_s > LOAD_SAMPLE_WINDOW_S:
+        _LOGGER.debug(
+            "No load: the inverter and meter reads lay %.0f ms apart",
+            sample_window_s * 1000,
+        )
         return None
     return round(meter_power_w + inverter_power_w, 2)
 

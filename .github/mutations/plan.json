@@ -2441,5 +2441,12 @@
     "old": "            REPORT_INVERTER,\n            *(meter_report_name(unit_id) for unit_id in self.meters),\n            *self._polled_models,\n",
     "new": "            REPORT_INVERTER,\n            *self._polled_models,\n            *(meter_report_name(unit_id) for unit_id in self.meters),\n",
     "tests": "right_after_the_inverter or too_far_apart"
+  },
+  {
+    "label": "derived: a pair too far apart says so in the debug log",
+    "path": "custom_components/fronius_modbus/derived.py",
+    "old": "        _LOGGER.debug(\n            \"No load: the inverter and meter reads lay %.0f ms apart\",\n            sample_window_s * 1000,\n        )\n",
+    "new": "",
+    "tests": "too_far_apart_says_so_in_the_debug_log"
   }
 ]

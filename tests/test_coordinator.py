@@ -27,7 +27,7 @@ from custom_components.fronius_modbus.fronius_modbus_api.storage import Extended
 from custom_components.fronius_modbus.fronius_modbus_api.sunspec_models import Nameplate
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
-from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID
+from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID, SteppingClock
 
 
 @pytest.fixture
@@ -183,6 +183,85 @@ async def test_derived_values_need_a_fresh_inverter_reading(coordinator, inverte
     assert "inverter" in coordinator.data.report.failed
     assert coordinator.data.load_w is None
     assert coordinator.data.grid_status is None
+
+
+def _set_power(device, inverter_unit, meter_unit, *, inverter_w, meter_w):
+    """Serve these AC powers on the next read, with a scale factor of 1."""
+    inverter_w_field = device.inverter.resolved_fields["w"]
+    meter_w_field = device.meters[METER_UNIT_ID].meter.resolved_fields["w"]
+    inverter_unit.load_raw(
+        {
+            "holding": {
+                inverter_w_field.address: inverter_w & 0xFFFF,
+                inverter_w_field.scale_address: 0,
+            }
+        }
+    )
+    meter_unit.load_raw(
+        {"holding": {meter_w_field.address: meter_w & 0xFFFF, meter_w_field.scale_address: 0}}
+    )
+
+
+async def test_other_generation_behind_the_meter_gives_a_negative_load(
+    coordinator, inverter_unit, meter_unit
+):
+    """A balcony inverter or an AC battery behind the meter exports more than the house uses.
+
+    The sum is the household's net demand; clamped to 0 W it hid that surplus.
+    """
+    await coordinator._async_update_data()
+    _set_power(coordinator.device, inverter_unit, meter_unit, inverter_w=500, meter_w=-1300)
+
+    poll = await coordinator._async_update_data()
+
+    assert poll.load_w == -800.0
+
+
+async def test_an_inverter_at_0_w_while_the_house_exports_is_a_reading(
+    coordinator, inverter_unit, meter_unit
+):
+    """PV goes entirely into the DC battery while other generation exports.
+
+    Taken for a misread inverter, it showed the last load once and then nothing.
+    """
+    await coordinator._async_update_data()
+    _set_power(coordinator.device, inverter_unit, meter_unit, inverter_w=0, meter_w=-1500)
+
+    first = await coordinator._async_update_data()
+    second = await coordinator._async_update_data()
+
+    assert (first.load_w, second.load_w) == (-1500.0, -1500.0)
+
+
+def _coordinator_on_a_clock(hass, entry, connection, step_seconds):
+    device = FroniusInverter(
+        connection.for_unit(INVERTER_UNIT_ID),
+        INVERTER_UNIT_ID,
+        {METER_UNIT_ID: connection.for_unit(METER_UNIT_ID)},
+        monotonic=SteppingClock(step_seconds).monotonic,
+    )
+    return FroniusModbusCoordinator(
+        hass,
+        entry,
+        device,
+        interval=timedelta(seconds=10),
+        primary_meter_unit_id=METER_UNIT_ID,
+        meter_locations={METER_UNIT_ID: 0},
+    )
+
+
+@pytest.mark.parametrize(
+    ("step_seconds", "load_w"), [(0.1, 3105.1), (0.2, None)]
+)
+async def test_a_load_from_reads_too_far_apart_is_unknown(
+    hass, entry, connection, step_seconds, load_w
+):
+    """Inverter read start to meter read end: 0.3 s is one moment, 0.6 s is not."""
+    coordinator = _coordinator_on_a_clock(hass, entry, connection, step_seconds)
+
+    poll = await coordinator._async_update_data()
+
+    assert poll.load_w == load_w
 
 
 # Model 124 WChaMax and the model 120 rate ratings in the captured fixture.

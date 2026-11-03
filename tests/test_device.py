@@ -24,7 +24,7 @@ from custom_components.fronius_modbus.fronius_modbus_api.exceptions import (
 )
 from custom_components.fronius_modbus.fronius_modbus_api.sunspec_models import AcMeter
 
-from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID
+from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID, SteppingClock
 
 
 @pytest.fixture
@@ -535,3 +535,21 @@ async def test_an_aborted_rediscovery_leaves_the_meter_addresses_alone(
     await device.async_update()
 
     assert device.meters[METER_UNIT_ID].meter is not stale
+
+
+async def test_the_meters_are_read_right_after_the_inverter(connection):
+    """Load adds the primary meter to the inverter's AC power.
+
+    With the other models read in between, a load step between the two reads
+    showed in the sum: 1608 W where the inverter's own Solar API said 839 W.
+    """
+    device = FroniusInverter(
+        connection.for_unit(INVERTER_UNIT_ID),
+        INVERTER_UNIT_ID,
+        {METER_UNIT_ID: connection.for_unit(METER_UNIT_ID)},
+        monotonic=SteppingClock(1.0).monotonic,
+    )
+    report = await device.async_update()
+
+    in_read_order = sorted(report.read_spans, key=lambda name: report.read_spans[name])
+    assert in_read_order[:2] == [REPORT_INVERTER, meter_report_name(METER_UNIT_ID)]

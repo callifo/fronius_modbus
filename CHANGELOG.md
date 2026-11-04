@@ -7,6 +7,7 @@
 
 ### Added
 - A brand icon, shown on the integration's pages in Home Assistant.
+- `tools/inverter_dump.bat` reads every Modbus unit with `-AllUnits`, to find a meter outside the usual numbering.
 
 ### Changed
 - **`Load` can be negative.** With other generation behind the grid meter that the inverter does not see, such as a balcony inverter or an AC-coupled battery, it is the household's consumption minus that generation, and negative while that generation exports; it used to stop at 0 W. Automations, templates and energy calculations that expect 0 W or more need a look.

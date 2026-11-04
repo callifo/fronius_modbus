@@ -78,7 +78,7 @@ Every parameter, discovery, the Modbus IP restriction and reconfiguring are in [
 ## Troubleshooting
 
 - **Diagnostics:** Settings -> Devices & services -> Fronius Modbus -> device -> Download diagnostics. Serial numbers and the Modbus restriction IP are redacted.
-- **Everything the inverter reads out:** on Windows, run [`tools/inverter_dump.bat`](tools/inverter_dump.bat) (it starts `inverter_dump.ps1` next to it; both files are needed). It only reads, and by default replaces serial numbers, addresses and names with `<redacted>`; still look through the file before you share it. Attached to an issue, such a file helps to support a device that is not verified yet.
+- **Everything the inverter reads out:** on Windows, run [`tools/inverter_dump.bat`](tools/inverter_dump.bat) (it starts `inverter_dump.ps1` next to it; both files are needed). It only reads, and by default replaces serial numbers, addresses and names with `<redacted>`; still look through the file before you share it. Attached to an issue, such a file helps to support a device that is not verified yet. To look for a meter on every Modbus unit, not only the usual ones, add the address and `-AllUnits`: `inverter_dump.bat <address> -AllUnits`.
 - Error messages, repair notices, logs and known limitations: [Troubleshooting and Diagnostics](https://github.com/callifo/fronius_modbus/wiki/Troubleshooting-and-Diagnostics) in the wiki.
 
 ## Removal

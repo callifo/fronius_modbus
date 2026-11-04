@@ -219,10 +219,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
         primary_meter_unit_id=primary,
         topology_confirmed=topology.confirmed,
         reported_keys=migrations.reported_keys(hass, entry),
-        registered_keys=migrations.registered_keys(hass, entry),
+        registered_keys=migrations.registered_keys(hass, entry, primary),
     )
 
     await migrations.async_migrate_v019_mppt_statistics(hass, entry)
+    migrations.async_migrate_v019_unique_ids(hass, entry)
+    migrations.async_migrate_v019_devices(hass, entry)
     migrations.async_migrate_callifo_lowercase_keys(hass, entry)
     await migrations.async_migrate_name_based_unique_ids(hass, entry)
     await migrations.async_remove_unexpected_entities(hass, entry)

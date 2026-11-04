@@ -40,7 +40,7 @@ Older Fronius inverters with a Datamanager (the SnapINverter family: Symo, Primo
 
 ## Coming from 0.3.x
 
-Entity IDs, unique IDs, history/statistics and existing options of the 0.3.x releases are kept; existing entries are migrated on the first start. Take a Home Assistant backup first: going back to 0.3.x afterwards needs that backup. Coming straight from 0.2.7 or older, the MPPT and storage module sensors (`mppt1_power`, `mppt1_lfte` and the like) come back under new entity ids, as they did with 0.2.8. Breaking changes are listed in the CHANGELOG; what changes in detail is in [Migration](https://github.com/callifo/fronius_modbus/wiki/Migration) in the wiki.
+Entity IDs, unique IDs, history/statistics and existing options of the 0.3.x releases are kept; existing entries are migrated on the first start. Take a Home Assistant backup first: going back to 0.3.x afterwards needs that backup. Coming straight from 0.2.7 or older, the MPPT and storage module sensors (`mppt1_power`, `mppt1_lfte` and the like) come back under new entity ids, as they did with 0.2.8. Entries from redpomodoro 0.1.9 are migrated as well. Breaking changes are listed in the CHANGELOG; what changes in detail is in [Migration](https://github.com/callifo/fronius_modbus/wiki/Migration) in the wiki.
 
 > [!IMPORTANT]
 > Enum states are translation keys now: `Auto` became `auto`, `Charge from Grid` became `charge_from_grid`, `On grid operating` became `on_grid_operating`, `Enabled`/`Disabled` became `enabled`/`disabled`. Update automations and templates that compare against the old texts; see the CHANGELOG for the rule.

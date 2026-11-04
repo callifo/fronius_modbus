@@ -947,7 +947,7 @@
   {
     "label": "setup: the runtime learns the registered keys",
     "path": "custom_components/fronius_modbus/__init__.py",
-    "old": "        registered_keys=migrations.registered_keys(hass, entry),\n",
+    "old": "        registered_keys=migrations.registered_keys(hass, entry, primary),\n",
     "new": "",
     "tests": "single_404_keeps_the_registered_component_sensors"
   },
@@ -1857,8 +1857,8 @@
   {
     "label": "migrations: a legacy twin is migrated per platform",
     "path": "custom_components/fronius_modbus/migrations.py",
-    "old": "            or (entity_entry.domain, new_unique_id) in taken\n",
-    "new": "            or any(taken_id == new_unique_id for _, taken_id in taken)\n",
+    "old": "    if new_unique_id not in expected or target in taken:\n",
+    "new": "    if new_unique_id not in expected or any(taken_id == new_unique_id for _, taken_id in taken):\n",
     "tests": "both_twins_of_a_legacy_unique_id"
   },
   {
@@ -2020,13 +2020,13 @@
     "path": "custom_components/fronius_modbus/migrations.py",
     "old": "            device_registry.async_remove_device(device.id)\n",
     "new": "            pass\n",
-    "tests": "pre_web_api_entry_is_upgraded"
+    "tests": "legacy_device_beside_the_current_one_goes"
   },
   {
     "label": "migrations: name-based unique ids are moved",
     "path": "custom_components/fronius_modbus/migrations.py",
-    "old": "        registry.async_update_entity(\n            entity_entry.entity_id, new_unique_id=new_unique_id\n        )\n",
-    "new": "        pass\n",
+    "old": "    registry.async_update_entity(entity_entry.entity_id, new_unique_id=new_unique_id)\n    taken.add(target)\n",
+    "new": "    taken.add(target)\n",
     "tests": "twins_of_a_legacy_unique_id"
   },
   {
@@ -2448,5 +2448,40 @@
     "old": "        _LOGGER.debug(\n            \"No load: the inverter and meter reads lay %.0f ms apart\",\n            sample_window_s * 1000,\n        )\n",
     "new": "",
     "tests": "too_far_apart_says_so_in_the_debug_log"
+  },
+  {
+    "label": "migrations: 0.1.9's meter keys continue on the primary meter",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "        return f\"meter_{primary_meter_unit_id}_{meter_key}\"\n",
+    "new": "        return key\n",
+    "tests": "0_1_9_entry_keeps_its_entity_ids"
+  },
+  {
+    "label": "migrations: 0.1.9's renamed keys are followed",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "    return _V019_RENAMED_KEYS.get(key, key)\n",
+    "new": "    return key\n",
+    "tests": "0_1_9_entry_keeps_its_entity_ids"
+  },
+  {
+    "label": "migrations: a 0.1.9 id counts as registered",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "        else:\n            keys.add(_v019_key(unique_id, primary_meter_unit_id))\n",
+    "new": "",
+    "tests": "0_1_9_id_counts_as_registered"
+  },
+  {
+    "label": "migrations: 0.1.9's devices keep their entries",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "                device_registry.async_update_device(device.id, new_identifiers={target})\n",
+    "new": "                pass\n",
+    "tests": "0_1_9_entry_keeps_its_devices"
+  },
+  {
+    "label": "setup: 0.1.9's ids move before the cleanup",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "    migrations.async_migrate_v019_unique_ids(hass, entry)\n",
+    "new": "",
+    "tests": "0_1_9_entry_keeps_its_entities_through_the_first_login"
   }
 ]

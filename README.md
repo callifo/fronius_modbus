@@ -4,7 +4,7 @@
 
 Home Assistant custom component for reading data from Fronius GEN24 and Verto inverters, connected smart meters, and battery storage. Modbus TCP (SunSpec) is the primary source; the authenticated Fronius Web API is optional and adds setup assistance and battery controls that are not available over Modbus. The inverter's web interface also reports module temperatures, fans, battery health and the inverter's event log, without a login.
 
-It began as redpomodoro/fronius_modbus and continued here. Version 1.0 is a rewrite onto Home Assistant's shared Modbus connection and the `modbus-connection` library, developed in the Varitras/fronius_modbus fork and merged back into this repository.
+It began as redpomodoro/fronius_modbus and continued here. Version 1.0 is a rewrite onto Home Assistant's shared Modbus connection and the `modbus-connection` library.
 
 **The full documentation is in the [wiki](https://github.com/callifo/fronius_modbus/wiki):** every entity, the battery and inverter controls, the inverter's events, how data updates, examples, troubleshooting and migration.
 

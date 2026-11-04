@@ -1,7 +1,8 @@
 fronius_modbus
-Copyright 2026 Varitras
+Copyright 2024-2026 redpomodoro, callifo, Varitras and contributors
 
-This product is derived from redpomodoro/fronius_modbus and
-callifo/fronius_modbus, both licensed under the Apache License 2.0.
-The Modbus layer was rewritten in version 1.0; the remaining files were
-modified from the upstream sources.
+This project began as redpomodoro/fronius_modbus and continues as
+callifo/fronius_modbus. Version 1.0 rewrote the Modbus layer; the remaining
+files were modified from the earlier sources.
+
+Licensed under the Apache License 2.0.

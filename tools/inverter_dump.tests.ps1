@@ -238,6 +238,20 @@ $script:Connects = 0
     $null = Read-Modbus $false 6>$null
 }
 Assert-True ($script:Connects -eq 2 + $MeterCandidates) "a timeout reconnects before the next unit: $($script:Connects) connects"
+
+$script:AskedUnits = New-Object System.Collections.Generic.List[int]
+& {
+    $AllUnits = $true
+    function Connect-Modbus {}
+    function Read-Registers($Stream, $Unit) {
+        $script:AskedUnits.Add($Unit)
+        throw "$ModbusProtocolError 11"
+    }
+    $null = Read-Modbus $false 6>$null
+}
+$expected = (1..247) -join ','
+Assert-True (($script:AskedUnits -join ',') -eq $expected) "a meter on an unexpected unit is found with -AllUnits: $($script:AskedUnits.Count) units asked"
+
 $script:Connects = 0
 & {
     function Connect-Modbus { $script:Connects++ }

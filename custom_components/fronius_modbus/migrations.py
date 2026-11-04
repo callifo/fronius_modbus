@@ -1,88 +1,100 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 import json
 import logging
 import re
 from pathlib import Path
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST, CONF_NAME
-from homeassistant.core import HomeAssistant
+from homeassistant.const import CONF_HOST, CONF_NAME, Platform
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 
-from . import hub
 from .const import (
     API_USERNAME,
     CONF_API_USERNAME,
+    CONF_MODBUS_RESTRICTION,
     CONF_METER_UNIT_ID,
     CONF_METER_UNIT_IDS,
     CONF_RECONFIGURE_REQUIRED,
     DOMAIN,
     ENTITY_PREFIX,
-    INVERTER_API_BUTTON_TYPES,
-    INVERTER_API_SWITCH_TYPES,
-    INVERTER_NUMBER_TYPES,
-    INVERTER_SELECT_TYPES,
-    INVERTER_SENSOR_TYPES,
-    INVERTER_STORAGE_SENSOR_TYPES,
-    INVERTER_SYMO_SENSOR_TYPES,
-    INVERTER_WEB_SENSOR_TYPES,
     MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX,
-    METER_SENSOR_TYPES,
-    MPPT_MODULE_SENSOR_TYPES,
-    SINGLE_PHASE_UNSUPPORTED_METER_SENSOR_KEYS,
-    STORAGE_API_NUMBER_TYPES,
-    STORAGE_API_SELECT_TYPES,
-    STORAGE_API_SWITCH_TYPES,
-    STORAGE_MODBUS_NUMBER_TYPES,
-    STORAGE_MODBUS_SELECT_TYPES,
-    STORAGE_SENSOR_TYPES,
     TECHNICIAN_USERNAME,
+    entity_prefix,
+    entry_title,
+    instance_key,
+    ModbusRestriction,
 )
-from .token_store import async_get_token_store
+from .const import web_api_disabled as entry_values_web_api_disabled
+from .component_readings import ONCE_REPORTED_KEYS
+from .entities import expected_unique_ids
+from .entity_base import expected_device_identifiers
+from .token_store import async_forget_unused_tokens, async_get_token_store
 
 _LOGGER = logging.getLogger(__name__)
 _TRANSLATIONS_DIR = Path(__file__).resolve().parent / "translations"
 _TRANSLATION_CACHE: dict[str, dict] = {}
 
 _TARGET_VERSION = 1
-_TARGET_MINOR_VERSION = 10
+_TARGET_MINOR_VERSION = 14
+# Entries below this minor version predate the web API integration and still
+# carry the dropped meter-unit config, so only they need the data migration.
+_WEB_API_MINOR_VERSION = 9
+# From this minor version (callifo 0.3.2) the stored role is the owner's choice;
+# below it, a constant customer.
+_CHOSEN_ROLE_MINOR_VERSION = 10
+# Entries below this minor version predate the single web API role.
+_SINGLE_ROLE_MINOR_VERSION = 11
+# Entries below this minor version store the restriction as a checkbox.
+_RESTRICTION_CHOICE_MINOR_VERSION = 12
+# Minor 13 marks the power modules the device reported; one registered before
+# cannot be told from a placeholder and is kept.
+_REPORTED_MARK_MINOR_VERSION = 13
+# Minor 14 makes these rows follow the report too. The owner chose to keep the
+# ones already registered rather than have them cleaned up automatically.
+_REPORT_FOLLOWING_SINCE_14 = (
+    "production_limit",
+    "production_limit_reached",
+    "battery_max_charge_power",
+    "battery_max_discharge_power",
+)
+_LIMIT_MARK_MINOR_VERSION = 14
+_LEGACY_RESTRICT_TO_THIS_IP = "restrict_modbus_to_this_ip"
 
 _LEGACY_METER_DEVICE_RE = re.compile(r".*_meter_?\d+")
 _V019_MPPT_UNIQUE_ID_MAPPINGS = (
-    ("fm_mppt1_power", "mppt_module_0_dc_power", "mppt_module_dc_power", {"module": "0"}),
-    ("fm_mppt2_power", "mppt_module_1_dc_power", "mppt_module_dc_power", {"module": "1"}),
-    ("fm_mppt1_lfte", "mppt_module_0_lifetime_energy", "mppt_module_lifetime_energy", {"module": "0"}),
-    ("fm_mppt2_lfte", "mppt_module_1_lifetime_energy", "mppt_module_lifetime_energy", {"module": "1"}),
+    (
+        "fm_mppt1_power",
+        "mppt_module_0_dc_power",
+        "mppt_module_dc_power",
+        {"module": "0"},
+    ),
+    (
+        "fm_mppt2_power",
+        "mppt_module_1_dc_power",
+        "mppt_module_dc_power",
+        {"module": "1"},
+    ),
+    (
+        "fm_mppt1_lfte",
+        "mppt_module_0_lifetime_energy",
+        "mppt_module_lifetime_energy",
+        {"module": "0"},
+    ),
+    (
+        "fm_mppt2_lfte",
+        "mppt_module_1_lifetime_energy",
+        "mppt_module_lifetime_energy",
+        {"module": "1"},
+    ),
     ("fm_mppt3_power", "storage_charge_power", "storage_charge_power", None),
     ("fm_mppt4_power", "storage_discharge_power", "storage_discharge_power", None),
     ("fm_mppt3_lfte", "storage_charge_lfte", "storage_charge_lfte", None),
     ("fm_mppt4_lfte", "storage_discharge_lfte", "storage_discharge_lfte", None),
-)
-
-_INVERTER_ENTITY_DEFINITIONS = (
-    INVERTER_SELECT_TYPES,
-    INVERTER_NUMBER_TYPES,
-    INVERTER_SENSOR_TYPES,
-    INVERTER_SYMO_SENSOR_TYPES,
-)
-_WEB_INVERTER_ENTITY_DEFINITIONS = (
-    INVERTER_WEB_SENSOR_TYPES,
-    INVERTER_API_SWITCH_TYPES,
-    INVERTER_API_BUTTON_TYPES,
-)
-_STORAGE_ENTITY_DEFINITIONS = (
-    STORAGE_MODBUS_SELECT_TYPES,
-    STORAGE_MODBUS_NUMBER_TYPES,
-    INVERTER_STORAGE_SENSOR_TYPES,
-    STORAGE_SENSOR_TYPES,
-)
-_WEB_STORAGE_ENTITY_DEFINITIONS = (
-    STORAGE_API_SELECT_TYPES,
-    STORAGE_API_NUMBER_TYPES,
-    STORAGE_API_SWITCH_TYPES,
 )
 
 
@@ -90,8 +102,125 @@ def _entry_value(entry: ConfigEntry, key: str, default=None):
     return entry.options.get(key, entry.data.get(key, default))
 
 
+REPORTED_OPTION = "reported"
+
+
 def _entity_entries_for_config_entry(registry, entry: ConfigEntry):
     return list(er.async_entries_for_config_entry(registry, entry.entry_id))
+
+
+def _marked_reported(entity_entry: er.RegistryEntry) -> bool:
+    return bool(entity_entry.options.get(DOMAIN, {}).get(REPORTED_OPTION))
+
+
+def registered_keys(hass: HomeAssistant, entry: ConfigEntry) -> frozenset[str]:
+    """The description keys of every entity the registry holds for this entry.
+
+    An id from before the per-entry scheme counts under the key it migrates to:
+    the migrations run after this is read, and a sensor dark at the first start
+    after an upgrade counted as never registered and was deleted.
+    """
+    prefix = f"{entity_prefix(entry.entry_id)}_"
+    legacy_prefix = _legacy_entity_unique_id(entry, "")
+    v019_keys = {old_id: key for old_id, key, _, _ in _V019_MPPT_UNIQUE_ID_MAPPINGS}
+    keys = set()
+    for candidate in _entity_entries_for_config_entry(er.async_get(hass), entry):
+        unique_id = candidate.unique_id or ""
+        if unique_id.startswith(prefix):
+            keys.add(unique_id.removeprefix(prefix))
+        elif unique_id.startswith(legacy_prefix):
+            keys.add(unique_id.removeprefix(legacy_prefix))
+        elif unique_id in v019_keys:
+            keys.add(v019_keys[unique_id])
+    return frozenset(keys)
+
+
+def reported_keys(hass: HomeAssistant, entry: ConfigEntry) -> frozenset[str]:
+    """The description keys of the entities marked as reported by the device."""
+    prefix = f"{entity_prefix(entry.entry_id)}_"
+    return frozenset(
+        unique_id.removeprefix(prefix)
+        for candidate in _entity_entries_for_config_entry(er.async_get(hass), entry)
+        if (unique_id := candidate.unique_id or "").startswith(prefix)
+        and _marked_reported(candidate)
+    )
+
+
+@callback
+def async_mark_reported(
+    hass: HomeAssistant, entry: ConfigEntry, keys: Iterable[str]
+) -> None:
+    """Remember in the registry that the device reported these sensors."""
+    registry = er.async_get(hass)
+    prefix = entity_prefix(entry.entry_id)
+    for key in keys:
+        entity_id = registry.async_get_entity_id(
+            Platform.SENSOR, DOMAIN, f"{prefix}_{key}"
+        )
+        entity_entry = registry.async_get(entity_id) if entity_id else None
+        if entity_entry is None or _marked_reported(entity_entry):
+            continue
+        registry.async_update_entity_options(
+            entity_entry.entity_id, DOMAIN, {REPORTED_OPTION: True}
+        )
+
+
+# callifo 0.3.3 read three module temperatures under keys of its own; the
+# same channels are module_temperature_<n> here.
+_CALLIFO_MODULE_TEMPERATURE_KEYS = {
+    "ac_mod_temperature": "module_temperature_1",
+    "dc_mod_temperature": "module_temperature_3",
+    "batt_mod_temperature": "module_temperature_4",
+}
+
+
+@callback
+def async_migrate_callifo_module_temperatures(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> None:
+    """Move callifo's module temperature ids onto this integration's keys.
+
+    Before the registered and reported keys are read, and marked as reported:
+    callifo created the sensor from a reading, and a module dark at the update
+    must not be retired with its history.
+    """
+    registry = er.async_get(hass)
+    prefix = entity_prefix(entry.entry_id)
+    moved = []
+    for callifo_key, key in _CALLIFO_MODULE_TEMPERATURE_KEYS.items():
+        entity_id = registry.async_get_entity_id(
+            Platform.SENSOR, DOMAIN, f"{prefix}_{callifo_key}"
+        )
+        taken = registry.async_get_entity_id(Platform.SENSOR, DOMAIN, f"{prefix}_{key}")
+        if entity_id is None or taken is not None:
+            continue
+        registry.async_update_entity(entity_id, new_unique_id=f"{prefix}_{key}")
+        moved.append(key)
+    async_mark_reported(hass, entry, moved)
+
+
+@callback
+def async_migrate_callifo_lowercase_keys(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> None:
+    """Move the unique ids callifo 0.3.4-rc2 wrote in lowercase onto these keys.
+
+    An entity that update left under the original id keeps it, with its
+    history; the lowercase twin beside it is left to the cleanup.
+    """
+    registry = er.async_get(hass)
+    by_lowercase = {
+        unique_id.lower(): unique_id
+        for unique_id in expected_unique_ids(entry, entry.runtime_data)
+        if unique_id != unique_id.lower()
+    }
+    for entity_entry in _entity_entries_for_config_entry(registry, entry):
+        target = by_lowercase.get(entity_entry.unique_id or "")
+        if target is None:
+            continue
+        if registry.async_get_entity_id(entity_entry.domain, DOMAIN, target):
+            continue
+        registry.async_update_entity(entity_entry.entity_id, new_unique_id=target)
 
 
 def _migration_issue_id(entry: ConfigEntry) -> str:
@@ -106,10 +235,11 @@ def _legacy_device_identifiers(entry: ConfigEntry) -> set[str]:
     }
 
 
-def _legacy_device_needs_removal(entry: ConfigEntry, device) -> bool:
+def _legacy_device_needs_removal(entry: ConfigEntry, device, current: set[str]) -> bool:
     identifiers = getattr(device, "identifiers", set())
     return any(
         identifier_domain == DOMAIN
+        and identifier not in current
         and (
             identifier in _legacy_device_identifiers(entry)
             or _LEGACY_METER_DEVICE_RE.fullmatch(identifier)
@@ -118,8 +248,8 @@ def _legacy_device_needs_removal(entry: ConfigEntry, device) -> bool:
     )
 
 
-def _entity_unique_id(runtime_data: hub.Hub, key: str) -> str:
-    return f"{runtime_data.entity_prefix}_{key}"
+def _entity_unique_id(entry: ConfigEntry, key: str) -> str:
+    return f"{entity_prefix(entry.entry_id)}_{key}"
 
 
 def _legacy_entity_unique_id(entry: ConfigEntry, key: str) -> str:
@@ -128,28 +258,13 @@ def _legacy_entity_unique_id(entry: ConfigEntry, key: str) -> str:
 
 
 def _entry_instance_key(entry: ConfigEntry) -> str:
-    return hub.Hub._normalize_instance_key(entry.entry_id)
-
-
-def _updated_entry_title(entry: ConfigEntry) -> str:
-    name = str(_entry_value(entry, CONF_NAME, "Fronius")).strip() or "Fronius"
-    host = str(_entry_value(entry, CONF_HOST, "")).strip()
-    return f"{name} {host}" if host else name
-
-
-def _definition_keys(definitions) -> list[str]:
-    items = definitions.values() if isinstance(definitions, dict) else definitions
-    return [item[1] for item in items]
-
-
-def _load_translation_data(language: str) -> dict:
-    return _TRANSLATION_CACHE.get(language, {})
+    return instance_key(entry.entry_id)
 
 
 def _read_translation_data(path: Path) -> dict:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError):
+    except FileNotFoundError, json.JSONDecodeError:
         return {}
 
 
@@ -195,84 +310,6 @@ async def _async_translated_sensor_name(
     return translation_key
 
 
-def _add_expected_keys(expected: set[str], runtime_data: hub.Hub, keys) -> None:
-    for key in keys:
-        expected.add(_entity_unique_id(runtime_data, key))
-
-
-def _visible_mppt_module_ids(runtime_data: hub.Hub, data: dict[str, object]) -> list[int]:
-    module_count = int(runtime_data._client.mppt_module_count)
-    visible_module_ids = data.get("mppt_visible_module_ids")
-    if (
-        not isinstance(visible_module_ids, list)
-        or not all(isinstance(module_id, int) for module_id in visible_module_ids)
-    ):
-        return list(range(1, module_count + 1))
-    return visible_module_ids
-
-
-def _expected_mppt_unique_ids(runtime_data: hub.Hub, data: dict[str, object]) -> set[str]:
-    expected: set[str] = set()
-    if not runtime_data._client.mppt_configured:
-        return expected
-
-    module_count = int(runtime_data._client.mppt_module_count)
-    for module_id in _visible_mppt_module_ids(runtime_data, data):
-        if module_id < 1 or module_id > module_count:
-            continue
-        module_idx = module_id - 1
-        for _name, key_suffix, *_rest in MPPT_MODULE_SENSOR_TYPES:
-            key = f"mppt_module_{module_idx}_{key_suffix}"
-            if key in data and data[key] is not None:
-                expected.add(_entity_unique_id(runtime_data, key))
-    return expected
-
-
-def _expected_meter_unique_ids(runtime_data: hub.Hub, data: dict[str, object]) -> set[str]:
-    expected: set[str] = set()
-    if not runtime_data.meter_configured:
-        return expected
-
-    for meter_unit_id in runtime_data._client._meter_unit_ids:
-        prefix = f"meter_{int(meter_unit_id)}_"
-        if f"{prefix}unit_id" not in data:
-            continue
-
-        phase_count = data.get(f"{prefix}phase_count")
-        for sensor_info in METER_SENSOR_TYPES.values():
-            if phase_count == 1 and sensor_info[1] in SINGLE_PHASE_UNSUPPORTED_METER_SENSOR_KEYS:
-                continue
-            expected.add(_entity_unique_id(runtime_data, f"{prefix}{sensor_info[1]}"))
-    return expected
-
-
-def _expected_entity_unique_ids(runtime_data: hub.Hub) -> set[str]:
-    expected: set[str] = set()
-    data = runtime_data.data if isinstance(runtime_data.data, dict) else {}
-
-    for definitions in _INVERTER_ENTITY_DEFINITIONS:
-        _add_expected_keys(expected, runtime_data, _definition_keys(definitions))
-
-    if runtime_data.web_api_configured:
-        for definitions in _WEB_INVERTER_ENTITY_DEFINITIONS:
-            _add_expected_keys(expected, runtime_data, _definition_keys(definitions))
-        if not runtime_data.tech_configured:
-            expected.discard(_entity_unique_id(runtime_data, "export_soft_limit"))
-
-    if runtime_data.storage_configured:
-        for definitions in _STORAGE_ENTITY_DEFINITIONS:
-            _add_expected_keys(expected, runtime_data, _definition_keys(definitions))
-
-        if runtime_data.web_api_configured:
-            for definitions in _WEB_STORAGE_ENTITY_DEFINITIONS:
-                _add_expected_keys(expected, runtime_data, _definition_keys(definitions))
-
-    expected.update(_expected_mppt_unique_ids(runtime_data, data))
-    expected.update(_expected_meter_unique_ids(runtime_data, data))
-
-    return expected
-
-
 async def _async_set_reconfigure_required(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -290,7 +327,9 @@ async def _async_set_reconfigure_required(
         changed = True
 
     if changed:
-        hass.config_entries.async_update_entry(entry, data=new_data, options=new_options)
+        hass.config_entries.async_update_entry(
+            entry, data=new_data, options=new_options
+        )
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -306,47 +345,85 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.error("Unsupported config entry version: %s", entry.version)
         return False
 
-    if entry.version == _TARGET_VERSION and entry.minor_version < 9:
-        new_data = dict(entry.data)
-        new_options = dict(entry.options)
+    if entry.version != _TARGET_VERSION or entry.minor_version >= _TARGET_MINOR_VERSION:
+        return True
 
+    new_data = dict(entry.data)
+    new_options = dict(entry.options)
+    title = entry.title
+
+    if entry.minor_version < _WEB_API_MINOR_VERSION:
         new_data.pop(CONF_METER_UNIT_ID, None)
         new_data.pop(CONF_METER_UNIT_IDS, None)
         new_options.pop(CONF_METER_UNIT_ID, None)
         new_options.pop(CONF_METER_UNIT_IDS, None)
         new_data[CONF_RECONFIGURE_REQUIRED] = True
         new_options[CONF_RECONFIGURE_REQUIRED] = True
+        # Up to 0.3.0 the generated title was the name alone; any other title
+        # is the owner's.
+        if title == str(_entry_value(entry, CONF_NAME, "")):
+            title = entry_title({**entry.data, **entry.options})
 
-        hass.config_entries.async_update_entry(
-            entry,
-            data=new_data,
-            options=new_options,
-            version=_TARGET_VERSION,
-            minor_version=9,
-            title=_updated_entry_title(entry),
-        )
-
-    if entry.version == _TARGET_VERSION and entry.minor_version < _TARGET_MINOR_VERSION:
-        host = str(_entry_value(entry, CONF_HOST, "")).strip()
-        api_username = API_USERNAME
-        if host and await async_get_token_store(hass).async_has_token(
-            host, TECHNICIAN_USERNAME
-        ):
-            api_username = TECHNICIAN_USERNAME
-
-        new_data = dict(entry.data)
-        new_options = dict(entry.options)
+    if entry.minor_version < _SINGLE_ROLE_MINOR_VERSION:
+        api_username = await _async_stored_role(hass, entry)
         new_data[CONF_API_USERNAME] = api_username
         new_options[CONF_API_USERNAME] = api_username
-        hass.config_entries.async_update_entry(
-            entry,
-            data=new_data,
-            options=new_options,
-            version=_TARGET_VERSION,
-            minor_version=_TARGET_MINOR_VERSION,
-        )
+
+    if entry.minor_version < _RESTRICTION_CHOICE_MINOR_VERSION:
+        # An unchecked box wrote "off"; it becomes "keep", since lifting a
+        # restriction has to be chosen.
+        choice = ModbusRestriction.KEEP
+        if _entry_value(entry, _LEGACY_RESTRICT_TO_THIS_IP, False):
+            choice = ModbusRestriction.HOME_ASSISTANT
+        for values in (new_data, new_options):
+            values.pop(_LEGACY_RESTRICT_TO_THIS_IP, None)
+        new_data[CONF_MODBUS_RESTRICTION] = choice
+        new_options[CONF_MODBUS_RESTRICTION] = choice
+
+    if entry.minor_version < _REPORTED_MARK_MINOR_VERSION:
+        async_mark_reported(hass, entry, ONCE_REPORTED_KEYS)
+    elif entry.minor_version < _LIMIT_MARK_MINOR_VERSION:
+        async_mark_reported(hass, entry, _REPORT_FOLLOWING_SINCE_14)
+
+    drops_a_role = entry.minor_version < _SINGLE_ROLE_MINOR_VERSION
+    hass.config_entries.async_update_entry(
+        entry,
+        data=new_data,
+        options=new_options,
+        version=_TARGET_VERSION,
+        minor_version=_TARGET_MINOR_VERSION,
+        title=title,
+    )
+    if drops_a_role:
+        # One role kept means the other role's token is unused now.
+        await async_forget_unused_tokens(hass, str(_entry_value(entry, CONF_HOST, "")))
 
     return True
+
+
+async def _async_stored_role(hass: HomeAssistant, entry: ConfigEntry) -> str:
+    """The role an entry used before roles were a setting.
+
+    From minor 10 (callifo 0.3.2) the role is the one its owner chose, and a
+    technician token left on the host did not override it. Before, the stored
+    role was a constant customer beside a technician token that enabled the
+    export limit, so such an entry keeps technician access.
+    """
+    chosen = _entry_value(entry, CONF_API_USERNAME, "")
+    if entry.minor_version >= _CHOSEN_ROLE_MINOR_VERSION and chosen:
+        return str(chosen)
+    host = str(_entry_value(entry, CONF_HOST, "")).strip()
+    if not host:
+        return API_USERNAME
+    token = await async_get_token_store(hass).async_load_token(
+        host, TECHNICIAN_USERNAME
+    )
+    return TECHNICIAN_USERNAME if token else API_USERNAME
+
+
+def web_api_disabled(entry: ConfigEntry) -> bool:
+    """Whether the owner set the entry up without a web login."""
+    return entry_values_web_api_disabled({**entry.data, **entry.options})
 
 
 async def async_prepare_entry_token(
@@ -354,58 +431,57 @@ async def async_prepare_entry_token(
     entry: ConfigEntry,
     host: str,
 ) -> dict[str, str] | None:
+    if web_api_disabled(entry):
+        await _async_set_reconfigure_required(hass, entry, False)
+        return None
     api_username = str(_entry_value(entry, CONF_API_USERNAME, API_USERNAME))
     token = await async_get_token_store(hass).async_load_token(host, api_username)
     await _async_set_reconfigure_required(hass, entry, not bool(token))
     return token
 
 
-async def async_sync_reconfigure_issue(
+async def async_sync_login_request(
     hass: HomeAssistant,
     entry: ConfigEntry,
     *,
     has_token: bool,
 ) -> None:
-    issue_id = _migration_issue_id(entry)
-    needs_reconfigure = bool(_entry_value(entry, CONF_RECONFIGURE_REQUIRED, False)) or not has_token
-    if needs_reconfigure:
-        ir.async_create_issue(
-            hass,
-            DOMAIN,
-            issue_id,
-            is_fixable=True,
-            is_persistent=True,
-            severity=ir.IssueSeverity.WARNING,
-            translation_key="legacy_modbus_only_entry_reconfigure",
-            translation_placeholders={
-                "entry_title": entry.title or _entry_value(entry, CONF_NAME, "Fronius"),
-            },
-            data={"entry_id": entry.entry_id},
-        )
-        return
+    """Ask for a new login where the entry's role has none.
 
-    ir.async_delete_issue(hass, DOMAIN, issue_id)
+    Home Assistant's reauthentication asks, not a Repairs item (quality scale
+    Silver); the item older versions raised goes either way.
+    """
+    ir.async_delete_issue(hass, DOMAIN, _migration_issue_id(entry))
+    needs_login = not web_api_disabled(entry) and (
+        bool(_entry_value(entry, CONF_RECONFIGURE_REQUIRED, False)) or not has_token
+    )
+    if needs_login:
+        entry.async_start_reauth(hass)
 
 
 async def async_migrate_v019_mppt_statistics(
     hass: HomeAssistant,
     entry: ConfigEntry,
-    runtime_data: hub.Hub,
 ) -> None:
     """Rename old v0.1.9 MPPT entities so recorder keeps history/statistics."""
     registry = er.async_get(hass)
     device_registry = dr.async_get(hass)
     entity_entries = _entity_entries_for_config_entry(registry, entry)
     old_unique_ids = {candidate.unique_id or "" for candidate in entity_entries}
-    expected_unique_ids = _expected_entity_unique_ids(runtime_data)
+    expected = expected_unique_ids(entry, entry.runtime_data)
     reserved_entity_ids = {candidate.entity_id for candidate in entity_entries}
 
-    for old_unique_id, new_key, translation_key, placeholders in _V019_MPPT_UNIQUE_ID_MAPPINGS:
+    for (
+        old_unique_id,
+        new_key,
+        translation_key,
+        placeholders,
+    ) in _V019_MPPT_UNIQUE_ID_MAPPINGS:
         if old_unique_id not in old_unique_ids:
             continue
 
-        new_unique_id = _entity_unique_id(runtime_data, new_key)
-        if new_unique_id not in expected_unique_ids:
+        new_unique_id = _entity_unique_id(entry, new_key)
+        if new_unique_id not in expected:
             continue
 
         old_entity_id = registry.async_get_entity_id("sensor", DOMAIN, old_unique_id)
@@ -424,9 +500,13 @@ async def async_migrate_v019_mppt_statistics(
         if entity_entry is None:
             continue
 
-        sensor_name = await _async_translated_sensor_name(hass, translation_key, placeholders)
+        sensor_name = await _async_translated_sensor_name(
+            hass, translation_key, placeholders
+        )
         suggested_object_id = sensor_name
-        if entity_entry.device_id and (device_entry := device_registry.async_get(entity_entry.device_id)):
+        if entity_entry.device_id and (
+            device_entry := device_registry.async_get(entity_entry.device_id)
+        ):
             device_name = device_entry.name_by_user or device_entry.name
             if device_name:
                 suggested_object_id = f"{device_name} {sensor_name}"
@@ -455,34 +535,35 @@ async def async_migrate_v019_mppt_statistics(
 async def async_migrate_name_based_unique_ids(
     hass: HomeAssistant,
     entry: ConfigEntry,
-    runtime_data: hub.Hub,
 ) -> None:
-    """Move old name-based unique ids to stable per-entry ids."""
+    """Move old name-based unique ids to stable per-entry ids.
+
+    Per registry entry, not per id: up to 0.3.0 a sensor and a control shared
+    one unique id, and moving the first left its twin to be deleted.
+    """
     registry = er.async_get(hass)
     entity_entries = _entity_entries_for_config_entry(registry, entry)
-    current_unique_ids = {candidate.unique_id or "" for candidate in entity_entries}
-    expected_unique_ids = _expected_entity_unique_ids(runtime_data)
+    taken = {(candidate.domain, candidate.unique_id) for candidate in entity_entries}
+    expected = expected_unique_ids(entry, entry.runtime_data)
+    legacy_prefix = _legacy_entity_unique_id(entry, "")
     migrated = 0
 
-    for new_unique_id in expected_unique_ids:
-        key = new_unique_id.removeprefix(f"{runtime_data.entity_prefix}_")
-        if key == new_unique_id:
+    for entity_entry in entity_entries:
+        old_unique_id = entity_entry.unique_id or ""
+        if not old_unique_id.startswith(legacy_prefix):
+            continue
+        key = old_unique_id.removeprefix(legacy_prefix)
+        new_unique_id = f"{entity_prefix(entry.entry_id)}_{key}"
+        if (
+            new_unique_id not in expected
+            or (entity_entry.domain, new_unique_id) in taken
+        ):
             continue
 
-        old_unique_id = _legacy_entity_unique_id(entry, key)
-        if old_unique_id not in current_unique_ids or new_unique_id in current_unique_ids:
-            continue
-
-        entity_entry = next(
-            (candidate for candidate in entity_entries if (candidate.unique_id or "") == old_unique_id),
-            None,
+        registry.async_update_entity(
+            entity_entry.entity_id, new_unique_id=new_unique_id
         )
-        if entity_entry is None:
-            continue
-
-        registry.async_update_entity(entity_entry.entity_id, new_unique_id=new_unique_id)
-        current_unique_ids.discard(old_unique_id)
-        current_unique_ids.add(new_unique_id)
+        taken.add((entity_entry.domain, new_unique_id))
         migrated += 1
 
     if migrated:
@@ -493,35 +574,79 @@ async def async_migrate_name_based_unique_ids(
         )
 
 
+def _retirement_blocked(entry: ConfigEntry, what: str) -> bool:
+    """Whether the current picture of the device is too uncertain to retire anything.
+
+    The one gate in front of every destructive cleanup: a failed poll, a failed
+    web refresh, a missing web login or an unread meter topology all mean
+    "not seen", never "gone".
+    Without it a single outage takes entities and their
+    history with it. An entry set up without the web API has no login to miss.
+    """
+    runtime = entry.runtime_data
+    reason = None
+    if runtime.modbus.data.report.failed:
+        reason = "a poll did not succeed everywhere"
+    elif runtime.web is not None and not runtime.web.last_update_success:
+        reason = "the web API refresh failed"
+    elif not web_api_disabled(entry) and (
+        runtime.web_control is None or not runtime.web_control.configured
+    ):
+        # A lost login leaves the web entities unread, not gone: an auth
+        # failure at setup retired them.
+        reason = "the web API login is missing"
+    elif not runtime.topology_confirmed:
+        reason = "the meter topology could not be read"
+    if reason is None:
+        return False
+    _LOGGER.info("Skipping the %s cleanup: %s", what, reason)
+    return True
+
+
 async def async_remove_legacy_devices(
     hass: HomeAssistant,
     entry: ConfigEntry,
 ) -> None:
     """Remove device ids that only existed on older layouts."""
+    if _retirement_blocked(entry, "legacy-device"):
+        return
     device_registry = dr.async_get(hass)
+    # The legacy meter pattern also matches the identifiers this version builds,
+    # so a reload retired live meter devices - and their entities with them.
+    # Never retire what the runtime just registered.
+    current = expected_device_identifiers(entry.runtime_data, entry)
 
     removed_devices = 0
     for device in dr.async_entries_for_config_entry(device_registry, entry.entry_id):
-        if _legacy_device_needs_removal(entry, device):
+        if _legacy_device_needs_removal(entry, device, current):
             device_registry.async_remove_device(device.id)
             removed_devices += 1
 
     if removed_devices:
-        _LOGGER.info("Removed %s legacy meter devices from pre-web-api config", removed_devices)
+        _LOGGER.info(
+            "Removed %s legacy meter devices from pre-web-api config", removed_devices
+        )
 
 
 async def async_remove_unexpected_entities(
     hass: HomeAssistant,
     entry: ConfigEntry,
-    runtime_data: hub.Hub,
 ) -> None:
-    """Remove registry entities that the integration no longer creates."""
+    """Remove registry entities that the integration no longer creates.
+
+    Only after a clean poll: the expected set is built from what the device
+    answered, so a sub-system that was silent this once would otherwise take
+    its entities - and their history - with it.
+    """
+    if _retirement_blocked(entry, "stale-entity"):
+        return
+
     registry = er.async_get(hass)
-    expected_unique_ids = _expected_entity_unique_ids(runtime_data)
+    expected = expected_unique_ids(entry, entry.runtime_data)
     removed = 0
     for entity_entry in _entity_entries_for_config_entry(registry, entry):
         unique_id = entity_entry.unique_id or ""
-        if not unique_id or unique_id in expected_unique_ids:
+        if not unique_id or unique_id in expected:
             continue
         registry.async_remove(entity_entry.entity_id)
         removed += 1

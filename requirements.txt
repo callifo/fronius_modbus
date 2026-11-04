@@ -1,0 +1,18 @@
+# What Home Assistant installs for this integration, repeated here so its
+# modules import during test collection - plus what the environment under test
+# needs and an installation already has. tests/test_requirements.py holds the
+# manifest to a subset of this file: a bound raised in only one of them is a
+# fix nobody receives.
+
+# Ours, and the only thing this integration imports. A LOWER BOUND, not a pin:
+# Home Assistant's own modbus integration pins this library exactly, and a
+# custom component that pins a different version cannot be installed beside
+# it. The bound is the release that introduced the shared connection.
+modbus-connection[tmodbus]>=4.10.0
+
+# Not ours: Home Assistant's modbus integration installs these, and this
+# integration depends on it. Pinned here to what core 2026.9 ships so the
+# tests run against the versions an installation actually has - never in the
+# manifest, where the pin would collide with core's own.
+tmodbus==0.6.2
+pymodbus==3.13.1

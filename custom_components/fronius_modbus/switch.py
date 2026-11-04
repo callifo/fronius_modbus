@@ -1,117 +1,57 @@
+"""Switch platform: every FroniusSwitchDescription becomes a FroniusSwitch."""
+
+from __future__ import annotations
+
 from homeassistant.components.switch import SwitchEntity
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .base import FroniusModbusBaseEntity, async_ensure_translation_cache
-from .const import INVERTER_API_SWITCH_TYPES, STORAGE_API_SWITCH_TYPES
-from .hub import Hub
+from .coordinator import FroniusConfigEntry
+from .entities import FroniusSwitchDescription, switch_descriptions
+from .entity_base import FroniusEntity
 
+# One write at a time: the inverter answers requests one after the other.
+PARALLEL_UPDATES = 1
 
-async def async_setup_entry(hass, config_entry, async_add_entities) -> None:
-    await async_ensure_translation_cache(hass)
-    hub: Hub = config_entry.runtime_data
-    coordinator = hub.coordinator
-
-    entities = []
-
-    if hub.storage_configured and hub.web_api_configured:
-        for switch_info in STORAGE_API_SWITCH_TYPES:
-            name, key, icon = switch_info[:3]
-            entity_category = switch_info[3] if len(switch_info) > 3 else None
-            entities.append(
-                FroniusModbusSwitch(
-                    coordinator=coordinator,
-                    device_info=hub.device_info_storage,
-                    name=name,
-                    key=key,
-                    icon=icon,
-                    entity_category=entity_category,
-                    translation_key=name,
-                    hub=hub,
-                )
-            )
-
-    if hub.web_api_configured:
-        for switch_info in INVERTER_API_SWITCH_TYPES:
-            name, key, icon = switch_info[:3]
-            entity_category = switch_info[3] if len(switch_info) > 3 else None
-            entities.append(
-                FroniusModbusSwitch(
-                    coordinator=coordinator,
-                    device_info=hub.device_info_inverter,
-                    name=name,
-                    key=key,
-                    icon=icon,
-                    entity_category=entity_category,
-                    translation_key=name,
-                    hub=hub,
-                )
-            )
-
-    async_add_entities(entities)
-    return True
+# The solar-API switch is the one web write whose effect the entity must show
+# immediately; every other web write relies on the control's own delayed refresh.
+_IMMEDIATE_REFRESH_KEY = "api_solar_api_enabled"
 
 
-class FroniusModbusSwitch(FroniusModbusBaseEntity, SwitchEntity):
-    """Representation of a Fronius Web API switch."""
-    _translation_platform = "switch"
+class FroniusSwitch(FroniusEntity, SwitchEntity):
+    """A switch whose state is its description's value_fn."""
 
-    def __init__(self, coordinator, device_info, name, key, icon, hub, entity_category=None, translation_key=None):
-        super().__init__(
-            coordinator=coordinator,
-            device_info=device_info,
-            name=name,
-            key=key,
-            icon=icon,
-            entity_category=entity_category,
-            translation_key=translation_key,
-        )
-        self._hub = hub
+    entity_description: FroniusSwitchDescription
 
     @property
-    def is_on(self):
-        value = None
-        if self.coordinator.data and self._key in self.coordinator.data:
-            value = self.coordinator.data[self._key]
-        if value is None:
-            return None
-        return bool(value)
-
-    async def _async_publish_web_update(self) -> None:
-        await self._hub.refresh_web_data()
-        if self._hub.coordinator is not None:
-            self._hub.coordinator.async_set_updated_data(self._hub.data)
+    def is_on(self) -> bool | None:
+        """The description's current state for the current runtime."""
+        return self.entity_description.value_fn(self._runtime)
 
     async def async_turn_on(self, **kwargs) -> None:
-        if self._key == "api_charge_from_grid":
-            await self._hub.set_api_charge_sources(
-                charge_from_grid=True,
-                charge_from_ac=True,
-            )
-        elif self._key == "api_charge_from_ac":
-            await self._hub.set_api_charge_sources(charge_from_ac=True)
-        elif self._key == "api_solar_api_enabled":
-            await self._hub.set_solar_api_enabled(True)
-            await self._async_publish_web_update()
-            return
-        self.async_write_ha_state()
+        """Run the description's turn_on action."""
+        await self._async_write(self.entity_description.turn_on)
 
     async def async_turn_off(self, **kwargs) -> None:
-        if self._key == "api_charge_from_grid":
-            await self._hub.set_api_charge_sources(charge_from_grid=False)
-        elif self._key == "api_charge_from_ac":
-            await self._hub.set_api_charge_sources(
-                charge_from_grid=False,
-                charge_from_ac=False,
-            )
-        elif self._key == "api_solar_api_enabled":
-            await self._hub.set_solar_api_enabled(False)
-            await self._async_publish_web_update()
-            return
-        self.async_write_ha_state()
+        """Run the description's turn_off action."""
+        await self._async_write(self.entity_description.turn_off)
 
-    @property
-    def available(self) -> bool:
-        if not super().available:
-            return False
-        if self._key == "api_solar_api_enabled":
-            return self._hub.web_api_configured
-        return self._hub.web_api_configured and self._hub.storage_configured
+    async def _async_write(self, action) -> None:
+        await self.async_run_write(lambda: action(self._runtime))
+        if self.entity_description.source == "modbus":
+            await self._runtime.modbus.async_request_refresh()
+        elif self.entity_description.key == _IMMEDIATE_REFRESH_KEY:
+            await self._runtime.web.async_request_refresh()
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: FroniusConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Add every switch the current runtime produces."""
+    runtime = entry.runtime_data
+    async_add_entities(
+        FroniusSwitch(runtime, entry, description)
+        for description in switch_descriptions(runtime)
+    )

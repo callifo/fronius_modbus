@@ -1,0 +1,345 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The repository root on sys.path: custom_components is a namespace package
+# (no __init__.py), so the root has to be importable for
+# `custom_components.fronius_modbus.<module>` to resolve in the tests.
+pythonpath = ["."]
+norecursedirs = [".git", "testing_config"]
+log_format = "%(asctime)s.%(msecs)03d %(levelname)-8s %(threadName)s %(name)s:%(filename)s:%(lineno)s %(message)s"
+log_date_format = "%Y-%m-%d %H:%M:%S"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+# The e2e tests boot a real Home Assistant instance per test, so they are
+# deselected for the everyday run. CI and check.sh pass `-m ""`, which cancels
+# this deselection - without that the marker would be a silent coverage gap.
+addopts = "-m 'not e2e'"
+markers = [
+  "e2e: full end-to-end test against a real Home Assistant setup (slow)",
+]
+# The other half of the duration budget in tests/durations.py: that one
+# measures a test AFTER it returns, which a deadlock never does. This one cuts
+# the run off. Far above the 30-second reporting budget on purpose - as a
+# kill, the same number would fail the suite on a slow runner. `thread`
+# because the waits this exists for sit in worker threads, where the default
+# signal method never fires.
+timeout = 300
+timeout_method = "thread"
+
+[tool.coverage.report]
+exclude_lines = [
+  # Have to re-enable the standard pragma
+  "pragma: no cover",
+  # Don't complain about missing debug-only code:
+  "def __repr__",
+  # Don't complain if tests don't hit defensive assertion code:
+  "raise AssertionError",
+  "raise NotImplementedError",
+  # TYPE_CHECKING and @overload blocks are never executed during pytest run
+  "if TYPE_CHECKING:",
+  "@overload",
+]
+
+[tool.ruff]
+required-version = ">=0.11.0"
+# The Python the supported Home Assistant runs on; the mypy section below
+# targets the same version and the two have to agree.
+target-version = "py314"
+
+[tool.ruff.lint]
+select = [
+  "A001",   # Variable {name} is shadowing a Python builtin
+  "ASYNC",  # flake8-async
+  "B002",   # Python does not support the unary prefix increment
+  "B005",   # Using .strip() with multi-character strings is misleading
+  "B007",   # Loop control variable {name} not used within loop body
+  "B009",   # Do not call getattr with a constant attribute value. It is not any safer than normal property access.
+  "B014",   # Exception handler with duplicate exception
+  "B015",   # Pointless comparison. Did you mean to assign a value? Otherwise, prepend assert or remove it.
+  "B017",   # pytest.raises(BaseException) should be considered evil
+  "B018",   # Found useless attribute access. Either assign it to a variable or remove it.
+  "B023",   # Function definition does not bind loop variable {name}
+  "B024",   # `{name}` is an abstract base class, but it has no abstract methods or properties
+  "B026",   # Star-arg unpacking after a keyword argument is strongly discouraged
+  "B032",   # Possible unintentional type annotation (using :). Did you mean to assign (using =)?
+  "B035",   # Dictionary comprehension uses static key
+  "B904",   # Use raise from to specify exception cause
+  "B905",   # zip() without an explicit strict= parameter
+  "BLE",
+  "C",      # complexity
+  "COM818", # Trailing comma on bare tuple prohibited
+  "D",      # docstrings
+  "DTZ003", # Use datetime.now(tz=) instead of datetime.utcnow()
+  "DTZ004", # Use datetime.fromtimestamp(ts, tz=) instead of datetime.utcfromtimestamp(ts)
+  "E",      # pycodestyle
+  "F",      # pyflakes/autoflake
+  "F541",   # f-string without any placeholders
+  "FLY",    # flynt
+  "FURB",   # refurb
+  "G",      # flake8-logging-format
+  "I",      # isort
+  "INP",    # flake8-no-pep420
+  "ISC",    # flake8-implicit-str-concat
+  "ICN001", # import concentions; {name} should be imported as {asname}
+  "LOG",    # flake8-logging
+  "N804",   # First argument of a class method should be named cls
+  "N805",   # First argument of a method should be named self
+  "N815",   # Variable {name} in class scope should not be mixedCase
+  "PERF",   # Perflint
+  "PGH",    # pygrep-hooks
+  "PIE",    # flake8-pie
+  "PL",     # pylint
+  "PT",     # flake8-pytest-style
+  "PTH",    # flake8-pathlib
+  "PYI",    # flake8-pyi
+  "RET",    # flake8-return
+  "RSE",    # flake8-raise
+  "RUF005", # Consider iterable unpacking instead of concatenation
+  "RUF006", # Store a reference to the return value of asyncio.create_task
+  "RUF007", # Prefer itertools.pairwise() over zip() when iterating over successive pairs
+  "RUF008", # Do not use mutable default values for dataclass attributes
+  "RUF010", # Use explicit conversion flag
+  "RUF013", # PEP 484 prohibits implicit Optional
+  "RUF016", # Slice in indexed access to type {value_type} uses type {index_type} instead of an integer
+  "RUF017", # Avoid quadratic list summation
+  "RUF018", # Avoid assignment expressions in assert statements
+  "RUF019", # Unnecessary key check before dictionary access
+  "RUF020", # {never_like} | T is equivalent to T
+  "RUF021", # Parenthesize a and b expressions when chaining and and or together, to make the precedence clear
+  "RUF022", # Sort __all__
+  "RUF023", # Sort __slots__
+  "RUF024", # Do not pass mutable objects as values to dict.fromkeys
+  "RUF026", # default_factory is a positional-only argument to defaultdict
+  "RUF030", # print() call in assert statement is likely unintentional
+  "RUF032", # Decimal() called with float literal argument
+  "RUF033", # __post_init__ method with argument defaults
+  "RUF034", # Useless if-else condition
+  "RUF100", # Unused `noqa` directive
+  "RUF101", # noqa directives that use redirected rule codes
+  "RUF200", # Failed to parse pyproject.toml: {message}
+  "S102",   # Use of exec detected
+  "S103",   # bad-file-permissions
+  "S108",   # hardcoded-temp-file
+  "S306",   # suspicious-mktemp-usage
+  "S307",   # suspicious-eval-usage
+  "S313",   # suspicious-xmlc-element-tree-usage
+  "S314",   # suspicious-xml-element-tree-usage
+  "S315",   # suspicious-xml-expat-reader-usage
+  "S316",   # suspicious-xml-expat-builder-usage
+  "S317",   # suspicious-xml-sax-usage
+  "S318",   # suspicious-xml-mini-dom-usage
+  "S319",   # suspicious-xml-pull-dom-usage
+  "S601",   # paramiko-call
+  "S602",   # subprocess-popen-with-shell-equals-true
+  "S604",   # call-with-shell-equals-true
+  "S608",   # hardcoded-sql-expression
+  "S609",   # unix-command-wildcard-injection
+  "SIM",    # flake8-simplify
+  "SLF",    # flake8-self
+  "SLOT",   # flake8-slots
+  "T100",   # Trace found: {name} used
+  "T20",    # flake8-print
+  "TC",     # flake8-type-checking
+  "TID",    # Tidy imports
+  "TRY",    # tryceratops
+  "UP",     # pyupgrade
+  "UP031",  # Use format specifiers instead of percent format
+  "UP032",  # Use f-string instead of `format` call
+  "W",      # pycodestyle
+]
+
+ignore = [
+  # Findings that were in the tree when `ruff check .` became a gate, frozen
+  # rather than fixed. A global ignore silences the rule everywhere, so each
+  # line here is a rule the gate does NOT enforce; a line comes out again
+  # once `ruff check --select <code>` is clean.
+  "BLE001",   # blind `except Exception`
+  "D401",     # docstrings not in imperative mood
+  "PERF401",  # loops that could be comprehensions
+  "PLR0917",  # item constructors with more than five positional arguments
+  "SLF001",   # private-member reads across the item/client boundary
+  "TRY300",   # returns inside try blocks
+  "ASYNC109", # Async function definition with a `timeout` parameter Use `asyncio.timeout` instead
+  "ASYNC110", # Use `asyncio.Event` instead of awaiting `asyncio.sleep` in a `while` loop
+  "D202",     # No blank lines allowed after function docstring
+  "D203",     # 1 blank line required before class docstring
+  "D213",     # Multi-line docstring summary should start at the second line
+  "D406",     # Section name should end with a newline
+  "D407",     # Section name underlining
+  "E501",     # line too long
+
+  "PLC1901", # {existing} can be simplified to {replacement} as an empty string is falsey; too many false positives
+  "PLR0911", # Too many return statements ({returns} > {max_returns})
+  "PLR0912", # Too many branches ({branches} > {max_branches})
+  "PLR0913", # Too many arguments to function call ({c_args} > {max_args})
+  "PLR0915", # Too many statements ({statements} > {max_statements})
+  "PLR2004", # Magic value used in comparison, consider replacing {value} with a constant variable
+  "PLW1641", # __eq__ without __hash__
+  "PLW2901", # Outer {outer_kind} variable {name} overwritten by inner {inner_kind} target
+  "PT011",   # pytest.raises({exception}) is too broad, set the `match` parameter or use a more specific exception
+  "PT018",   # Assertion should be broken down into multiple parts
+  "RUF001",  # String contains ambiguous unicode character.
+  "RUF002",  # Docstring contains ambiguous unicode character.
+  "RUF003",  # Comment contains ambiguous unicode character.
+  "RUF015",  # Prefer next(...) over single element slice
+  "SIM102",  # Use a single if statement instead of nested if statements
+  "SIM103",  # Return the condition {condition} directly
+  "SIM108",  # Use ternary operator {contents} instead of if-else-block
+  "SIM115",  # Use context handler for opening files
+
+  # Moving imports into type-checking blocks can mess with pytest.patch()
+  "TC001", # Move application import {} into a type-checking block
+  "TC002", # Move third-party import {} into a type-checking block
+  "TC003", # Move standard library import {} into a type-checking block
+  # Quotes for typing.cast generally not necessary, only for performance critical paths
+  "TC006", # Add quotes to type expression in typing.cast()
+
+  "TRY003", # Avoid specifying long messages outside the exception class
+  "TRY400", # Use `logging.exception` instead of `logging.error`
+  # Ignored due to performance: https://github.com/charliermarsh/ruff/issues/2923
+  "UP046", # Non PEP 695 generic class
+  "UP047", # Non PEP 696 generic function
+  "UP049", # Avoid private type parameter names
+
+  # May conflict with the formatter, https://docs.astral.sh/ruff/formatter/#conflicting-lint-rules
+  "W191",
+  "E111",
+  "E114",
+  "E117",
+  "D206",
+  "D300",
+  "Q",
+  "COM812",
+  "COM819",
+
+  # Disabled because ruff does not understand type of __all__ generated by a function
+  "PLE0605",
+]
+
+[tool.ruff.lint.flake8-import-conventions.extend-aliases]
+voluptuous = "vol"
+"homeassistant.helpers.area_registry" = "ar"
+"homeassistant.helpers.category_registry" = "cr"
+"homeassistant.helpers.config_validation" = "cv"
+"homeassistant.helpers.device_registry" = "dr"
+"homeassistant.helpers.entity_registry" = "er"
+"homeassistant.helpers.floor_registry" = "fr"
+"homeassistant.helpers.issue_registry" = "ir"
+"homeassistant.helpers.label_registry" = "lr"
+"homeassistant.util.color" = "color_util"
+"homeassistant.util.dt" = "dt_util"
+"homeassistant.util.json" = "json_util"
+"homeassistant.util.location" = "location_util"
+"homeassistant.util.logging" = "logging_util"
+"homeassistant.util.network" = "network_util"
+"homeassistant.util.ulid" = "ulid_util"
+"homeassistant.util.uuid" = "uuid_util"
+"homeassistant.util.yaml" = "yaml_util"
+
+[tool.ruff.lint.flake8-pytest-style]
+fixture-parentheses = false
+mark-parentheses = false
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"async_timeout".msg = "use asyncio.timeout instead"
+"pytz".msg = "use zoneinfo instead"
+
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+known-first-party = ["homeassistant"]
+combine-as-imports = true
+split-on-trailing-comma = false
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["SLF001"]  # Allow private member access in tests
+
+# The guards and the harness: assertion messages carry the numbers, a docstring
+# per helper would only restate the test name, and the harness reports on
+# stdout on purpose (it is a command-line tool, not library code).
+"tests/**" = ["PTH", "D", "PLR2004", "T201"]
+".github/scripts/*" = ["T201", "D", "INP001", "PLR2004", "S603", "PLW1510"]
+# ast.NodeVisitor dispatches on `visit_<NodeName>`; the aliases have to be mixedCase.
+"tests/complexity.py" = ["N815"]
+
+# The modules carried over from 0.3 untouched. Their findings were in the tree
+# when `ruff check .` became a gate and are frozen per file rather than
+# silenced everywhere: the same modules are the ones tests/test_mypy_scope.py
+# lists as not type-checked yet, and both lists empty together when a module
+# is finally reworked. Rewriting them to satisfy the linter now would be a
+# large untested diff in the code the rewrite has not reached.
+"custom_components/fronius_modbus/froniuswebclient.py" = ["D100", "D101", "D102", "D103", "D107", "I001", "UP033", "B018"]
+"custom_components/fronius_modbus/token_store.py" = ["D100", "D101", "D102", "D103", "D107", "F401"]
+"custom_components/fronius_modbus/config_flow.py" = ["D100", "D101", "D102", "D103", "D107", "I001", "UP035", "TRY301", "LOG004"]
+"custom_components/fronius_modbus/migrations.py" = ["D100", "D103", "I001"]
+"custom_components/fronius_modbus/repairs.py" = ["D100", "D102", "D107", "I001"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 25
+
+[tool.ruff.lint.pydocstyle]
+property-decorators = ["propcache.api.cached_property"]
+
+[tool.mypy]
+python_version = "3.14"
+# The type-check scope. Frozen at the modules that were clean when the gate
+# was adopted; the rest are listed with their reason in
+# tests/test_mypy_scope.py, and widening this list is how that list empties.
+# A module in neither place fails that guard - leaving one out is a decision
+# somebody writes down, not something that happens.
+files = [
+  "custom_components/fronius_modbus/fronius_modbus_api/__init__.py",
+  "custom_components/fronius_modbus/component_readings.py",
+  "custom_components/fronius_modbus/fronius_modbus_api/controls.py",
+  "custom_components/fronius_modbus/fronius_modbus_api/writes.py",
+  "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+  "custom_components/fronius_modbus/fronius_modbus_api/exceptions.py",
+  "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+  "custom_components/fronius_modbus/fronius_modbus_api/sunspec_models.py",
+  "custom_components/fronius_modbus/const.py",
+  "custom_components/fronius_modbus/coordinator.py",
+  "custom_components/fronius_modbus/derived.py",
+  "custom_components/fronius_modbus/discovery.py",
+  "custom_components/fronius_modbus/flow_settings.py",
+  "custom_components/fronius_modbus/flow_entry.py",
+  "custom_components/fronius_modbus/flow_state.py",
+  "custom_components/fronius_modbus/web_errors.py",
+  "custom_components/fronius_modbus/descriptions.py",
+  "custom_components/fronius_modbus/entities.py",
+  "custom_components/fronius_modbus/entity_base.py",
+  "custom_components/fronius_modbus/event_entities.py",
+  "custom_components/fronius_modbus/mppt_entities.py",
+  "custom_components/fronius_modbus/meter_topology.py",
+  "custom_components/fronius_modbus/event.py",
+  "custom_components/fronius_modbus/inverter_events.py",
+  "custom_components/fronius_modbus/flow_forms.py",
+  "custom_components/fronius_modbus/export_limit.py",
+]
+
+# Path tracking rules
+mypy_path = "/usr/src/homeassistant"
+explicit_package_bases = true
+
+# --- OFFICIAL HOME ASSISTANT CI STRICT CORE FLAGS ---
+show_error_codes = true
+follow_imports = "silent"
+ignore_missing_imports = true
+strict_equality = true
+warn_incomplete_stub = true
+warn_redundant_casts = true
+warn_unused_configs = true
+warn_unused_ignores = true
+enable_error_code = ["ignore-without-code"]
+check_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_untyped_decorators = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+warn_return_any = true
+warn_unreachable = true
+
+# Silence Home Assistant core noise, keep context intact
+[[tool.mypy.overrides]]
+module = "homeassistant.*"
+ignore_errors = true
+

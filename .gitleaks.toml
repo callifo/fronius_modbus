@@ -1,0 +1,22 @@
+# gitleaks configuration: the pre-push hook, check.sh and the CI jobs all use it.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "What the default rules flag here and is not a secret"
+# Matched against the rule's MATCH, never against the whole line: a line-wide
+# allowlist hid a real token that sat on the same line as a translation key.
+# The match is `key="soc_minimum"` on gitleaks 8.16 and the whole
+# `translation_key="soc_minimum"` on 8.30 - the pattern accepts both spellings
+# and nothing else in front of `key` (an `api_key` stays a finding).
+regexTarget = "match"
+regexes = [
+    # The generic-api-key rule reads `key="..."` as a credential; these are
+    # entity translation keys: either words joined by an underscore, or one
+    # short word with a register number at most. A 32-character alphanumeric
+    # credential has neither shape (the former rule let it through).
+    # tests/test_secret_scan.py holds every table key to this shape.
+    '''^(?:translation_)?key="(?:[a-z0-9]*_[a-z0-9_]*|[a-z]{1,20}[0-9]{0,6})"$''',
+]
+# No path allowlist: it would also hide a NEW leak under that path.

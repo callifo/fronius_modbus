@@ -1,0 +1,520 @@
+"""What the inverter's component endpoints add beyond Modbus: one row per sensor.
+
+`/api/components/inverter/readable` and `.../BatteryManagementSystem/readable`
+also carry serial numbers, part serials and device ids. The web client takes
+only the fields named here, so none of those reaches a state or a
+diagnostics dump.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+import json
+import math
+from typing import Any, Literal
+
+type Component = Literal["inverter", "storage"]
+type Transform = Literal["as_is", "positive", "yes_no"]
+
+# Derived fields: the web client builds them from nested attributes.
+NAMEPLATE_PREFIX = "nameplate."
+CONNECTION = "connection"
+# The battery's own firmware and hardware go to its device entry, not to a sensor.
+STORAGE_DEVICE_FIELDS = ("sw_version", "hw_version")
+YES, NO = "yes", "no"
+# The endpoints send raw float32 values (a fan at 37.254902 %); what a unit is
+# worth showing. Durations are left to the unit they are shown in.
+DISPLAY_PRECISION = {"%": 0, "W": 0, "°C": 1, "V": 1, "Hz": 2}
+# Set while the output is held at a limit: one in watts, such as an export
+# limit, or a percentage one, such as the Modbus AC limit (measured).
+ABSOLUTE_LIMIT_REACHED = "ACBRIDGE_VALUE_POWERACTIVE_PRODUCTION_LIMIT_REACHED_U8"
+RELATIVE_LIMIT_REACHED = (
+    "ACBRIDGE_VALUE_POWERACTIVE_RELATIVE_PRODUCTION_LIMIT_REACHED_U8"
+)
+# How the inverter spells a flag, in its configs and its component attributes.
+FLAG_WORDS = {
+    **dict.fromkeys(("1", "true", "on", "yes", "enabled"), True),
+    **dict.fromkeys(("0", "false", "off", "no", "disabled"), False),
+}
+
+
+@dataclass(frozen=True, slots=True)
+class ComponentReading:
+    """One sensor: the fields it reads and how Home Assistant shows it.
+
+    With several fields the first one the device reports is shown; a yes/no
+    reading is "yes" when any of them is set.
+    """
+
+    key: str
+    component: Component
+    fields: tuple[str, ...]
+    unit: str | None = None
+    device_class: str | None = None
+    measurement: bool = True
+    diagnostic: bool = False
+    enabled: bool = True
+    transform: Transform = "as_is"
+    suggested_unit: str | None = None
+    # Exists once the device reported it: a power module, or a field some firmware
+    # lacks. Every other row exists with its component.
+    once_reported: bool = False
+
+
+def _module_temperature(index: int) -> ComponentReading:
+    return ComponentReading(
+        f"module_temperature_{index}",
+        "inverter",
+        (f"MODULE_TEMPERATURE_MEAN_{index:02d}_F32",),
+        "°C",
+        "temperature",
+        once_reported=True,
+    )
+
+
+def _feed_in_voltage(suffix: str, channel: str) -> ComponentReading:
+    return ComponentReading(
+        f"feed_in_voltage_{suffix}",
+        "inverter",
+        (f"FEEDINPOINT_VOLTAGE_MEAN_{channel}_F32",),
+        "V",
+        "voltage",
+        enabled=False,
+    )
+
+
+def _nameplate(key: str, field: str, unit: str | None) -> ComponentReading:
+    return ComponentReading(
+        key,
+        "storage",
+        (NAMEPLATE_PREFIX + field,),
+        unit,
+        "power" if unit == "W" else None,
+        measurement=False,
+        diagnostic=True,
+        enabled=False,
+    )
+
+
+COMPONENT_READINGS: tuple[ComponentReading, ...] = (
+    ComponentReading(
+        "inverter_temperature",
+        "inverter",
+        ("DEVICE_TEMPERATURE_AMBIENTMEAN_01_F32",),
+        "°C",
+        "temperature",
+    ),
+    ComponentReading(
+        "inverter_temperature_2",
+        "inverter",
+        ("DEVICE_TEMPERATURE_AMBIENTMEAN_02_F32",),
+        "°C",
+        "temperature",
+        once_reported=True,
+    ),
+    ComponentReading(
+        "storage_temperature",
+        "storage",
+        ("BAT_TEMPERATURE_CELL_F64",),
+        "°C",
+        "temperature",
+    ),
+    # The web interface names modules 1-10 (AC modules 1-6, DC modules 3, 9 and
+    # 10, a DC or battery module 4); a Verto 30.0 Plus reported 1-5 and 9.
+    *(_module_temperature(index) for index in range(1, 11)),
+    ComponentReading("fan_1", "inverter", ("FANCONTROL_PERCENT_01_F32",), "%"),
+    ComponentReading("fan_2", "inverter", ("FANCONTROL_PERCENT_02_F32",), "%"),
+    *(
+        ComponentReading(
+            f"fan_{index}",
+            "inverter",
+            (f"FANCONTROL_PERCENT_0{index}_F32",),
+            "%",
+            once_reported=True,
+        )
+        for index in (3, 4, 5)
+    ),
+    *(
+        ComponentReading(
+            f"inverter_power_l{phase}",
+            "inverter",
+            (f"ACBRIDGE_POWERACTIVE_MEAN_0{phase}_F32",),
+            "W",
+            "power",
+        )
+        for phase in (1, 2, 3)
+    ),
+    ComponentReading(
+        "production_limit",
+        "inverter",
+        ("ACBRIDGE_POWERACTIVE_PRODUCTION_LIMIT_F32",),
+        "W",
+        "power",
+        once_reported=True,
+    ),
+    ComponentReading(
+        "production_limit_reached",
+        "inverter",
+        (ABSOLUTE_LIMIT_REACHED, RELATIVE_LIMIT_REACHED),
+        measurement=False,
+        transform="yes_no",
+        once_reported=True,
+    ),
+    ComponentReading(
+        "battery_max_charge_power",
+        "inverter",
+        ("DCDC_POWERACTIVE_BAT_MAX_F32",),
+        "W",
+        "power",
+        once_reported=True,
+    ),
+    ComponentReading(
+        "battery_max_discharge_power",
+        "inverter",
+        ("DCDC_POWERACTIVE_BAT_MIN_F32",),
+        "W",
+        "power",
+        transform="positive",
+        once_reported=True,
+    ),
+    ComponentReading(
+        "dc_link_voltage",
+        "inverter",
+        ("DCLINK_VOLTAGE_MEAN_F32",),
+        "V",
+        "voltage",
+        diagnostic=True,
+        enabled=False,
+    ),
+    # Seen set only while an export limit curtailed PV; undocumented.
+    ComponentReading(
+        "surplus_power_available",
+        "inverter",
+        ("POWERMANAGER_VALUE_SURPLUS_POWER_AVAILABLE_U8",),
+        measurement=False,
+        enabled=False,
+        transform="yes_no",
+        once_reported=True,
+    ),
+    ComponentReading(
+        "grid_valid",
+        "inverter",
+        ("FEEDINPOINT_MODE_GRID_VALIDITY_U8",),
+        measurement=False,
+        transform="yes_no",
+    ),
+    _feed_in_voltage("l1", "01"),
+    _feed_in_voltage("l2", "02"),
+    _feed_in_voltage("l3", "03"),
+    _feed_in_voltage("l1_l2", "12"),
+    _feed_in_voltage("l2_l3", "23"),
+    _feed_in_voltage("l3_l1", "31"),
+    ComponentReading(
+        "feed_in_frequency",
+        "inverter",
+        ("FEEDINPOINT_FREQUENCY_MEAN_F32",),
+        "Hz",
+        "frequency",
+        enabled=False,
+    ),
+    # Seconds, but no clock: it grew 7192 s in 7383 s on a GEN24, and a float32
+    # at this size steps in 8 s.
+    ComponentReading(
+        "operating_time",
+        "inverter",
+        ("DEVICE_TIME_UPTIME_SUM_F32",),
+        "s",
+        "duration",
+        measurement=False,
+        diagnostic=True,
+        enabled=False,
+        suggested_unit="h",
+    ),
+    ComponentReading(
+        "backup_time",
+        "inverter",
+        ("ACBRIDGE_TIME_BACKUPMODE_UPTIME_SUM_F32",),
+        "s",
+        "duration",
+        measurement=False,
+        enabled=False,
+        suggested_unit="h",
+    ),
+    ComponentReading(
+        "power_stage_firmware_1",
+        "inverter",
+        ("PS.rev-sw",),
+        measurement=False,
+        diagnostic=True,
+    ),
+    ComponentReading(
+        "power_stage_firmware_2",
+        "inverter",
+        ("PS2.rev-sw",),
+        measurement=False,
+        diagnostic=True,
+    ),
+    # Both power stages report the same list of all part numbers, so one sensor.
+    ComponentReading(
+        "power_stage_hardware",
+        "inverter",
+        ("PS.rev-hw",),
+        measurement=False,
+        diagnostic=True,
+        enabled=False,
+    ),
+    ComponentReading(
+        "storage_state_of_health",
+        "storage",
+        ("BAT_VALUE_STATE_OF_HEALTH_RELATIVE_U16",),
+        "%",
+    ),
+    ComponentReading(
+        "storage_cell_temperature_min",
+        "storage",
+        ("BAT_TEMPERATURE_CELL_MIN_F64",),
+        "°C",
+        "temperature",
+        enabled=False,
+    ),
+    ComponentReading(
+        "storage_cell_temperature_max",
+        "storage",
+        ("BAT_TEMPERATURE_CELL_MAX_F64",),
+        "°C",
+        "temperature",
+        enabled=False,
+    ),
+    ComponentReading(
+        "storage_bms_temperature",
+        "storage",
+        ("DEVICE_TEMPERATURE_AMBIENTEMEAN_F32",),
+        "°C",
+        "temperature",
+        enabled=False,
+    ),
+    ComponentReading(
+        "storage_discharge_limit",
+        "storage",
+        ("DCLINK_POWERACTIVE_LIMIT_DISCHARGE_F64",),
+        "W",
+        "power",
+        enabled=False,
+    ),
+    ComponentReading(
+        "storage_power_limit",
+        "storage",
+        ("DCLINK_POWERACTIVE_MAX_F32",),
+        "W",
+        "power",
+        enabled=False,
+    ),
+    _nameplate("storage_peak_charge_power", "peak_power_charge_w", "W"),
+    _nameplate("storage_peak_discharge_power", "peak_power_discharge_w", "W"),
+    _nameplate("storage_rated_soc_min", "min_soc", "%"),
+    _nameplate("storage_rated_soc_max", "max_soc", "%"),
+    _nameplate("storage_modules", "module_number", None),
+    ComponentReading(
+        "storage_voltage_min",
+        "storage",
+        ("min_udc",),
+        "V",
+        "voltage",
+        measurement=False,
+        diagnostic=True,
+        enabled=False,
+    ),
+    ComponentReading(
+        "storage_voltage_max",
+        "storage",
+        ("max_udc",),
+        "V",
+        "voltage",
+        measurement=False,
+        diagnostic=True,
+        enabled=False,
+    ),
+    ComponentReading(
+        "storage_link",
+        "storage",
+        (CONNECTION,),
+        measurement=False,
+        diagnostic=True,
+        enabled=False,
+    ),
+)
+
+
+def reported(reading: ComponentReading, readings: dict[str, Any] | None) -> bool:
+    """Whether a sensor exists for an answered or unread component.
+
+    Existence follows the component, not the field: an answer without a value
+    retired the sensor and the owner's entity id. Rows that
+    follow the report exist when reported, and also when the answer names none
+    of their group, which is no answer about them.
+    """
+    if not reading.once_reported or readings is None:
+        return True
+    group = {
+        field
+        for row in COMPONENT_READINGS
+        if row.once_reported and row.component == reading.component
+        for field in row.fields
+    }
+    if not group & readings.keys():
+        return True
+    return any(field in readings for field in reading.fields)
+
+
+ONCE_REPORTED_KEYS = frozenset(
+    row.key for row in COMPONENT_READINGS if row.once_reported
+)
+
+
+def reported_rows(component: Component, readings: dict[str, Any] | None) -> set[str]:
+    """The report-following rows an answer names; only these count as seen.
+
+    A row made while unread or while none of them was named is a placeholder,
+    and keeping it would show a module or a field the device lacks.
+    """
+    if readings is None:
+        return set()
+    return {
+        row.key
+        for row in COMPONENT_READINGS
+        if row.once_reported
+        and row.component == component
+        and any(field in readings for field in row.fields)
+    }
+
+
+def readable_fields(component: Component) -> frozenset[str]:
+    """Every field the web client may take from a component; nothing else leaves it."""
+    fields = {
+        field
+        for reading in COMPONENT_READINGS
+        if reading.component == component
+        for field in reading.fields
+    }
+    if component == "storage":
+        fields.update(STORAGE_DEVICE_FIELDS)
+    return frozenset(fields)
+
+
+def component_value(reading: ComponentReading, readings: dict[str, Any] | None) -> Any:
+    """What the sensor shows for ``readings``; None while unread or unreported."""
+    if readings is None:
+        return None
+    values = [readings[field] for field in reading.fields if field in readings]
+    if not values:
+        return None
+    if reading.transform == "yes_no":
+        return YES if any(_is_set(value) for value in values) else NO
+    value = values[0]
+    if reading.unit is not None:
+        value = _as_number(value)
+    if value is None or reading.transform != "positive":
+        return value
+    return abs(value)
+
+
+def _as_number(value: Any) -> float | None:
+    """A number, or numeric text as attributes carry it ("467.2"); else unknown.
+
+    A value Home Assistant cannot show as a number would be refused on every
+    update; "nan" and "inf" parse, but are no reading.
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, str):
+        try:
+            value = float(value)
+        except ValueError:
+            return None
+    if not isinstance(value, (int, float)) or not math.isfinite(value):
+        return None
+    return value
+
+
+def _is_set(value: Any) -> bool:
+    """A flag as the inverter sends it: 1.0, True, "1" or "true"; "0" is not set."""
+    if isinstance(value, bool):
+        return value
+    number = _as_number(value)
+    if number is not None:
+        return number != 0
+    return isinstance(value, str) and FLAG_WORDS.get(value.strip().lower(), False)
+
+
+def flag_value(value: Any) -> bool | None:
+    """A flag the inverter sent in a form it uses; anything else is unknown."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        return FLAG_WORDS.get(value.strip().lower())
+    return None
+
+
+def limits_reached(
+    readings: dict[str, Any] | None,
+) -> tuple[bool | None, bool | None]:
+    """Whether a percentage limit and a limit in watts hold the output; None if unread."""
+    if readings is None:
+        return None, None
+    return (
+        flag_value(readings.get(RELATIVE_LIMIT_REACHED)),
+        flag_value(readings.get(ABSOLUTE_LIMIT_REACHED)),
+    )
+
+
+def take_readings(device: dict[str, Any], component: Component) -> dict[str, Any]:
+    """The listed fields of one component's readable node; its serials and ids stay behind."""
+    channels = device.get("channels")
+    channels = channels if isinstance(channels, dict) else {}
+    attributes = device.get("attributes")
+    attributes = attributes if isinstance(attributes, dict) else {}
+    nameplate = json_object(attributes.get("nameplate"))
+    found = {}
+    for field in readable_fields(component):
+        value = _reading(field, channels, attributes, nameplate)
+        if value is not None:
+            found[field] = value
+    return found
+
+
+def _reading(
+    field: str,
+    channels: dict[str, Any],
+    attributes: dict[str, Any],
+    nameplate: dict[str, Any],
+) -> Any:
+    if field.startswith(NAMEPLATE_PREFIX):
+        return nameplate.get(field.removeprefix(NAMEPLATE_PREFIX))
+    if field == CONNECTION:
+        return _connection_text(attributes)
+    if field in channels:
+        return channels[field]
+    return attributes.get(field)
+
+
+def _connection_text(attributes: dict[str, Any]) -> str | None:
+    """How the battery hangs on the inverter, e.g. "ModbusRTU rtu0:21"."""
+    connection = json_object(attributes.get("connection"))
+    protocol = connection.get("protocol")
+    if not protocol:
+        return None
+    interface = str(connection.get("rtu-interface") or "").rsplit("/", 1)[-1]
+    text = f"{protocol} {interface}".strip()
+    address = attributes.get("addr")
+    return f"{text}:{address}" if address else text
+
+
+def json_object(value: Any) -> dict[str, Any]:
+    """An attribute the inverter nests as a JSON string; anything else is empty."""
+    try:
+        parsed = json.loads(value) if isinstance(value, str) else None
+    except TypeError, ValueError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}

@@ -1,47 +1,217 @@
-"""Load production modules with lightweight HA API boundaries, without HA startup.
+"""Shared fixtures: the captured inverter replayed into the in-memory Modbus backend."""
 
-All register decoding, transport types, hub logic and polling methods are real.
-These unit tests do not replace Home Assistant integration or hardware tests.
-"""
-import importlib
-from pathlib import Path
-import sys
-from types import ModuleType, SimpleNamespace
+import json
+import pathlib
 
+from modbus_connection.mock import MockModbusConnection
+import pytest
 
-def module(name, **members):
-    result = ModuleType(name)
-    result.__dict__.update(members)
-    sys.modules[name] = result
-    return result
+from homeassistant.config_entries import ConfigEntry
 
+from .durations import SLOW_TEST_SECONDS, over_budget
 
-class Coordinator:
-    def __init__(self, *args, **kwargs):
-        pass
+pytest_plugins = ("pytest_homeassistant_custom_component",)
+
+# Summed per test across setup, call and teardown, and read at the end of the
+# session. A dict at module level because that is what a pytest hook has: the
+# hooks are functions, not a fixture with somewhere to keep state.
+_durations: dict = {}
 
 
-class UpdateFailed(Exception):
-    pass
+def pytest_addoption(parser):
+    parser.addoption(
+        "--slow-test-seconds",
+        type=float,
+        default=SLOW_TEST_SECONDS,
+        help=(
+            "fail the session if a single test takes longer than this "
+            "(0 makes every test late, which is how the check is tested)"
+        ),
+    )
 
 
-def values(*names):
-    return SimpleNamespace(**{name: name.lower() for name in names})
+def pytest_runtest_logreport(report):
+    """Add up what one test costs, fixtures included."""
+    _durations[report.nodeid] = _durations.get(report.nodeid, 0.0) + report.duration
 
 
-module("homeassistant")
-module("homeassistant.config_entries", ConfigEntry=object)
-module("homeassistant.core", HomeAssistant=object)
-module("homeassistant.helpers")
-module("homeassistant.helpers.issue_registry")
-module("homeassistant.helpers.update_coordinator", DataUpdateCoordinator=Coordinator, UpdateFailed=UpdateFailed)
-module("homeassistant.helpers.storage", Store=object)
-module("homeassistant.components")
-module("homeassistant.components.sensor",
-       SensorDeviceClass=values("BATTERY", "CURRENT", "ENERGY", "FREQUENCY", "POWER", "TEMPERATURE", "VOLTAGE"),
-       SensorStateClass=values("MEASUREMENT", "TOTAL_INCREASING"))
-module("homeassistant.helpers.entity", EntityCategory=values("DIAGNOSTIC"))
-package = module("fronius_under_test")
-package.__path__ = [str(Path(__file__).resolve().parents[1] / "custom_components/fronius_modbus")]
-hub_module = importlib.import_module("fronius_under_test.hub")
-client_module = importlib.import_module("fronius_under_test.froniusmodbusclient")
+def pytest_sessionfinish(session, exitstatus):
+    """Turn a green run red when a test ran far longer than it should.
+
+    Only a green one: a failing suite has more urgent news, and a test that is
+    slow *because* it failed is not the subject here.
+    """
+    if exitstatus != pytest.ExitCode.OK:
+        return
+
+    late = over_budget(_durations, session.config.getoption("--slow-test-seconds"))
+    if not late:
+        return
+
+    listed = "\n  ".join(f"{seconds:7.2f}s {node_id}" for node_id, seconds in late)
+    print(
+        f"\nSLOWER THAN THE BUDGET ALLOWS:\n  {listed}\n\n"
+        "A test in the minutes is nearly always a wait that was meant to be "
+        "shortened and no longer is - check what the test patches against "
+        "where the production code now reads it. If the time is genuinely "
+        "warranted, raise SLOW_TEST_SECONDS in tests/durations.py and say "
+        "in the commit why."
+    )
+    session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+
+FIXTURES = pathlib.Path(__file__).with_name("fixtures")
+INVERTER_UNIT_ID = 1
+METER_UNIT_ID = 200
+
+
+class SteppingClock:
+    """A monotonic clock that moves `step` seconds on every reading."""
+
+    def __init__(self, step: float) -> None:
+        self.now = 0.0
+        self.step = step
+
+    def monotonic(self) -> float:
+        self.now += self.step
+        return self.now
+
+
+def load_fixture(name: str) -> dict[int, dict[str, dict[int, int]]]:
+    """A captured device as {unit_id: {"holding": {address: word}}}."""
+    raw = json.loads((FIXTURES / name).read_text(encoding="utf-8"))
+    return {
+        int(unit_id): {
+            space: {int(a): v for a, v in words.items()}
+            for space, words in spaces.items()
+        }
+        for unit_id, spaces in raw.items()
+    }
+
+
+@pytest.fixture
+def symo_gen24() -> dict:
+    return load_fixture("symo_gen24_fw1386.json")
+
+
+@pytest.fixture
+def connection(symo_gen24) -> MockModbusConnection:
+    """A Symo GEN24 10.0 with one Smart Meter on unit 200, in memory."""
+    connection = MockModbusConnection()
+    for unit_id, spaces in symo_gen24.items():
+        connection.for_unit(unit_id).load_raw(spaces)
+    return connection
+
+
+@pytest.fixture
+def inverter_unit(connection):
+    return connection.for_unit(INVERTER_UNIT_ID)
+
+
+@pytest.fixture
+def meter_unit(connection):
+    return connection.for_unit(METER_UNIT_ID)
+
+
+CORE_CONNECTION = "homeassistant.components.modbus.connection.ModbusConnection"
+
+
+@pytest.fixture(autouse=True)
+def _no_real_inverter(monkeypatch):
+    """Fail loudly instead of dialling out when a test forgets the mock_modbus fixture."""
+
+    def _refuse(params, **_kwargs):
+        raise AssertionError(
+            "a test reached a real Modbus device - use the mock_modbus fixture"
+        )
+
+    monkeypatch.setattr(CORE_CONNECTION, _refuse)
+
+
+class SharedMockModbus:
+    """Stands in for the core modbus integration's connection factory, seeding every unit from the fixture."""
+
+    def __init__(self, fixture: dict) -> None:
+        self.params_seen: list = []
+        self.connections: list[MockModbusConnection] = []
+        self._fixture = fixture
+        self._request_failures: dict[int, Exception | None] = {}
+        self._read_failures: dict[tuple[int, int], Exception | None] = {}
+
+    def __call__(self, params, **_kwargs) -> MockModbusConnection:
+        self.params_seen.append(params)
+        connection = MockModbusConnection()
+        for unit_id, spaces in self._fixture.items():
+            connection.for_unit(unit_id).load_raw(spaces)
+        for unit_id, error in self._request_failures.items():
+            connection.for_unit(unit_id).fail_requests(error)
+        for (unit_id, address), error in self._read_failures.items():
+            connection.for_unit(unit_id).fail_read(address, error)
+        self.connections.append(connection)
+        return connection
+
+    def add_unit(self, unit_id: int, like: int) -> None:
+        """Serve another unit id from an existing unit's captured registers."""
+        self._fixture[unit_id] = self._fixture[like]
+
+    def unit(self, unit_id: int):
+        """The unit on the connection the integration is currently holding."""
+        return self.connections[-1].for_unit(unit_id)
+
+    @property
+    def connected(self) -> bool:
+        """Whether the current connection is up."""
+        return bool(self.connections) and self.connections[-1].connected
+
+    def fail_read(self, unit_id: int, address: int, error: Exception | None) -> None:
+        """Make one register block unreadable, on the current connection and every later one."""
+        self._read_failures[(unit_id, address)] = error
+        for connection in self.connections:
+            connection.for_unit(unit_id).fail_read(address, error)
+
+    def fail_requests(self, unit_id: int, error: Exception | None) -> None:
+        """Make a unit stop answering, on the current connection and every later one."""
+        self._request_failures[unit_id] = error
+        for connection in self.connections:
+            connection.for_unit(unit_id).fail_requests(error)
+
+
+@pytest.fixture
+def mock_modbus(monkeypatch, symo_gen24):
+    shared = SharedMockModbus(symo_gen24)
+    monkeypatch.setattr(CORE_CONNECTION, shared)
+    return shared
+
+
+@pytest.fixture
+def reauth_requests(monkeypatch) -> list[str]:
+    """The entries that asked Home Assistant for a new login, instead of a real flow.
+
+    A unit test's entry has no loaded integration, so a real reauth flow for
+    it would fail in the background after the test.
+    """
+    requests: list[str] = []
+    monkeypatch.setattr(
+        ConfigEntry,
+        "async_start_reauth",
+        lambda entry, hass, **_kwargs: requests.append(entry.entry_id),
+    )
+    return requests
+
+
+@pytest.fixture(autouse=True)
+def _no_deprecated_home_assistant_calls(caplog):
+    """Fail a test in which Home Assistant reports a deprecated call by this integration.
+
+    Home Assistant only logs such a call, so a green test hid one that will stop
+    working in a later release (device_registry.async_get_device, 2026.9).
+    """
+    yield
+    reports = [
+        record.getMessage()
+        for phase in ("setup", "call")
+        for record in caplog.get_records(phase)
+        if record.name == "homeassistant.helpers.frame"
+        and "fronius_modbus" in record.getMessage()
+    ]
+    assert not reports, reports

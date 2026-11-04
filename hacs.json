@@ -1,4 +1,4 @@
 {
-    "name": "Fronius Modbus",
-    "homeassistant": "2024.4.0"
-  }
+  "name": "Fronius Modbus",
+  "homeassistant": "2026.9.0"
+}

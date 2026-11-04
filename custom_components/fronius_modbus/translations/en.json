@@ -1,63 +1,95 @@
 {
+  "title": "Fronius Modbus",
   "config": {
+    "flow_title": "{name}",
     "step": {
       "user": {
         "title": "Set up Fronius System",
-        "description": "Enter the host, choose the local Web API access role, and configure the update interval and Modbus IP restriction. Technician access also enables the export soft-limit control. Minimum interval: 5 seconds.",
+        "description": "Enter the host, choose the local Web API access role, and set the update intervals and Modbus IP restriction. Minimum Modbus and Web API interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand, with the SunSpec model type int + SF. Switching an existing entry to it removes those entities; their history stays.",
         "data": {
           "host": "Host",
-          "api_username": "Web API access role",
           "scan_interval": "Update interval (seconds)",
-          "restrict_modbus_to_this_ip": "Restrict Modbus to this IP"
+          "web_scan_interval": "Web API update interval (seconds)",
+          "meter_power_interval": "Grid meter power update interval (seconds, 0 = with the update interval)",
+          "modbus_restriction": "Modbus IP restriction",
+          "api_username": "Web API access role"
         }
       },
       "user_password": {
-        "title": "Web API Password",
-        "description": "Enter the password for the selected Web API role on {entry_title} ({host}) to create or refresh its stored token. The password is not stored in the config entry.",
+        "title": "Web API password",
+        "description": "Enter the password of the selected Web API role for {entry_title} ({host}) to create or refresh the stored token. The password is not stored in the config entry.",
         "data": {
           "api_password": "Password"
         }
+      },
+      "user_sunspec": {
+        "title": "Switch the SunSpec model type?",
+        "description": "The Modbus of {entry_title} ({host}) uses the **{mode}** SunSpec model type. This integration reads the int + SF models and switches the inverter to them. If an external device reads the inverter with the {mode} models, it may no longer work after the switch. Submit to switch; close this dialog to leave the inverter as it is."
       },
       "reconfigure": {
         "title": "Review Fronius System",
-        "description": "Review the host, local Web API access role, update interval, and Modbus IP restriction. Technician access also enables the export soft-limit control. Minimum interval: 5 seconds.",
+        "description": "Review the host, the local Web API access role, the update intervals and the Modbus IP restriction. Minimum Modbus and Web API interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand, with the SunSpec model type int + SF. Switching an existing entry to it removes those entities; their history stays.",
         "data": {
           "host": "Host",
-          "api_username": "Web API access role",
           "scan_interval": "Update interval (seconds)",
-          "restrict_modbus_to_this_ip": "Restrict Modbus to this IP"
+          "web_scan_interval": "Web API update interval (seconds)",
+          "meter_power_interval": "Grid meter power update interval (seconds, 0 = with the update interval)",
+          "modbus_restriction": "Modbus IP restriction",
+          "api_username": "Web API access role"
         }
       },
       "reconfigure_password": {
-        "title": "Web API Password",
-        "description": "Enter the password for the selected Web API role on {entry_title} ({host}) to create or refresh its stored token. The password is not stored in the config entry.",
+        "title": "Web API password",
+        "description": "Enter the password of the selected Web API role for {entry_title} ({host}) to create or refresh the stored token. The password is not stored in the config entry.",
         "data": {
           "api_password": "Password"
         }
+      },
+      "reconfigure_sunspec": {
+        "title": "Switch the SunSpec model type?",
+        "description": "The Modbus of {entry_title} ({host}) uses the **{mode}** SunSpec model type. This integration reads the int + SF models and switches the inverter to them. If an external device reads the inverter with the {mode} models, it may no longer work after the switch. Submit to switch; close this dialog to leave the inverter as it is."
+      },
+      "reauth_confirm": {
+        "title": "Log in to the Fronius Web API again",
+        "description": "The stored login of this entry is missing or was rejected, for example after the password was changed on the inverter. Choose the access role; the next step asks for its password. If you do not want to use the web API, choose Without the web API. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand, with the SunSpec model type int + SF. Switching an existing entry to it removes those entities; their history stays.",
+        "data": {
+          "api_username": "Web API access role"
+        }
+      },
+      "reauth_password": {
+        "title": "Web API password",
+        "description": "Enter the password of the selected Web API role for {entry_title} ({host}) to create or refresh the stored token. The password is not stored in the config entry.",
+        "data": {
+          "api_password": "Password"
+        }
+      },
+      "reauth_sunspec": {
+        "title": "Switch the SunSpec model type?",
+        "description": "The Modbus of {entry_title} ({host}) uses the **{mode}** SunSpec model type. This integration reads the int + SF models and switches the inverter to them. If an external device reads the inverter with the {mode} models, it may no longer work after the switch. Submit to switch; close this dialog to leave the inverter as it is."
       }
     },
     "abort": {
-      "reconfigure_successful": "Configuration updated successfully."
+      "already_configured": "Device is already configured",
+      "already_in_progress": "Setting up this inverter is already in progress.",
+      "reconfigure_successful": "Configuration updated successfully.",
+      "not_ipv4_address": "Only an inverter announced with an IPv4 address can be added from discovery.",
+      "reauth_successful": "Logged in again.",
+      "entry_not_found": "The entry no longer exists."
     },
     "error": {
       "cannot_connect": "Failed to connect",
+      "cannot_connect_modbus": "Modbus did not answer. Without the web API, switch Modbus TCP on in the inverter first and set the SunSpec model type to int + SF.",
       "invalid_port": "Invalid port number",
       "invalid_host": "Invalid host address",
       "unsupported_hardware": "Unsupported hardware. See logs.",
       "unknown": "Unknown error",
       "scan_interval_too_short": "Minimum update interval is 5 seconds.",
+      "meter_power_interval_too_long": "The grid meter power interval must be shorter than the update interval, or 0.",
       "modbus_address_conflict": "Modbus IDs are not unique",
       "missing_api_password": "A password is required for the selected Web API role.",
       "invalid_api_credentials": "Login failed for the selected Web API role.",
-      "cannot_resolve_local_ip": "Could not determine the Home Assistant IP."
-    }
-  },
-  "selector": {
-    "api_username": {
-      "options": {
-        "customer": "Customer",
-        "technician": "Technician"
-      }
+      "cannot_resolve_local_ip": "Could not determine the Home Assistant IP.",
+      "already_configured": "Another entry already uses this host."
     }
   },
   "entity": {
@@ -80,16 +112,13 @@
         "name": "PV charge limit"
       },
       "soc_minimum": {
-        "name": "SoC Minimum"
+        "name": "Modbus storage reserve"
       },
       "api_battery_power": {
         "name": "Target feed in"
       },
       "soc_maximum": {
         "name": "SoC Maximum"
-      },
-      "backup_reserve": {
-        "name": "Backup reserve"
       },
       "ac_limit_rate": {
         "name": "AC limit rate"
@@ -99,6 +128,12 @@
       },
       "export_soft_limit": {
         "name": "Export soft limit"
+      },
+      "backup_reserve": {
+        "name": "Backup reserve"
+      },
+      "api_soc_minimum": {
+        "name": "SoC Minimum (Web API)"
       }
     },
     "select": {
@@ -116,9 +151,9 @@
         }
       },
       "api_battery_mode": {
-        "name": "Battery API mode",
+        "name": "Self-consumption optimisation",
         "state": {
-          "auto": "Auto",
+          "auto": "Automatic",
           "manual": "Manual"
         }
       },
@@ -136,25 +171,32 @@
           "enabled": "Enabled"
         }
       },
-      "conn": {
+      "connection_control": {
         "name": "Inverter connection",
         "state": {
           "disabled": "Disabled",
           "enabled": "Enabled"
         }
+      },
+      "api_soc_mode": {
+        "name": "Web API SoC mode",
+        "state": {
+          "automatic": "Automatic",
+          "manual": "Manual"
+        }
       }
     },
     "sensor": {
-      "a": {
+      "ac_current": {
         "name": "AC current"
       },
-      "apha": {
+      "ac_current_l1": {
         "name": "AC current L1"
       },
-      "aphb": {
+      "ac_current_l2": {
         "name": "AC current L2"
       },
-      "aphc": {
+      "ac_current_l3": {
         "name": "AC current L3"
       },
       "acpower": {
@@ -226,7 +268,17 @@
         "name": "Line frequency"
       },
       "inverter_controls": {
-        "name": "Control mode"
+        "name": "Control mode",
+        "state": {
+          "normal": "Normal",
+          "power_reduction": "Power reduction",
+          "constant_reactive_power": "Constant reactive power",
+          "constant_power_factor": "Constant power factor",
+          "power_reduction_constant_reactive_power": "Power reduction,Constant reactive power",
+          "power_reduction_constant_power_factor": "Power reduction,Constant power factor",
+          "constant_reactive_power_constant_power_factor": "Constant reactive power,Constant power factor",
+          "power_reduction_constant_reactive_power_constant_power_factor": "Power reduction,Constant reactive power,Constant power factor"
+        }
       },
       "vref": {
         "name": "Reference voltage"
@@ -238,7 +290,7 @@
         "name": "Maximum power"
       },
       "events2": {
-        "name": "Events"
+        "name": "Event severity"
       },
       "grid_status": {
         "name": "Grid status",
@@ -249,62 +301,62 @@
           "on_grid_operating": "On grid operating"
         }
       },
-      "conn": {
+      "connection_control": {
         "name": "Connection control",
         "state": {
           "disabled": "Disabled",
           "enabled": "Enabled"
         }
       },
-      "wmaxlim_ena": {
+      "power_limit_control": {
         "name": "Throttle control",
         "state": {
           "disabled": "Disabled",
           "enabled": "Enabled"
         }
       },
-      "outpfset_ena": {
+      "power_factor_control": {
         "name": "Fixed power factor status",
         "state": {
           "disabled": "Disabled",
           "enabled": "Enabled"
         }
       },
-      "varpct_ena": {
+      "reactive_power_control": {
         "name": "Limit VAr control",
         "state": {
           "disabled": "Disabled",
           "enabled": "Enabled"
         }
       },
-      "phvpha": {
+      "ac_voltage_l1_n": {
         "name": "AC voltage L1-N"
       },
-      "phvphb": {
+      "ac_voltage_l2_n": {
         "name": "AC voltage L2-N"
       },
-      "phvphc": {
+      "ac_voltage_l3_n": {
         "name": "AC voltage L3-N"
       },
-      "ppv": {
+      "ac_voltage_line_line": {
         "name": "AC voltage Line to Line"
       },
-      "ppvphab": {
+      "ac_voltage_l1_l2": {
         "name": "AC voltage L1-L2"
       },
-      "ppvphbc": {
+      "ac_voltage_l2_l3": {
         "name": "AC voltage L2-L3"
       },
-      "ppvphca": {
+      "ac_voltage_l3_l1": {
         "name": "AC voltage L3-L1"
       },
-      "wpha": {
+      "power_l1": {
         "name": "Power L1"
       },
-      "wphb": {
+      "power_l2": {
         "name": "Power L2"
       },
-      "wphc": {
+      "power_l3": {
         "name": "Power L3"
       },
       "unit_id": {
@@ -328,16 +380,7 @@
         "name": "Isolation Resistance"
       },
       "inverter_temperature": {
-        "name": "Temperature"
-      },
-      "ac_mod_temperature": {
-        "name": "AC Module Temperature"
-      },
-      "dc_mod_temperature": {
-        "name": "DC Module Temperature"
-      },
-      "batt_mod_temperature": {
-        "name": "Battery Module Temperature"
+        "name": "Internal temperature"
       },
       "api_modbus_mode": {
         "name": "Web API Modbus mode"
@@ -368,15 +411,7 @@
           "auto": "Auto",
           "charge": "Charge",
           "discharge": "Discharge",
-          "charge_and_discharge": "Charge and Discharge",
-          "normal": "Normal",
-          "power_reduction": "Power reduction",
-          "constant_reactive_power": "Constant reactive power",
-          "constant_power_factor": "Constant power factor",
-          "power_reduction_constant_reactive_power": "Power reduction,Constant reactive power",
-          "power_reduction_constant_power_factor": "Power reduction,Constant power factor",
-          "constant_reactive_power_constant_power_factor": "Constant reactive power,Constant power factor",
-          "power_reduction_constant_reactive_power_constant_power_factor": "Power reduction,Constant reactive power,Constant power factor"
+          "charge_and_discharge": "Charge and Discharge"
         }
       },
       "charge_status": {
@@ -392,7 +427,7 @@
         }
       },
       "max_charge": {
-        "name": "Max charging power"
+        "name": "Charge/discharge reference power"
       },
       "storage_charge_current": {
         "name": "Storage charging current"
@@ -443,20 +478,20 @@
           "enabled": "Enabled"
         }
       },
-      "whrtg": {
+      "energy_rating": {
         "name": "Capacity"
       },
-      "maxcharte": {
+      "max_charge_rate": {
         "name": "Maximum charge rate"
       },
-      "maxdischarte": {
+      "max_discharge_rate": {
         "name": "Maximum discharge rate"
       },
       "soc": {
         "name": "State of charge"
       },
       "soc_minimum": {
-        "name": "SoC Minimum"
+        "name": "Modbus storage reserve"
       },
       "charging_power": {
         "name": "Charging power"
@@ -475,6 +510,217 @@
       },
       "mppt_module_lifetime_energy": {
         "name": "MPPT module {module} Lifetime energy"
+      },
+      "throttle_reason": {
+        "name": "Throttle reason",
+        "state": {
+          "none": "Not throttled",
+          "inverter_state": "Inverter reports throttling",
+          "ac_limit": "AC limit",
+          "feed_in_limit": "Export limit",
+          "several": "Several reasons",
+          "active_power_control": "Active power control",
+          "export_limit": "AC limit",
+          "unknown": "Unknown"
+        }
+      },
+      "module_temperature_1": {
+        "name": "AC module 1 temperature"
+      },
+      "module_temperature_2": {
+        "name": "AC module 2 temperature"
+      },
+      "module_temperature_3": {
+        "name": "DC module temperature (3)"
+      },
+      "module_temperature_4": {
+        "name": "DC or battery module temperature"
+      },
+      "fan_1": {
+        "name": "Fan 1"
+      },
+      "fan_2": {
+        "name": "Fan 2"
+      },
+      "inverter_power_l1": {
+        "name": "AC power L1"
+      },
+      "inverter_power_l2": {
+        "name": "AC power L2"
+      },
+      "inverter_power_l3": {
+        "name": "AC power L3"
+      },
+      "production_limit": {
+        "name": "Output power limit"
+      },
+      "production_limit_reached": {
+        "name": "Output limited",
+        "state": {
+          "yes": "Yes",
+          "no": "No"
+        }
+      },
+      "battery_max_charge_power": {
+        "name": "Battery max charge power (DC-DC)"
+      },
+      "battery_max_discharge_power": {
+        "name": "Battery max discharge power (DC-DC)"
+      },
+      "dc_link_voltage": {
+        "name": "DC link voltage"
+      },
+      "grid_valid": {
+        "name": "Grid valid",
+        "state": {
+          "yes": "Yes",
+          "no": "No"
+        }
+      },
+      "feed_in_voltage_l1": {
+        "name": "Feed-in point voltage L1"
+      },
+      "feed_in_voltage_l2": {
+        "name": "Feed-in point voltage L2"
+      },
+      "feed_in_voltage_l3": {
+        "name": "Feed-in point voltage L3"
+      },
+      "feed_in_voltage_l1_l2": {
+        "name": "Feed-in point voltage L1-L2"
+      },
+      "feed_in_voltage_l2_l3": {
+        "name": "Feed-in point voltage L2-L3"
+      },
+      "feed_in_voltage_l3_l1": {
+        "name": "Feed-in point voltage L3-L1"
+      },
+      "feed_in_frequency": {
+        "name": "Feed-in point frequency"
+      },
+      "operating_time": {
+        "name": "Operating time"
+      },
+      "backup_time": {
+        "name": "Time in backup mode"
+      },
+      "power_stage_firmware_1": {
+        "name": "Power stage 1 firmware"
+      },
+      "power_stage_firmware_2": {
+        "name": "Power stage 2 firmware"
+      },
+      "power_stage_hardware": {
+        "name": "Power stage hardware"
+      },
+      "storage_state_of_health": {
+        "name": "State of health"
+      },
+      "storage_cell_temperature_min": {
+        "name": "Cell temperature min"
+      },
+      "storage_cell_temperature_max": {
+        "name": "Cell temperature max"
+      },
+      "storage_bms_temperature": {
+        "name": "BMS ambient temperature"
+      },
+      "storage_discharge_limit": {
+        "name": "Current discharge limit"
+      },
+      "storage_power_limit": {
+        "name": "Current charge limit"
+      },
+      "storage_peak_charge_power": {
+        "name": "Peak charge power (10 s)"
+      },
+      "storage_peak_discharge_power": {
+        "name": "Peak discharge power (10 s)"
+      },
+      "storage_rated_soc_min": {
+        "name": "Manufacturer SoC min"
+      },
+      "storage_rated_soc_max": {
+        "name": "Manufacturer SoC max"
+      },
+      "storage_voltage_min": {
+        "name": "Voltage range min"
+      },
+      "storage_voltage_max": {
+        "name": "Voltage range max"
+      },
+      "storage_modules": {
+        "name": "Modules"
+      },
+      "storage_link": {
+        "name": "Connection"
+      },
+      "exported_l1": {
+        "name": "Exported L1"
+      },
+      "imported_l1": {
+        "name": "Imported L1"
+      },
+      "exported_l2": {
+        "name": "Exported L2"
+      },
+      "imported_l2": {
+        "name": "Imported L2"
+      },
+      "exported_l3": {
+        "name": "Exported L3"
+      },
+      "imported_l3": {
+        "name": "Imported L3"
+      },
+      "inverter_temperature_2": {
+        "name": "Ambient temperature 2"
+      },
+      "surplus_power_available": {
+        "name": "Surplus power available",
+        "state": {
+          "yes": "Yes",
+          "no": "No"
+        }
+      },
+      "module_temperature_5": {
+        "name": "AC module 3 temperature"
+      },
+      "module_temperature_6": {
+        "name": "AC module 4 temperature"
+      },
+      "module_temperature_7": {
+        "name": "AC module 5 temperature"
+      },
+      "module_temperature_8": {
+        "name": "AC module 6 temperature"
+      },
+      "module_temperature_9": {
+        "name": "DC module temperature (9)"
+      },
+      "fan_3": {
+        "name": "Fan 3"
+      },
+      "fan_4": {
+        "name": "Fan 4"
+      },
+      "fan_5": {
+        "name": "Fan 5"
+      },
+      "module_temperature_10": {
+        "name": "DC module temperature (10)"
+      },
+      "active_event": {
+        "name": "Active event"
+      },
+      "active_events": {
+        "name": "Active events"
+      },
+      "active_service_event": {
+        "name": "Active service event"
+      },
+      "active_service_events": {
+        "name": "Active service events"
       }
     },
     "switch": {
@@ -493,51 +739,37 @@
       "api_solar_api_enabled": {
         "name": "Solar API"
       }
+    },
+    "event": {
+      "inverter_event": {
+        "name": "Inverter event",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "error": "Error",
+              "warning": "Warning",
+              "info": "Info",
+              "unclassified": "Unclassified"
+            }
+          }
+        }
+      },
+      "service_event": {
+        "name": "Service event",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "error": "Error",
+              "warning": "Warning",
+              "info": "Info",
+              "unclassified": "Unclassified"
+            }
+          }
+        }
+      }
     }
   },
   "issues": {
-    "legacy_modbus_only_entry_reconfigure": {
-      "title": "Review Fronius web API access",
-      "fix_flow": {
-        "step": {
-          "init": {
-            "title": "Review Fronius System",
-            "description": "The entry \"{entry_title}\" needs a valid token for its selected Web API role. Review the host, access role, update interval, and Modbus IP restriction. The next step asks for the corresponding password only if needed.",
-            "data": {
-              "host": "Host",
-              "api_username": "Web API access role",
-              "scan_interval": "Update interval (seconds)",
-              "restrict_modbus_to_this_ip": "Restrict Modbus to this IP"
-            }
-          },
-          "password": {
-            "title": "Web API Password",
-            "description": "Enter the password for the selected Web API role on {entry_title} ({host}) to create or refresh its stored token. The password is not stored in the config entry.",
-            "data": {
-              "api_password": "Password"
-            }
-          }
-        },
-        "error": {
-          "cannot_connect": "Failed to connect",
-          "invalid_port": "Invalid port number",
-          "invalid_host": "Invalid host address",
-          "unsupported_hardware": "Unsupported hardware. See logs.",
-          "unknown": "Unknown error",
-          "scan_interval_too_short": "Minimum update interval is 5 seconds.",
-          "modbus_address_conflict": "Modbus IDs are not unique",
-          "missing_api_password": "A password is required for the selected Web API role.",
-          "invalid_api_credentials": "Login failed for the selected Web API role.",
-          "cannot_resolve_local_ip": "Could not determine the Home Assistant IP."
-        },
-        "abort": {
-          "entry_not_found": "The Fronius entry no longer exists."
-        },
-        "create_entry": {
-          "default": "Configuration updated successfully."
-        }
-      }
-    },
     "solar_api_low_firmware": {
       "title": "Disable Fronius Solar API on older firmware",
       "fix_flow": {
@@ -557,14 +789,15 @@
           "confirm": {
             "title": "Disable Solar API",
             "description": "Press Submit to disable Solar API on the inverter \"{entry_title}\".",
-            "submit": "Disable Solar API",
-            "data": {}
+            "submit": "Disable Solar API"
           }
         },
         "error": {
           "cannot_connect": "Failed to connect to the inverter.",
           "invalid_api_credentials": "Login failed for the selected Web API role.",
-          "unknown": "Unknown error"
+          "unknown": "Unknown error",
+          "already_configured": "Another entry already uses this host.",
+          "missing_api_password": "A password is required for the selected Web API role."
         },
         "abort": {
           "entry_not_found": "The Fronius entry no longer exists.",
@@ -574,39 +807,146 @@
           "default": "Solar API disabled successfully."
         }
       }
+    },
+    "legacy_modbus_only_entry_reconfigure": {
+      "title": "Old Fronius login notice",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Old Fronius login notice",
+            "description": "This notice is from an earlier version of the integration. Home Assistant now asks for a new login on the integration itself when one is needed. Confirm to remove the notice."
+          }
+        }
+      }
     }
   },
   "options": {
     "step": {
       "init": {
         "title": "Set up Fronius System",
-        "description": "Set the host, local Web API access role, update interval, and Modbus IP restriction. Technician access also enables the export soft-limit control. Minimum interval: 5 seconds.",
+        "description": "Review the host, the local Web API access role, the update intervals and the Modbus IP restriction. Minimum Modbus and Web API interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand, with the SunSpec model type int + SF. Switching an existing entry to it removes those entities; their history stays.",
         "data": {
           "host": "Host",
-          "api_username": "Web API access role",
           "scan_interval": "Update interval (seconds)",
-          "restrict_modbus_to_this_ip": "Restrict Modbus to this IP"
+          "web_scan_interval": "Web API update interval (seconds)",
+          "meter_power_interval": "Grid meter power update interval (seconds, 0 = with the update interval)",
+          "modbus_restriction": "Modbus IP restriction",
+          "api_username": "Web API access role"
         }
       },
       "password": {
-        "title": "Web API Password",
-        "description": "Enter the password for the selected Web API role on {entry_title} ({host}) to create or refresh its stored token. The password is not stored in the config entry.",
+        "title": "Web API password",
+        "description": "Enter the password of the selected Web API role for {entry_title} ({host}) to create or refresh the stored token, or leave it empty to keep the stored one. Passwords are not stored in the config entry.",
         "data": {
           "api_password": "Password"
         }
+      },
+      "sunspec": {
+        "title": "Switch the SunSpec model type?",
+        "description": "The Modbus of {entry_title} ({host}) uses the **{mode}** SunSpec model type. This integration reads the int + SF models and switches the inverter to them. If an external device reads the inverter with the {mode} models, it may no longer work after the switch. Submit to switch; close this dialog to leave the inverter as it is."
       }
     },
     "error": {
       "cannot_connect": "Failed to connect",
+      "cannot_connect_modbus": "Modbus did not answer. Without the web API, switch Modbus TCP on in the inverter first and set the SunSpec model type to int + SF.",
       "invalid_port": "Invalid port number",
       "invalid_host": "Invalid host address",
       "unsupported_hardware": "Unsupported hardware. See logs.",
       "unknown": "Unknown error",
       "scan_interval_too_short": "Minimum update interval is 5 seconds.",
+      "meter_power_interval_too_long": "The grid meter power interval must be shorter than the update interval, or 0.",
       "modbus_address_conflict": "Modbus IDs are not unique",
       "missing_api_password": "A password is required for the selected Web API role.",
       "invalid_api_credentials": "Login failed for the selected Web API role.",
-      "cannot_resolve_local_ip": "Could not determine the Home Assistant IP."
+      "cannot_resolve_local_ip": "Could not determine the Home Assistant IP.",
+      "already_configured": "Another entry already uses this host."
+    }
+  },
+  "selector": {
+    "api_username": {
+      "options": {
+        "customer": "Customer",
+        "technician": "Technician (adds the export limit control)",
+        "none": "Without the web API (Modbus only)"
+      }
+    },
+    "modbus_restriction": {
+      "options": {
+        "keep": "Keep the inverter's setting",
+        "home_assistant": "Restrict control to allowed hosts and allow this Home Assistant (hosts already allowed stay; if the restriction was off, only this Home Assistant)",
+        "off": "Lift the restriction (every host may control the inverter)"
+      }
+    }
+  },
+  "exceptions": {
+    "charge_limit_not_in_mode": {
+      "message": "The charge limit cannot be changed in the current storage mode."
+    },
+    "limit_blocks_both_ways": {
+      "message": "A limit of 0 W would block charging and discharging at once, which the inverter refuses."
+    },
+    "grid_power_beyond_window": {
+      "message": "The inverter holds a combined charge and discharge limit, for example from another controller, that this grid power would exceed. Select the storage mode again to set the power freely."
+    },
+    "storage_mode_left": {
+      "message": "The inverter is no longer in the selected storage mode, for example after a schedule or another controller changed it. Select the mode again."
+    },
+    "discharge_limit_not_in_mode": {
+      "message": "The discharge limit cannot be changed in the current storage mode."
+    },
+    "grid_charge_power_not_in_mode": {
+      "message": "Grid charge power can only be changed in the Charge from Grid storage mode."
+    },
+    "grid_discharge_power_not_in_mode": {
+      "message": "Grid discharge power can only be changed in the Discharge to Grid storage mode."
+    },
+    "value_not_whole": {
+      "message": "The value must be a whole number."
+    },
+    "value_out_of_range": {
+      "message": "The value must be between {minimum} and {maximum}."
+    },
+    "soc_minimum_above_maximum": {
+      "message": "The SoC minimum must not exceed the SoC maximum."
+    },
+    "needs_manual_self_consumption": {
+      "message": "This value can only be changed while self-consumption optimisation is Manual."
+    },
+    "needs_manual_soc_mode": {
+      "message": "This value can only be changed while the Web API SoC mode is Manual."
+    },
+    "ac_limit_without_max_power": {
+      "message": "The AC limit cannot be set: the inverter has not reported its maximum power yet."
+    },
+    "web_api_not_configured": {
+      "message": "The Fronius Web API is not configured for this entry."
+    },
+    "web_api_auth_failed": {
+      "message": "The Fronius Web API rejected the login. Log in again when Home Assistant asks for it on the integration."
+    },
+    "technician_not_configured": {
+      "message": "This control needs the technician role. Choose it via Configure."
+    },
+    "value_refused": {
+      "message": "The value was refused: {error}"
+    },
+    "write_failed": {
+      "message": "Writing to the inverter failed: {error}"
+    },
+    "unsupported_option": {
+      "message": "Unsupported option: {option}"
+    },
+    "web_api_unreachable": {
+      "message": "The inverter's web interface did not answer. Check that the inverter is on and reachable."
+    },
+    "grid_charge_sources_failed": {
+      "message": "The storage mode is set to Charge from Grid, but the inverter's web interface did not allow charging from the grid: {error}"
+    },
+    "grid_charge_sources_login_lost": {
+      "message": "The storage mode is set to Charge from Grid, but without the web login charging from the grid could not be allowed. Log in again when Home Assistant asks for it on the integration."
+    },
+    "soc_minimum_web_failed": {
+      "message": "The Modbus storage reserve is set, but the inverter's web interface did not take it as SoC minimum; the two minimums now differ: {error}"
     }
   }
 }

@@ -1,0 +1,28 @@
+# Test dependencies for LOCAL use.
+#
+# pytest-homeassistant-custom-component pulls in a matching Home Assistant
+# release plus the pytest plugin/fixtures for custom integrations.
+#
+# Deliberately UNPINNED here: locally you want whatever is current, and only a
+# current Home Assistant surfaces deprecations and API removals - an old pin
+# makes the integration look healthy while it is already broken (the previous
+# pin, 0.13.254, held Home Assistant 2025.6 while users ran 2026.8).
+#
+# The CI test job does NOT install this file. It installs the plugin directly,
+# because unpinned is not good enough there: the plugin publishes a normal
+# release for every Home Assistant BETA too, so "newest" quietly becomes a beta
+# and nothing tests the release people run. See .github/workflows/test.yaml and
+# .github/scripts/resolve_phcc.py.
+pytest-homeassistant-custom-component
+# Declared rather than inherited: it arrives through the plugin above today,
+# and the e2e tests rely on `pytest.mark.timeout`. The day that transitive
+# dependency changes, a marker nothing registers becomes a silent no-op.
+pytest-timeout
+# The gates check.sh runs, at the versions CI pins - a formatter that
+# reflows differently from CI's is a red build nobody changed.
+ruff==0.17.3
+mypy==2.4.1
+pip-audit==2.10.1
+# resolve_phcc.py parses versions with it.
+packaging
+-r requirements.txt

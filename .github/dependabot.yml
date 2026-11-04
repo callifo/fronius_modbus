@@ -1,0 +1,41 @@
+version: 2
+
+updates:
+  # The workflow actions. Pinned to commits; Dependabot moves the pin and the
+  # version comment together.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    # One pull request for all of them - action bumps travel together and
+    # each one on its own is a review nobody does.
+    groups:
+      actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "ci"
+
+  # The Python requirements: requirements.txt (what the integration needs at
+  # runtime) and requirements_test.txt (the gates). Dependabot does not read
+  # manifest.json, and tests/test_requirements.py holds the manifest to a
+  # subset of requirements.txt - so a runtime bump here is finished only once
+  # the same line is copied into manifest.json in the same pull request.
+  #
+  # The three modbus packages are excluded on purpose: Home Assistant's own
+  # modbus integration installs them and pins them, so they move with the
+  # declared minimum Home Assistant, never on their own.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    groups:
+      python:
+        patterns:
+          - "*"
+    ignore:
+      - dependency-name: "modbus-connection"
+      - dependency-name: "tmodbus"
+      - dependency-name: "pymodbus"
+    commit-message:
+      prefix: "deps"

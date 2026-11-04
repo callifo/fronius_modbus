@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import hashlib
-import json
+import ipaddress
 import logging
+import math
 import os
 import re
 import socket
-from functools import lru_cache
+from http import HTTPStatus
 from typing import Any
 from urllib.parse import urlparse
 
@@ -14,32 +15,85 @@ import requests
 from requests.auth import AuthBase
 from requests.utils import parse_dict_header
 
-from .const import API_USERNAME
+from .component_readings import flag_value, json_object, take_readings
+from .const import API_USERNAME, ModbusRestriction
+from .export_limit import soft_limit_location
+from .fronius_modbus_api.exceptions import ControlRefused
+from .web_errors import (
+    ClientIpResolutionError,
+    FroniusWebUnreachable,
+    FroniusWebResponseError,
+    SunSpecModeChangeNeeded,
+    FroniusWebAuthError,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
+# Only for a reply without the RS485 roles; a read one is written back as it is.
 MASTER_RTUIF = {"master": {"rtuif": [{"if": "rtu0"}, {"if": "rtu1"}]}}
+# Modes in which the Modbus TCP server answers; "both" also serves RTU clients.
+TCP_MODES = ("tcp", "both")
+# The slave mode in which no device is served over Modbus at all.
+SLAVE_OFF = "off"
+# The mode that adds Modbus TCP to what a slave serves: "tcp" alone would end
+# the RS485 side an RTU client reads.
+_MODE_WITH_TCP = {SLAVE_OFF: "tcp", "rtu": "both", "tcp": "tcp", "both": "both"}
+RESTRICTION_LIST_SEPARATOR = ","
+BATTERIES_PATH = "/api/config/batteries"
+MODBUS_PATH = "/api/config/modbus"
+SOLAR_API_PATH = "/api/config/solar_api"
+# The inverter's name for the integer + scale factor models, the ones read here.
+SUNSPEC_MODE_INT = "int"
+# A component endpoint that answers 404: firmware without it, not a failed read.
+ENDPOINT_MISSING = object()
+# Lists in the answer to a config write that name the fields it did not take.
+WRITE_REFUSALS = (
+    "errors",
+    "permissionFailure",
+    "unknownNodes",
+    "validationErrors",
+    "writeFailure",
+)
 
 
-class ClientIpResolutionError(RuntimeError):
-    """Raised when the local IP for Modbus restriction cannot be resolved."""
+def _http(method: str, url: str, **options: Any) -> requests.Response:
+    """The one call into requests; a guard in the tests keeps it that way.
+
+    Requests puts the URL, and with it the host, into its error text, and
+    that text used to reach the config flow's log through the login.
+    """
+    try:
+        return requests.request(method, url, **options)
+    except requests.RequestException as err:
+        raise FroniusWebUnreachable(type(err).__name__) from err
 
 
-class FroniusWebAuthError(RuntimeError):
-    """Raised when Fronius Web API authentication fails."""
+def _refusal(response: requests.Response) -> str:
+    """The fields an answer names as not taken; only these, never the whole body."""
+    try:
+        body = response.json()
+    except ValueError:
+        return ""
+    if not isinstance(body, dict):
+        return ""
+    refused = {key: body[key] for key in WRITE_REFUSALS if body.get(key)}
+    return f" refused {refused}" if refused else ""
 
 
 def _as_int(value: Any, fallback: int) -> int:
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError, OverflowError:
         return fallback
 
 
-def _is_enabled(value: Any) -> bool:
-    if isinstance(value, str):
-        return value.strip().lower() in {"1", "true", "on", "yes", "enabled"}
-    return bool(value)
+def is_enabled(value: Any) -> bool:
+    """Whether a flag reads as on; a form the inverter does not use is not on.
+
+    Read as on, `[1]` counted as Modbus control already switched on, and the
+    write that switches it on was skipped.
+    """
+    return flag_value(value) is True
 
 
 def _base_url(host_or_url: str) -> str:
@@ -69,81 +123,135 @@ def _is_power_meter_model(model: str | None) -> bool:
     return "meter" in model_l or "wattnode" in model_l or "42,0411" in model_l
 
 
-def _parse_json_object(value: Any) -> dict[str, Any]:
-    try:
-        parsed = json.loads(value) if isinstance(value, str) else None
-    except (TypeError, ValueError, json.JSONDecodeError):
-        return {}
-    return parsed if isinstance(parsed, dict) else {}
-
-
 def _parse_storage_info(attributes: Any) -> dict[str, str | None]:
     if not isinstance(attributes, dict):
         return {"manufacturer": None, "model": "Battery Storage", "serial": None}
 
-    nameplate = _parse_json_object(attributes.get("nameplate"))
+    nameplate = json_object(attributes.get("nameplate"))
     return {
-        "manufacturer": _clean_text(nameplate.get("manufacturer")) or _clean_text(attributes.get("manufacturer")),
+        "manufacturer": _clean_text(nameplate.get("manufacturer"))
+        or _clean_text(attributes.get("manufacturer")),
         "model": (
             _clean_text(attributes.get("model"))
             or _clean_text(nameplate.get("model"))
             or _clean_text(attributes.get("DisplayName"))
             or "Battery Storage"
         ),
-        "serial": _clean_text(attributes.get("serial")) or _clean_text(nameplate.get("serial")),
+        "serial": _clean_text(attributes.get("serial"))
+        or _clean_text(nameplate.get("serial")),
     }
 
 
-def _parse_storage_readable(payload: Any) -> dict[str, Any]:
-    info = _parse_storage_info(None)
-    info["cell_temperature"] = None
-
+def _component_device(payload: Any) -> dict[str, Any] | None:
     nodes, _ = _body_data(payload, "Body", "Data")
     if not isinstance(nodes, dict):
+        return None
+    device = next(iter(nodes.values()), None)
+    return device if isinstance(device, dict) else None
+
+
+def _parse_storage_readable(payload: Any) -> dict[str, Any]:
+    info: dict[str, Any] = dict(_parse_storage_info(None))
+    info["missing"] = payload is ENDPOINT_MISSING
+    device = _component_device(payload)
+    if device is None:
+        info["readings"] = None
         return info
-
-    device = next(iter(nodes.values()), {})
-    if not isinstance(device, dict):
-        return info
-
-    attributes = device.get("attributes") if isinstance(device.get("attributes"), dict) else None
-    channels = device.get("channels") if isinstance(device.get("channels"), dict) else None
-
-    info.update(_parse_storage_info(attributes))
-    if channels is not None:
-        value = channels.get("BAT_TEMPERATURE_CELL_F64")
-        if isinstance(value, (int, float)):
-            info["cell_temperature"] = float(value)
+    attributes = device.get("attributes")
+    info.update(
+        _parse_storage_info(attributes if isinstance(attributes, dict) else None)
+    )
+    info["readings"] = take_readings(device, "storage")
     return info
 
 
 def _parse_inverter_readable(payload: Any) -> dict[str, Any]:
-    info: dict[str, Any] = {"temperature": None, "ac_mod_temperature": None, "dc_mod_temperature": None, "batt_mod_temperature": None}
-    nodes, _ = _body_data(payload, "Body", "Data")
-    if not isinstance(nodes, dict):
-        return info
+    device = _component_device(payload)
+    return {
+        "readings": None if device is None else take_readings(device, "inverter"),
+        "missing": payload is ENDPOINT_MISSING,
+    }
 
-    device = next(iter(nodes.values()), {})
-    if not isinstance(device, dict):
-        return info
 
-    channels = device.get("channels") if isinstance(device.get("channels"), dict) else None
-    if channels is None:
-        return info
+def _without_descriptions(node: Any) -> Any:
+    """A config as it is written: the inverter reads every field with a _<field>_meta."""
+    if isinstance(node, dict):
+        return {
+            key: _without_descriptions(value)
+            for key, value in node.items()
+            if not key.startswith("_")
+        }
+    if isinstance(node, list):
+        return [_without_descriptions(value) for value in node]
+    return node
 
-    value = channels.get("DEVICE_TEMPERATURE_AMBIENTMEAN_01_F32")
-    if isinstance(value, (int, float)):
-        info["temperature"] = float(value)
-    value = channels.get("MODULE_TEMPERATURE_MEAN_01_F32")
-    if isinstance(value, (int, float)):
-        info["ac_mod_temperature"] = float(value)
-    value = channels.get("MODULE_TEMPERATURE_MEAN_03_F32")
-    if isinstance(value, (int, float)):
-        info["dc_mod_temperature"] = float(value)
-    value = channels.get("MODULE_TEMPERATURE_MEAN_04_F32")
-    if isinstance(value, (int, float)):
-        info["batt_mod_temperature"] = float(value)
-    return info
+
+def _config_object(payload: Any, path: str) -> dict[str, Any]:
+    """A config as it is written back: without descriptions, and an object.
+
+    Anything else is a failed read, not a crash further down.
+    """
+    config = _without_descriptions(payload)
+    if not isinstance(config, dict):
+        raise FroniusWebResponseError(
+            f"HTTP 200 on {path} answered no object", HTTPStatus.OK
+        )
+    return config
+
+
+def _nested_object(config: dict[str, Any], key: str, path: str) -> dict[str, Any]:
+    """A nested part of a config, checked like the whole.
+
+    Only an absent part defaults to empty; a present `[]`, `0` or `""` would
+    otherwise be written back with defaults.
+    """
+    return _config_object(config.get(key, {}), path)
+
+
+def _is_number(value: Any) -> bool:
+    """A finite number: NaN compares false with anything."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    return math.isfinite(value)
+
+
+def _same(current: Any, wanted: Any) -> bool:
+    """Whether the inverter already holds what a write would set.
+
+    It answers flags and words in its own spelling ("true", 1, "Manual").
+    """
+    if current is None:
+        return False
+    if isinstance(wanted, bool):
+        # An unknown form is never what is wanted: it is written.
+        return flag_value(current) == wanted
+    if isinstance(wanted, str) and isinstance(current, str):
+        return current.casefold() == wanted.casefold()
+    return bool(current == wanted)
+
+
+def _network(entry: str) -> ipaddress.IPv4Network | ipaddress.IPv6Network | None:
+    try:
+        return ipaddress.ip_network(entry.strip(), strict=False)
+    except ValueError:
+        return None
+
+
+def _restriction_with(restriction: dict[str, Any], address: str) -> dict[str, Any]:
+    """The restriction with ``address`` allowed, keeping every host already on it.
+
+    The inverter takes a list of hosts and networks; replacing it locked out
+    the others. A list that is switched off is not revived with it.
+    """
+    listed = str(restriction.get("ip") or "")
+    entries = [entry for entry in listed.split(RESTRICTION_LIST_SEPARATOR) if entry]
+    if not is_enabled(restriction.get("on")):
+        entries = []
+    client = ipaddress.ip_address(address)
+    networks = [_network(entry) for entry in entries]
+    if not any(network is not None and client in network for network in networks):
+        entries.append(address)
+    return {**restriction, "on": True, "ip": RESTRICTION_LIST_SEPARATOR.join(entries)}
 
 
 def _body_data(payload: Any, *path: str) -> tuple[dict[str, Any] | None, str | None]:
@@ -153,6 +261,15 @@ def _body_data(payload: Any, *path: str) -> tuple[dict[str, Any] | None, str | N
     for key in path:
         node = node.get(key) if isinstance(node, dict) else None
     return (node, ".".join(path)) if isinstance(node, dict) else (None, None)
+
+
+def _rtu_address(attributes: dict[str, Any]) -> int | None:
+    """A meter's RS485 address, or None when the answer gives no usable one."""
+    try:
+        rtu_addr = int(str(attributes.get("addr", "")).strip())
+    except TypeError, ValueError:
+        return None
+    return rtu_addr if rtu_addr > 0 else None
 
 
 def _parse_power_meter_info(
@@ -168,9 +285,9 @@ def _parse_power_meter_info(
     result: dict[str, Any] = {
         "unit_ids": [],
         "primary_unit_id": None,
-        "phase_counts_by_unit_id": {},
         "locations_by_unit_id": {},
         "payload_shape": payload_shape,
+        "incomplete": False,
     }
 
     meters: list[dict[str, Any]] = []
@@ -182,33 +299,32 @@ def _parse_power_meter_info(
             continue
 
         model = _clean_text(attributes.get("model"))
-        try:
-            rtu_addr = int(str(attributes.get("addr", "")).strip())
-        except (TypeError, ValueError):
-            continue
-
-        if rtu_addr <= 0:
-            continue
         if not _is_power_meter_model(model):
+            continue
+        rtu_addr = _rtu_address(attributes)
+        if rtu_addr is None:
+            # A meter the answer names but cannot place; leaving it out
+            # silently would read as that meter being gone.
+            result["incomplete"] = True
             continue
 
         label = (_clean_text(attributes.get("label")) or "").lower()
         location = _clean_text(attributes.get("meter-location"))
-        phase_count = _as_int(attributes.get("phaseCnt"), 0)
         meters.append(
             {
                 "unit_id": int(meter_address_offset) + rtu_addr - 1,
                 "rtu_addr": rtu_addr,
                 "is_primary": label == "<primary>" or location == "0",
                 "location": _as_int(location, -1),
-                "phase_count": phase_count if phase_count > 0 else None,
             }
         )
 
     if not meters:
         return result
 
-    meters.sort(key=lambda meter: (not meter["is_primary"], meter["rtu_addr"], meter["unit_id"]))
+    meters.sort(
+        key=lambda meter: (not meter["is_primary"], meter["rtu_addr"], meter["unit_id"])
+    )
     seen: set[int] = set()
     unit_ids: list[int] = []
     for meter in meters:
@@ -217,8 +333,6 @@ def _parse_power_meter_info(
             continue
         seen.add(unit_id)
         unit_ids.append(unit_id)
-        if meter["phase_count"] is not None:
-            result["phase_counts_by_unit_id"][unit_id] = meter["phase_count"]
         if meter["location"] >= 0:
             result["locations_by_unit_id"][unit_id] = meter["location"]
         if result["primary_unit_id"] is None and meter["is_primary"]:
@@ -230,10 +344,20 @@ def _parse_power_meter_info(
     return result
 
 
-@lru_cache(maxsize=None)
+_HASH_MODES: dict[tuple[str, str], str] = {}
+
+
 def _hash_mode(base_url: str, user: str, timeout: float) -> str:
+    """The digest hash this device declares for `user`, remembered once answered.
+
+    A transport failure returns the fallback without remembering it: caching
+    that answer left md5 devices unable to log in until a restart.
+    """
+    remembered = _HASH_MODES.get((base_url, user))
+    if remembered is not None:
+        return remembered
     try:
-        response = requests.get(f"{base_url}/api/status/common", timeout=timeout)
+        response = _http("get", f"{base_url}/api/status/common", timeout=timeout)
         response.raise_for_status()
         version = (
             response.json()
@@ -241,9 +365,11 @@ def _hash_mode(base_url: str, user: str, timeout: float) -> str:
             .get("digest", {})
             .get(f"{user}HashingVersion")
         )
-    except (requests.RequestException, ValueError):
-        version = None
-    return "md5" if version == 1 else "sha256"
+    except FroniusWebUnreachable, requests.HTTPError, ValueError:
+        return "sha256"
+    mode = "md5" if version == 1 else "sha256"
+    _HASH_MODES[(base_url, user)] = mode
+    return mode
 
 
 class XHeaderDigestAuth(AuthBase):
@@ -272,8 +398,14 @@ class XHeaderDigestAuth(AuthBase):
         request.register_hook("response", self.handle_401)
         return request
 
-    def handle_401(self, response: requests.Response, **kwargs: object) -> requests.Response:
+    def handle_401(
+        self, response: requests.Response, **kwargs: object
+    ) -> requests.Response:
         if response.status_code != 401 or "Authorization" in response.request.headers:
+            return response
+        # Without a password or token the answer would be an empty-password
+        # login on every poll of a no-login entry.
+        if not self.password and self.token is None:
             return response
 
         challenge = _digest_challenge(
@@ -295,7 +427,16 @@ class XHeaderDigestAuth(AuthBase):
         retried = response.connection.send(prepared, **kwargs)
         retried.history.append(response)
         retried.request = prepared
-        if retried.status_code != 401 and self.password:
+        if retried.status_code == 401:
+            # Refused: the client lives on for the public reads, and would send
+            # the same refused login on every poll. The device may
+            # have changed its hash too; the next login asks it again.
+            self.password = ""
+            self.token = None
+            _HASH_MODES.pop((self.base_url or "", self.username), None)
+            self.mode = None
+            return retried
+        if self.password:
             self.saved_token = {
                 "realm": challenge["realm"],
                 "token": self._secret(challenge["realm"]),
@@ -355,7 +496,8 @@ def _login_response(
     timeout: float = 4.0,
 ) -> tuple[requests.Response, XHeaderDigestAuth]:
     auth = XHeaderDigestAuth(user, password=password, token=token, timeout=timeout)
-    response = requests.get(
+    response = _http(
+        "get",
         f"http://{host}/api/commands/Login",
         params={"user": user},
         auth=auth,
@@ -371,10 +513,17 @@ def login(
     token: dict[str, str] | None = None,
     timeout: float = 4.0,
 ) -> bool:
-    return _login_response(host, user, password=password, token=token, timeout=timeout)[0].status_code == 200
+    return (
+        _login_response(host, user, password=password, token=token, timeout=timeout)[
+            0
+        ].status_code
+        == 200
+    )
 
 
-def mint_token(host: str, user: str, password: str, timeout: float = 4.0) -> dict[str, str] | None:
+def mint_token(
+    host: str, user: str, password: str, timeout: float = 4.0
+) -> dict[str, str] | None:
     response, auth = _login_response(host, user, password=password, timeout=timeout)
     return auth.saved_token if response.status_code == 200 else None
 
@@ -394,6 +543,7 @@ class FroniusWebClient:
         self._username = username if username is not None else API_USERNAME
         self._password = password
         self._timeout = timeout
+        self._failing_optional_reads: set[str] = set()
         self._auth = XHeaderDigestAuth(
             self._username,
             password=password,
@@ -401,35 +551,84 @@ class FroniusWebClient:
             timeout=self._timeout,
         )
 
-    def _request(self, method: str, path: str, payload: dict | None = None) -> requests.Response:
-        response = requests.request(
+    def _request(
+        self,
+        method: str,
+        path: str,
+        payload: dict | None = None,
+        *,
+        authenticated: bool = True,
+    ) -> requests.Response:
+        response = _http(
             method,
             f"http://{self._host}{path}",
-            auth=self._auth,
+            auth=self._auth if authenticated else None,
             json=payload,
             timeout=self._timeout,
         )
         if response.status_code in (401, 403):
-            raise FroniusWebAuthError(f"Fronius Web API auth failed with status {response.status_code}")
-        response.raise_for_status()
+            raise FroniusWebAuthError(
+                f"Fronius Web API auth failed with status {response.status_code}"
+            )
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as err:
+            # A bare status left owners without the inverter's reason.
+            raise FroniusWebResponseError(
+                f"HTTP {response.status_code} on {path}{_refusal(response)}",
+                response.status_code,
+            ) from err
         return response
 
     def _get_json(self, path: str) -> dict[str, Any]:
         return self._request("get", path).json()
 
     def _get_public_json(self, path: str) -> dict[str, Any]:
-        response = requests.get(
-            f"http://{self._host}{path}",
-            timeout=self._timeout,
-        )
-        response.raise_for_status()
-        return response.json()
+        return self._request("get", path, authenticated=False).json()
 
-    def _post_ok(self, path: str, payload: dict[str, Any] | None = None) -> bool:
-        return self._request("post", path, payload=payload).ok
+    def _post(self, path: str, payload: dict[str, Any] | None = None) -> None:
+        """Write, and fail on a field the inverter names as refused.
 
-    def issued_token(self) -> dict[str, str] | None:
-        return self._auth.saved_token
+        It answers a config write field by field in the body (seen on a GEN24),
+        so HTTP 200 alone does not say every field was taken.
+        """
+        response = self._request("post", path, payload=payload)
+        if refusal := _refusal(response):
+            raise FroniusWebResponseError(
+                f"HTTP {response.status_code} on {path}{refusal}",
+                response.status_code,
+            )
+
+    def _read_or_nothing(self, path: str) -> dict[str, Any]:
+        """A config to compare against; one that cannot be read compares as empty."""
+        try:
+            return _config_object(self._get_json(path), path)
+        except FroniusWebResponseError, ValueError:
+            return {}
+
+    def _post_changes(
+        self,
+        path: str,
+        wanted: dict[str, Any],
+        current: dict[str, Any] | None = None,
+    ) -> bool:
+        """Write only the fields of ``wanted`` the inverter does not hold; whether any were.
+
+        Compared against a fresh read, not the last poll: a value another
+        controller changed in between would otherwise be skipped as "already
+        set". A config that cannot be read is written in full.
+        """
+        if current is None:
+            current = self._read_or_nothing(path)
+        changes = {
+            key: value
+            for key, value in wanted.items()
+            if not _same(current.get(key), value)
+        }
+        if not changes:
+            return False
+        self._post(path, changes)
+        return True
 
     def _resolve_client_ip(self) -> str:
         try:
@@ -437,10 +636,14 @@ class FroniusWebClient:
                 sock.connect((self._host, 80))
                 client_ip = sock.getsockname()[0]
         except OSError as err:
-            raise ClientIpResolutionError(f"Failed resolving local IP for {self._host}") from err
+            raise ClientIpResolutionError(
+                f"Failed resolving local IP for {self._host}"
+            ) from err
 
         if not client_ip or client_ip.startswith("127."):
-            raise ClientIpResolutionError(f"Invalid local IP resolved for {self._host}: {client_ip!r}")
+            raise ClientIpResolutionError(
+                f"Invalid local IP resolved for {self._host}: {client_ip!r}"
+            )
         return client_ip
 
     def login(self) -> bool:
@@ -458,51 +661,65 @@ class FroniusWebClient:
     def get_solar_api_config(self) -> dict[str, Any]:
         return self._get_json("/api/config/solar_api")
 
-    def get_storage_info(self) -> dict[str, Any]:
+    def get_optional_json(self, path: str) -> Any:
+        """A display-only read: when it fails its values are unknown, not the refresh.
+
+        The component endpoints differ between firmware versions, and one of
+        them failing must not take the controls down with it. A failure is
+        still logged once, and its end: a swallowed HTTP 500 read as "no
+        value". A switched-off device and a rejected login are
+        not this read's to handle.
+        """
         try:
-            return _parse_storage_readable(
-                self._get_json("/api/components/BatteryManagementSystem/readable")
-            )
-        except FroniusWebAuthError:
-            raise
-        except Exception as err:
-            _LOGGER.warning("Failed reading storage identity via web API from %s: %s", self._host, err)
-        return _parse_storage_readable(None)
+            payload = self._get_json(path)
+        except (FroniusWebResponseError, ValueError) as err:
+            missing = getattr(err, "status_code", None) == HTTPStatus.NOT_FOUND
+            if path not in self._failing_optional_reads:
+                self._failing_optional_reads.add(path)
+                log = _LOGGER.debug if missing else _LOGGER.warning
+                log("%s did not answer, its values stay unknown: %s", path, err)
+            return ENDPOINT_MISSING if missing else None
+        if path in self._failing_optional_reads:
+            self._failing_optional_reads.discard(path)
+            _LOGGER.info("%s answers again", path)
+        return payload
+
+    def get_storage_info(self) -> dict[str, Any]:
+        return _parse_storage_readable(
+            self.get_optional_json("/api/components/BatteryManagementSystem/readable")
+        )
 
     def get_inverter_info(self) -> dict[str, Any]:
-        try:
-            return _parse_inverter_readable(
-                self._get_json("/api/components/inverter/readable")
-            )
-        except FroniusWebAuthError:
-            raise
-        except Exception as err:
-            _LOGGER.warning("Failed reading inverter readable data via web API from %s: %s", self._host, err)
-        return _parse_inverter_readable(None)
+        return _parse_inverter_readable(
+            self.get_optional_json("/api/components/inverter/readable")
+        )
 
-    def get_power_meter_info(self, meter_address_offset: int = 200) -> dict[str, Any] | None:
+    def get_power_meter_info(
+        self, meter_address_offset: int = 200
+    ) -> dict[str, Any] | None:
         try:
             data = self._get_public_json("/api/components/PowerMeter/readable")
             meter_info = _parse_power_meter_info(data, meter_address_offset)
             if meter_info is None:
                 top_level_keys = list(data.keys()) if isinstance(data, dict) else []
                 _LOGGER.debug(
-                    "Unrecognized PowerMeter payload shape from %s: top-level keys=%s",
-                    self._host,
+                    "Unrecognized PowerMeter payload shape: top-level keys=%s",
                     top_level_keys,
                 )
                 return None
 
             _LOGGER.debug(
-                "Parsed PowerMeter payload from %s via %s: unit_ids=%s primary_unit_id=%s",
-                self._host,
+                "Parsed the PowerMeter payload via %s: unit_ids=%s primary_unit_id=%s",
                 meter_info.get("payload_shape"),
                 meter_info.get("unit_ids"),
                 meter_info.get("primary_unit_id"),
             )
             return meter_info
         except Exception as err:
-            _LOGGER.warning("Failed reading power meter config via web API from %s: %s", self._host, err)
+            _LOGGER.debug(
+                "Failed reading the power meter config via the web API: %s",
+                err,
+            )
         return None
 
     def ensure_modbus_enabled(
@@ -510,50 +727,70 @@ class FroniusWebClient:
         port: int,
         meter_address: int,
         inverter_unit_id: int,
-        restrict_to_client_ip: bool = False,
+        restriction: ModbusRestriction = ModbusRestriction.KEEP,
+        switch_sunspec_mode: bool = False,
     ) -> bool:
-        current = self.get_modbus_config()
-        slave = current.get("slave") or {}
-        ctr = slave.get("ctr") or {}
-        current_restriction = ctr.get("restriction") or {}
-        restriction_on = bool(restrict_to_client_ip)
-        restriction_ip = self._resolve_client_ip() if restriction_on else None
+        config = _config_object(self.get_modbus_config(), MODBUS_PATH)
+        # Checked like the slave: it is written back as read.
+        master = _config_object(
+            config.get("master", MASTER_RTUIF["master"]), MODBUS_PATH
+        )
+        slave = _nested_object(config, "slave", MODBUS_PATH)
+        ctr = _nested_object(slave, "ctr", MODBUS_PATH)
+        current_restriction = _nested_object(ctr, "restriction", MODBUS_PATH)
+        wanted = current_restriction
+        if restriction == ModbusRestriction.HOME_ASSISTANT:
+            wanted = _restriction_with(current_restriction, self._resolve_client_ip())
+        if restriction == ModbusRestriction.OFF:
+            wanted = {**current_restriction, "on": False}
+        serves_tcp = slave.get("mode") in TCP_MODES
 
         if (
-            slave.get("mode") == "tcp"
-            and _is_enabled(ctr.get("on"))
+            serves_tcp
+            # The integration reads the integer+SF models only; a float map
+            # would pass every other check and then fail the probe.
+            and slave.get("sunspecMode") == SUNSPEC_MODE_INT
+            and is_enabled(ctr.get("on"))
             and _as_int(slave.get("port"), port) == int(port)
             and _as_int(slave.get("meterAddress"), meter_address) == int(meter_address)
-            and _as_int(slave.get("rtu_inverter_slave_id"), inverter_unit_id) == int(inverter_unit_id)
-            and _is_enabled(current_restriction.get("on")) == restriction_on
-            and (not restriction_on or current_restriction.get("ip") == restriction_ip)
+            and _as_int(slave.get("rtu_inverter_slave_id"), inverter_unit_id)
+            == int(inverter_unit_id)
+            and is_enabled(current_restriction.get("on"))
+            == is_enabled(wanted.get("on"))
+            and current_restriction.get("ip") == wanted.get("ip")
         ):
             return False
 
+        # A firmware that names no model type has nothing to switch away from,
+        # and with the slave off no device reads the other models.
+        current_mode = slave.get("sunspecMode")
+        other_mode = current_mode is not None and current_mode != SUNSPEC_MODE_INT
+        served = slave.get("mode") != SLAVE_OFF
+        if other_mode and served and not switch_sunspec_mode:
+            raise SunSpecModeChangeNeeded(str(current_mode))
+
+        # Everything read is written back: the RS485 roles, serial settings and
+        # a "both" mode belong to other devices on the inverter.
         payload = {
-            **MASTER_RTUIF,
+            "master": master,
             "slave": {
-                "rtuif": [],
-                "mode": "tcp",
+                **slave,
+                "rtuif": slave.get("rtuif", []),
+                "mode": _MODE_WITH_TCP.get(slave.get("mode"), "tcp"),
                 "port": port,
-                "sunspecMode": "int",
+                "sunspecMode": SUNSPEC_MODE_INT,
                 "meterAddress": meter_address,
                 "rtu_inverter_slave_id": inverter_unit_id,
-                "ctr": {
-                    "on": True,
-                    "restriction": {"on": restriction_on, **({"ip": restriction_ip} if restriction_ip else {})},
-                },
+                "ctr": {**ctr, "on": True, "restriction": wanted},
             },
         }
-        self._request("post", "/api/config/modbus", payload=payload)
+        self._post(MODBUS_PATH, payload)
         _LOGGER.info(
-            "Enabled Modbus TCP via web API on %s (port=%s inverter_id=%s meter_id=%s restriction=%s ip=%s)",
-            self._host,
+            "Enabled Modbus TCP via the web API (port=%s inverter_id=%s meter_id=%s restriction=%s)",
             port,
             inverter_unit_id,
             meter_address,
-            restriction_on,
-            restriction_ip,
+            is_enabled(wanted.get("on")),
         )
         return True
 
@@ -561,74 +798,112 @@ class FroniusWebClient:
         return self._get_json("/api/config/batteries")
 
     def set_solar_api_enabled(self, enabled: bool) -> bool:
-        payload = {
-            "SolarAPIv1Enabled": bool(enabled),
-            "activeOnExternalDevicesDiscovered": False,
-        }
-        return self._post_ok("/api/config/solar_api", payload)
+        """Switch the Solar API, leaving the owner's discovery switch as it is.
+
+        Switching off clears it too: a discovered device would switch the API
+        straight back on.
+        """
+        current = _config_object(self.get_solar_api_config(), SOLAR_API_PATH)
+        wanted: dict[str, Any] = {"SolarAPIv1Enabled": bool(enabled)}
+        if not enabled:
+            wanted["activeOnExternalDevicesDiscovered"] = False
+        if all(_same(current.get(key), value) for key, value in wanted.items()):
+            return False
+        # Written whole: only the battery endpoint is known to take single fields.
+        self._post(SOLAR_API_PATH, {**current, **wanted})
+        return True
 
     def reset_modbus_control(self) -> bool:
-        return self._post_ok("/api/commands/ModbusReset")
+        self._post("/api/commands/ModbusReset")
+        return True
 
-    def set_battery_config(
-        self,
-        mode: int,
-        power: int | None = None,
-        soc_min: int | None = None,
-    ) -> bool:
-        soc_mode = "manual" if int(mode) == 1 else "auto"
-        payload: dict[str, Any] = {
-            "HYB_EM_MODE": mode,
-            "BAT_M0_SOC_MODE": soc_mode,
-        }
-        if int(mode) == 1 and soc_min is not None:
-            payload["BAT_M0_SOC_MIN"] = int(soc_min)
-        if int(mode) != 1:
-            payload["BAT_M0_SOC_MIN"] = 5
-            payload["BAT_M0_SOC_MAX"] = 100
-        if power is not None:
-            payload["HYB_EM_POWER"] = power
-        return self._post_ok("/api/config/batteries", payload)
+    def set_battery_config(self, mode: int) -> bool:
+        """Self-consumption optimisation only; the SoC window has its own switch."""
+        return self._post_changes(BATTERIES_PATH, {"HYB_EM_MODE": mode})
 
-    def set_battery_soc_config(
-        self,
-        soc_min: int = 6,
-        soc_max: int = 99,
-        backup_reserved: int = 5,
+    def set_battery_power(self, power: int) -> bool:
+        """The target in manual self-consumption optimisation, without the mode."""
+        return self._post_changes(BATTERIES_PATH, {"HYB_EM_POWER": power})
+
+    def set_soc_limits(
+        self, soc_min: int | None = None, soc_max: int | None = None
     ) -> bool:
-        payload: dict[str, Any] = {
-            "BAT_M0_SOC_MIN": soc_min,
-            "BAT_M0_SOC_MODE": "manual",
-            "BAT_M0_SOC_MAX": soc_max,
-            "HYB_BACKUP_RESERVED": backup_reserved,
-        }
-        return self._post_ok("/api/config/batteries", payload)
+        """The SoC limit asked for, checked against the window the inverter holds now.
+
+        The other limit is not sent: taken from the last poll it undid a change
+        made in the inverter UI since.
+        """
+        current = self.check_soc_window(soc_min, soc_max)
+        limits = {"BAT_M0_SOC_MIN": soc_min, "BAT_M0_SOC_MAX": soc_max}
+        wanted = {key: int(value) for key, value in limits.items() if value is not None}
+        return self._post_changes(BATTERIES_PATH, wanted, current)
+
+    def check_soc_window(
+        self, soc_min: int | None = None, soc_max: int | None = None
+    ) -> dict[str, Any]:
+        """Refuse a limit that would invert the window the inverter holds now.
+
+        A config that cannot be read is an error, not an empty window: read as
+        empty it passed, and Modbus took a minimum the web API then refused.
+        Returns the config read.
+        """
+        current = _config_object(self._get_json(BATTERIES_PATH), BATTERIES_PATH)
+        lower = soc_min if soc_min is not None else current.get("BAT_M0_SOC_MIN")
+        upper = soc_max if soc_max is not None else current.get("BAT_M0_SOC_MAX")
+        if not (_is_number(lower) and _is_number(upper)):
+            # Unknown is not "fits": Modbus would take a minimum the web API
+            # may refuse.
+            raise FroniusWebResponseError(
+                f"HTTP 200 on {BATTERIES_PATH} answered no SoC window", HTTPStatus.OK
+            )
+        if lower > upper:
+            raise ControlRefused(
+                "soc_minimum_above_maximum", "SoC Minimum must not exceed SoC Maximum"
+            )
+        return current
+
+    def set_soc_mode(self, mode: str) -> bool:
+        return self._post_changes(BATTERIES_PATH, {"BAT_M0_SOC_MODE": mode})
 
     def set_backup_reserve(self, percent: int) -> bool:
-        """Write only the backup power reserve; the inverter offers it in either battery mode."""
-        return self._post_ok("/api/config/batteries", {"HYB_BACKUP_RESERVED": int(percent)})
+        return self._post_changes(BATTERIES_PATH, {"HYB_BACKUP_RESERVED": int(percent)})
 
-    def set_battery_charge_sources(self, charge_from_grid: bool, charge_from_ac: bool) -> bool:
-        payload = {
-            "HYB_EVU_CHARGEFROMGRID": bool(charge_from_grid),
-            "HYB_BM_CHARGEFROMAC": bool(charge_from_ac),
+    def set_battery_charge_sources(
+        self,
+        charge_from_grid: bool | None = None,
+        charge_from_ac: bool | None = None,
+    ) -> bool:
+        """Only the flags given; a flag not given stays as the inverter holds it."""
+        flags = {
+            "HYB_EVU_CHARGEFROMGRID": charge_from_grid,
+            "HYB_BM_CHARGEFROMAC": charge_from_ac,
         }
-        return self._post_ok("/api/config/batteries", payload)
+        wanted = {key: bool(value) for key, value in flags.items() if value is not None}
+        return self._post_changes(BATTERIES_PATH, wanted)
 
     def get_export_limit_config(self) -> dict[str, Any]:
         """Read current Export Limit Control configuration from the inverter."""
         try:
             return self._get_json("/api/config/limit_settings/powerLimits")
-        except requests.HTTPError:
+        except FroniusWebResponseError as err:
+            # Firmware without the endpoint answers 404; any other status is a
+            # failure the refresh has to report.
+            if err.status_code != HTTPStatus.NOT_FOUND:
+                raise
             return {}
 
     def set_export_soft_limit(self, power_w: int) -> bool:
-        """Set Export Limit Control (Soft Limit) in watts.
+        """Set the export soft limit in watts; whether it was written.
 
-        Reads the current config, patches only the softLimit fields, and writes back.
-        Mirrors read_export_limit.py: only modifies softLimit, leaves everything else unchanged.
+        Writes back the config just read, with only the switch and the watts patched.
         """
         config = self._get_json("/api/config/limit_settings/powerLimits")
-        config["exportLimits"]["activePower"]["softLimit"]["enabled"] = True
-        config["exportLimits"]["activePower"]["softLimit"]["powerLimit"] = int(power_w)
-        return self._post_ok("/api/config/limit_settings/powerLimits", config)
+        active_power = config["exportLimits"]["activePower"]
+        soft = active_power["softLimit"]
+        holder, key = soft_limit_location(active_power)
+        if is_enabled(soft.get("enabled")) and _same(holder.get(key), int(power_w)):
+            return False
+        soft["enabled"] = True
+        holder[key] = int(power_w)
+        self._post("/api/config/limit_settings/powerLimits", config)
+        return True

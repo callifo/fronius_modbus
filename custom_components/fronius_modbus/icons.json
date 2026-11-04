@@ -1,0 +1,248 @@
+{
+  "entity": {
+    "button": {
+      "reset_modbus_control": {
+        "default": "mdi:restart"
+      }
+    },
+    "number": {
+      "backup_reserve": {
+        "default": "mdi:home-battery"
+      }
+    },
+    "sensor": {
+      "ac_current": {
+        "default": "mdi:current-ac"
+      },
+      "ac_current_l1": {
+        "default": "mdi:current-ac"
+      },
+      "ac_current_l2": {
+        "default": "mdi:current-ac"
+      },
+      "ac_current_l3": {
+        "default": "mdi:current-ac"
+      },
+      "ac_limit_enable": {
+        "default": "mdi:power-plug"
+      },
+      "ac_limit_rate": {
+        "default": "mdi:chart-line"
+      },
+      "ac_voltage_l1_l2": {
+        "default": "mdi:lightning-bolt"
+      },
+      "ac_voltage_l1_n": {
+        "default": "mdi:lightning-bolt"
+      },
+      "ac_voltage_l2_l3": {
+        "default": "mdi:lightning-bolt"
+      },
+      "ac_voltage_l2_n": {
+        "default": "mdi:lightning-bolt"
+      },
+      "ac_voltage_l3_l1": {
+        "default": "mdi:lightning-bolt"
+      },
+      "ac_voltage_l3_n": {
+        "default": "mdi:lightning-bolt"
+      },
+      "ac_voltage_line_line": {
+        "default": "mdi:lightning-bolt"
+      },
+      "acenergy": {
+        "default": "mdi:lightning-bolt"
+      },
+      "acpower": {
+        "default": "mdi:lightning-bolt"
+      },
+      "charging_power": {
+        "default": "mdi:gauge"
+      },
+      "discharging_power": {
+        "default": "mdi:gauge"
+      },
+      "export_soft_limit": {
+        "default": "mdi:transmission-tower-export"
+      },
+      "exported": {
+        "default": "mdi:lightning-bolt"
+      },
+      "imported": {
+        "default": "mdi:lightning-bolt"
+      },
+      "inverter_temperature": {
+        "default": "mdi:thermometer"
+      },
+      "isolation_resistance": {
+        "default": "mdi:omega"
+      },
+      "load": {
+        "default": "mdi:lightning-bolt"
+      },
+      "max_power": {
+        "default": "mdi:lightning-bolt"
+      },
+      "mppt_module_dc_current": {
+        "default": "mdi:current-dc"
+      },
+      "mppt_module_dc_power": {
+        "default": "mdi:solar-power"
+      },
+      "mppt_module_dc_voltage": {
+        "default": "mdi:lightning-bolt"
+      },
+      "mppt_module_lifetime_energy": {
+        "default": "mdi:solar-panel"
+      },
+      "power": {
+        "default": "mdi:lightning-bolt"
+      },
+      "power_l1": {
+        "default": "mdi:lightning-bolt"
+      },
+      "power_l2": {
+        "default": "mdi:lightning-bolt"
+      },
+      "power_l3": {
+        "default": "mdi:lightning-bolt"
+      },
+      "pv_power": {
+        "default": "mdi:solar-power"
+      },
+      "soc_minimum": {
+        "default": "mdi:gauge"
+      },
+      "storage_charge_current": {
+        "default": "mdi:current-dc"
+      },
+      "storage_charge_lfte": {
+        "default": "mdi:home-battery"
+      },
+      "storage_charge_power": {
+        "default": "mdi:home-battery"
+      },
+      "storage_charge_voltage": {
+        "default": "mdi:lightning-bolt"
+      },
+      "storage_discharge_current": {
+        "default": "mdi:current-dc"
+      },
+      "storage_discharge_lfte": {
+        "default": "mdi:home-battery"
+      },
+      "storage_discharge_power": {
+        "default": "mdi:home-battery"
+      },
+      "storage_discharge_voltage": {
+        "default": "mdi:lightning-bolt"
+      },
+      "storage_temperature": {
+        "default": "mdi:thermometer"
+      },
+      "throttle_reason": {
+        "default": "mdi:speedometer-slow"
+      },
+      "var": {
+        "default": "mdi:sine-wave"
+      },
+      "vref": {
+        "default": "mdi:lightning-bolt"
+      },
+      "vrefofs": {
+        "default": "mdi:lightning-bolt"
+      },
+      "fan_1": {
+        "default": "mdi:fan"
+      },
+      "fan_2": {
+        "default": "mdi:fan"
+      },
+      "production_limit": {
+        "default": "mdi:solar-power-variant"
+      },
+      "production_limit_reached": {
+        "default": "mdi:speedometer"
+      },
+      "grid_valid": {
+        "default": "mdi:transmission-tower"
+      },
+      "operating_time": {
+        "default": "mdi:timer-outline"
+      },
+      "backup_time": {
+        "default": "mdi:home-battery-outline"
+      },
+      "power_stage_firmware_1": {
+        "default": "mdi:chip"
+      },
+      "power_stage_firmware_2": {
+        "default": "mdi:chip"
+      },
+      "power_stage_hardware": {
+        "default": "mdi:chip"
+      },
+      "storage_state_of_health": {
+        "default": "mdi:battery-heart-variant"
+      },
+      "storage_modules": {
+        "default": "mdi:battery-high"
+      },
+      "storage_link": {
+        "default": "mdi:connection"
+      },
+      "storage_rated_soc_min": {
+        "default": "mdi:battery-low"
+      },
+      "storage_rated_soc_max": {
+        "default": "mdi:battery-high"
+      },
+      "fan_3": {
+        "default": "mdi:fan"
+      },
+      "fan_4": {
+        "default": "mdi:fan"
+      },
+      "fan_5": {
+        "default": "mdi:fan"
+      },
+      "inverter_temperature_2": {
+        "default": "mdi:thermometer"
+      },
+      "surplus_power_available": {
+        "default": "mdi:solar-power-variant"
+      },
+      "active_event": {
+        "default": "mdi:alert-circle-outline"
+      },
+      "active_events": {
+        "default": "mdi:counter"
+      },
+      "active_service_event": {
+        "default": "mdi:wrench-clock"
+      },
+      "active_service_events": {
+        "default": "mdi:counter"
+      }
+    },
+    "switch": {
+      "api_charge_from_ac": {
+        "default": "mdi:power-plug-battery"
+      },
+      "api_charge_from_grid": {
+        "default": "mdi:transmission-tower-export"
+      },
+      "api_solar_api_enabled": {
+        "default": "mdi:api"
+      }
+    },
+    "event": {
+      "inverter_event": {
+        "default": "mdi:bell-outline"
+      },
+      "service_event": {
+        "default": "mdi:wrench-outline"
+      }
+    }
+  }
+}

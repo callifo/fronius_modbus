@@ -1,57 +1,39 @@
+"""Button platform: every FroniusButtonDescription becomes a FroniusButton."""
+
+from __future__ import annotations
+
 from homeassistant.components.button import ButtonEntity
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .base import FroniusModbusBaseEntity, async_ensure_translation_cache
-from .const import INVERTER_API_BUTTON_TYPES
-from .hub import Hub
+from .coordinator import FroniusConfigEntry
+from .entities import FroniusButtonDescription, button_descriptions
+from .entity_base import FroniusEntity
 
-
-async def async_setup_entry(hass, config_entry, async_add_entities) -> None:
-    await async_ensure_translation_cache(hass)
-    hub: Hub = config_entry.runtime_data
-    coordinator = hub.coordinator
-
-    entities = []
-    if hub.web_api_configured:
-        for button_info in INVERTER_API_BUTTON_TYPES:
-            name, key, icon = button_info[:3]
-            entity_category = button_info[3] if len(button_info) > 3 else None
-            entities.append(
-                FroniusModbusButton(
-                    coordinator=coordinator,
-                    device_info=hub.device_info_inverter,
-                    name=name,
-                    key=key,
-                    icon=icon,
-                    entity_category=entity_category,
-                    translation_key=name,
-                    hub=hub,
-                )
-            )
-
-    async_add_entities(entities)
-    return True
+# One write at a time: the inverter answers requests one after the other.
+PARALLEL_UPDATES = 1
 
 
-class FroniusModbusButton(FroniusModbusBaseEntity, ButtonEntity):
-    """Representation of a Fronius Web API button."""
-    _translation_platform = "button"
+class FroniusButton(FroniusEntity, ButtonEntity):
+    """A button that runs its description's press action."""
 
-    def __init__(self, coordinator, device_info, name, key, icon, hub, entity_category=None, translation_key=None):
-        super().__init__(
-            coordinator=coordinator,
-            device_info=device_info,
-            name=name,
-            key=key,
-            icon=icon,
-            entity_category=entity_category,
-            translation_key=translation_key,
-        )
-        self._hub = hub
+    entity_description: FroniusButtonDescription
 
     async def async_press(self) -> None:
-        if self._key == "reset_modbus_control":
-            await self._hub.reset_modbus_control()
+        """Run the description's press action, then request a refresh on Modbus writes."""
+        await self.async_run_write(lambda: self.entity_description.press(self._runtime))
+        if self.entity_description.source == "modbus":
+            await self._runtime.modbus.async_request_refresh()
 
-    @property
-    def available(self) -> bool:
-        return super().available and self._hub.web_api_configured
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: FroniusConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Add every button the current runtime produces."""
+    runtime = entry.runtime_data
+    async_add_entities(
+        FroniusButton(runtime, entry, description)
+        for description in button_descriptions(runtime)
+    )

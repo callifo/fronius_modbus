@@ -1,0 +1,203 @@
+"""The inverter's event log: which events are active, which one leads, what is new.
+
+The entries have the shape /api/status/activeEvents and /api/status/events
+answered on a GEN24 on 2026-09-27; the uuids are made up.
+"""
+
+import pathlib
+
+from custom_components.fronius_modbus.inverter_events import (
+    EVENT_TYPES,
+    EventTracker,
+    event_texts,
+    leading_event,
+    parse_events,
+)
+from homeassistant.components import event as event_component
+from homeassistant.util.yaml import load_yaml
+
+TEXTS = event_texts(
+    {
+        "StateCodes": {
+            "GEN24-1009": "Selbst­test der Licht­bo­gen-Er­ken­nung (AFCI) fehl­ge­schla­gen",
+            "GEN24-1175": "Zu wenig DC-Leis­tung für Ein­spei­se­be­trieb",
+        }
+    }
+)
+
+
+def entry(uuid, prefix, event_id, label, severity, viewer, start, end=None):
+    return {
+        "activeUntil": end,
+        "category": [0],
+        "confirmable": False,
+        "eventID": event_id,
+        "label": label,
+        "prefix": prefix,
+        "severity": severity,
+        "sourceID": 6,
+        "subID": 0,
+        "timestamp": start,
+        "type": 0,
+        "uuid": uuid,
+        "viewer": viewer,
+    }
+
+
+AFCI = entry("a", "GEN24", 1009, "AfciSelftestFailed", 2, 3, 1788683992)
+POWER_LOW = entry("b", "GEN24", 1175, "PowerLow", 2, 1, 1790470000)
+NO_BATTERY_VOLTAGE = entry(
+    "c", "GEN24", 1187, "NoBatteryVoltageMeasured", 1, 1, 1790000000
+)
+# The log's entries without a code carry neither a label nor a text.
+PLACEHOLDER = entry("d", "IG24", 4294967295, "", 3, 3, 1788683900)
+
+
+def test_an_event_reads_as_its_code_its_text_and_its_levels():
+    (event,) = parse_events([AFCI], TEXTS)
+
+    assert event.code == "GEN24-1009"
+    assert event.text == "Selbsttest der Lichtbogen-Erkennung (AFCI) fehlgeschlagen"
+    assert (event.severity, event.visible_to) == ("warning", "service")
+    assert (event.started, event.ended, event.confirmable) == (1788683992, None, False)
+
+
+def test_an_event_without_a_text_shows_its_label():
+    (event,) = parse_events([NO_BATTERY_VOLTAGE], TEXTS)
+
+    assert event.text == "NoBatteryVoltageMeasured"
+    assert event.severity == "error"
+
+
+def test_an_entry_without_a_code_is_no_event():
+    assert parse_events([PLACEHOLDER, AFCI], TEXTS) == parse_events([AFCI], TEXTS)
+
+
+def test_a_level_in_an_unknown_shape_is_unknown():
+    """A list as the severity raised and failed the whole web poll."""
+    odd = AFCI | {"severity": [2], "viewer": {"id": 3}}
+
+    (event,) = parse_events([odd], TEXTS)
+
+    assert (event.severity, event.visible_to) == (None, None)
+
+
+def test_an_answer_that_is_no_list_is_no_reading():
+    assert parse_events(None, TEXTS) is None
+    assert parse_events({"error": "x"}, TEXTS) is None
+
+
+def test_an_error_leads_a_warning():
+    events = parse_events([POWER_LOW, NO_BATTERY_VOLTAGE], TEXTS)
+
+    assert leading_event(events).code == "GEN24-1187"
+
+
+def test_among_equal_levels_the_newest_leads():
+    """Measured: at night PowerLow joins the AFCI warning and leads until morning."""
+    events = parse_events([AFCI, POWER_LOW], TEXTS)
+
+    assert leading_event(events).code == "GEN24-1175"
+
+
+def test_no_active_event_leads_nothing():
+    assert leading_event(()) is None
+
+
+# Home Assistant's clock at a read; the entries above all started before it.
+NOW = 1790600000.0
+
+
+def codes(events):
+    return [event.code for event in events]
+
+
+def test_the_first_read_of_the_log_only_learns_it():
+    """Old entries fired at every restart would flood the logbook."""
+    tracker = EventTracker()
+
+    tracker.read(parse_events([AFCI, POWER_LOW], TEXTS), NOW)
+
+    assert tracker.pending == ()
+    assert tracker.readable
+
+
+def test_a_later_read_reports_only_what_is_new_oldest_first():
+    """A zero-length entry (the battery's BYD2-44) is new like any other."""
+    tracker = EventTracker()
+    tracker.read(parse_events([AFCI], TEXTS), NOW)
+    later = entry("e", "BYD2", 44, "", 2, 1, 1790500001, 1790500001)
+    earlier = entry("f", "GEN24", 1187, "NoBatteryVoltageMeasured", 1, 1, 1790500000)
+
+    tracker.read(parse_events([later, AFCI, earlier], TEXTS), NOW)
+
+    assert codes(tracker.pending) == ["GEN24-1187", "BYD2-44"]
+    tracker.delivered(tracker.batch)
+    tracker.read(parse_events([later, AFCI, earlier], TEXTS), NOW)
+    assert tracker.pending == ()
+
+
+def test_new_entries_wait_until_a_poll_delivers_them():
+    """A poll that failed after the log read published nothing."""
+    tracker = EventTracker()
+    tracker.read(parse_events([AFCI], TEXTS), NOW)
+    tracker.read(parse_events([AFCI, POWER_LOW], TEXTS), NOW)
+    tracker.read(parse_events([AFCI, POWER_LOW, NO_BATTERY_VOLTAGE], TEXTS), NOW)
+
+    assert codes(tracker.pending) == ["GEN24-1187", "GEN24-1175"]
+
+
+def test_after_a_failed_first_read_what_started_since_is_new():
+    """The first read that succeeds is late, not the start."""
+    tracker = EventTracker()
+    tracker.read(None, 1790400000.0)
+    # A later failure keeps the first one's boundary: PowerLow started between.
+    tracker.read(None, 1790480000.0)
+
+    assert not tracker.readable
+    tracker.read(parse_events([AFCI, POWER_LOW, NO_BATTERY_VOLTAGE], TEXTS), NOW)
+
+    assert codes(tracker.pending) == ["GEN24-1175"]
+    assert tracker.readable
+
+
+def test_a_failed_read_after_the_first_changes_nothing_but_readability():
+    tracker = EventTracker()
+    tracker.read(parse_events([AFCI], TEXTS), NOW)
+    tracker.read(None, NOW)
+    tracker.read(parse_events([AFCI, NO_BATTERY_VOLTAGE], TEXTS), NOW)
+
+    assert codes(tracker.pending) == ["GEN24-1187"]
+
+
+def test_entries_are_held_back_while_the_log_does_not_answer():
+    """The event entity is unavailable then; an entry fired into it is lost."""
+    tracker = EventTracker()
+    tracker.read(parse_events([AFCI], TEXTS), NOW)
+    tracker.read(parse_events([AFCI, POWER_LOW], TEXTS), NOW)
+    tracker.read(None, NOW)
+
+    assert tracker.batch == ()
+    tracker.delivered(tracker.batch)
+    tracker.read(parse_events([AFCI, POWER_LOW, NO_BATTERY_VOLTAGE], TEXTS), NOW)
+    assert codes(tracker.batch) == ["GEN24-1187", "GEN24-1175"]
+    tracker.delivered(tracker.batch[:1])
+    assert codes(tracker.pending) == ["GEN24-1175"]
+
+
+def test_texts_that_are_no_mapping_are_no_texts():
+    assert event_texts(None) == {}
+    assert event_texts({"StateCodes": "x"}) == {}
+
+
+def test_every_event_type_can_be_picked_in_the_automation_editor():
+    """The editor's event.received form hides these states from its type list.
+
+    A type named like one of them runs from YAML only.
+    """
+    triggers = load_yaml(
+        pathlib.Path(event_component.__file__).with_name("triggers.yaml")
+    )
+    selector = triggers["received"]["fields"]["event_type"]["selector"]["state"]
+
+    assert not set(EVENT_TYPES) & set(selector["hide_states"])

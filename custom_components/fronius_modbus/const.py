@@ -1,242 +1,203 @@
-from homeassistant.components.sensor import (
-    SensorDeviceClass,
-    SensorStateClass,
-)
-from homeassistant.helpers.entity import EntityCategory
-from .froniusmodbusclient_const import (
-    AC_LIMIT_STATUS,
-    CHARGE_GRID_STATUS,
-    CHARGE_STATUS,
-    CONNECTION_STATUS_CONDENSED,
-    CONTROL_STATUS,
-    ECP_CONNECTION_STATUS,
-    FRONIUS_INVERTER_STATUS,
-    GRID_STATUS,
-    INVERTER_STATUS,
-    STORAGE_CONTROL_MODE,
-)
+"""Constants, SunSpec state maps, and shared value-mapping helpers."""
 
-DOMAIN = 'fronius_modbus'
-CONNECTION_MODBUS = 'modbus'
-DEFAULT_NAME = 'Fronius'
-ENTITY_PREFIX = 'fm'
+from collections.abc import Mapping
+from enum import StrEnum
+import re
+from typing import Any
+
+from homeassistant.const import CONF_HOST, CONF_NAME
+
+DOMAIN = "fronius_modbus"
+DEFAULT_NAME = "Fronius"
+ENTITY_PREFIX = "fm"
 DEFAULT_SCAN_INTERVAL = 10
+DEFAULT_WEB_SCAN_INTERVAL = 60
+MINIMUM_SCAN_INTERVAL = 5
+# 0 leaves the grid meter's power to the full poll.
+DEFAULT_METER_POWER_INTERVAL = 0
+MAXIMUM_METER_POWER_INTERVAL = 60
 DEFAULT_PORT = 502
 DEFAULT_INVERTER_UNIT_ID = 1
 DEFAULT_METER_UNIT_ID = 200
-DEFAULT_METER_UNIT_IDS = [DEFAULT_METER_UNIT_ID]
 DEFAULT_AUTO_ENABLE_MODBUS = True
-DEFAULT_RESTRICT_MODBUS_TO_THIS_IP = False
 API_USERNAME = "customer"
 TECHNICIAN_USERNAME = "technician"
+# The local web logins an entry can use; exactly one is active per entry.
 API_USERNAMES = (API_USERNAME, TECHNICIAN_USERNAME)
+# The role choice that sets an entry up without a web login.
+WEB_API_DISABLED = "none"
 CONF_RECONFIGURE_REQUIRED = "_reconfigure_required"
 MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX = "legacy_modbus_only_reconfigure_"
 SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX = "solar_api_low_firmware_"
-CONF_INVERTER_UNIT_ID = 'inverter_modbus_unit_id'
-CONF_METER_UNIT_ID = 'meter_modbus_unit_id'
-CONF_METER_UNIT_IDS = 'meter_modbus_unit_ids'
-CONF_API_USERNAME = 'api_username'
-CONF_API_PASSWORD = 'api_password'
-CONF_AUTO_ENABLE_MODBUS = 'auto_enable_modbus'
-CONF_RESTRICT_MODBUS_TO_THIS_IP = 'restrict_modbus_to_this_ip'
-ATTR_MANUFACTURER = 'Fronius'
-SUPPORTED_MANUFACTURERS = ['Fronius']
-SUPPORTED_MODELS = ['Primo GEN24', 'Symo GEN24', 'Verto']
+CONF_INVERTER_UNIT_ID = "inverter_modbus_unit_id"
+CONF_METER_UNIT_ID = "meter_modbus_unit_id"
+CONF_METER_UNIT_IDS = "meter_modbus_unit_ids"
+CONF_API_USERNAME = "api_username"
+CONF_API_PASSWORD = "api_password"
+CONF_AUTO_ENABLE_MODBUS = "auto_enable_modbus"
+CONF_MODBUS_RESTRICTION = "modbus_restriction"
+CONF_WEB_SCAN_INTERVAL = "web_scan_interval"
+CONF_METER_POWER_INTERVAL = "meter_power_interval"
 
+
+class ModbusRestriction(StrEnum):
+    """What setup does with the inverter's Modbus IP restriction.
+
+    Keeping is the default: lifting a restriction opens the Modbus server to
+    every host, so it has to be chosen, never implied.
+    """
+
+    KEEP = "keep"
+    HOME_ASSISTANT = "home_assistant"
+    OFF = "off"
+
+
+SUPPORTED_MANUFACTURERS = ["Fronius"]
+# The models Fronius publishes the GEN24 SunSpec register maps for; the Tauro
+# and Tauro ECO share them without the storage model.
+SUPPORTED_MODELS = ["Primo GEN24", "Symo GEN24", "Verto", "Tauro"]
+# Every enum state is a translation key (hassfest: [a-z0-9-_]+); an unmapped
+# SunSpec code shows as this key instead of a value the option list lacks.
+UNKNOWN_STATE = "unknown"
 API_BATTERY_MODE = {
-    0: 'auto',
-    1: 'manual',
+    0: "auto",
+    1: "manual",
 }
 
 API_SOC_MODE = {
-    'auto': 'Automatic',
-    'manual': 'Manual',
+    "auto": "automatic",
+    "manual": "manual",
+}
+# The select speaks in codes like every other one; 1 is manual, as for HYB_EM_MODE.
+SOC_MODE_MANUAL_CODE = 1
+API_SOC_MODE_OPTIONS = {
+    0: API_SOC_MODE["auto"],
+    SOC_MODE_MANUAL_CODE: API_SOC_MODE["manual"],
+}
+
+STORAGE_CONTROL_MODE = {
+    0: "auto",
+    1: "charge",
+    2: "discharge",
+    3: "charge_and_discharge",
+}
+
+CHARGE_STATUS = {
+    1: "off",
+    2: "empty",
+    3: "discharging",
+    4: "charging",
+    5: "full",
+    6: "holding",
+    7: "testing",
+}
+
+INVERTER_STATUS = {
+    1: "off",
+    2: "sleeping",
+    3: "starting",
+    4: "normal",
+    5: "throttled",
+    6: "shutdown",
+    7: "fault",
+    8: "standby",
+}
+
+INVERTER_CONTROLS = [
+    "power_reduction",
+    "constant_reactive_power",
+    "constant_power_factor",
+]
+
+INVERTER_EVENTS = [
+    "error",
+    "warning",
+    "info",
+]
+
+FRONIUS_INVERTER_STATUS = {
+    1: "off",
+    2: "sleeping",
+    3: "starting",
+    4: "normal",
+    5: "throttled",
+    6: "shutdown",
+    7: "fault",
+    8: "standby",
+    9: "no_solarnet",
+    10: "no_inverter_communication",
+    11: "overcurrent_solarnet",
+    12: "firmware_updating",
+    13: "acfi_event",
+}
+
+CHARGE_GRID_STATUS = {
+    0: "disabled",
+    1: "enabled",
+}
+
+# Why the inverter is limiting its output, in the order the rule reports them.
+THROTTLE_REASONS = (
+    "none",
+    "inverter_state",
+    # A percentage limit reached, such as the AC limit (model 123 WMaxLim).
+    "ac_limit",
+    # A limit in watts reached, in practice the export limit of the web interface.
+    "feed_in_limit",
+    "several",
+)
+# No longer reported: both meant a limit that was switched on, not one that held
+# the output. Kept so the states in history keep their label.
+LEGACY_THROTTLE_REASONS = ("active_power_control", "export_limit")
+
+GRID_STATUS = {
+    0: "off_grid",
+    1: "off_grid_operating",
+    2: "on_grid",
+    3: "on_grid_operating",
+}
+
+CONNECTION_STATUS_CONDENSED = {
+    0: "disconnected",
+    1: "connected",
+    3: "available",
+    7: "operating",
+}
+
+ECP_CONNECTION_STATUS = {
+    0: "disconnected",
+    1: "connected",
+}
+
+CONTROL_STATUS = {
+    0: "disabled",
+    1: "enabled",
+}
+
+AC_LIMIT_STATUS = {
+    0: "disabled",
+    1: "enabled",
 }
 
 STORAGE_EXT_CONTROL_MODE = {
-    0: 'auto',
-    1: 'pv_charge_limit',
-    2: 'discharge_limit',
-    3: 'pv_charge_and_discharge_limit',
-    4: 'charge_from_grid',
-    5: 'discharge_to_grid',
-    6: 'block_discharging',
-    7: 'block_charging',
-}
-
-STORAGE_MODBUS_SELECT_TYPES = [
-    ['ext_control_mode', 'ext_control_mode', STORAGE_EXT_CONTROL_MODE],
-]
-
-STORAGE_API_SELECT_TYPES = [
-    ['api_battery_mode', 'api_battery_mode', API_BATTERY_MODE],
-]
-
-STORAGE_API_SWITCH_TYPES = [
-    ['charge_from_ac', 'api_charge_from_ac', 'mdi:power-plug-battery'],
-    ['charge_from_grid', 'api_charge_from_grid', 'mdi:transmission-tower-export'],
-]
-
-STORAGE_MODBUS_NUMBER_TYPES = [
-    ['grid_discharge_power', 'grid_discharge_power', {'min': 0, 'max': 10100, 'step': 10, 'mode':'box', 'unit': 'W', 'max_key': 'maxdischarte'}],
-    ['grid_charge_power', 'grid_charge_power', {'min': 0, 'max': 10100, 'step': 10, 'mode':'box', 'unit': 'W', 'max_key': 'maxcharte'}],
-    ['discharge_limit', 'discharge_limit',  {'min': 0, 'max': 10100, 'step': 10, 'mode':'box', 'unit': 'W', 'max_key': 'maxdischarte'}],
-    ['charge_limit', 'charge_limit', {'min': 0, 'max': 10100, 'step': 10, 'mode':'box', 'unit': 'W', 'max_key': 'maxcharte'}],
-    ['soc_minimum', 'soc_minimum', {'min': 5, 'max': 100, 'step': 1, 'mode':'box', 'unit': '%'}],
-]
-
-STORAGE_API_NUMBER_TYPES = [
-    ['api_battery_power', 'api_battery_power', {'min': -20000, 'max': 20000, 'step': 10, 'mode': 'box', 'unit': 'W'}],
-    ['soc_maximum', 'soc_maximum', {'min': 0, 'max': 100, 'step': 1, 'mode': 'box', 'unit': '%'}],
-    ['backup_reserve', 'backup_reserve', {'min': 5, 'max': 100, 'step': 1, 'mode': 'box', 'unit': '%'}],
-]
-
-INVERTER_NUMBER_TYPES = [
-    ['ac_limit_rate', 'ac_limit_rate', {'min': 0, 'max': 50000, 'step': 10, 'mode':'box', 'unit': 'W', 'max_key': 'max_power'}],
-    ['power_factor', 'power_factor', {'min': -1, 'max': 1, 'step': 0.001, 'mode':'box', 'unit': None}],
-]
-
-INVERTER_WEB_NUMBER_TYPES = [
-    ['export_soft_limit', 'export_soft_limit', {'min': 0, 'max': 15000, 'step': 10, 'mode': 'box', 'unit': 'W'}],
-]
-
-INVERTER_SELECT_TYPES = [
-    ['ac_limit_enable', 'ac_limit_enable', {0: 'disabled', 1: 'enabled'}],
-    ['power_factor_enable', 'power_factor_enable', {0: 'disabled', 1: 'enabled'}],
-    ['conn', 'conn', {0: 'disabled', 1: 'enabled'}],
-]
-
-INVERTER_API_SWITCH_TYPES = [
-    ['api_solar_api_enabled', 'api_solar_api_enabled', 'mdi:api', EntityCategory.DIAGNOSTIC],
-]
-
-INVERTER_API_BUTTON_TYPES = [
-    ['reset_modbus_control', 'reset_modbus_control', 'mdi:restart', EntityCategory.DIAGNOSTIC],
-]
-
-INVERTER_SENSOR_TYPES = {
-    'a': ['a', 'a', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-ac', None],
-    'apha': ['apha', 'apha', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-ac', None],
-    'acpower': ['acpower', 'acpower', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:lightning-bolt', None],
-    'var': ['var', 'var', None, SensorStateClass.MEASUREMENT, 'var', 'mdi:sine-wave', None],
-    'acenergy': ['acenergy', 'acenergy', SensorDeviceClass.ENERGY, SensorStateClass.TOTAL_INCREASING, 'Wh', 'mdi:lightning-bolt', None],
-    'pv_power': ['pv_power', 'pv_power', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:solar-power', None],
-    'load': ['load', 'load', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:lightning-bolt', None],
-    'pv_connection': ['pv_connection', 'pv_connection', None, None, None, None, EntityCategory.DIAGNOSTIC],
-    'ecp_connection': ['ecp_connection', 'ecp_connection', None, None, None, None, EntityCategory.DIAGNOSTIC],
-    'status': ['status', 'status', None, None, None, None, EntityCategory.DIAGNOSTIC],
-    'statusvendor': ['statusvendor', 'statusvendor', None, None, None, None, EntityCategory.DIAGNOSTIC],
-    'line_frequency': ['line_frequency', 'line_frequency', SensorDeviceClass.FREQUENCY, SensorStateClass.MEASUREMENT, 'Hz', None, None],
-    'inverter_controls': ['control_mode', 'inverter_controls', None, None, None, None, EntityCategory.DIAGNOSTIC],
-    'vref': ['vref', 'vref', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', EntityCategory.DIAGNOSTIC],
-    'vrefofs': ['vrefofs', 'vrefofs', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', EntityCategory.DIAGNOSTIC],
-    'max_power': ['max_power', 'max_power', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:lightning-bolt', None],
-    'events2': ['events2', 'events2', None, None, None, None, EntityCategory.DIAGNOSTIC],
-
-    'grid_status': ['grid_status', 'grid_status', None, None, None, None, EntityCategory.DIAGNOSTIC],
-
-    'conn': ['conn', 'conn', None, None, None, None, EntityCategory.DIAGNOSTIC],
-    'wmaxlim_ena': ['wmaxlim_ena', 'wmaxlim_ena', None, None, None, None, EntityCategory.DIAGNOSTIC],
-    'outpfset_ena': ['outpfset_ena', 'outpfset_ena', None, None, None, None, EntityCategory.DIAGNOSTIC],
-    'varpct_ena': ['varpct_ena', 'varpct_ena', None, None, None, None, EntityCategory.DIAGNOSTIC],
-    'phvpha': ['phvpha', 'phvpha', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
-    'unit_id': ['unit_id', 'i_unit_id', None, None, None, None, EntityCategory.DIAGNOSTIC],
-    'ac_limit_rate': ['ac_limit_rate', 'ac_limit_rate', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:chart-line', None],
-    'ac_limit_enable': ['ac_limit_enable', 'ac_limit_enable', None, None, None, 'mdi:power-plug', EntityCategory.DIAGNOSTIC],
-    'isolation_resistance': ['isolation_resistance', 'isolation_resistance', None, SensorStateClass.MEASUREMENT, 'MΩ', 'mdi:omega', None],
-}
-
-INVERTER_WEB_SENSOR_TYPES = {
-    'inverter_temperature': ['inverter_temperature', 'inverter_temperature', SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, '°C', 'mdi:thermometer', None],
-    'ac_mod_temperature': ['ac_mod_temperature', 'ac_mod_temperature', SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, '°C', 'mdi:thermometer', None],
-    'dc_mod_temperature': ['dc_mod_temperature', 'dc_mod_temperature', SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, '°C', 'mdi:thermometer', None],
-    'batt_mod_temperature': ['batt_mod_temperature', 'batt_mod_temperature', SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, '°C', 'mdi:thermometer', None],
-    'export_soft_limit': ['export_soft_limit', 'export_soft_limit', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:transmission-tower-export', None],
-    'api_modbus_mode': ['api_modbus_mode', 'api_modbus_mode', None, None, None, None, EntityCategory.DIAGNOSTIC],
-    'api_modbus_control': ['api_modbus_control', 'api_modbus_control', None, None, None, None, EntityCategory.DIAGNOSTIC],
-    'api_modbus_sunspec_mode': ['api_modbus_sunspec_mode', 'api_modbus_sunspec_mode', None, None, None, None, EntityCategory.DIAGNOSTIC],
-    'api_modbus_restriction': ['api_modbus_restriction', 'api_modbus_restriction', None, None, None, None, EntityCategory.DIAGNOSTIC],
-    'api_modbus_restriction_ip': ['api_modbus_restriction_ip', 'api_modbus_restriction_ip', None, None, None, None, EntityCategory.DIAGNOSTIC],
-}
-
-MPPT_MODULE_SENSOR_TYPES = [
-    ['dc_current', 'dc_current', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-dc', None],
-    ['dc_voltage', 'dc_voltage', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
-    ['dc_power', 'dc_power', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:solar-power', None],
-    ['lifetime_energy', 'lifetime_energy', SensorDeviceClass.ENERGY, SensorStateClass.TOTAL_INCREASING, 'Wh', 'mdi:solar-panel', None],
-]
-
-INVERTER_SYMO_SENSOR_TYPES = {
-    'aphb': ['aphb', 'aphb', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-ac', None],
-    'aphc': ['aphc', 'aphc', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-ac', None],
-    'phvphb': ['phvphb', 'phvphb', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
-    'phvphc': ['phvphc', 'phvphc', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
-    'ppvphab': ['ppvphab', 'ppvphab', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
-    'ppvphbc': ['ppvphbc', 'ppvphbc', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
-    'ppvphca': ['ppvphca', 'ppvphca', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
-}
-
-INVERTER_STORAGE_SENSOR_TYPES = {
-    'storage_charge_current': ['storage_charge_current', 'storage_charge_current', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-dc', None],
-    'storage_charge_voltage': ['storage_charge_voltage', 'storage_charge_voltage', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
-    'storage_charge_power': ['storage_charge_power', 'storage_charge_power', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:home-battery', None],
-    'storage_charge_lfte': ['storage_charge_lfte', 'storage_charge_lfte', SensorDeviceClass.ENERGY, SensorStateClass.TOTAL_INCREASING, 'Wh', 'mdi:home-battery', None],
-    'storage_discharge_current': ['storage_discharge_current', 'storage_discharge_current', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-dc', None],
-    'storage_discharge_voltage': ['storage_discharge_voltage', 'storage_discharge_voltage', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
-    'storage_discharge_power': ['storage_discharge_power', 'storage_discharge_power', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:home-battery', None],
-    'storage_discharge_lfte': ['storage_discharge_lfte', 'storage_discharge_lfte', SensorDeviceClass.ENERGY, SensorStateClass.TOTAL_INCREASING, 'Wh', 'mdi:home-battery', None],
-    'storage_connection': ['storage_connection', 'storage_connection', None, None, None, None, EntityCategory.DIAGNOSTIC],
+    0: "auto",
+    1: "pv_charge_limit",
+    2: "discharge_limit",
+    3: "pv_charge_and_discharge_limit",
+    4: "charge_from_grid",
+    5: "discharge_to_grid",
+    6: "block_discharging",
+    7: "block_charging",
 }
 
 
-METER_SENSOR_TYPES = {
-    'a': ['a', 'a', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-ac', None],
-    'apha': ['apha', 'apha', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-ac', None],
-    'aphb': ['aphb', 'aphb', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-ac', None],
-    'aphc': ['aphc', 'aphc', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-ac', None],
-    'power': ['power', 'power', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:lightning-bolt', None],
-    'wpha': ['wpha', 'wpha', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:lightning-bolt', None],
-    'wphb': ['wphb', 'wphb', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:lightning-bolt', None],
-    'wphc': ['wphc', 'wphc', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:lightning-bolt', None],
-    'exported': ['exported', 'exported', SensorDeviceClass.ENERGY, SensorStateClass.TOTAL_INCREASING, 'Wh', 'mdi:lightning-bolt', None],
-    'imported': ['imported', 'imported', SensorDeviceClass.ENERGY, SensorStateClass.TOTAL_INCREASING, 'Wh', 'mdi:lightning-bolt', None],
-    'line_frequency': ['line_frequency', 'line_frequency', SensorDeviceClass.FREQUENCY, SensorStateClass.MEASUREMENT, 'Hz', None, None],
-    'phvpha': ['phvpha', 'phvpha', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
-    'phvphb': ['phvphb', 'phvphb', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
-    'phvphc': ['phvphc', 'phvphc', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
-    'ppv': ['ppv', 'ppv', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
-    'unit_id': ['unit_id', 'unit_id', None, None, None, None, EntityCategory.DIAGNOSTIC],
-}
-
-SINGLE_PHASE_UNSUPPORTED_METER_SENSOR_KEYS = (
-    "aphb",
-    "aphc",
-    "wphb",
-    "wphc",
-    "phvphb",
-    "phvphc",
-    "ppv",
-)
-
-STORAGE_SENSOR_TYPES = {
-    'storage_temperature': ['storage_temperature', 'storage_temperature', SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, '°C', 'mdi:thermometer', None],
-    'control_mode': ['control_mode', 'control_mode', None, None, None, None, EntityCategory.DIAGNOSTIC],
-    'charge_status': ['charge_status', 'charge_status', None, None, None, None, None, EntityCategory.DIAGNOSTIC],
-    'max_charge': ['max_charge', 'max_charge', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', None, EntityCategory.DIAGNOSTIC],
-    'soc': ['soc', 'soc', SensorDeviceClass.BATTERY, SensorStateClass.MEASUREMENT, '%', None, None],
-    'charging_power': ['charging_power', 'charging_power',  None, None, '%', 'mdi:gauge', EntityCategory.DIAGNOSTIC],
-    'discharging_power': ['discharging_power', 'discharging_power',  None, None, '%', 'mdi:gauge', EntityCategory.DIAGNOSTIC],
-    'soc_minimum': ['soc_minimum', 'soc_minimum',  None, None, '%', 'mdi:gauge', None],
-    'grid_charging': ['grid_charging', 'grid_charging',  None, None, None, None, EntityCategory.DIAGNOSTIC],
-    'whrtg': ['whrtg', 'whrtg',  SensorDeviceClass.ENERGY, SensorStateClass.MEASUREMENT, 'Wh', None, EntityCategory.DIAGNOSTIC],
-    'maxcharte': ['maxcharte', 'maxcharte',  SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', None, EntityCategory.DIAGNOSTIC],
-    'maxdischarte': ['maxdischarte', 'maxdischarte',  SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', None, EntityCategory.DIAGNOSTIC],
-}
-
-
-def _state_values(*mappings) -> list[str]:
-    return list(dict.fromkeys(value for mapping in mappings for value in mapping.values()))
+def _state_values(*mappings: Mapping[int, str]) -> list[str]:
+    return list(
+        dict.fromkeys(
+            [value for mapping in mappings for value in mapping.values()]
+            + [UNKNOWN_STATE]
+        )
+    )
 
 
 INVERTER_CONTROL_STATE_VALUES = [
@@ -252,20 +213,83 @@ INVERTER_CONTROL_STATE_VALUES = [
 
 
 SENSOR_STATE_OPTIONS = {
-    'pv_connection': _state_values(CONNECTION_STATUS_CONDENSED),
-    'storage_connection': _state_values(CONNECTION_STATUS_CONDENSED),
-    'ecp_connection': _state_values(ECP_CONNECTION_STATUS),
-    'status': _state_values(INVERTER_STATUS),
-    'statusvendor': _state_values(FRONIUS_INVERTER_STATUS),
-    'grid_status': _state_values(GRID_STATUS),
-    'conn': _state_values(CONTROL_STATUS),
-    'wmaxlim_ena': _state_values(CONTROL_STATUS),
-    'outpfset_ena': _state_values(CONTROL_STATUS),
-    'varpct_ena': _state_values(CONTROL_STATUS),
-    'ac_limit_enable': _state_values(AC_LIMIT_STATUS, {2: 'unknown'}),
-    'control_mode': _state_values(STORAGE_CONTROL_MODE) + INVERTER_CONTROL_STATE_VALUES,
-    'charge_status': _state_values(CHARGE_STATUS),
-    'grid_charging': _state_values(CHARGE_GRID_STATUS),
-    'api_modbus_control': _state_values(CONTROL_STATUS),
-    'api_modbus_restriction': _state_values(CONTROL_STATUS),
+    "pv_connection": _state_values(CONNECTION_STATUS_CONDENSED),
+    "storage_connection": _state_values(CONNECTION_STATUS_CONDENSED),
+    "ecp_connection": _state_values(ECP_CONNECTION_STATUS),
+    "status": _state_values(INVERTER_STATUS),
+    "statusvendor": _state_values(FRONIUS_INVERTER_STATUS),
+    "grid_status": _state_values(GRID_STATUS),
+    "throttle_reason": [*THROTTLE_REASONS, *LEGACY_THROTTLE_REASONS, UNKNOWN_STATE],
+    "connection_control": _state_values(CONTROL_STATUS),
+    "power_limit_control": _state_values(CONTROL_STATUS),
+    "power_factor_control": _state_values(CONTROL_STATUS),
+    "reactive_power_control": _state_values(CONTROL_STATUS),
+    "ac_limit_enable": _state_values(AC_LIMIT_STATUS, {2: UNKNOWN_STATE}),
+    "control_mode": _state_values(STORAGE_CONTROL_MODE),
+    "inverter_controls": [*INVERTER_CONTROL_STATE_VALUES, UNKNOWN_STATE],
+    "charge_status": _state_values(CHARGE_STATUS),
+    "grid_charging": _state_values(CHARGE_GRID_STATUS),
+    "api_modbus_control": _state_values(CONTROL_STATUS),
+    "api_modbus_restriction": _state_values(CONTROL_STATUS),
 }
+
+
+_NOT_A_KEY_CHARACTER = re.compile(r"[^a-z0-9]+")
+
+
+def instance_key(entry_id: str) -> str:
+    """The per-entry key every unique id and device identifier is built on since 0.2."""
+    return _NOT_A_KEY_CHARACTER.sub("_", entry_id.lower()).strip("_") or "fronius"
+
+
+def web_api_disabled(values: Mapping[str, Any]) -> bool:
+    """Whether the owner set the entry up without a web login."""
+    return str(values.get(CONF_API_USERNAME, API_USERNAME)) == WEB_API_DISABLED
+
+
+def entry_title(data: Mapping[str, Any]) -> str:
+    """The entry's title: its name and the host it serves."""
+    host = str(data.get(CONF_HOST, "")).strip()
+    name = str(data.get(CONF_NAME, DEFAULT_NAME)).strip() or DEFAULT_NAME
+    return f"{name} {host}" if host else name
+
+
+def entry_title_after(
+    title: str, before: Mapping[str, Any], after: Mapping[str, Any]
+) -> str:
+    """The title for changed settings: only a generated one follows them.
+
+    A title the owner gave is theirs.
+    """
+    return entry_title(after) if title == entry_title(before) else title
+
+
+def entry_unique_id(data: Mapping[str, Any]) -> str:
+    """The entry's unique id: its host, spelled one way."""
+    return str(data.get(CONF_HOST, "")).strip().lower()
+
+
+def entity_prefix(entry_id: str) -> str:
+    """The unique-id/entity-id prefix for one config entry."""
+    return f"{ENTITY_PREFIX}_{instance_key(entry_id)}"
+
+
+def map_code(mapping: dict[int, str], code: int | None) -> str | None:
+    """Look up a SunSpec state code; an unmapped one reads as UNKNOWN_STATE."""
+    if code is None:
+        return None
+    return mapping.get(code, UNKNOWN_STATE)
+
+
+def bitmask_to_string(
+    bitmask: int | None, names: list[str], default: str, bits: int = 16
+) -> str | None:
+    """Render a SunSpec bitfield as its set flag names joined into one state key."""
+    if bitmask is None:
+        return None
+    set_names = [
+        names[bit] if bit < len(names) else f"bit {bit} undefined"
+        for bit in range(bits)
+        if bitmask & (1 << bit)
+    ]
+    return "_".join(set_names) if set_names else default

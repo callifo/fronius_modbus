@@ -1,0 +1,1560 @@
+"""Entity descriptions for every platform; the base entity is in entity_base.py.
+
+Each description carries a ``value_fn`` (and, for writable platforms, a
+``set_fn``/``turn_on``/``turn_off``/``press``) closing over a
+:class:`FroniusRuntimeData`. The `*_descriptions()` factories build the full
+list for the current runtime -- including the per-meter and per-MPPT-module
+rows, which only exist once the device reports them -- so a platform's
+``async_setup_entry`` is just ``factory(runtime)`` fed into an entity class.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Awaitable, Callable
+from dataclasses import replace
+from functools import partial
+from operator import attrgetter
+from typing import Any
+
+from homeassistant.components.number import NumberMode
+from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
+from homeassistant.helpers.entity import EntityCategory
+
+from .component_readings import (
+    COMPONENT_READINGS,
+    DISPLAY_PRECISION,
+    NO,
+    YES,
+    ComponentReading,
+    component_value,
+    reported,
+)
+from .const import (
+    AC_LIMIT_STATUS,
+    API_BATTERY_MODE,
+    API_SOC_MODE_OPTIONS,
+    CHARGE_GRID_STATUS,
+    CHARGE_STATUS,
+    CONNECTION_STATUS_CONDENSED,
+    CONTROL_STATUS,
+    ECP_CONNECTION_STATUS,
+    FRONIUS_INVERTER_STATUS,
+    INVERTER_CONTROLS,
+    INVERTER_EVENTS,
+    INVERTER_STATUS,
+    SENSOR_STATE_OPTIONS,
+    SOC_MODE_MANUAL_CODE,
+    STORAGE_CONTROL_MODE,
+    STORAGE_EXT_CONTROL_MODE,
+    UNKNOWN_STATE,
+    bitmask_to_string,
+    entity_prefix,
+    map_code,
+)
+from .coordinator import FroniusConfigEntry, FroniusRuntimeData, assume_present
+from .descriptions import (
+    DeviceKind,
+    FroniusButtonDescription,
+    FroniusEventDescription,
+    FroniusNumberDescription,
+    FroniusSelectDescription,
+    FroniusSensorDescription,
+    FroniusSwitchDescription,
+    Source,
+    WebClientKind,
+)
+from .event_entities import (
+    CUSTOMER,
+    EVENT_AUDIENCES,
+    SERVICE,
+    active_event_count,
+    leading_event_attributes,
+    leading_event_text,
+)
+from .fronius_modbus_api.device import (
+    REPORT_CONTROLS,
+    REPORT_INVERTER,
+    REPORT_MPPT,
+    REPORT_NAMEPLATE,
+    REPORT_SETTINGS,
+    REPORT_STATUS,
+    REPORT_STORAGE,
+    MeterInfo,
+    meter_report_name,
+)
+from .fronius_modbus_api.storage import (
+    CHARGE_LIMIT_MODES,
+    DISCHARGE_LIMIT_MODES,
+    ExtendedMode,
+)
+from .fronius_modbus_api.sunspec_models import MpptModule
+from .inverter_events import EVENT_TYPES
+from .mppt_entities import _mppt_sensor_descriptions
+from .web_control import WebData
+
+# The rated power while settings.w_max is unknown: 0.3's static AC limit maximum.
+RATED_POWER_FALLBACK_W = 50_000
+
+
+# -- value helpers -----------------------------------------------------------------
+
+
+def _rated_power_w(runtime: FroniusRuntimeData) -> float:
+    """The inverter's rated AC power, which no power control can go beyond."""
+    settings = runtime.device.settings
+    return (settings.w_max if settings else None) or RATED_POWER_FALLBACK_W
+
+
+def _control_status(value: bool | None) -> str | None:
+    """CONTROL_STATUS as the inverter-controls booleans report it: None stays None."""
+    if value is None:
+        return None
+    return CONTROL_STATUS[1] if value else CONTROL_STATUS[0]
+
+
+def _ac_limit_status(value: bool | None) -> str:
+    """AC_LIMIT_STATUS, with an explicit UNKNOWN_STATE for a value the controls haven't read yet."""
+    if value is None:
+        return UNKNOWN_STATE
+    return AC_LIMIT_STATUS[1] if value else AC_LIMIT_STATUS[0]
+
+
+def _mppt_channel_module(
+    runtime: FroniusRuntimeData, channel: int | None
+) -> MpptModule:
+    """The MPPT module on a storage channel, assumed present like its channel."""
+    return assume_present(runtime.device.mppt_module(assume_present(channel)))
+
+
+def _storage_present(runtime: FroniusRuntimeData) -> bool:
+    return runtime.device.storage is not None
+
+
+def _web_field(runtime: FroniusRuntimeData, field_name: str) -> Any:
+    web_data = runtime.web_data
+    return None if web_data is None else getattr(web_data, field_name)
+
+
+def _web_configured(runtime: FroniusRuntimeData) -> bool:
+    return runtime.web_control is not None and runtime.web_control.configured
+
+
+def _web_soc_mode_is_manual(runtime: FroniusRuntimeData) -> bool:
+    return (
+        _web_configured(runtime)
+        and assume_present(runtime.web_control).soc_mode_is_manual
+    )
+
+
+def _controls_present(runtime: FroniusRuntimeData) -> bool:
+    return runtime.inverter_controls is not None
+
+
+def _controls_value(runtime: FroniusRuntimeData, getter: Callable[[Any], Any]) -> Any:
+    """Read a value off inverter_controls, or None while it hasn't loaded yet."""
+    controls = runtime.inverter_controls
+    return None if controls is None else getter(controls)
+
+
+# -- sensor table --------------------------------------------------------------
+
+
+def _sensor(
+    key: str,
+    translation_key: str,
+    *,
+    device: DeviceKind = "inverter",
+    source: Source = "modbus",
+    web_client: WebClientKind = "customer",
+    report_name: str | None = None,
+    meter_unit_id: int | None = None,
+    value_fn: Callable[[FroniusRuntimeData], Any],
+    exists_fn: Callable[[FroniusRuntimeData], bool] = lambda runtime: True,
+    available_fn: Callable[[FroniusRuntimeData], bool] = lambda runtime: True,
+    device_class: SensorDeviceClass | None = None,
+    state_class: SensorStateClass | None = None,
+    unit: str | None = None,
+    entity_category: EntityCategory | None = None,
+    enabled: bool = True,
+    meter_power: bool = False,
+) -> FroniusSensorDescription:
+    options = SENSOR_STATE_OPTIONS.get(translation_key)
+    return FroniusSensorDescription(
+        key=key,
+        translation_key=translation_key,
+        device=device,
+        source=source,
+        web_client=web_client,
+        report_name=report_name,
+        meter_unit_id=meter_unit_id,
+        value_fn=value_fn,
+        exists_fn=exists_fn,
+        available_fn=available_fn,
+        device_class=SensorDeviceClass.ENUM if options is not None else device_class,
+        state_class=state_class,
+        native_unit_of_measurement=unit,
+        entity_category=entity_category,
+        options=options,
+        entity_registry_enabled_default=enabled,
+        meter_power=meter_power,
+    )
+
+
+# The inverter's events, read without a login from its web interface.
+_event_sensor = partial(
+    _sensor,
+    source="web",
+    web_client="public",
+    exists_fn=lambda runtime: runtime.web is not None,
+    entity_category=EntityCategory.DIAGNOSTIC,
+)
+
+
+_STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
+    _sensor(
+        "A",
+        "ac_current",
+        report_name=REPORT_INVERTER,
+        value_fn=lambda r: assume_present(r.device.inverter).a,
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="A",
+    ),
+    _sensor(
+        "AphA",
+        "ac_current_l1",
+        report_name=REPORT_INVERTER,
+        value_fn=lambda r: assume_present(r.device.inverter).aph_a,
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="A",
+    ),
+    _sensor(
+        "acpower",
+        "acpower",
+        report_name=REPORT_INVERTER,
+        value_fn=lambda r: assume_present(r.device.inverter).w,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="W",
+    ),
+    _sensor(
+        "var",
+        "var",
+        report_name=REPORT_INVERTER,
+        value_fn=lambda r: assume_present(r.device.inverter).v_ar,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="var",
+    ),
+    _sensor(
+        "acenergy",
+        "acenergy",
+        report_name=REPORT_INVERTER,
+        value_fn=lambda r: assume_present(r.device.inverter).wh,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        unit="Wh",
+    ),
+    _sensor(
+        "pv_power",
+        "pv_power",
+        report_name=REPORT_MPPT,
+        value_fn=lambda r: r.device.pv_power_w,
+        exists_fn=lambda r: r.device.mppt is not None,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="W",
+    ),
+    _sensor(
+        "pv_connection",
+        "pv_connection",
+        report_name=REPORT_STATUS,
+        value_fn=lambda r: map_code(
+            CONNECTION_STATUS_CONDENSED, assume_present(r.device.status).pv_conn
+        ),
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    _sensor(
+        "ecp_connection",
+        "ecp_connection",
+        report_name=REPORT_STATUS,
+        value_fn=lambda r: map_code(
+            ECP_CONNECTION_STATUS, assume_present(r.device.status).ecp_conn
+        ),
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    _sensor(
+        "status",
+        "status",
+        report_name=REPORT_INVERTER,
+        value_fn=lambda r: map_code(
+            INVERTER_STATUS, assume_present(r.device.inverter).st
+        ),
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    _sensor(
+        "statusvendor",
+        "statusvendor",
+        report_name=REPORT_INVERTER,
+        value_fn=lambda r: map_code(
+            FRONIUS_INVERTER_STATUS, assume_present(r.device.inverter).st_vnd
+        ),
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    _sensor(
+        "line_frequency",
+        "line_frequency",
+        report_name=REPORT_INVERTER,
+        value_fn=lambda r: assume_present(r.device.inverter).hz,
+        device_class=SensorDeviceClass.FREQUENCY,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="Hz",
+    ),
+    _sensor(
+        "inverter_controls",
+        "inverter_controls",
+        report_name=REPORT_STATUS,
+        value_fn=lambda r: bitmask_to_string(
+            assume_present(r.device.status).st_act_ctl, INVERTER_CONTROLS, "normal"
+        ),
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    _sensor(
+        "vref",
+        "vref",
+        report_name=REPORT_SETTINGS,
+        value_fn=lambda r: assume_present(r.device.settings).v_ref,
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="V",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    _sensor(
+        "vrefofs",
+        "vrefofs",
+        report_name=REPORT_SETTINGS,
+        value_fn=lambda r: assume_present(r.device.settings).v_ref_ofs,
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="V",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    _sensor(
+        "max_power",
+        "max_power",
+        report_name=REPORT_SETTINGS,
+        value_fn=lambda r: assume_present(r.device.settings).w_max,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="W",
+    ),
+    _sensor(
+        "events2",
+        "events2",
+        report_name=REPORT_INVERTER,
+        value_fn=lambda r: bitmask_to_string(
+            assume_present(r.device.inverter).evt_vnd2, INVERTER_EVENTS, "none", bits=32
+        ),
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    _sensor(
+        "Conn",
+        "connection_control",
+        report_name=REPORT_CONTROLS,
+        value_fn=lambda r: _controls_value(r, lambda c: _control_status(c.connected)),
+        exists_fn=_controls_present,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    _sensor(
+        "WMaxLim_Ena",
+        "power_limit_control",
+        report_name=REPORT_CONTROLS,
+        value_fn=lambda r: _controls_value(
+            r, lambda c: _control_status(c.ac_limit_enabled)
+        ),
+        exists_fn=_controls_present,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        # The flag "AC limit enabled" shows; an entry keeps it where it has it.
+        enabled=False,
+    ),
+    _sensor(
+        "OutPFSet_Ena",
+        "power_factor_control",
+        report_name=REPORT_CONTROLS,
+        value_fn=lambda r: _controls_value(
+            r, lambda c: _control_status(c.power_factor_enabled)
+        ),
+        exists_fn=_controls_present,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    _sensor(
+        "VArPct_Ena",
+        "reactive_power_control",
+        report_name=REPORT_CONTROLS,
+        value_fn=lambda r: _controls_value(
+            r, lambda c: _control_status(c.var_percent_enabled)
+        ),
+        exists_fn=_controls_present,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    _sensor(
+        "PhVphA",
+        "ac_voltage_l1_n",
+        report_name=REPORT_INVERTER,
+        value_fn=lambda r: assume_present(r.device.inverter).ph_vph_a,
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="V",
+    ),
+    _sensor(
+        "i_unit_id",
+        "unit_id",
+        value_fn=lambda r: assume_present(r.device.identity).address,
+        exists_fn=lambda r: r.device.identity is not None,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    _sensor(
+        "ac_limit_rate",
+        "ac_limit_rate",
+        report_name=REPORT_CONTROLS,
+        value_fn=lambda r: _controls_value(r, lambda c: c.ac_limit_w),
+        exists_fn=_controls_present,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="W",
+    ),
+    _sensor(
+        "ac_limit_enable",
+        "ac_limit_enable",
+        report_name=REPORT_CONTROLS,
+        value_fn=lambda r: _controls_value(
+            r, lambda c: _ac_limit_status(c.ac_limit_enabled)
+        ),
+        exists_fn=_controls_present,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    _sensor(
+        "isolation_resistance",
+        "isolation_resistance",
+        report_name=REPORT_STATUS,
+        value_fn=lambda r: r.device.isolation_resistance_megaohm,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="MΩ",
+    ),
+    # -- three-phase-only inverter sensors -----------------------------------
+    _sensor(
+        "AphB",
+        "ac_current_l2",
+        report_name=REPORT_INVERTER,
+        value_fn=lambda r: assume_present(r.device.inverter).aph_b,
+        exists_fn=lambda r: r.device.three_phase,
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="A",
+    ),
+    _sensor(
+        "AphC",
+        "ac_current_l3",
+        report_name=REPORT_INVERTER,
+        value_fn=lambda r: assume_present(r.device.inverter).aph_c,
+        exists_fn=lambda r: r.device.three_phase,
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="A",
+    ),
+    _sensor(
+        "PhVphB",
+        "ac_voltage_l2_n",
+        report_name=REPORT_INVERTER,
+        value_fn=lambda r: assume_present(r.device.inverter).ph_vph_b,
+        exists_fn=lambda r: r.device.three_phase,
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="V",
+    ),
+    _sensor(
+        "PhVphC",
+        "ac_voltage_l3_n",
+        report_name=REPORT_INVERTER,
+        value_fn=lambda r: assume_present(r.device.inverter).ph_vph_c,
+        exists_fn=lambda r: r.device.three_phase,
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="V",
+    ),
+    _sensor(
+        "PPVphAB",
+        "ac_voltage_l1_l2",
+        report_name=REPORT_INVERTER,
+        value_fn=lambda r: assume_present(r.device.inverter).pp_vph_ab,
+        exists_fn=lambda r: r.device.three_phase,
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="V",
+    ),
+    _sensor(
+        "PPVphBC",
+        "ac_voltage_l2_l3",
+        report_name=REPORT_INVERTER,
+        value_fn=lambda r: assume_present(r.device.inverter).pp_vph_bc,
+        exists_fn=lambda r: r.device.three_phase,
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="V",
+    ),
+    _sensor(
+        "PPVphCA",
+        "ac_voltage_l3_l1",
+        report_name=REPORT_INVERTER,
+        value_fn=lambda r: assume_present(r.device.inverter).pp_vph_ca,
+        exists_fn=lambda r: r.device.three_phase,
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="V",
+    ),
+    # -- web sensors ------------------------------------------------------------
+    _sensor(
+        "export_soft_limit",
+        "export_soft_limit",
+        source="web",
+        web_client="technician",
+        value_fn=lambda r: _web_field(r, "export_soft_limit_w"),
+        exists_fn=_web_configured,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="W",
+    ),
+    _sensor(
+        "api_modbus_mode",
+        "api_modbus_mode",
+        source="web",
+        value_fn=lambda r: _web_field(r, "modbus_mode"),
+        exists_fn=_web_configured,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    _sensor(
+        "api_modbus_control",
+        "api_modbus_control",
+        source="web",
+        value_fn=lambda r: _web_field(r, "modbus_control"),
+        exists_fn=_web_configured,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    _sensor(
+        "api_modbus_sunspec_mode",
+        "api_modbus_sunspec_mode",
+        source="web",
+        value_fn=lambda r: _web_field(r, "sunspec_mode"),
+        exists_fn=_web_configured,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    _sensor(
+        "api_modbus_restriction",
+        "api_modbus_restriction",
+        source="web",
+        value_fn=lambda r: _web_field(r, "modbus_restriction"),
+        exists_fn=_web_configured,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    _sensor(
+        "api_modbus_restriction_ip",
+        "api_modbus_restriction_ip",
+        source="web",
+        value_fn=lambda r: _web_field(r, "modbus_restriction_ip"),
+        exists_fn=_web_configured,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    # -- storage sensors ----------------------------------------------------
+    _sensor(
+        "storage_charge_current",
+        "storage_charge_current",
+        report_name=REPORT_MPPT,
+        value_fn=lambda r: _mppt_channel_module(r, r.device.mppt_channels.charge).dca,
+        exists_fn=_storage_present,
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="A",
+    ),
+    _sensor(
+        "storage_charge_voltage",
+        "storage_charge_voltage",
+        report_name=REPORT_MPPT,
+        value_fn=lambda r: _mppt_channel_module(r, r.device.mppt_channels.charge).dcv,
+        exists_fn=_storage_present,
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="V",
+    ),
+    _sensor(
+        "storage_charge_power",
+        "storage_charge_power",
+        report_name=REPORT_MPPT,
+        value_fn=lambda r: _mppt_channel_module(r, r.device.mppt_channels.charge).dcw,
+        exists_fn=_storage_present,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="W",
+    ),
+    _sensor(
+        "storage_charge_lfte",
+        "storage_charge_lfte",
+        report_name=REPORT_MPPT,
+        value_fn=lambda r: _mppt_channel_module(r, r.device.mppt_channels.charge).dcwh,
+        exists_fn=_storage_present,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        unit="Wh",
+    ),
+    _sensor(
+        "storage_discharge_current",
+        "storage_discharge_current",
+        report_name=REPORT_MPPT,
+        value_fn=lambda r: (
+            _mppt_channel_module(r, r.device.mppt_channels.discharge).dca
+        ),
+        exists_fn=_storage_present,
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="A",
+    ),
+    _sensor(
+        "storage_discharge_voltage",
+        "storage_discharge_voltage",
+        report_name=REPORT_MPPT,
+        value_fn=lambda r: (
+            _mppt_channel_module(r, r.device.mppt_channels.discharge).dcv
+        ),
+        exists_fn=_storage_present,
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="V",
+    ),
+    _sensor(
+        "storage_discharge_power",
+        "storage_discharge_power",
+        report_name=REPORT_MPPT,
+        value_fn=lambda r: (
+            _mppt_channel_module(r, r.device.mppt_channels.discharge).dcw
+        ),
+        exists_fn=_storage_present,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="W",
+    ),
+    _sensor(
+        "storage_discharge_lfte",
+        "storage_discharge_lfte",
+        report_name=REPORT_MPPT,
+        value_fn=lambda r: (
+            _mppt_channel_module(r, r.device.mppt_channels.discharge).dcwh
+        ),
+        exists_fn=_storage_present,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        unit="Wh",
+    ),
+    _sensor(
+        "storage_connection",
+        "storage_connection",
+        report_name=REPORT_STATUS,
+        value_fn=lambda r: map_code(
+            CONNECTION_STATUS_CONDENSED, assume_present(r.device.status).stor_conn
+        ),
+        exists_fn=_storage_present,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    _sensor(
+        "control_mode",
+        "control_mode",
+        device="storage",
+        report_name=REPORT_STORAGE,
+        value_fn=lambda r: map_code(
+            STORAGE_CONTROL_MODE, assume_present(r.storage_control).control_mode
+        ),
+        exists_fn=_storage_present,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    _sensor(
+        "charge_status",
+        "charge_status",
+        device="storage",
+        report_name=REPORT_STORAGE,
+        value_fn=lambda r: map_code(
+            CHARGE_STATUS, assume_present(r.device.storage).cha_st
+        ),
+        exists_fn=_storage_present,
+        # 0.3's row for this entity had no seventh field, so it carried no category.
+        entity_category=None,
+    ),
+    _sensor(
+        "max_charge",
+        "max_charge",
+        device="storage",
+        report_name=REPORT_STORAGE,
+        value_fn=lambda r: assume_present(r.device.storage).w_cha_max,
+        exists_fn=_storage_present,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="W",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    _sensor(
+        "soc",
+        "soc",
+        device="storage",
+        report_name=REPORT_STORAGE,
+        value_fn=lambda r: assume_present(r.device.storage).cha_state,
+        exists_fn=_storage_present,
+        device_class=SensorDeviceClass.BATTERY,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="%",
+    ),
+    _sensor(
+        "charging_power",
+        "charging_power",
+        device="storage",
+        report_name=REPORT_STORAGE,
+        value_fn=lambda r: assume_present(r.device.storage).in_w_rte,
+        exists_fn=_storage_present,
+        unit="%",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    _sensor(
+        "discharging_power",
+        "discharging_power",
+        device="storage",
+        report_name=REPORT_STORAGE,
+        value_fn=lambda r: assume_present(r.device.storage).out_w_rte,
+        exists_fn=_storage_present,
+        unit="%",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    _sensor(
+        "soc_minimum",
+        "soc_minimum",
+        device="storage",
+        report_name=REPORT_STORAGE,
+        value_fn=lambda r: assume_present(r.storage_control).soc_minimum,
+        exists_fn=_storage_present,
+        unit="%",
+    ),
+    _sensor(
+        "grid_charging",
+        "grid_charging",
+        device="storage",
+        report_name=REPORT_STORAGE,
+        value_fn=lambda r: map_code(
+            CHARGE_GRID_STATUS, assume_present(r.device.storage).cha_gri_set
+        ),
+        exists_fn=_storage_present,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    _sensor(
+        "WHRtg",
+        "energy_rating",
+        device="storage",
+        report_name=REPORT_NAMEPLATE,
+        value_fn=lambda r: assume_present(r.device.nameplate).wh_rtg,
+        exists_fn=_storage_present,
+        # A rating in Wh is stored energy, not energy flow: that device class
+        # allows the measurement state class the 0.3 statistics were recorded
+        # with, where the energy device class does not.
+        device_class=SensorDeviceClass.ENERGY_STORAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="Wh",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    _sensor(
+        "MaxChaRte",
+        "max_charge_rate",
+        device="storage",
+        report_name=REPORT_NAMEPLATE,
+        value_fn=lambda r: assume_present(r.device.nameplate).max_cha_rte,
+        exists_fn=_storage_present,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="W",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    _sensor(
+        "MaxDisChaRte",
+        "max_discharge_rate",
+        device="storage",
+        report_name=REPORT_NAMEPLATE,
+        value_fn=lambda r: assume_present(r.device.nameplate).max_dis_cha_rte,
+        exists_fn=_storage_present,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit="W",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    replace(
+        _sensor(
+            "throttle_reason",
+            "throttle_reason",
+            value_fn=lambda r: r.throttle_reason,
+            entity_category=EntityCategory.DIAGNOSTIC,
+        ),
+        also_web=True,
+    ),
+    *(
+        sensor
+        for audience, part in EVENT_AUDIENCES
+        for sensor in (
+            replace(
+                _event_sensor(
+                    f"active_{part}event",
+                    f"active_{part}event",
+                    value_fn=partial(leading_event_text, audience=audience),
+                    enabled=audience == CUSTOMER,
+                ),
+                attributes_fn=partial(leading_event_attributes, audience=audience),
+            ),
+            _event_sensor(
+                f"active_{part}events",
+                f"active_{part}events",
+                value_fn=partial(active_event_count, audience=audience),
+                enabled=audience == CUSTOMER,
+            ),
+        )
+    ),
+)
+
+_SINGLE_PHASE_UNSUPPORTED_METER_KEYS = (
+    "AphB",
+    "AphC",
+    "WphB",
+    "WphC",
+    "PhVphB",
+    "PhVphC",
+    "PPV",
+)
+
+
+# The 0.3 data keys double as translation keys, but hassfest only accepts
+# [a-z0-9-_]+ there; the unique ids keep the data keys, the names move.
+_TRANSLATION_KEYS: dict[str, str] = {
+    "A": "ac_current",
+    "AphA": "ac_current_l1",
+    "AphB": "ac_current_l2",
+    "AphC": "ac_current_l3",
+    "Conn": "connection_control",
+    "WMaxLim_Ena": "power_limit_control",
+    "OutPFSet_Ena": "power_factor_control",
+    "VArPct_Ena": "reactive_power_control",
+    "PhVphA": "ac_voltage_l1_n",
+    "PhVphB": "ac_voltage_l2_n",
+    "PhVphC": "ac_voltage_l3_n",
+    "PPV": "ac_voltage_line_line",
+    "PPVphAB": "ac_voltage_l1_l2",
+    "PPVphBC": "ac_voltage_l2_l3",
+    "PPVphCA": "ac_voltage_l3_l1",
+    "WphA": "power_l1",
+    "WphB": "power_l2",
+    "WphC": "power_l3",
+    **{
+        f"TotWh{direction}Ph{phase}": f"{word}_l{number}"
+        for direction, word in (("Exp", "exported"), ("Imp", "imported"))
+        for number, phase in enumerate("ABC", start=1)
+    },
+    "WHRtg": "energy_rating",
+    "MaxChaRte": "max_charge_rate",
+    "MaxDisChaRte": "max_discharge_rate",
+}
+
+
+def _meter_spec(
+    suffix: str,
+    attribute: str,
+    device_class: SensorDeviceClass,
+    state_class: SensorStateClass,
+    unit: str,
+) -> tuple:
+    return (suffix, attrgetter(attribute), device_class, state_class, unit)
+
+
+def _phase_specs(
+    suffix: str, attribute: str, device_class: SensorDeviceClass, unit: str
+) -> tuple[tuple, ...]:
+    """One spec per phase: `AphA`/`aph_a` for L1, and so on."""
+    return tuple(
+        _meter_spec(
+            f"{suffix}{phase}",
+            f"{attribute}_{phase.lower()}",
+            device_class,
+            SensorStateClass.MEASUREMENT,
+            unit,
+        )
+        for phase in "ABC"
+    )
+
+
+_CURRENT, _POWER, _VOLTAGE = (
+    SensorDeviceClass.CURRENT,
+    SensorDeviceClass.POWER,
+    SensorDeviceClass.VOLTAGE,
+)
+_MEASUREMENT, _ENERGY = SensorStateClass.MEASUREMENT, SensorDeviceClass.ENERGY
+_METER_SENSOR_SPECS: tuple[tuple, ...] = (
+    _meter_spec("A", "a", _CURRENT, _MEASUREMENT, "A"),
+    *_phase_specs("Aph", "aph", _CURRENT, "A"),
+    _meter_spec("power", "w", _POWER, _MEASUREMENT, "W"),
+    *_phase_specs("Wph", "wph", _POWER, "W"),
+    _meter_spec(
+        "exported", "tot_wh_exp", _ENERGY, SensorStateClass.TOTAL_INCREASING, "Wh"
+    ),
+    _meter_spec(
+        "imported", "tot_wh_imp", _ENERGY, SensorStateClass.TOTAL_INCREASING, "Wh"
+    ),
+    _meter_spec(
+        "line_frequency", "hz", SensorDeviceClass.FREQUENCY, _MEASUREMENT, "Hz"
+    ),
+    *_phase_specs("PhVph", "ph_vph", _VOLTAGE, "V"),
+    _meter_spec("PPV", "ppv", _VOLTAGE, _MEASUREMENT, "V"),
+)
+# Per-phase counters some meters or firmware leave at 0, SunSpec's "not
+# implemented" for a counter: they exist once counted, disabled at first.
+_METER_PHASE_ENERGY_SPECS: tuple[tuple, ...] = tuple(
+    _meter_spec(
+        f"TotWh{direction}Ph{phase}",
+        f"tot_wh_{direction.lower()}_ph_{phase.lower()}",
+        _ENERGY,
+        SensorStateClass.TOTAL_INCREASING,
+        "Wh",
+    )
+    for direction in ("Exp", "Imp")
+    for phase in "ABC"
+)
+
+
+def _meter_value(
+    unit_id: int, getter: Callable[[Any], Any]
+) -> Callable[[FroniusRuntimeData], Any]:
+    """A value_fn reading one field off a meter, bound to that meter's unit id."""
+    return lambda runtime: getter(runtime.device.meters[unit_id].meter)
+
+
+def _meter_phase_energy_descriptions(
+    runtime: FroniusRuntimeData, unit_id: int, info: MeterInfo
+) -> list[FroniusSensorDescription]:
+    """A meter's per-phase counters it counts, or that an entity already shows."""
+    phases = "ABC"[: info.phases]
+    descriptions = []
+    for suffix, getter, device_class, state_class, unit in _METER_PHASE_ENERGY_SPECS:
+        key = f"meter_{unit_id}_{suffix}"
+        counted = bool(getter(info.meter)) or key in runtime.registered_keys
+        if suffix[-1] not in phases or not counted:
+            continue
+        descriptions.append(
+            _sensor(
+                key,
+                _TRANSLATION_KEYS[suffix],
+                device="meter",
+                report_name=meter_report_name(unit_id),
+                meter_unit_id=unit_id,
+                value_fn=_meter_value(unit_id, getter),
+                device_class=device_class,
+                state_class=state_class,
+                unit=unit,
+                enabled=False,
+            )
+        )
+    return descriptions
+
+
+def _meter_sensor_descriptions(
+    unit_id: int, phases: int
+) -> list[FroniusSensorDescription]:
+    descriptions = [
+        _sensor(
+            f"meter_{unit_id}_{suffix}",
+            _TRANSLATION_KEYS.get(suffix, suffix),
+            device="meter",
+            report_name=meter_report_name(unit_id),
+            meter_unit_id=unit_id,
+            value_fn=_meter_value(unit_id, getter),
+            device_class=device_class,
+            state_class=state_class,
+            unit=unit,
+            meter_power=suffix == "power",
+        )
+        for suffix, getter, device_class, state_class, unit in _METER_SENSOR_SPECS
+        if phases != 1 or suffix not in _SINGLE_PHASE_UNSUPPORTED_METER_KEYS
+    ]
+    descriptions.append(
+        _sensor(
+            f"meter_{unit_id}_unit_id",
+            "unit_id",
+            device="meter",
+            report_name=meter_report_name(unit_id),
+            meter_unit_id=unit_id,
+            value_fn=lambda runtime: unit_id,
+            entity_category=EntityCategory.DIAGNOSTIC,
+        )
+    )
+    return descriptions
+
+
+def _load_and_grid_status_descriptions(
+    runtime: FroniusRuntimeData,
+) -> list[FroniusSensorDescription]:
+    unit_id = runtime.primary_meter_unit_id
+    if unit_id not in runtime.device.meters:
+        return []
+    report_name = meter_report_name(unit_id)
+    return [
+        _sensor(
+            "load",
+            "load",
+            report_name=report_name,
+            value_fn=lambda r: r.modbus.data.load_w,
+            device_class=SensorDeviceClass.POWER,
+            state_class=SensorStateClass.MEASUREMENT,
+            unit="W",
+        ),
+        _sensor(
+            "grid_status",
+            "grid_status",
+            report_name=report_name,
+            value_fn=lambda r: r.modbus.data.grid_status,
+            entity_category=EntityCategory.DIAGNOSTIC,
+        ),
+    ]
+
+
+# -- inverter events ----------------------------------------------------------------
+
+
+def event_descriptions(runtime: FroniusRuntimeData) -> list[FroniusEventDescription]:
+    """The event entity for the inverter's log, while the web poll runs."""
+    if runtime.web is None:
+        return []
+    return [
+        FroniusEventDescription(
+            key=key,
+            translation_key=key,
+            device="inverter",
+            source="web",
+            web_client="public",
+            value_fn=lambda runtime: None,
+            event_types=list(EVENT_TYPES),
+            audience=audience,
+            entity_registry_enabled_default=audience == CUSTOMER,
+        )
+        for audience, key in ((CUSTOMER, "inverter_event"), (SERVICE, "service_event"))
+    ]
+
+
+def sensor_descriptions(runtime: FroniusRuntimeData) -> list[FroniusSensorDescription]:
+    """Every sensor description the current runtime produces."""
+    descriptions = [d for d in _STATIC_SENSOR_DESCRIPTIONS if d.exists_fn(runtime)]
+    descriptions += _load_and_grid_status_descriptions(runtime)
+    for unit_id, info in runtime.device.meters.items():
+        descriptions += _meter_sensor_descriptions(unit_id, info.phases)
+        descriptions += _meter_phase_energy_descriptions(runtime, unit_id, info)
+    for index in runtime.device.mppt_channels.pv:
+        descriptions += _mppt_sensor_descriptions(index, runtime)
+    if runtime.web is not None:
+        descriptions += [
+            _component_sensor(reading)
+            for reading in COMPONENT_READINGS
+            if _component_reported(runtime, reading)
+        ]
+    return descriptions
+
+
+def _component_readings(
+    runtime: FroniusRuntimeData, reading: ComponentReading
+) -> dict[str, Any] | None:
+    web_data = runtime.web_data
+    if web_data is None:
+        return None
+    if reading.component == "storage":
+        return web_data.storage_readings
+    return web_data.inverter_readings
+
+
+def _component_reported(runtime: FroniusRuntimeData, reading: ComponentReading) -> bool:
+    if reading.component == "storage" and not _storage_present(runtime):
+        return False
+    web_data = runtime.web_data
+    if web_data is not None and _component_endpoint_missing(web_data, reading):
+        return reading.key in runtime.registered_keys
+    if reading.once_reported and reading.key in runtime.reported_keys:
+        return True
+    return reported(reading, _component_readings(runtime, reading))
+
+
+def _component_endpoint_missing(web_data: WebData, reading: ComponentReading) -> bool:
+    if reading.component == "storage":
+        return web_data.storage_endpoint_missing
+    return web_data.inverter_endpoint_missing
+
+
+def _component_sensor(reading: ComponentReading) -> FroniusSensorDescription:
+    yes_no = reading.transform == "yes_no"
+    device_class = (
+        SensorDeviceClass(reading.device_class) if reading.device_class else None
+    )
+    if yes_no:
+        device_class = SensorDeviceClass.ENUM
+    return FroniusSensorDescription(
+        key=reading.key,
+        translation_key=reading.key,
+        device=reading.component,
+        source="web",
+        web_client="public",
+        value_fn=lambda runtime: component_value(
+            reading, _component_readings(runtime, reading)
+        ),
+        device_class=device_class,
+        options=[YES, NO] if yes_no else None,
+        state_class=SensorStateClass.MEASUREMENT if reading.measurement else None,
+        native_unit_of_measurement=reading.unit,
+        suggested_unit_of_measurement=reading.suggested_unit,
+        suggested_display_precision=DISPLAY_PRECISION.get(reading.unit or ""),
+        entity_category=EntityCategory.DIAGNOSTIC if reading.diagnostic else None,
+        entity_registry_enabled_default=reading.enabled,
+    )
+
+
+# -- number table -----------------------------------------------------------------
+
+
+def _storage_percent_number(
+    key: str,
+    *,
+    max_key: str,
+    percent_getter: Callable[[FroniusRuntimeData], float | None],
+    set_fn: Callable[[FroniusRuntimeData, float], Awaitable[None]],
+    available_fn: Callable[[FroniusRuntimeData], bool],
+) -> FroniusNumberDescription:
+    def value_fn(runtime: FroniusRuntimeData) -> float | None:
+        percent = percent_getter(runtime)
+        max_rate = getattr(runtime.storage_control, max_key)
+        return None if percent is None else round(percent / 100.0 * max_rate, 0)
+
+    return FroniusNumberDescription(
+        key=key,
+        translation_key=key,
+        device="storage",
+        report_name=REPORT_STORAGE,
+        value_fn=value_fn,
+        set_fn=set_fn,
+        available_fn=available_fn,
+        exists_fn=_storage_present,
+        max_fn=lambda r: getattr(r.storage_control, max_key),
+        native_min_value=0,
+        native_max_value=10100,
+        native_step=10,
+        mode=NumberMode.BOX,
+        native_unit_of_measurement="W",
+    )
+
+
+# A number in watts: no power control goes beyond the inverter's rated power.
+_power_number = partial(
+    FroniusNumberDescription,
+    max_fn=_rated_power_w,
+    native_min_value=0,
+    native_max_value=RATED_POWER_FALLBACK_W,
+    native_step=10,
+    mode=NumberMode.BOX,
+    native_unit_of_measurement="W",
+)
+
+
+_NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
+    _storage_percent_number(
+        "grid_discharge_power",
+        max_key="max_discharge_rate_w",
+        percent_getter=lambda r: (
+            assume_present(r.storage_control).grid_discharge_power_pct
+        ),
+        set_fn=lambda r, v: assume_present(
+            r.storage_control
+        ).set_grid_discharge_power_w(v),
+        available_fn=lambda r: (
+            assume_present(r.storage_control).grid_discharge_power_pct is not None
+            and assume_present(r.storage_control).extended_mode
+            is ExtendedMode.DISCHARGE_TO_GRID
+        ),
+    ),
+    _storage_percent_number(
+        "grid_charge_power",
+        max_key="max_charge_rate_w",
+        percent_getter=lambda r: (
+            assume_present(r.storage_control).grid_charge_power_pct
+        ),
+        set_fn=lambda r, v: assume_present(r.storage_control).set_grid_charge_power_w(
+            v
+        ),
+        available_fn=lambda r: (
+            assume_present(r.storage_control).grid_charge_power_pct is not None
+            and assume_present(r.storage_control).extended_mode
+            is ExtendedMode.CHARGE_FROM_GRID
+        ),
+    ),
+    _storage_percent_number(
+        "discharge_limit",
+        max_key="max_discharge_rate_w",
+        percent_getter=lambda r: assume_present(r.storage_control).discharge_limit_pct,
+        set_fn=lambda r, v: assume_present(r.storage_control).set_discharge_limit_w(v),
+        available_fn=lambda r: (
+            assume_present(r.storage_control).discharge_limit_pct is not None
+            and assume_present(r.storage_control).extended_mode in DISCHARGE_LIMIT_MODES
+        ),
+    ),
+    _storage_percent_number(
+        "charge_limit",
+        max_key="max_charge_rate_w",
+        percent_getter=lambda r: assume_present(r.storage_control).charge_limit_pct,
+        set_fn=lambda r, v: assume_present(r.storage_control).set_charge_limit_w(v),
+        available_fn=lambda r: (
+            assume_present(r.storage_control).charge_limit_pct is not None
+            and assume_present(r.storage_control).extended_mode in CHARGE_LIMIT_MODES
+        ),
+    ),
+    FroniusNumberDescription(
+        key="soc_minimum",
+        translation_key="soc_minimum",
+        device="storage",
+        report_name=REPORT_STORAGE,
+        exists_fn=_storage_present,
+        value_fn=lambda r: assume_present(r.storage_control).soc_minimum,
+        set_fn=lambda r, v: r.async_set_soc_minimum(v),
+        native_min_value=5,
+        native_max_value=100,
+        native_step=1,
+        mode=NumberMode.BOX,
+        native_unit_of_measurement="%",
+    ),
+    _power_number(
+        key="ac_limit_rate",
+        translation_key="ac_limit_rate",
+        device="inverter",
+        report_name=REPORT_CONTROLS,
+        value_fn=lambda r: _controls_value(r, lambda c: c.ac_limit_w),
+        set_fn=lambda r, v: assume_present(r.inverter_controls).set_ac_limit_w(v),
+        exists_fn=_controls_present,
+    ),
+    FroniusNumberDescription(
+        key="power_factor",
+        translation_key="power_factor",
+        device="inverter",
+        report_name=REPORT_CONTROLS,
+        value_fn=lambda r: _controls_value(r, lambda c: c.power_factor),
+        set_fn=lambda r, v: assume_present(r.inverter_controls).set_power_factor(v),
+        exists_fn=_controls_present,
+        available_fn=lambda r: _controls_value(r, lambda c: c.power_factor) is not None,
+        native_min_value=-1,
+        native_max_value=1,
+        native_step=0.001,
+        mode=NumberMode.BOX,
+    ),
+    _power_number(
+        key="api_battery_power",
+        translation_key="api_battery_power",
+        device="storage",
+        source="web",
+        value_fn=lambda r: _web_field(r, "battery_power_w"),
+        set_fn=lambda r, v: assume_present(r.web_control).set_battery_power_w(v),
+        exists_fn=lambda r: _storage_present(r) and _web_configured(r),
+        available_fn=lambda r: (
+            _web_configured(r) and assume_present(r.web_control).battery_mode_is_manual
+        ),
+        min_fn=lambda r: -_rated_power_w(r),
+        native_min_value=-RATED_POWER_FALLBACK_W,
+    ),
+    FroniusNumberDescription(
+        key="soc_maximum",
+        translation_key="soc_maximum",
+        device="storage",
+        source="web",
+        value_fn=lambda r: _web_field(r, "soc_max"),
+        set_fn=lambda r, v: assume_present(r.web_control).set_soc_maximum(
+            int(round(v))
+        ),
+        exists_fn=lambda r: _storage_present(r) and _web_configured(r),
+        available_fn=_web_soc_mode_is_manual,
+        native_min_value=0,
+        native_max_value=100,
+        native_step=1,
+        mode=NumberMode.BOX,
+        native_unit_of_measurement="%",
+    ),
+    FroniusNumberDescription(
+        key="api_soc_minimum",
+        translation_key="api_soc_minimum",
+        device="storage",
+        source="web",
+        value_fn=lambda r: _web_field(r, "soc_min"),
+        set_fn=lambda r, v: assume_present(r.web_control).set_soc_minimum_manual(
+            int(round(v))
+        ),
+        exists_fn=lambda r: _storage_present(r) and _web_configured(r),
+        available_fn=_web_soc_mode_is_manual,
+        native_min_value=5,
+        native_max_value=100,
+        native_step=1,
+        mode=NumberMode.BOX,
+        native_unit_of_measurement="%",
+    ),
+    FroniusNumberDescription(
+        key="backup_reserve",
+        translation_key="backup_reserve",
+        device="storage",
+        source="web",
+        value_fn=lambda r: _web_field(r, "backup_reserved"),
+        set_fn=lambda r, v: assume_present(r.web_control).set_backup_reserve(
+            int(round(v))
+        ),
+        exists_fn=lambda r: _storage_present(r) and _web_configured(r),
+        native_min_value=5,
+        native_max_value=100,
+        native_step=1,
+        mode=NumberMode.BOX,
+        native_unit_of_measurement="%",
+    ),
+    _power_number(
+        key="export_soft_limit",
+        translation_key="export_soft_limit",
+        web_client="technician",
+        device="inverter",
+        source="web",
+        value_fn=lambda r: _web_field(r, "export_soft_limit_w"),
+        set_fn=lambda r, v: assume_present(r.web_control).set_export_soft_limit_w(v),
+        exists_fn=_web_configured,
+        available_fn=lambda r: (
+            r.web_control is not None
+            and assume_present(r.web_control).technician_configured
+        ),
+    ),
+)
+
+
+def number_descriptions(runtime: FroniusRuntimeData) -> list[FroniusNumberDescription]:
+    """Every number description the current runtime produces."""
+    return [d for d in _NUMBER_DESCRIPTIONS if d.exists_fn(runtime)]
+
+
+# -- select table -----------------------------------------------------------------
+
+
+_CONTROL_STATUS_OPTIONS = {0: CONTROL_STATUS[0], 1: CONTROL_STATUS[1]}
+
+
+def _select(
+    key: str,
+    translation_key: str | None = None,
+    *,
+    device: DeviceKind = "inverter",
+    source: Source = "modbus",
+    options_map: dict[int, str],
+    value_fn: Callable[[FroniusRuntimeData], str | None],
+    set_fn: Callable[[FroniusRuntimeData, int], Awaitable[None]],
+    exists_fn: Callable[[FroniusRuntimeData], bool] = lambda runtime: True,
+    available_fn: Callable[[FroniusRuntimeData], bool] = lambda runtime: True,
+    report_name: str | None = None,
+) -> FroniusSelectDescription:
+    return FroniusSelectDescription(
+        key=key,
+        translation_key=translation_key or key,
+        device=device,
+        source=source,
+        report_name=report_name,
+        options_map=options_map,
+        value_fn=value_fn,
+        set_fn=set_fn,
+        exists_fn=exists_fn,
+        available_fn=available_fn,
+        options=list(options_map.values()),
+    )
+
+
+_SELECT_DESCRIPTIONS: tuple[FroniusSelectDescription, ...] = (
+    _select(
+        "ext_control_mode",
+        device="storage",
+        report_name=REPORT_STORAGE,
+        options_map=STORAGE_EXT_CONTROL_MODE,
+        value_fn=lambda r: map_code(
+            STORAGE_EXT_CONTROL_MODE,
+            assume_present(r.storage_control).extended_mode.value,
+        ),
+        set_fn=lambda r, code: r.async_set_extended_mode(code),
+        exists_fn=_storage_present,
+    ),
+    _select(
+        "api_soc_mode",
+        device="storage",
+        source="web",
+        options_map=API_SOC_MODE_OPTIONS,
+        value_fn=lambda r: _web_field(r, "soc_mode"),
+        set_fn=lambda r, code: assume_present(r.web_control).set_soc_mode(
+            manual=code == SOC_MODE_MANUAL_CODE
+        ),
+        exists_fn=lambda r: _storage_present(r) and _web_configured(r),
+    ),
+    _select(
+        "api_battery_mode",
+        device="storage",
+        source="web",
+        options_map=API_BATTERY_MODE,
+        value_fn=lambda r: _web_field(r, "battery_mode"),
+        set_fn=lambda r, code: assume_present(r.web_control).set_battery_mode(code),
+        exists_fn=lambda r: _storage_present(r) and _web_configured(r),
+    ),
+    _select(
+        "ac_limit_enable",
+        report_name=REPORT_CONTROLS,
+        options_map=_CONTROL_STATUS_OPTIONS,
+        value_fn=lambda r: _controls_value(
+            r, lambda c: _control_status(c.ac_limit_enabled)
+        ),
+        set_fn=lambda r, code: assume_present(r.inverter_controls).set_ac_limit_enable(
+            bool(code)
+        ),
+        exists_fn=_controls_present,
+    ),
+    _select(
+        "power_factor_enable",
+        report_name=REPORT_CONTROLS,
+        options_map=_CONTROL_STATUS_OPTIONS,
+        value_fn=lambda r: _controls_value(
+            r, lambda c: _control_status(c.power_factor_enabled)
+        ),
+        set_fn=lambda r, code: assume_present(
+            r.inverter_controls
+        ).set_power_factor_enable(bool(code)),
+        exists_fn=_controls_present,
+        available_fn=lambda r: (
+            _controls_value(r, lambda c: c.power_factor_enabled) is not None
+        ),
+    ),
+    _select(
+        "Conn",
+        translation_key=_TRANSLATION_KEYS["Conn"],
+        report_name=REPORT_CONTROLS,
+        options_map=_CONTROL_STATUS_OPTIONS,
+        value_fn=lambda r: _controls_value(r, lambda c: _control_status(c.connected)),
+        set_fn=lambda r, code: assume_present(r.inverter_controls).set_connected(
+            bool(code)
+        ),
+        exists_fn=_controls_present,
+    ),
+)
+
+
+def select_descriptions(runtime: FroniusRuntimeData) -> list[FroniusSelectDescription]:
+    """Every select description the current runtime produces."""
+    return [d for d in _SELECT_DESCRIPTIONS if d.exists_fn(runtime)]
+
+
+# -- switch table -----------------------------------------------------------------
+
+
+def _switch(
+    key: str,
+    *,
+    device: DeviceKind = "inverter",
+    value_fn: Callable[[FroniusRuntimeData], bool | None],
+    turn_on: Callable[[FroniusRuntimeData], Awaitable[None]],
+    turn_off: Callable[[FroniusRuntimeData], Awaitable[None]],
+    exists_fn: Callable[[FroniusRuntimeData], bool],
+    entity_category: EntityCategory | None = None,
+) -> FroniusSwitchDescription:
+    return FroniusSwitchDescription(
+        key=key,
+        translation_key=key,
+        device=device,
+        source="web",
+        value_fn=value_fn,
+        turn_on=turn_on,
+        turn_off=turn_off,
+        exists_fn=exists_fn,
+        entity_category=entity_category,
+    )
+
+
+_SWITCH_DESCRIPTIONS: tuple[FroniusSwitchDescription, ...] = (
+    _switch(
+        "api_charge_from_ac",
+        device="storage",
+        value_fn=lambda r: _web_field(r, "charge_from_ac"),
+        turn_on=lambda r: assume_present(r.web_control).set_charge_sources(
+            charge_from_ac=True
+        ),
+        turn_off=lambda r: assume_present(r.web_control).set_charge_sources(
+            charge_from_grid=False, charge_from_ac=False
+        ),
+        exists_fn=lambda r: _storage_present(r) and _web_configured(r),
+    ),
+    _switch(
+        "api_charge_from_grid",
+        device="storage",
+        value_fn=lambda r: _web_field(r, "charge_from_grid"),
+        turn_on=lambda r: assume_present(r.web_control).set_charge_sources(
+            charge_from_grid=True, charge_from_ac=True
+        ),
+        turn_off=lambda r: assume_present(r.web_control).set_charge_sources(
+            charge_from_grid=False
+        ),
+        exists_fn=lambda r: _storage_present(r) and _web_configured(r),
+    ),
+    _switch(
+        "api_solar_api_enabled",
+        value_fn=lambda r: _web_field(r, "solar_api_enabled"),
+        turn_on=lambda r: assume_present(r.web_control).set_solar_api_enabled(True),
+        turn_off=lambda r: assume_present(r.web_control).set_solar_api_enabled(False),
+        exists_fn=_web_configured,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+)
+
+
+def switch_descriptions(runtime: FroniusRuntimeData) -> list[FroniusSwitchDescription]:
+    """Every switch description the current runtime produces."""
+    return [d for d in _SWITCH_DESCRIPTIONS if d.exists_fn(runtime)]
+
+
+# -- button table -----------------------------------------------------------------
+
+
+_BUTTON_DESCRIPTIONS: tuple[FroniusButtonDescription, ...] = (
+    FroniusButtonDescription(
+        key="reset_modbus_control",
+        translation_key="reset_modbus_control",
+        device="inverter",
+        source="web",
+        value_fn=lambda r: None,
+        press=lambda r: assume_present(r.web_control).reset_modbus_control(),
+        exists_fn=_web_configured,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+)
+
+
+def button_descriptions(runtime: FroniusRuntimeData) -> list[FroniusButtonDescription]:
+    """Every button description the current runtime produces."""
+    return [d for d in _BUTTON_DESCRIPTIONS if d.exists_fn(runtime)]
+
+
+def expected_unique_ids(
+    entry: FroniusConfigEntry, runtime: FroniusRuntimeData
+) -> set[str]:
+    """Every unique id the current runtime is expected to register, across platforms."""
+    prefix = entity_prefix(entry.entry_id)
+    factories = (
+        sensor_descriptions,
+        number_descriptions,
+        select_descriptions,
+        switch_descriptions,
+        button_descriptions,
+        event_descriptions,
+    )
+    return {
+        f"{prefix}_{description.key}"
+        for factory in factories
+        for description in factory(runtime)
+    }

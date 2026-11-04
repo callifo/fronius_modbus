@@ -1,0 +1,536 @@
+"""The Modbus coordinator turns the device's report into entity data, and fails the right way."""
+
+import asyncio
+from datetime import timedelta
+import logging
+import time
+from unittest.mock import MagicMock
+
+from modbus_connection import (
+    IllegalDataAddressError,
+    ModbusConnectionError,
+    ModbusTimeoutError,
+    ServerDeviceFailureError,
+)
+from modbus_connection.model.sunspec import SunSpecMapShiftError
+import pytest
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from custom_components.fronius_modbus import coordinator as coordinator_module
+from custom_components.fronius_modbus.const import DOMAIN
+from custom_components.fronius_modbus.coordinator import (
+    DEFAULT_MAX_RATE_W,
+    FroniusModbusCoordinator,
+)
+from custom_components.fronius_modbus.fronius_modbus_api.device import FroniusInverter
+from custom_components.fronius_modbus.fronius_modbus_api.storage import ExtendedMode
+from custom_components.fronius_modbus.fronius_modbus_api.sunspec_models import Nameplate
+from homeassistant.helpers.update_coordinator import UpdateFailed
+
+from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID, SteppingClock
+
+
+@pytest.fixture
+def entry(hass):
+    entry = MockConfigEntry(domain=DOMAIN, data={"host": "192.0.2.1"})
+    entry.add_to_hass(hass)
+    return entry
+
+
+@pytest.fixture
+def coordinator(hass, entry, connection):
+    device = FroniusInverter(
+        connection.for_unit(INVERTER_UNIT_ID),
+        INVERTER_UNIT_ID,
+        {METER_UNIT_ID: connection.for_unit(METER_UNIT_ID)},
+    )
+    return FroniusModbusCoordinator(
+        hass,
+        entry,
+        device,
+        interval=timedelta(seconds=10),
+        primary_meter_unit_id=METER_UNIT_ID,
+        meter_locations={METER_UNIT_ID: 0},
+    )
+
+
+async def test_a_poll_yields_report_load_and_grid_status(coordinator):
+    poll = await coordinator._async_update_data()
+    assert "inverter" in poll.report.updated
+    assert poll.load_w == 3105.1  # meter 30 W + inverter 3075.1 W
+    assert poll.grid_status == "on_grid_operating"
+    assert (
+        coordinator.storage_control is not None
+        and coordinator.inverter_controls is not None
+    )
+
+
+async def test_a_dead_link_is_a_failed_update(coordinator, inverter_unit):
+    inverter_unit.fail_requests(ModbusConnectionError())
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+
+
+async def test_failures_are_tolerated_inside_the_write_window(
+    coordinator, inverter_unit
+):
+    first = await coordinator._async_update_data()
+    coordinator.data = first
+    coordinator.tolerate_failures_until(10**9)
+    inverter_unit.fail_requests(ModbusConnectionError())
+
+    tolerated = await coordinator._async_update_data()
+    # The same reading is served on for display, marked as not newly read.
+    assert (tolerated.report, tolerated.load_w) == (first.report, first.load_w)
+    assert tolerated.retained
+
+
+async def test_a_tolerated_outage_is_no_warning(coordinator, inverter_unit, caplog):
+    """The inverter restarts its Modbus server after a web write; that is expected."""
+    # A loaded machine, made certain: under phcc's asyncio debug mode every step
+    # then logs a slow-callback warning that names this test's coroutine, and
+    # with it the word "tolerated" (seen once in a full run, 2026-10-11).
+    asyncio.get_running_loop().slow_callback_duration = 0
+    coordinator.data = await coordinator._async_update_data()
+    coordinator.tolerate_failures_until(10**9)
+    inverter_unit.fail_requests(ModbusConnectionError())
+
+    with caplog.at_level(logging.DEBUG, logger=coordinator_module.__name__):
+        await coordinator._async_update_data()
+        await coordinator._async_update_data()
+
+    levels = [
+        r.levelno
+        for r in caplog.records
+        if r.name == coordinator_module.__name__ and "tolerated" in r.getMessage()
+    ]
+    assert levels == [logging.DEBUG, logging.DEBUG]
+
+
+async def test_three_timeouts_recycle_the_link(coordinator, inverter_unit, connection):
+    await coordinator._async_update_data()
+    inverter_unit.fail_requests(ModbusTimeoutError())
+    for _ in range(3):
+        with pytest.raises(UpdateFailed):
+            await coordinator._async_update_data()
+    assert connection.connected is False
+
+
+async def test_a_shifted_map_reloads_the_entry(coordinator, hass, entry, monkeypatch):
+    await coordinator._async_update_data()
+    reload = MagicMock()
+    monkeypatch.setattr(hass.config_entries, "async_schedule_reload", reload)
+
+    async def shifted():
+        raise SunSpecMapShiftError("moved")
+
+    monkeypatch.setattr(coordinator.device, "async_update", shifted)
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+    reload.assert_called_once_with(entry.entry_id)
+
+
+async def test_failures_outside_the_write_window_are_not_tolerated(
+    coordinator, inverter_unit
+):
+    """The tolerance is bounded by the deadline, not by having data at all.
+
+    A window that never closes would keep every entity on its last value for
+    the rest of the run, with nothing saying the inverter is gone.
+    """
+    first = await coordinator._async_update_data()
+    coordinator.data = first
+    coordinator.tolerate_failures_until(0.0)
+    inverter_unit.fail_requests(ModbusConnectionError())
+
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+
+
+async def test_a_successful_poll_ends_the_tolerance_window(coordinator, inverter_unit):
+    """A window left open after the link recovered would swallow the next real outage."""
+    coordinator.data = await coordinator._async_update_data()
+    coordinator.tolerate_failures_until(10**9)
+    await coordinator._async_update_data()
+
+    inverter_unit.fail_requests(ModbusConnectionError())
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+
+
+async def test_the_link_is_recycled_when_the_window_expires_failing(
+    coordinator, inverter_unit, connection
+):
+    """A socket that outlived the inverter's restart answers nothing until it is reopened."""
+    coordinator.data = await coordinator._async_update_data()
+    coordinator.tolerate_failures_until(time.monotonic() + 0.05)
+    inverter_unit.fail_requests(ModbusConnectionError())
+    assert (await coordinator._async_update_data()).retained
+
+    await asyncio.sleep(0.1)
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+
+    assert connection.connected is False
+
+
+async def test_derived_values_need_a_fresh_inverter_reading(coordinator, inverter_unit):
+    """A failed inverter block still produced load and grid status from stale power."""
+    await coordinator.async_refresh()
+    address = coordinator.device.inverter.resolved_fields["model_id"].address
+    inverter_unit.fail_read(address, ServerDeviceFailureError())
+    await coordinator.async_refresh()
+    assert "inverter" in coordinator.data.report.failed
+    assert coordinator.data.load_w is None
+    assert coordinator.data.grid_status is None
+
+
+def _set_power(device, inverter_unit, meter_unit, *, inverter_w, meter_w):
+    """Serve these AC powers on the next read, with a scale factor of 1."""
+    inverter_w_field = device.inverter.resolved_fields["w"]
+    meter_w_field = device.meters[METER_UNIT_ID].meter.resolved_fields["w"]
+    inverter_unit.load_raw(
+        {
+            "holding": {
+                inverter_w_field.address: inverter_w & 0xFFFF,
+                inverter_w_field.scale_address: 0,
+            }
+        }
+    )
+    meter_unit.load_raw(
+        {
+            "holding": {
+                meter_w_field.address: meter_w & 0xFFFF,
+                meter_w_field.scale_address: 0,
+            }
+        }
+    )
+
+
+async def test_other_generation_behind_the_meter_gives_a_negative_load(
+    coordinator, inverter_unit, meter_unit
+):
+    """A balcony inverter or an AC battery behind the meter exports more than the house uses.
+
+    The sum is the household's net demand; clamped to 0 W it hid that surplus.
+    """
+    await coordinator._async_update_data()
+    _set_power(
+        coordinator.device, inverter_unit, meter_unit, inverter_w=500, meter_w=-1300
+    )
+
+    poll = await coordinator._async_update_data()
+
+    assert poll.load_w == -800.0
+
+
+async def test_an_inverter_at_0_w_while_the_house_exports_is_a_reading(
+    coordinator, inverter_unit, meter_unit
+):
+    """PV goes entirely into the DC battery while other generation exports.
+
+    Taken for a misread inverter, it showed the last load once and then nothing.
+    """
+    await coordinator._async_update_data()
+    _set_power(
+        coordinator.device, inverter_unit, meter_unit, inverter_w=0, meter_w=-1500
+    )
+
+    first = await coordinator._async_update_data()
+    second = await coordinator._async_update_data()
+
+    assert (first.load_w, second.load_w) == (-1500.0, -1500.0)
+
+
+def _coordinator_on_a_clock(hass, entry, connection, step_seconds):
+    device = FroniusInverter(
+        connection.for_unit(INVERTER_UNIT_ID),
+        INVERTER_UNIT_ID,
+        {METER_UNIT_ID: connection.for_unit(METER_UNIT_ID)},
+        monotonic=SteppingClock(step_seconds).monotonic,
+    )
+    return FroniusModbusCoordinator(
+        hass,
+        entry,
+        device,
+        interval=timedelta(seconds=10),
+        primary_meter_unit_id=METER_UNIT_ID,
+        meter_locations={METER_UNIT_ID: 0},
+    )
+
+
+@pytest.mark.parametrize(("step_seconds", "load_w"), [(0.1, 3105.1), (0.2, None)])
+async def test_a_load_from_reads_too_far_apart_is_unknown(
+    hass, entry, connection, step_seconds, load_w
+):
+    """Inverter read start to meter read end: 0.3 s is one moment, 0.6 s is not."""
+    coordinator = _coordinator_on_a_clock(hass, entry, connection, step_seconds)
+
+    poll = await coordinator._async_update_data()
+
+    assert poll.load_w == load_w
+
+
+# Model 124 WChaMax and the model 120 rate ratings in the captured fixture.
+STORAGE_WCHAMAX_ADDRESS = 40345
+NAMEPLATE_MAX_CHA_RTE_ADDRESS = 40144
+NAMEPLATE_MAX_DIS_CHA_RTE_ADDRESS = 40146
+
+
+async def test_the_nameplate_rates_replace_the_fallback_once_read(
+    coordinator, inverter_unit, monkeypatch
+):
+    """A first poll without model 120 fixed the storage control on 11000 W."""
+    inverter_unit.load_raw({"holding": {STORAGE_WCHAMAX_ADDRESS: 0}})
+    original_update = Nameplate.async_update
+    calls = {"failed": False}
+
+    async def fail_first(component):
+        if not calls["failed"]:
+            calls["failed"] = True
+            raise ServerDeviceFailureError
+        await original_update(component)
+
+    monkeypatch.setattr(Nameplate, "async_update", fail_first)
+    await coordinator.async_refresh()
+    assert "nameplate" in coordinator.data.report.failed
+    assert coordinator.storage_control.max_charge_rate_w == DEFAULT_MAX_RATE_W
+    await coordinator.async_refresh()
+    assert coordinator.storage_control.max_charge_rate_w == 10240
+    assert coordinator.storage_control.max_discharge_rate_w == 10240
+
+
+async def test_the_rate_percentages_are_relative_to_wchamax(coordinator, inverter_unit):
+    """Fronius: InWRte/OutWRte are percentages of WChaMax (model 124), not of the nameplate ratings."""
+    inverter_unit.load_raw({"holding": {STORAGE_WCHAMAX_ADDRESS: 8000}})
+    await coordinator.async_refresh()
+    assert coordinator.storage_control.max_charge_rate_w == 8000
+    assert coordinator.storage_control.max_discharge_rate_w == 8000
+
+
+async def test_a_missing_wchamax_falls_back_to_the_nameplate(
+    coordinator, inverter_unit
+):
+    inverter_unit.load_raw({"holding": {STORAGE_WCHAMAX_ADDRESS: 0}})
+    await coordinator.async_refresh()
+    assert coordinator.storage_control.max_charge_rate_w == 10240
+    inverter_unit.load_raw(
+        {
+            "holding": {
+                NAMEPLATE_MAX_CHA_RTE_ADDRESS: 0,
+                NAMEPLATE_MAX_DIS_CHA_RTE_ADDRESS: 0,
+            }
+        }
+    )
+    await coordinator.async_refresh()
+    assert coordinator.storage_control.max_charge_rate_w == DEFAULT_MAX_RATE_W
+
+
+# A register inside the model-160 block of the captured fixture: the block read fails,
+# the header scan does not.
+MPPT_HEADER_ADDRESS = 40260
+
+
+async def test_a_sub_system_answering_for_the_first_time_reloads_the_entry(
+    coordinator, inverter_unit, hass, entry, monkeypatch
+):
+    """MPPT entities built from a failed first read never appeared."""
+    inverter_unit.fail_read(MPPT_HEADER_ADDRESS, ServerDeviceFailureError())
+    await coordinator.async_refresh()
+    assert "mppt" in coordinator.data.report.failed
+    reload = MagicMock()
+    monkeypatch.setattr(hass.config_entries, "async_schedule_reload", reload)
+    inverter_unit.fail_read(MPPT_HEADER_ADDRESS, None)
+    await coordinator.async_refresh()
+    reload.assert_called_once_with(entry.entry_id)
+    await coordinator.async_refresh()
+    reload.assert_called_once()
+
+
+# Model 124 header, its StorCtl_Mod register, and the AC limit in the fixture.
+STORAGE_HEADER_ADDRESS = 40343
+STORAGE_CONTROL_MODE_ADDRESS = 40348
+AC_LIMIT_PERCENT_ADDRESS = 40232
+CHAIN_END_ADDRESS = 40369
+CONTROLS_HEADER_ADDRESS = 40227
+
+
+async def test_rediscovery_keeps_the_controls_reading_the_polled_component(
+    coordinator, inverter_unit
+):
+    """Every retry built new components while the wrappers kept the old ones."""
+    inverter_unit.fail_read(STORAGE_HEADER_ADDRESS, IllegalDataAddressError())
+    await coordinator.async_refresh()
+
+    inverter_unit.holding[AC_LIMIT_PERCENT_ADDRESS] = 2500
+    await coordinator.async_refresh()
+
+    assert coordinator.inverter_controls.ac_limit_pct == 25.0
+
+
+async def test_rediscovery_keeps_the_storage_control_reading_the_polled_component(
+    coordinator, inverter_unit
+):
+    """The storage wrapper kept a component nothing polls any more."""
+    # The chain's end marker, right behind the storage model: storage itself
+    # answers, only the walk cannot finish.
+    inverter_unit.fail_read(CHAIN_END_ADDRESS, IllegalDataAddressError())
+    await coordinator.async_refresh()
+    assert coordinator.device.storage is not None
+
+    inverter_unit.holding[STORAGE_CONTROL_MODE_ADDRESS] = 3
+    await coordinator.async_refresh()
+
+    assert coordinator.storage_control.extended_mode is not ExtendedMode.AUTO
+
+
+async def test_a_model_that_returns_after_one_scan_keeps_its_control(
+    coordinator, inverter_unit
+):
+    """A model missing from one scan came back as a new component."""
+    inverter_unit.fail_read(CHAIN_END_ADDRESS, IllegalDataAddressError())
+    await coordinator.async_refresh()
+
+    inverter_unit.fail_read(CONTROLS_HEADER_ADDRESS, IllegalDataAddressError())
+    await coordinator.async_refresh()
+
+    inverter_unit.fail_read(CONTROLS_HEADER_ADDRESS, None)
+    inverter_unit.fail_read(CHAIN_END_ADDRESS, None)
+    inverter_unit.holding[AC_LIMIT_PERCENT_ADDRESS] = 2500
+    await coordinator.async_refresh()
+
+    assert coordinator.device.discovery_complete
+    assert coordinator.inverter_controls.ac_limit_pct == 25.0
+
+
+def _insert_a_model_before_the_controls(unit) -> None:
+    """Move the tail of the map by inserting one well-formed unknown model."""
+    filler_id, filler_length = 129, 2
+    block = filler_length + 2
+    tail = {
+        address: value
+        for address, value in unit.holding.items()
+        if address >= CONTROLS_HEADER_ADDRESS
+    }
+    for address in sorted(tail, reverse=True):
+        unit.holding[address + block] = tail[address]
+    unit.holding[CONTROLS_HEADER_ADDRESS] = filler_id
+    unit.holding[CONTROLS_HEADER_ADDRESS + 1] = filler_length
+    unit.holding[CONTROLS_HEADER_ADDRESS + 2] = 0
+    unit.holding[CONTROLS_HEADER_ADDRESS + 3] = 0
+
+
+async def test_a_model_that_moves_during_a_retry_is_not_published(
+    coordinator, inverter_unit, hass, entry, monkeypatch
+):
+    """A new component at a new address left the controls on the old registers."""
+    inverter_unit.fail_read(CHAIN_END_ADDRESS, IllegalDataAddressError())
+    await coordinator.async_refresh()
+    controls_component = coordinator.device.controls
+
+    reload_entry = MagicMock()
+    monkeypatch.setattr(hass.config_entries, "async_schedule_reload", reload_entry)
+    _insert_a_model_before_the_controls(inverter_unit)
+    inverter_unit.fail_read(CHAIN_END_ADDRESS, None)
+    await coordinator.async_refresh()
+
+    # Nothing is published at the new addresses; the entry reloads instead.
+    assert coordinator.device.controls is controls_component
+    reload_entry.assert_called_once_with(entry.entry_id)
+
+
+async def test_a_mode_written_while_a_poll_runs_is_neither_dropped_nor_undone(
+    coordinator, inverter_unit
+):
+    """The 0.1 line had a busy flag that dropped writes landing during a poll, silently.
+
+    Here a write and a poll share nothing but the connection, and the chosen
+    mode survives the poll that was running while it was written.
+    """
+    await coordinator.async_refresh()
+    storage = coordinator.storage_control
+    assert storage is not None
+    written = []
+    inverter_unit.on_write(written.append)
+
+    await asyncio.gather(
+        coordinator.async_refresh(), storage.set_mode(ExtendedMode.BLOCK_CHARGING)
+    )
+    await coordinator.async_refresh()
+
+    assert written
+    assert storage.extended_mode is ExtendedMode.BLOCK_CHARGING
+    assert inverter_unit.holding[STORAGE_CONTROL_MODE_ADDRESS] == 3
+
+
+# Model 1 and its Vr (firmware version) in the captured fixture, the same on every unit.
+COMMON_ADDRESS = 40002
+VERSION_ADDRESS = 40044
+VERSION_LENGTH = 8
+
+
+def _set_version(unit, version: str) -> None:
+    encoded = version.encode().ljust(VERSION_LENGTH * 2, b"\0")
+    for offset in range(VERSION_LENGTH):
+        unit.holding[VERSION_ADDRESS + offset] = int.from_bytes(
+            encoded[2 * offset : 2 * offset + 2], "big"
+        )
+
+
+async def _away_and_back(coordinator, inverter_unit) -> None:
+    inverter_unit.fail_requests(ModbusConnectionError())
+    await coordinator.async_refresh()
+    assert not coordinator.last_update_success
+    inverter_unit.fail_requests(None)
+    await coordinator.async_refresh()
+
+
+@pytest.mark.parametrize("updated", ["inverter_unit", "meter_unit"])
+async def test_a_firmware_update_during_an_outage_reloads_the_entry(
+    coordinator, inverter_unit, hass, entry, monkeypatch, request, updated
+):
+    """The device page kept the firmware read at setup until a restart.
+
+    A firmware update restarts the inverter; the identity read at setup then
+    named the old version, and the Solar API repair judged it too.
+    """
+    await coordinator.async_refresh()
+    reload = MagicMock()
+    monkeypatch.setattr(hass.config_entries, "async_schedule_reload", reload)
+
+    _set_version(request.getfixturevalue(updated), "1.42.9-1")
+    await _away_and_back(coordinator, inverter_unit)
+
+    reload.assert_called_once_with(entry.entry_id)
+    await coordinator.async_refresh()
+    reload.assert_called_once()
+
+
+async def test_an_outage_without_a_firmware_change_does_not_reload(
+    coordinator, inverter_unit, hass, monkeypatch
+):
+    await coordinator.async_refresh()
+    reload = MagicMock()
+    monkeypatch.setattr(hass.config_entries, "async_schedule_reload", reload)
+
+    await _away_and_back(coordinator, inverter_unit)
+
+    reload.assert_not_called()
+
+
+async def test_an_unread_firmware_is_read_again_on_the_next_poll(
+    coordinator, inverter_unit, hass, entry, monkeypatch
+):
+    """A check that failed is still due: it must not count as unchanged."""
+    await coordinator.async_refresh()
+    reload = MagicMock()
+    monkeypatch.setattr(hass.config_entries, "async_schedule_reload", reload)
+    _set_version(inverter_unit, "1.42.9-1")
+    inverter_unit.fail_read(COMMON_ADDRESS, ServerDeviceFailureError())
+
+    await _away_and_back(coordinator, inverter_unit)
+    reload.assert_not_called()
+
+    inverter_unit.fail_read(COMMON_ADDRESS, None)
+    await coordinator.async_refresh()
+    reload.assert_called_once_with(entry.entry_id)

@@ -1,0 +1,611 @@
+"""The inverter, its optional sub-systems and its meters over modbus-connection units."""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
+import logging
+import time
+from typing import Any, NamedTuple, cast
+
+from modbus_connection import (
+    IllegalDataAddressError,
+    ModbusConnectionError,
+    ModbusError,
+    ModbusTimeoutError,
+    ModbusUnit,
+)
+from modbus_connection.model.sunspec import (
+    SunSpecError,
+    SunSpecMapShiftError,
+    SunSpecModel,
+    SunSpecModels,
+    scan,
+)
+
+from .exceptions import IncompleteChainError, NotAFroniusInverter, error_text
+from .sunspec_models import (
+    COMMON_MODEL_ID,
+    COMMON_SERIAL_WORDS,
+    CONTROLS_MODEL_ID,
+    INVERTER_MODEL_IDS,
+    METER_MODEL_IDS,
+    MPPT_MODEL_ID,
+    NAMEPLATE_MODEL_ID,
+    SETTINGS_MODEL_ID,
+    SINGLE_PHASE_METER_MODEL_ID,
+    STATUS_MODEL_ID,
+    STORAGE_MODEL_ID,
+    SUNSPEC_BASE_ADDRESS,
+    THREE_PHASE_INVERTER_MODEL_ID,
+    AcMeter,
+    Common,
+    Controls,
+    Inverter,
+    Mppt,
+    MpptModule,
+    Nameplate,
+    Settings,
+    Status,
+    Storage,
+)
+
+_LOGGER = logging.getLogger(__name__)
+
+# The one answer that establishes an absence: the unit responds, but serves no
+# registers at the marker address. A gateway error means the meter did not
+# answer at all - which is also what a switched-off meter does - and
+# every other error is a failure, so both leave the question open.
+ABSENCE_ERRORS = (IllegalDataAddressError,)
+REPORT_DISCOVERY = "discovery"
+REPORT_INVERTER = "inverter"
+REPORT_NAMEPLATE = "nameplate"
+REPORT_SETTINGS = "settings"
+REPORT_STATUS = "status"
+REPORT_CONTROLS = "controls"
+REPORT_MPPT = "mppt"
+REPORT_STORAGE = "storage"
+OHM_PER_MEGAOHM = 1_000_000
+PV_LABEL = "MPPT"
+CHARGE_LABEL = "STCHA"
+DISCHARGE_LABEL = "STDISCHA"
+
+
+@dataclass(frozen=True)
+class MpptChannels:
+    """Which model-160 modules are PV strings and which are the storage paths."""
+
+    pv: tuple[int, ...]
+    charge: int | None
+    discharge: int | None
+
+
+EMPTY_CHANNELS = MpptChannels(pv=(), charge=None, discharge=None)
+
+
+def meter_report_name(unit_id: int) -> str:
+    """The report name of the meter on ``unit_id``."""
+    return f"meter_{unit_id}"
+
+
+class DeviceIdentity(NamedTuple):
+    """What model 1 says about a unit."""
+
+    manufacturer: str
+    model: str
+    serial: str
+    version: str
+    options: str
+    # `da` is a plain uint16 register; the reader hands every numeric field
+    # back as a float, so the type follows the reader rather than the spec.
+    address: float | None
+
+
+@dataclass
+class UpdateReport:
+    """What one poll managed to refresh, and when each refreshed part was read.
+
+    `read_spans` holds the monotonic start and end of each read in `updated`.
+    """
+
+    updated: list[str] = field(default_factory=list)
+    failed: dict[str, ModbusError] = field(default_factory=dict)
+    read_spans: dict[str, tuple[float, float]] = field(default_factory=dict)
+
+
+@dataclass
+class MeterInfo:
+    """A meter found on its own unit."""
+
+    unit_id: int
+    identity: DeviceIdentity
+    common: Common
+    phases: int
+    meter: AcMeter
+    # Where the meter's model sits, for a second reader of some of its points.
+    model: SunSpecModel
+
+
+def _common(unit: ModbusUnit, chain: SunSpecModels) -> Common:
+    # Model 1 is mandatory in every SunSpec map, and _scan() has already
+    # refused a chain without it - so the lookup cannot be None here.
+    return Common(unit, cast(SunSpecModel, chain.first(COMMON_MODEL_ID)))
+
+
+async def _read_identity(common: Common) -> DeviceIdentity:
+    await common.async_update()
+    return DeviceIdentity(
+        manufacturer=common.mn or "",
+        model=common.md or "",
+        serial=common.sn or "",
+        version=common.vr or "",
+        options=common.opt or "",
+        address=common.da,
+    )
+
+
+# SunSpec header words before the first model, and the id that closes the chain.
+MARKER_WORDS = 2
+END_MODEL_ID = 0xFFFF
+# A map longer than this is a misread chain, not a device; bounds the walk.
+MAXIMUM_MODELS = 64
+
+
+async def _scan(unit: ModbusUnit) -> tuple[SunSpecModels, bool]:
+    """The SunSpec chain and whether it ended in the end marker rather than a refusal.
+
+    An incomplete chain is not a device without those models: the caller has to
+    keep it as undecided and look again.
+    """
+    complete = True
+    try:
+        chain = await scan(unit, SUNSPEC_BASE_ADDRESS)
+    except IllegalDataAddressError:
+        # Some devices refuse a read past their map instead of answering the
+        # end marker, which took the whole chain down and left setup reporting
+        # "cannot connect" although Modbus was fine (redpomodoro issue 105).
+        # Keep what the device did serve; if that is not even a Fronius,
+        # report the refusal itself, which is what an absent unit answers.
+        chain = await _scan_until_refused(unit)
+        if chain.first(COMMON_MODEL_ID) is None:
+            raise
+        complete = False
+        _LOGGER.warning(
+            "The SunSpec chain ends in a refused read; continuing with the models "
+            "found before it: %s",
+            ", ".join(str(model_id) for model_id in sorted(chain)),
+        )
+    except SunSpecError as err:
+        raise NotAFroniusInverter(str(err)) from err
+    if chain.first(COMMON_MODEL_ID) is None:
+        raise NotAFroniusInverter("no SunSpec common model")
+    return chain, complete
+
+
+async def _scan_until_refused(unit: ModbusUnit) -> SunSpecModels:
+    """Walk the model chain by hand, keeping what was read before a refusal."""
+    chain = SunSpecModels()
+    address = SUNSPEC_BASE_ADDRESS + MARKER_WORDS
+    for _ in range(MAXIMUM_MODELS):
+        try:
+            model_id, length = await unit.read_holding_registers(address, MARKER_WORDS)
+        except IllegalDataAddressError:
+            return chain
+        if model_id == END_MODEL_ID:
+            return chain
+        model = SunSpecModel(model_id=model_id, address=address, length=length)
+        chain.setdefault(model_id, []).append(model)
+        address += model.span
+    return chain
+
+
+class FroniusInverter:
+    """A Fronius inverter: components at the addresses the SunSpec chain reports."""
+
+    def __init__(
+        self,
+        unit: ModbusUnit,
+        unit_id: int,
+        meter_units: Mapping[int, ModbusUnit],
+        *,
+        monotonic: Callable[[], float] = time.monotonic,
+    ) -> None:
+        """Bind to the inverter's unit and the units to probe for meters."""
+        self._unit = unit
+        self._unit_id = unit_id
+        self._monotonic = monotonic
+        self._meter_units = dict(meter_units)
+        # The configured order, kept apart from `meters`: that one holds only
+        # the meters that answered, so numbering displays off it would renumber
+        # the second meter as soon as the first is unplugged.
+        self.meter_unit_ids: tuple[int, ...] = tuple(self._meter_units)
+        self.identity: DeviceIdentity | None = None
+        self._common: Common | None = None
+        self.three_phase = False
+        self.inverter: Inverter | None = None
+        self.nameplate: Nameplate | None = None
+        self.settings: Settings | None = None
+        self.status: Status | None = None
+        self.controls: Controls | None = None
+        self.mppt: Mppt | None = None
+        self.storage: Storage | None = None
+        # False while the chain ended in a refused header: the models behind it
+        # are undecided, not absent, so discovery is retried.
+        self.discovery_complete = False
+        # Each optional model's last component and the address it was built
+        # for; an unchanged block keeps its component, so the controls and the
+        # storage wrapper keep reading what the poll refreshes.
+        self._components_by_model: dict[int, tuple[int, Any]] = {}
+        # Where each meter's model sat when its component was built.
+        self._meter_addresses: dict[int, int] = {}
+        self.meters: dict[int, MeterInfo] = {}
+        # Meter units whose probe did not answer: neither present nor absent
+        # yet, probed again on every poll.
+        self._undecided_meters: dict[int, ModbusUnit] = {}
+        # The inverter's models after its AC block, in chain order.
+        self._polled_models: tuple[str, ...] = ()
+
+    @property
+    def _polled(self) -> tuple[str, ...]:
+        """Everything one poll reads, in read order.
+
+        The load adds the primary meter to the inverter's AC power, so the
+        meters are read right after the inverter, also one found after setup:
+        a load step between the two reads showed in the sum.
+        """
+        if not self.is_set_up:
+            return ()
+        return (
+            REPORT_INVERTER,
+            *(meter_report_name(unit_id) for unit_id in self.meters),
+            *self._polled_models,
+        )
+
+    @property
+    def unit(self) -> ModbusUnit:
+        """The inverter's own unit."""
+        return self._unit
+
+    @staticmethod
+    async def async_probe(unit: ModbusUnit) -> DeviceIdentity:
+        """The identity of the inverter on ``unit``; raises NotAFroniusInverter otherwise."""
+        chain, _complete = await _scan(unit)
+        if chain.first(*INVERTER_MODEL_IDS) is None:
+            raise NotAFroniusInverter("no SunSpec inverter model in the chain")
+        return await _read_identity(_common(unit, chain))
+
+    @property
+    def is_set_up(self) -> bool:
+        """Whether discovery has run and placed the components."""
+        return self.inverter is not None
+
+    async def _async_setup(self) -> None:
+        """Read what changes only with a restart and place the components, as one step.
+
+        Everything is built beside the live state and published only when it is
+        whole. A failure halfway through leaves the entities on the objects they
+        already read, and leaves discovery with its obligation to try again.
+        """
+        chain, complete = await _scan(self._unit)
+        inverter_model = chain.first(*INVERTER_MODEL_IDS)
+        if inverter_model is None:
+            raise NotAFroniusInverter("no SunSpec inverter model in the chain")
+        common = _common(self._unit, chain)
+        identity = await _read_identity(common)
+        components = {
+            REPORT_INVERTER: self._optional(Inverter, chain, inverter_model.model_id),
+            REPORT_NAMEPLATE: self._optional(Nameplate, chain, NAMEPLATE_MODEL_ID),
+            REPORT_SETTINGS: self._optional(Settings, chain, SETTINGS_MODEL_ID),
+            REPORT_STATUS: self._optional(Status, chain, STATUS_MODEL_ID),
+            REPORT_CONTROLS: self._optional(Controls, chain, CONTROLS_MODEL_ID),
+            REPORT_MPPT: self._optional(Mppt, chain, MPPT_MODEL_ID),
+            REPORT_STORAGE: self._optional(Storage, chain, STORAGE_MODEL_ID),
+        }
+        meters: dict[int, MeterInfo] = {}
+        undecided: dict[int, ModbusUnit] = {}
+        addresses = dict(self._meter_addresses)
+        for unit_id, meter_unit in self._meter_units.items():
+            await self._async_place_meter(
+                unit_id, meter_unit, meters, undecided, addresses
+            )
+
+        self.identity = identity
+        self._common = common
+        self.three_phase = inverter_model.model_id == THREE_PHASE_INVERTER_MODEL_ID
+        self.inverter = components[REPORT_INVERTER]
+        self.nameplate = components[REPORT_NAMEPLATE]
+        self.settings = components[REPORT_SETTINGS]
+        self.status = components[REPORT_STATUS]
+        self.controls = components[REPORT_CONTROLS]
+        self.mppt = components[REPORT_MPPT]
+        self.storage = components[REPORT_STORAGE]
+        self.meters = meters
+        self._meter_addresses = addresses
+        self._undecided_meters = undecided
+        self._polled_models = tuple(
+            name
+            for name, component in components.items()
+            if component is not None and name != REPORT_INVERTER
+        )
+        self.discovery_complete = complete
+
+    def _optional(
+        self, component_class: Any, chain: SunSpecModels, model_id: int
+    ) -> Any:
+        """The component for `model_id`, kept while its block has not moved.
+
+        Remembered per model rather than read off the live attribute: a model
+        missing from one incomplete scan must come back as the same object, or
+        the control built on it reads a component nothing polls.
+        """
+        model = chain.first(model_id)
+        if model is None:
+            return None
+        address, component = self._components_by_model.get(model_id, (None, None))
+        if component is not None:
+            if address == model.address:
+                return component
+            # Building a replacement here would leave every control that holds
+            # the old component writing to the old registers. The
+            # coordinator answers a moved map by reloading the entry.
+            raise SunSpecMapShiftError(
+                f"SunSpec model {model_id} moved from register {address} to "
+                f"{model.address}"
+            )
+        component = component_class(self._unit, model)
+        self._components_by_model[model_id] = (model.address, component)
+        return component
+
+    async def _async_place_meter(
+        self,
+        unit_id: int,
+        meter_unit: ModbusUnit,
+        meters: dict[int, MeterInfo],
+        undecided: dict[int, ModbusUnit],
+        addresses: dict[int, int],
+    ) -> None:
+        """Probe one meter unit and file it as present, absent or undecided.
+
+        Its map address goes where the meter goes: into the provisional maps of
+        a rediscovery, published with them or not at all.
+        """
+        try:
+            meter = await self._async_probe_meter(unit_id, meter_unit, addresses)
+        except ModbusConnectionError:
+            raise
+        except ModbusError as err:
+            # Only "no such device" is an absence. A timeout, a busy meter or a
+            # device failure leave the question open: try again
+            # on every poll, and say so in the report.
+            _LOGGER.debug(
+                "Meter on unit %s did not answer yet: %s", unit_id, error_text(err)
+            )
+            undecided[unit_id] = meter_unit
+            return
+        undecided.pop(unit_id, None)
+        if meter is not None:
+            meters[unit_id] = meter
+
+    async def _async_probe_meter(
+        self, unit_id: int, meter_unit: ModbusUnit, addresses: dict[int, int]
+    ) -> MeterInfo | None:
+        """A meter on ``unit_id``, or None when nothing SunSpec answers there.
+
+        A unit that answers but serves no registers at the marker address has
+        no SunSpec map: that is an absence. Every other error propagates and
+        the caller keeps the unit undecided.
+        """
+        try:
+            chain, complete = await _scan(meter_unit)
+        except ABSENCE_ERRORS:
+            _LOGGER.debug("No meter on unit %s", unit_id)
+            return None
+        if not complete:
+            raise IncompleteChainError(f"meter {unit_id} answered an incomplete chain")
+        model = chain.first(*METER_MODEL_IDS)
+        if model is None:
+            return None
+        common = _common(meter_unit, chain)
+        identity = await _read_identity(common)
+        phases = 1 if model.model_id == SINGLE_PHASE_METER_MODEL_ID else 3
+        # An unchanged meter keeps its component, so a poll that fails right
+        # after a rediscovery still shows the last readings.
+        known = self.meters.get(unit_id)
+        moved = self._meter_addresses.get(unit_id) != model.address
+        addresses[unit_id] = model.address
+        meter = AcMeter(meter_unit, model) if known is None or moved else known.meter
+        return MeterInfo(
+            unit_id=unit_id,
+            identity=identity,
+            common=common,
+            phases=phases,
+            meter=meter,
+            model=model,
+        )
+
+    async def async_identities_changed(self) -> bool:
+        """Whether model 1 of the inverter or of a meter says something new.
+
+        A firmware update restarts the inverter; what setup read would name the
+        old version until a reload. The inverter's read propagates its error,
+        a meter that fails is that meter's failure and counts as unchanged.
+        """
+        if self._common is None:
+            return False
+        if await _read_identity(self._common) != self.identity:
+            return True
+        for info in self.meters.values():
+            try:
+                identity = await _read_identity(info.common)
+            except ModbusConnectionError:
+                raise
+            except ModbusError as err:
+                _LOGGER.debug(
+                    "Meter on unit %s did not answer: %s", info.unit_id, error_text(err)
+                )
+                continue
+            if identity != info.identity:
+                return True
+        return False
+
+    def _component(self, name: str) -> Any:
+        if name.startswith("meter_"):
+            return self.meters[int(name.removeprefix("meter_"))].meter
+        return getattr(self, name)
+
+    async def async_update(self) -> UpdateReport:
+        """Refresh every sub-system on its own; a dead link propagates."""
+        if not self.is_set_up:
+            try:
+                await self._async_setup()
+            except ModbusError:
+                self.inverter = None
+                raise
+        report = await self._async_open_report()
+        for name in self._polled:
+            await self._async_update_component(name, report)
+        await self._async_retry_undecided_meters(report)
+        return report
+
+    async def _async_open_report(self) -> UpdateReport:
+        """A report for this poll; an incomplete chain is retried and named in it."""
+        if self.discovery_complete:
+            return UpdateReport()
+        await self._async_retry_discovery()
+        report = UpdateReport()
+        if not self.discovery_complete:
+            report.failed[REPORT_DISCOVERY] = IncompleteChainError(
+                "the SunSpec chain ends in a refused read"
+            )
+        return report
+
+    async def _async_retry_discovery(self) -> None:
+        """Scan again; a chain that completes now brings its models with it."""
+        try:
+            await self._async_setup()
+        except ModbusConnectionError:
+            raise
+        except (ModbusError, NotAFroniusInverter) as err:
+            _LOGGER.debug("Discovery is still incomplete: %s", error_text(err))
+
+    async def _async_update_component(self, name: str, report: UpdateReport) -> None:
+        """Refresh one component and file the outcome under its report name.
+
+        A meter that fails is that meter's failure, never the poll's - the
+        retry path once read a recovered meter outside this.
+        """
+        started = self._monotonic()
+        try:
+            await self._component(name).async_update()
+        except ModbusConnectionError:
+            raise
+        except ModbusTimeoutError as err:
+            # The first sub-system to time out with nothing answered yet means
+            # the link is down. The incomplete chain's note is no answer; it
+            # stood in every report and hid every outage.
+            failed = report.failed.keys() - {REPORT_DISCOVERY}
+            if not report.updated and not failed:
+                raise
+            report.failed[name] = err
+        except ModbusError as err:
+            report.failed[name] = err
+        else:
+            report.updated.append(name)
+            report.read_spans[name] = (started, self._monotonic())
+
+    async def _async_retry_undecided_meters(self, report: UpdateReport) -> None:
+        for unit_id, meter_unit in list(self._undecided_meters.items()):
+            name = meter_report_name(unit_id)
+            await self._async_place_meter(
+                unit_id,
+                meter_unit,
+                self.meters,
+                self._undecided_meters,
+                self._meter_addresses,
+            )
+            if unit_id in self._undecided_meters:
+                report.failed[name] = ModbusTimeoutError(
+                    f"meter {unit_id} did not answer"
+                )
+                continue
+            if unit_id in self.meters:
+                await self._async_update_component(name, report)
+
+    async def async_read_raw(self) -> dict[int, dict[str, dict[int, int | bool]]]:
+        """Every register read, undecoded, per unit id, minus the serial number words."""
+        if not self.is_set_up:
+            await self._async_setup()
+        per_unit: dict[int, dict[str, dict[int, int | bool]]] = {}
+
+        async def collect(
+            unit_id: int, unit: ModbusUnit, components: Sequence[Any]
+        ) -> None:
+            chain, _complete = await _scan(unit)
+            common = Common(unit, cast(SunSpecModel, chain.first(COMMON_MODEL_ID)))
+            raw = per_unit.setdefault(unit_id, {})
+            for component in (common, *components):
+                for space, words in (await component.async_read_raw()).items():
+                    raw.setdefault(space, {}).update(words)
+            serial_start = common.resolved_fields["sn"].address
+            for address in range(serial_start, serial_start + COMMON_SERIAL_WORDS):
+                raw.get("holding", {}).pop(address, None)
+
+        inverter_components = [
+            self._component(n) for n in self._polled if not n.startswith("meter_")
+        ]
+        await collect(self._unit_id, self._unit, inverter_components)
+        for unit_id, info in self.meters.items():
+            await collect(unit_id, self._meter_units[unit_id], [info.meter])
+        return per_unit
+
+    @property
+    def isolation_resistance_megaohm(self) -> float | None:
+        """Model 122 reports ohms; the entity has always shown megaohms."""
+        if self.status is None or self.status.ris is None:
+            return None
+        return round(self.status.ris / OHM_PER_MEGAOHM, 3)
+
+    def mppt_module(self, index: int) -> MpptModule | None:
+        """The module at ``index``, or None when there is no MPPT model or index."""
+        if self.mppt is None or index >= len(self.mppt.module):
+            return None
+        return self.mppt.module[index]
+
+    @property
+    def mppt_channels(self) -> MpptChannels:
+        """Classify the model-160 modules from the last poll by their label."""
+        if self.mppt is None:
+            return EMPTY_CHANNELS
+        labels = [
+            (module.id_str or "").replace(" ", "").upper()
+            for module in self.mppt.module
+        ]
+        charge = next(
+            (i for i, label in enumerate(labels) if label.startswith(CHARGE_LABEL)),
+            None,
+        )
+        discharge = next(
+            (i for i, label in enumerate(labels) if DISCHARGE_LABEL in label), None
+        )
+        # Older firmware ships no labels; the storage paths are then the last two modules.
+        if (
+            self.storage is not None
+            and (charge is None or discharge is None)
+            and len(labels) >= 4
+        ):
+            charge, discharge = len(labels) - 2, len(labels) - 1
+        pv = tuple(i for i, label in enumerate(labels) if PV_LABEL in label)
+        if not pv:
+            pv = tuple(i for i in range(len(labels)) if i not in (charge, discharge))
+        return MpptChannels(pv=pv, charge=charge, discharge=discharge)
+
+    @property
+    def pv_power_w(self) -> float | None:
+        """The sum of the PV channels' dcw, or None when none of them report a value."""
+        modules = [self.mppt_module(i) for i in self.mppt_channels.pv]
+        values = [
+            module.dcw
+            for module in modules
+            if module is not None and module.dcw is not None
+        ]
+        return round(sum(values), 2) if values else None

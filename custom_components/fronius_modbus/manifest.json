@@ -1,12 +1,22 @@
 {
-    "domain": "fronius_modbus",
-    "name": "Fronius Modbus",
-    "codeowners": ["@callifo"],
-    "config_flow": true,
-    "dependencies": [],
-    "documentation": "https://github.com/callifo/fronius_modbus",
-    "iot_class": "local_polling",
-    "issue_tracker": "https://github.com/callifo/fronius_modbus/issues",
-    "requirements": ["pymodbus>=3.13.1"],
-    "version": "0.3.4"
-  }
+  "domain": "fronius_modbus",
+  "name": "Fronius Modbus",
+  "codeowners": [
+    "@callifo",
+    "@Varitras"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "modbus"
+  ],
+  "documentation": "https://github.com/callifo/fronius_modbus",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/callifo/fronius_modbus/issues",
+  "requirements": [
+    "modbus-connection[tmodbus]>=4.10.0"
+  ],
+  "version": "1.4.0b1",
+  "zeroconf": [
+    "_Fronius-SE-Inverter._tcp.local."
+  ]
+}

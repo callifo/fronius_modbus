@@ -1,40 +1,69 @@
-"""The Fronius Modbus integration."""
+"""The Fronius Modbus integration, served from Home Assistant's shared Modbus connection."""
 
 from __future__ import annotations
 
+from dataclasses import replace
+from datetime import timedelta
 import logging
+import time
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL, Platform
-from homeassistant.core import HomeAssistant
+from modbus_connection import ModbusTcpParams
 
-from . import hub, migrations
+from homeassistant.components.modbus import async_get_unit
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
+from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL, Platform
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr
+
+from . import migrations
+from .component_readings import reported_rows
 from .const import (
     API_USERNAME,
     CONF_API_USERNAME,
     CONF_INVERTER_UNIT_ID,
-    CONF_RESTRICT_MODBUS_TO_THIS_IP,
+    CONF_METER_POWER_INTERVAL,
+    CONF_WEB_SCAN_INTERVAL,
     DEFAULT_INVERTER_UNIT_ID,
-    DEFAULT_NAME,
-    DEFAULT_METER_UNIT_IDS,
+    DEFAULT_METER_POWER_INTERVAL,
+    DEFAULT_METER_UNIT_ID,
     DEFAULT_PORT,
-    DEFAULT_RESTRICT_MODBUS_TO_THIS_IP,
     DEFAULT_SCAN_INTERVAL,
+    DEFAULT_WEB_SCAN_INTERVAL,
     DOMAIN,
 )
+from .coordinator import (
+    FroniusConfigEntry,
+    FroniusMeterPowerCoordinator,
+    FroniusModbusCoordinator,
+    FroniusRuntimeData,
+    FroniusWebCoordinator,
+)
+from .entity_base import expected_device_identifiers
+from .fronius_modbus_api.device import FroniusInverter
+from .froniuswebclient import FroniusWebClient
+from .meter_topology import MeterTopology, parse_meter_topology
+from .mppt_entities import left_out_mppt_keys
+from .token_store import async_forget_unused_tokens
+from .web_control import BATTERY_WRITE_MODBUS_RECOVERY_SECONDS, FroniusWebControl
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.SELECT, Platform.SWITCH, Platform.NUMBER, Platform.SENSOR, Platform.BUTTON]
-
-type HubConfigEntry = ConfigEntry[hub.Hub]
+PLATFORMS = [
+    Platform.SELECT,
+    Platform.SWITCH,
+    Platform.NUMBER,
+    Platform.SENSOR,
+    Platform.BUTTON,
+    Platform.EVENT,
+]
 
 
 def _entry_value(entry: ConfigEntry, key: str, default=None):
     return entry.options.get(key, entry.data.get(key, default))
 
+
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Migrate old config entries."""
+    """Migrate an old config entry to the current version."""
     return await migrations.async_migrate_entry(hass, entry)
 
 
@@ -42,59 +71,209 @@ async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     await hass.config_entries.async_reload(entry.entry_id)
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: HubConfigEntry) -> bool:
+async def _async_meter_topology(
+    hass: HomeAssistant, public_client: FroniusWebClient | None
+) -> MeterTopology:
+    """Ask the web API which meters exist; fall back to the single default meter.
+
+    The read needs no login and answers None when it fails, so a rejected token
+    shows at the first protected read of the web poll instead.
+    """
+    unconfirmed = parse_meter_topology(None)
+    if public_client is None:
+        # Without a web client the entry only ever serves the default meter, so
+        # that is the configuration, not an unread answer.
+        return replace(unconfirmed, confirmed=True)
+
+    info = await hass.async_add_executor_job(
+        public_client.get_power_meter_info, DEFAULT_METER_UNIT_ID
+    )
+    return parse_meter_topology(info)
+
+
+@callback
+def _async_reload_when_a_string_lights_up(
+    hass: HomeAssistant, entry: FroniusConfigEntry, left_out: frozenset[str]
+) -> None:
+    """Reload once an MPPT string dark at setup sends its first value.
+
+    Its sensors were left out for want of a value; without the reload they
+    came only with the next restart. ``left_out`` is taken
+    before the platforms set up: a poll during their setup lit a string
+    unseen.
+    """
+    if not left_out:
+        return
+    runtime = entry.runtime_data
+    scheduled = False
+
+    @callback
+    def _check() -> None:
+        nonlocal scheduled
+        if scheduled or not left_out - left_out_mppt_keys(runtime):
+            return
+        scheduled = True
+        hass.config_entries.async_schedule_reload(entry.entry_id)
+
+    entry.async_on_unload(runtime.modbus.async_add_listener(_check))
+    _check()
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> bool:
     """Set up Fronius Modbus from a config entry."""
-    name = _entry_value(entry, CONF_NAME, DEFAULT_NAME)
-    host = _entry_value(entry, CONF_HOST)
-    port = _entry_value(entry, CONF_PORT, DEFAULT_PORT)
-    inverter_unit_id = _entry_value(entry, CONF_INVERTER_UNIT_ID, DEFAULT_INVERTER_UNIT_ID)
-    scan_interval = _entry_value(entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
-    api_username = _entry_value(entry, CONF_API_USERNAME, API_USERNAME)
-    restrict_modbus_to_this_ip = _entry_value(
-        entry,
-        CONF_RESTRICT_MODBUS_TO_THIS_IP,
-        DEFAULT_RESTRICT_MODBUS_TO_THIS_IP,
+    host = str(_entry_value(entry, CONF_HOST))
+    port = int(_entry_value(entry, CONF_PORT, DEFAULT_PORT))
+    inverter_unit_id = int(
+        _entry_value(entry, CONF_INVERTER_UNIT_ID, DEFAULT_INVERTER_UNIT_ID)
+    )
+    scan_interval = int(_entry_value(entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))
+    web_scan_interval = int(
+        _entry_value(entry, CONF_WEB_SCAN_INTERVAL, DEFAULT_WEB_SCAN_INTERVAL)
+    )
+    meter_power_interval = int(
+        _entry_value(entry, CONF_METER_POWER_INTERVAL, DEFAULT_METER_POWER_INTERVAL)
     )
 
-    _LOGGER.debug("Setup %s.%s", DOMAIN, name)
-
+    api_username = str(_entry_value(entry, CONF_API_USERNAME, API_USERNAME))
     api_token = await migrations.async_prepare_entry_token(hass, entry, host)
-    await migrations.async_sync_reconfigure_issue(hass, entry, has_token=api_token is not None)
-
-    entry.runtime_data = hub.Hub(
-        hass=hass,
-        name=name,
-        host=host,
-        port=port,
-        inverter_unit_id=inverter_unit_id,
-        meter_unit_ids=list(DEFAULT_METER_UNIT_IDS),
-        scan_interval=scan_interval,
-        api_username=api_username if api_token else None,
-        api_token=api_token,
-        auto_enable_modbus=False,
-        restrict_modbus_to_this_ip=restrict_modbus_to_this_ip,
+    await migrations.async_sync_login_request(
+        hass, entry, has_token=api_token is not None
     )
+    client = (
+        FroniusWebClient(host=host, username=api_username, password="", token=api_token)
+        if api_token
+        else None
+    )
+    public_client = client
+    if migrations.web_api_disabled(entry):
+        public_client = FroniusWebClient(host=host, username=API_USERNAME, password="")
 
-    await entry.runtime_data.init_data(config_entry=entry)
-    await migrations.async_migrate_v019_mppt_statistics(hass, entry, entry.runtime_data)
-    await migrations.async_migrate_name_based_unique_ids(hass, entry, entry.runtime_data)
-    await migrations.async_remove_unexpected_entities(hass, entry, entry.runtime_data)
-    await migrations.async_remove_legacy_devices(hass, entry)
-    await migrations.async_sync_reconfigure_issue(
+    topology = await _async_meter_topology(hass, public_client)
+    meter_unit_ids, primary = topology.unit_ids, topology.primary_unit_id
+    locations = topology.locations
+
+    params = ModbusTcpParams(host=host, port=port)
+    unit = async_get_unit(hass, entry, params, inverter_unit_id)
+    meter_units = {
+        unit_id: async_get_unit(hass, entry, params, unit_id)
+        for unit_id in meter_unit_ids
+    }
+    device = FroniusInverter(unit, inverter_unit_id, meter_units)
+    modbus = FroniusModbusCoordinator(
         hass,
         entry,
-        has_token=entry.runtime_data.web_api_configured,
+        device,
+        interval=timedelta(seconds=scan_interval),
+        primary_meter_unit_id=primary,
+        meter_locations=locations,
+    )
+    await modbus.async_config_entry_first_refresh()
+
+    meter_power = None
+    grid_meter = device.meters.get(primary)
+    if meter_power_interval and grid_meter is not None:
+        meter_power = FroniusMeterPowerCoordinator(
+            hass, entry, grid_meter, interval=timedelta(seconds=meter_power_interval)
+        )
+        await meter_power.async_refresh()
+
+    web_control = None
+    web = None
+    if public_client is not None:
+        web_control = FroniusWebControl(
+            hass,
+            entry,
+            host=host,
+            client=client,
+            public_client=public_client,
+            api_username=api_username,
+            storage_present=device.storage is not None,
+            inverter_firmware=lambda: (
+                device.identity.version if device.identity else None
+            ),
+            on_battery_write=lambda: modbus.tolerate_failures_until(
+                time.monotonic() + BATTERY_WRITE_MODBUS_RECOVERY_SECONDS
+            ),
+        )
+        web = FroniusWebCoordinator(
+            hass,
+            entry,
+            web_control,
+            interval=timedelta(seconds=web_scan_interval),
+            recheck_topology=not topology.confirmed,
+        )
+        web_control.attach_coordinator(web)
+        entry.async_on_unload(web_control.shutdown)
+        # A web-API outage must not block setup: refresh (not first_refresh) so
+        # web entities come up unavailable while Modbus entities still load.
+        await web.async_refresh()
+
+    migrations.async_migrate_callifo_module_temperatures(hass, entry)
+    entry.runtime_data = FroniusRuntimeData(
+        device=device,
+        modbus=modbus,
+        web=web,
+        web_control=web_control,
+        meter_locations=locations,
+        meter_power=meter_power,
+        primary_meter_unit_id=primary,
+        topology_confirmed=topology.confirmed,
+        reported_keys=migrations.reported_keys(hass, entry),
+        registered_keys=migrations.registered_keys(hass, entry),
+    )
+
+    await migrations.async_migrate_v019_mppt_statistics(hass, entry)
+    migrations.async_migrate_callifo_lowercase_keys(hass, entry)
+    await migrations.async_migrate_name_based_unique_ids(hass, entry)
+    await migrations.async_remove_unexpected_entities(hass, entry)
+    await migrations.async_remove_legacy_devices(hass, entry)
+    await migrations.async_sync_login_request(
+        hass, entry, has_token=web_control is not None and web_control.configured
     )
 
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
+    left_out = left_out_mppt_keys(entry.runtime_data)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    _async_reload_when_a_string_lights_up(hass, entry, left_out)
+    if web is not None:
+        web_poll = web
+
+        @callback
+        def _mark_reported_rows() -> None:
+            # ponytail: the report-following rows are all inverter rows today.
+            readings = web_poll.data.inverter_readings if web_poll.data else None
+            migrations.async_mark_reported(
+                hass, entry, reported_rows("inverter", readings)
+            )
+
+        _mark_reported_rows()
+        entry.async_on_unload(web.async_add_listener(_mark_reported_rows))
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> bool:
     """Unload a config entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unload_ok and getattr(entry, "runtime_data", None) is not None:
-        entry.runtime_data.close()
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
-    return unload_ok
+
+async def async_remove_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> None:
+    """Delete the entry's web token unless another entry still logs in with it."""
+    await async_forget_unused_tokens(hass, str(_entry_value(entry, CONF_HOST, "")))
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, entry: FroniusConfigEntry, device_entry: dr.DeviceEntry
+) -> bool:
+    """Let the owner delete a device the inverter no longer reports.
+
+    Cleanup never deletes a device on doubt, so one short answer cannot take a
+    meter with its history; the owner decides instead.
+    """
+    del hass
+    if entry.state is not ConfigEntryState.LOADED:
+        return False
+    expected = expected_device_identifiers(entry.runtime_data, entry)
+    return not any(
+        domain == DOMAIN and identifier in expected
+        for domain, identifier in device_entry.identifiers
+    )

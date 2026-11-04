@@ -1,0 +1,580 @@
+"""FroniusInverter: discovery over the SunSpec chain, and one poll as a report."""
+
+from modbus_connection import (
+    GatewayTargetError,
+    IllegalDataAddressError,
+    ModbusConnectionError,
+    ModbusTimeoutError,
+    ServerDeviceBusyError,
+    ServerDeviceFailureError,
+)
+from modbus_connection.mock import MockModbusConnection
+import pytest
+
+from custom_components.fronius_modbus.fronius_modbus_api.device import (
+    REPORT_DISCOVERY,
+    REPORT_INVERTER,
+    REPORT_MPPT,
+    REPORT_STORAGE,
+    FroniusInverter,
+    meter_report_name,
+)
+from custom_components.fronius_modbus.fronius_modbus_api.exceptions import (
+    NotAFroniusInverter,
+)
+from custom_components.fronius_modbus.fronius_modbus_api.sunspec_models import AcMeter
+
+from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID, SteppingClock
+
+
+@pytest.fixture
+def device(connection):
+    return FroniusInverter(
+        connection.for_unit(INVERTER_UNIT_ID),
+        INVERTER_UNIT_ID,
+        {METER_UNIT_ID: connection.for_unit(METER_UNIT_ID)},
+    )
+
+
+async def test_probe_returns_the_identity(inverter_unit):
+    identity = await FroniusInverter.async_probe(inverter_unit)
+    assert (identity.manufacturer, identity.model, identity.version) == (
+        "Fronius",
+        "Symo GEN24 10.0",
+        "1.38.6-1",
+    )
+    assert identity.address == 1
+
+
+async def test_probe_rejects_a_device_without_an_inverter_model():
+    unit = MockModbusConnection().for_unit(1)
+    unit.load_raw({"holding": {40000: 0x5375, 40001: 0x6E53, 40002: 0xFFFF, 40003: 0}})
+    with pytest.raises(NotAFroniusInverter):
+        await FroniusInverter.async_probe(unit)
+
+
+async def test_the_first_update_discovers_every_sub_system(device):
+    report = await device.async_update()
+    assert device.three_phase is True
+    assert device.storage is not None and device.mppt is not None
+    assert set(report.updated) == {
+        "inverter",
+        "nameplate",
+        "settings",
+        "status",
+        "controls",
+        "mppt",
+        "storage",
+        meter_report_name(METER_UNIT_ID),
+    }
+    assert report.failed == {}
+    assert device.inverter.w == 3075.1
+    assert device.meters[METER_UNIT_ID].phases == 3
+    assert device.meters[METER_UNIT_ID].identity.model == "Smart Meter TS 65A-3"
+
+
+async def test_a_missing_meter_is_absent_not_an_error(connection):
+    """A unit that answers without a SunSpec map has no meter; a gateway error is an outage."""
+    absent = connection.for_unit(201)
+    absent.fail_requests(IllegalDataAddressError())
+    device = FroniusInverter(
+        connection.for_unit(INVERTER_UNIT_ID),
+        INVERTER_UNIT_ID,
+        {METER_UNIT_ID: connection.for_unit(METER_UNIT_ID), 201: absent},
+    )
+    report = await device.async_update()
+    assert 201 not in device.meters
+    assert meter_report_name(201) not in report.updated
+    assert meter_report_name(201) not in report.failed
+
+
+async def test_a_meter_that_stops_answering_fails_only_its_own_report(
+    device, meter_unit
+):
+    await device.async_update()
+    meter_unit.fail_requests(ModbusTimeoutError())
+    report = await device.async_update()
+    assert REPORT_INVERTER in report.updated
+    assert isinstance(
+        report.failed[meter_report_name(METER_UNIT_ID)], ModbusTimeoutError
+    )
+
+
+async def test_an_inverter_without_storage_and_mppt(symo_gen24):
+    connection = MockModbusConnection()
+    holding = dict(symo_gen24[1]["holding"])
+    holding[40253], holding[40254] = 0xFFFF, 0  # chain ends after model 123
+    connection.for_unit(1).load_raw({"holding": holding})
+    device = FroniusInverter(connection.for_unit(1), 1, {})
+    report = await device.async_update()
+    assert device.storage is None and device.mppt is None
+    assert REPORT_STORAGE not in report.updated and REPORT_MPPT not in report.updated
+
+
+async def test_a_dead_link_propagates(device, inverter_unit):
+    inverter_unit.fail_requests(ModbusConnectionError())
+    with pytest.raises(ModbusConnectionError):
+        await device.async_update()
+    assert device.is_set_up is False
+
+
+async def test_isolation_resistance_is_reported_in_megaohm(device):
+    await device.async_update()
+    assert device.isolation_resistance_megaohm == 8.607
+
+
+async def test_raw_diagnostics_drop_the_serial_number(device):
+    await device.async_update()
+    raw = await device.async_read_raw()
+    assert (
+        40052 not in raw[INVERTER_UNIT_ID]["holding"]
+        and 40067 not in raw[INVERTER_UNIT_ID]["holding"]
+    )
+    assert raw[INVERTER_UNIT_ID]["holding"][40002] == 1
+
+
+async def test_mppt_channels_are_classified_by_their_label(device):
+    await device.async_update()
+    channels = device.mppt_channels
+    assert channels.pv == (0, 1)
+    assert (channels.charge, channels.discharge) == (2, 3)
+    assert device.pv_power_w == 3123.6
+
+
+async def test_unlabelled_channels_fall_back_to_the_last_two_for_storage(
+    connection, symo_gen24
+):
+    holding = dict(symo_gen24[1]["holding"])
+    for module in range(4):  # blank every id_str (8 words from header+11+20*module)
+        for word in range(8):
+            holding[40253 + 11 + 20 * module + word] = 0
+    connection.for_unit(1).load_raw({"holding": holding})
+    device = FroniusInverter(connection.for_unit(1), 1, {})
+    await device.async_update()
+    assert device.mppt_channels.pv == (0, 1)
+    assert (device.mppt_channels.charge, device.mppt_channels.discharge) == (2, 3)
+
+
+async def test_a_link_that_dies_after_setup_still_propagates(device, inverter_unit):
+    """A dead link during the per-component poll must reach the caller too.
+
+    The first poll fails in discovery, where the re-raise is obvious. Once the
+    device is set up the same failure arrives inside the component loop, and
+    swallowing it there would report a green poll over a dead connection.
+    """
+    await device.async_update()
+    inverter_unit.fail_requests(ModbusConnectionError())
+    with pytest.raises(ModbusConnectionError):
+        await device.async_update()
+
+
+def _relabel_module(holding: dict, module: int, label: str) -> None:
+    """Overwrite one model-160 module's id_str (8 words from header+11+20*module)."""
+    padded = label.ljust(16, "\0")[:16]
+    for word in range(8):
+        pair = padded[word * 2 : word * 2 + 2]
+        holding[40253 + 11 + 20 * module + word] = (ord(pair[0]) << 8) | ord(pair[1])
+
+
+async def test_a_module_count_beyond_the_model_fails_the_mppt_read(
+    device, inverter_unit
+):
+    """N=5 on a four-module model read the storage model as a fifth module."""
+    await device.async_update()
+    inverter_unit.holding[device.mppt.resolved_fields["n"].address] = 5
+
+    report = await device.async_update()
+
+    assert REPORT_MPPT in report.failed
+    assert [module.id for module in device.mppt.module] == [1, 2, 3, 4]
+
+
+async def test_a_wrong_module_count_does_not_move_the_unlabelled_storage_paths(
+    device, inverter_unit
+):
+    for index in range(4):
+        _relabel_module(inverter_unit.holding, index, "")
+    await device.async_update()
+    inverter_unit.holding[device.mppt.resolved_fields["n"].address] = 5
+
+    report = await device.async_update()
+
+    assert REPORT_MPPT in report.failed
+    channels = device.mppt_channels
+    assert (channels.charge, channels.discharge) == (2, 3)
+
+
+async def test_an_unimplemented_module_count_fails_the_mppt_read(device, inverter_unit):
+    """0xFFFF decoded to None and emptied the modules, reported as a success."""
+    await device.async_update()
+    inverter_unit.holding[device.mppt.resolved_fields["n"].address] = 0xFFFF
+
+    report = await device.async_update()
+
+    assert REPORT_MPPT in report.failed
+    assert len(device.mppt.module) == 4
+
+
+async def test_a_foreign_labelled_module_is_not_a_pv_channel(connection, symo_gen24):
+    """The PV channels are the ones LABELLED as strings, not "whatever is left".
+
+    The fallback for unlabelled firmware would otherwise cover for a label
+    check that matches nothing at all, and a module that is neither a string
+    nor a storage path would be counted as PV.
+    """
+    holding = dict(symo_gen24[1]["holding"])
+    _relabel_module(holding, 0, "AUX 1")
+    connection.for_unit(1).load_raw({"holding": holding})
+    device = FroniusInverter(connection.for_unit(1), 1, {})
+    await device.async_update()
+
+    assert device.mppt_channels.pv == (1,)
+
+
+async def test_a_meter_that_does_not_answer_at_setup_is_retried_on_the_next_poll(
+    connection,
+):
+    """A discovery timeout was filed as "no meter" for the life of the entry."""
+    meter_unit = connection.for_unit(METER_UNIT_ID)
+    meter_unit.fail_requests(ModbusTimeoutError())
+    device = FroniusInverter(
+        connection.for_unit(INVERTER_UNIT_ID),
+        INVERTER_UNIT_ID,
+        {METER_UNIT_ID: meter_unit},
+    )
+    report = await device.async_update()
+    assert METER_UNIT_ID not in device.meters
+    assert isinstance(
+        report.failed[meter_report_name(METER_UNIT_ID)], ModbusTimeoutError
+    )
+    meter_unit.fail_requests(None)
+    report = await device.async_update()
+    assert METER_UNIT_ID in device.meters
+    assert meter_report_name(METER_UNIT_ID) in report.updated
+
+
+async def test_a_unit_without_a_sunspec_map_is_absent_for_good(connection):
+    """Only "answered, but nothing here" settles it; a gateway error does not."""
+    absent = connection.for_unit(201)
+    absent.fail_requests(IllegalDataAddressError())
+    device = FroniusInverter(
+        connection.for_unit(INVERTER_UNIT_ID), INVERTER_UNIT_ID, {201: absent}
+    )
+    report = await device.async_update()
+    absent.fail_requests(None)
+    report = await device.async_update()
+    assert 201 not in device.meters
+    assert meter_report_name(201) not in report.failed
+
+
+# The storage model header in the captured fixture; the chain ends right after it.
+STORAGE_HEADER_ADDRESS = 40343
+
+
+async def test_a_refused_model_header_keeps_the_models_found_before_it(connection):
+    """Redpomodoro issue 105: one refused header failed the whole chain, and setup then
+
+    reported "cannot connect" although Modbus was answering fine.
+    """
+    unit = connection.for_unit(INVERTER_UNIT_ID)
+    unit.fail_read(STORAGE_HEADER_ADDRESS, IllegalDataAddressError())
+    identity = await FroniusInverter.async_probe(unit)
+    assert identity.manufacturer == "Fronius"
+    device = FroniusInverter(unit, INVERTER_UNIT_ID, {})
+    report = await device.async_update()
+    assert device.storage is None
+    assert device.mppt is not None
+    assert REPORT_INVERTER in report.updated
+
+
+async def test_a_unit_that_refuses_every_read_is_still_no_meter(connection):
+    """The tolerant walk must not turn an absent meter into a failed setup."""
+    meter_unit = connection.for_unit(201)
+    meter_unit.fail_requests(IllegalDataAddressError())
+    device = FroniusInverter(
+        connection.for_unit(INVERTER_UNIT_ID), INVERTER_UNIT_ID, {201: meter_unit}
+    )
+    report = await device.async_update()
+    assert 201 not in device.meters
+    assert meter_report_name(201) not in report.failed
+
+
+async def test_an_incomplete_chain_is_rescanned_until_it_is_complete(connection):
+    """Models behind a refused header stayed hidden for the life of the entry."""
+    unit = connection.for_unit(INVERTER_UNIT_ID)
+    unit.fail_read(STORAGE_HEADER_ADDRESS, IllegalDataAddressError())
+    device = FroniusInverter(unit, INVERTER_UNIT_ID, {})
+    report = await device.async_update()
+    assert device.storage is None
+    assert not device.discovery_complete
+    assert REPORT_DISCOVERY in report.failed
+
+    unit.fail_read(STORAGE_HEADER_ADDRESS, None)
+    report = await device.async_update()
+    assert device.discovery_complete
+    assert device.storage is not None
+    assert REPORT_STORAGE in report.updated
+
+
+# The common model in the captured fixture: a block read of it carries the identity.
+COMMON_MODEL_ADDRESS = 40002
+COMMON_HEADER_WORDS = 2
+# The chain's end marker in the captured fixture, right behind the storage model.
+CHAIN_END_ADDRESS = 40369
+# The model-103 header; a failed read of it fails the inverter report.
+INVERTER_HEADER_ADDRESS = 40069
+
+
+async def test_a_silent_link_behind_an_incomplete_chain_is_a_timeout(connection):
+    """The chain's note made every outage a report, so nothing recycled the link."""
+    unit = connection.for_unit(INVERTER_UNIT_ID)
+    unit.fail_read(CHAIN_END_ADDRESS, IllegalDataAddressError())
+    device = FroniusInverter(unit, INVERTER_UNIT_ID, {})
+    await device.async_update()
+    assert not device.discovery_complete
+
+    unit.fail_requests(ModbusTimeoutError("no answer"))
+
+    with pytest.raises(ModbusTimeoutError):
+        await device.async_update()
+
+
+async def test_a_failed_identity_read_does_not_finish_incomplete_discovery(
+    connection, monkeypatch
+):
+    """Completion was published from the scan, before the models were installed."""
+    unit = connection.for_unit(INVERTER_UNIT_ID)
+    unit.fail_read(STORAGE_HEADER_ADDRESS, IllegalDataAddressError())
+    device = FroniusInverter(unit, INVERTER_UNIT_ID, {})
+    await device.async_update()
+    assert not device.discovery_complete
+
+    unit.fail_read(STORAGE_HEADER_ADDRESS, None)
+    read = unit.read_holding_registers
+    refused = []
+
+    async def refuse_the_identity_once(address, count, **kwargs):
+        reads_identity = address == COMMON_MODEL_ADDRESS and count > COMMON_HEADER_WORDS
+        if reads_identity and not refused:
+            refused.append(address)
+            raise ModbusTimeoutError("identity temporarily unavailable")
+        return await read(address, count, **kwargs)
+
+    monkeypatch.setattr(unit, "read_holding_registers", refuse_the_identity_once)
+    await device.async_update()
+    assert refused
+    assert not device.discovery_complete
+
+    await device.async_update()
+    assert device.discovery_complete
+    assert device.storage is not None
+
+
+async def test_a_busy_meter_is_undecided_rather_than_absent(connection):
+    """A busy or failing meter was filed as absent and never probed again."""
+    meter_unit = connection.for_unit(METER_UNIT_ID)
+    meter_unit.fail_requests(ServerDeviceBusyError())
+    device = FroniusInverter(
+        connection.for_unit(INVERTER_UNIT_ID),
+        INVERTER_UNIT_ID,
+        {METER_UNIT_ID: meter_unit},
+    )
+    report = await device.async_update()
+    assert METER_UNIT_ID not in device.meters
+    assert meter_report_name(METER_UNIT_ID) in report.failed
+
+    meter_unit.fail_requests(None)
+    report = await device.async_update()
+    assert METER_UNIT_ID in device.meters
+    assert meter_report_name(METER_UNIT_ID) in report.updated
+
+
+async def test_a_failed_meter_probe_during_a_retry_keeps_the_poll_coherent(
+    connection, monkeypatch
+):
+    """Setup cleared the meters before probing, leaving a polled name without one."""
+    inverter_unit = connection.for_unit(INVERTER_UNIT_ID)
+    meter_unit = connection.for_unit(METER_UNIT_ID)
+    inverter_unit.fail_read(CHAIN_END_ADDRESS, IllegalDataAddressError())
+    device = FroniusInverter(
+        inverter_unit, INVERTER_UNIT_ID, {METER_UNIT_ID: meter_unit}
+    )
+    await device.async_update()
+    assert METER_UNIT_ID in device.meters
+
+    read = meter_unit.read_holding_registers
+
+    async def refuse_the_meter_identity(address, count, **kwargs):
+        if address == COMMON_MODEL_ADDRESS and count > COMMON_HEADER_WORDS:
+            raise ServerDeviceFailureError
+        return await read(address, count, **kwargs)
+
+    monkeypatch.setattr(meter_unit, "read_holding_registers", refuse_the_meter_identity)
+    report = await device.async_update()
+
+    assert REPORT_INVERTER in report.updated
+    assert meter_report_name(METER_UNIT_ID) in report.failed
+
+
+async def test_an_aborted_rediscovery_keeps_the_previous_meters(connection):
+    """The meters were cleared before probing, so an abort left them gone."""
+    inverter_unit = connection.for_unit(INVERTER_UNIT_ID)
+    meter_unit = connection.for_unit(METER_UNIT_ID)
+    inverter_unit.fail_read(CHAIN_END_ADDRESS, IllegalDataAddressError())
+    device = FroniusInverter(
+        inverter_unit, INVERTER_UNIT_ID, {METER_UNIT_ID: meter_unit}
+    )
+    await device.async_update()
+    assert METER_UNIT_ID in device.meters
+
+    meter_unit.fail_requests(ModbusConnectionError())
+    with pytest.raises(ModbusConnectionError):
+        await device.async_update()
+
+    # Entities still read the meter through this mapping while the coordinator
+    # serves the retained poll.
+    assert METER_UNIT_ID in device.meters
+
+
+async def test_a_gateway_outage_on_a_meter_is_retried(connection):
+    """A switched-off meter answers 0x0B, which was taken for "no meter"."""
+    meter_unit = connection.for_unit(METER_UNIT_ID)
+    meter_unit.fail_requests(GatewayTargetError())
+    device = FroniusInverter(
+        connection.for_unit(INVERTER_UNIT_ID),
+        INVERTER_UNIT_ID,
+        {METER_UNIT_ID: meter_unit},
+    )
+    report = await device.async_update()
+    assert METER_UNIT_ID not in device.meters
+    assert meter_report_name(METER_UNIT_ID) in report.failed
+
+    meter_unit.fail_requests(None)
+    report = await device.async_update()
+    assert METER_UNIT_ID in device.meters
+    assert meter_report_name(METER_UNIT_ID) in report.updated
+
+
+async def test_a_component_that_did_not_move_keeps_its_readings(connection):
+    """A rediscovery installed empty components over the last readings."""
+    inverter_unit = connection.for_unit(INVERTER_UNIT_ID)
+    # The chain stays incomplete, so every poll rediscovers.
+    inverter_unit.fail_read(CHAIN_END_ADDRESS, IllegalDataAddressError())
+    device = FroniusInverter(inverter_unit, INVERTER_UNIT_ID, {})
+    await device.async_update()
+    power = device.inverter.w
+    assert power is not None
+
+    inverter_unit.fail_read(INVERTER_HEADER_ADDRESS, ServerDeviceFailureError)
+    report = await device.async_update()
+
+    assert REPORT_INVERTER in report.failed
+    assert device.inverter.w == power
+
+
+async def test_a_recovered_meters_first_bad_read_stays_in_its_report(
+    connection, monkeypatch
+):
+    """The retry path updated the meter outside the per-component catch."""
+    meter_unit = connection.for_unit(METER_UNIT_ID)
+    meter_unit.fail_requests(ServerDeviceBusyError())
+    device = FroniusInverter(
+        connection.for_unit(INVERTER_UNIT_ID),
+        INVERTER_UNIT_ID,
+        {METER_UNIT_ID: meter_unit},
+    )
+    await device.async_update()
+    assert METER_UNIT_ID not in device.meters
+    meter_unit.fail_requests(None)
+
+    # The probe reads the same header the data read starts at, so the failure
+    # has to sit on the component itself to hit the data read alone.
+    original_update = AcMeter.async_update
+
+    async def fail_the_first_data_read(self):
+        monkeypatch.setattr(AcMeter, "async_update", original_update)
+        raise ServerDeviceFailureError
+
+    monkeypatch.setattr(AcMeter, "async_update", fail_the_first_data_read)
+    report = await device.async_update()
+
+    assert METER_UNIT_ID in device.meters
+    assert REPORT_INVERTER in report.updated
+    assert isinstance(
+        report.failed[meter_report_name(METER_UNIT_ID)], ServerDeviceFailureError
+    )
+    assert meter_report_name(METER_UNIT_ID) in (await device.async_update()).updated
+
+
+async def test_an_aborted_rediscovery_leaves_the_meter_addresses_alone(
+    connection, symo_gen24
+):
+    """A probe wrote the new address before the rediscovery committed.
+
+    Meter 200 had moved and meter 201 aborted the rediscovery. The retry saw an
+    unchanged address and kept the component bound to the old registers.
+    """
+    inverter_unit = connection.for_unit(INVERTER_UNIT_ID)
+    inverter_unit.fail_read(CHAIN_END_ADDRESS, IllegalDataAddressError())
+    second = connection.for_unit(201)
+    second.load_raw(symo_gen24[METER_UNIT_ID])
+    device = FroniusInverter(
+        inverter_unit,
+        INVERTER_UNIT_ID,
+        {METER_UNIT_ID: connection.for_unit(METER_UNIT_ID), 201: second},
+    )
+    await device.async_update()
+    stale = device.meters[METER_UNIT_ID].meter
+    # As if the published component had been built for a map that has moved since.
+    device._meter_addresses[METER_UNIT_ID] = -1
+
+    second.fail_requests(ModbusConnectionError())
+    with pytest.raises(ModbusConnectionError):
+        await device.async_update()
+    second.fail_requests(None)
+    await device.async_update()
+
+    assert device.meters[METER_UNIT_ID].meter is not stale
+
+
+async def test_the_meters_are_read_right_after_the_inverter(connection):
+    """Load adds the primary meter to the inverter's AC power.
+
+    With the other models read in between, a load step between the two reads
+    showed in the sum: 1608 W where the inverter's own Solar API said 839 W.
+    """
+    device = FroniusInverter(
+        connection.for_unit(INVERTER_UNIT_ID),
+        INVERTER_UNIT_ID,
+        {METER_UNIT_ID: connection.for_unit(METER_UNIT_ID)},
+        monotonic=SteppingClock(1.0).monotonic,
+    )
+    report = await device.async_update()
+
+    in_read_order = sorted(report.read_spans, key=lambda name: report.read_spans[name])
+    assert in_read_order[:2] == [REPORT_INVERTER, meter_report_name(METER_UNIT_ID)]
+
+
+async def test_a_meter_found_after_setup_is_still_read_right_after_the_inverter(
+    connection,
+):
+    """A meter that answers only on a later poll joined the read order last.
+
+    As the primary meter it was then read after every other model on each poll.
+    """
+    meter_unit = connection.for_unit(METER_UNIT_ID)
+    meter_unit.fail_requests(ModbusTimeoutError())
+    device = FroniusInverter(
+        connection.for_unit(INVERTER_UNIT_ID),
+        INVERTER_UNIT_ID,
+        {METER_UNIT_ID: meter_unit},
+        monotonic=SteppingClock(1.0).monotonic,
+    )
+    await device.async_update()
+    meter_unit.fail_requests(None)
+    await device.async_update()
+
+    report = await device.async_update()
+
+    in_read_order = sorted(report.read_spans, key=lambda name: report.read_spans[name])
+    assert in_read_order[:2] == [REPORT_INVERTER, meter_report_name(METER_UNIT_ID)]

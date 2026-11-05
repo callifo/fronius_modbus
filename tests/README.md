@@ -71,6 +71,7 @@ because the thing it prevents happened, here or in a sibling project.
 | `test_imports.py` | Every module imports outside the author's own tree - the `from config.custom_components...` line that shipped on main cannot ship again |
 | `test_entity_table.py` | Every legacy unique-id key is still registered and translated (`legacy_unique_ids.json`) |
 | `test_api_is_ha_free.py` | The device library under `fronius_modbus_api/` imports no Home Assistant |
+| `test_deprecated_constants.py` | No Home Assistant constant with an announced removal is used; Home Assistant logs such a use at import, where the check in `conftest.py` cannot see it |
 | `test_mutation_harness.py` | The mutation run fails loudly rather than printing "all caught" without having checked |
 | `test_mypy_scope.py` | Every module is in the mypy scope or carries a written reason why not yet |
 | `test_platform_entities.py` | Every platform builds its entities through the one shared helper |

@@ -262,6 +262,41 @@ async def test_the_select_changes_the_storage_mode(hass, mock_modbus, monkeypatc
     assert unit.holding[40355] == 0
 
 
+async def test_the_select_follows_another_controller_s_hold_charge(
+    hass, mock_modbus, monkeypatch
+):
+    """callifo 141: evcc's hold charge after a PV charge limit set in Home Assistant."""
+    serve_the_public_endpoints(mock_modbus, monkeypatch)
+    entry = make_entry(hass, api_username="none")
+    await setup_entry(hass, entry)
+    await hass.services.async_call(
+        "select",
+        "select_option",
+        {
+            "entity_id": entity_id_for(hass, entry, "select", "ext_control_mode"),
+            "option": "pv_charge_limit",
+        },
+        blocking=True,
+    )
+    await hass.services.async_call(
+        "number",
+        "set_value",
+        {
+            "entity_id": entity_id_for(hass, entry, "number", "charge_limit"),
+            "value": 2500,
+        },
+        blocking=True,
+    )
+    await entry.runtime_data.modbus.async_refresh()
+    mock_modbus.unit(INVERTER_UNIT_ID).holding[40356] = 0
+
+    await entry.runtime_data.modbus.async_refresh()
+    await hass.async_block_till_done()
+
+    assert state_of(hass, entry, "ext_control_mode", "select") == "block_charging"
+    assert state_of(hass, entry, "charge_limit", "number") == "unavailable"
+
+
 async def test_minor_version_9_entries_migrate_to_the_current_shape(hass, mock_modbus):
     entry = make_entry(hass, minor_version=9)
     title_before = entry.title

@@ -75,7 +75,8 @@ async def test_auto_on_the_device_reads_as_auto(control):
         (1, 10000, 0, ExtendedMode.BLOCK_CHARGING),
         (1, 10000, 10000, ExtendedMode.PV_CHARGE_LIMIT),
         (2, -3000 & 0xFFFF, 10000, ExtendedMode.CHARGE_FROM_GRID),
-        (2, 10000, -3000 & 0xFFFF, ExtendedMode.DISCHARGE_TO_GRID),
+        # Discharge to Grid is StorCtl_Mod 1: on 2 the device ignores InWRte.
+        (1, 10000, -3000 & 0xFFFF, ExtendedMode.DISCHARGE_TO_GRID),
         (3, 0, 10000, ExtendedMode.BLOCK_DISCHARGING),
         (2, 10000, 10000, ExtendedMode.DISCHARGE_LIMIT),
         (3, 10000, 10000, ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT),
@@ -97,12 +98,13 @@ async def test_the_extended_mode_is_derived_from_the_registers(
     assert control.extended_mode is expected
 
 
-async def test_charge_from_grid_writes_mode_then_rates(control, writes, inverter_unit):
+async def test_charge_from_grid_writes_rates_then_mode(control, writes, inverter_unit):
     inverter_unit.holding[IN_W_RTE] = 5000
     await control.set_mode(ExtendedMode.CHARGE_FROM_GRID)
     assert _words(writes, STOR_CTL_MOD) == [2]
     assert _words(writes, IN_W_RTE) == [10000]
     assert _words(writes, OUT_W_RTE) == [0]
+    assert writes[-1].address == STOR_CTL_MOD
     assert control.extended_mode is ExtendedMode.CHARGE_FROM_GRID
 
 
@@ -126,7 +128,10 @@ def _signed(word):
 
 
 def _refused_windows(inverter_unit):
-    """Every register image the firmware refuses (exception 3), as the writes pass it."""
+    """Every register image the firmware refuses (exception 3), as the writes pass it.
+
+    Only StorCtl_Mod 3 has a window: (1, 0, 0) is accepted (GEN24, fw 1.42.9-1).
+    """
     image = {
         address: inverter_unit.holding[address]
         for address in (STOR_CTL_MOD, IN_W_RTE, OUT_W_RTE)
@@ -138,7 +143,8 @@ def _refused_windows(inverter_unit):
             image[event.address + offset] = word
         mode = image[STOR_CTL_MOD]
         in_rate, out_rate = _signed(image[IN_W_RTE]), _signed(image[OUT_W_RTE])
-        if (in_rate <= 0 and out_rate <= 0) or (mode == 3 and -in_rate > out_rate):
+        both_closed = in_rate <= 0 and out_rate <= 0
+        if mode == 3 and (both_closed or -in_rate > out_rate):
             refused.append((mode, in_rate, out_rate))
 
     inverter_unit.on_write(track)
@@ -389,10 +395,18 @@ ZERO_LIMITS = [
     for mode in sorted(modes)
 ]
 BLOCK_MODES = (ExtendedMode.BLOCK_CHARGING, ExtendedMode.BLOCK_DISCHARGING)
+# The modes this integration writes with both rates switched on (StorCtl_Mod 3).
+BOTH_RATES_ON = {
+    ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT,
+    ExtendedMode.BLOCK_CHARGING,
+    ExtendedMode.BLOCK_DISCHARGING,
+}
+ZERO_LIMITS_BOTH_ON = [row for row in ZERO_LIMITS if row[0] in BOTH_RATES_ON]
+ZERO_LIMITS_OTHER_OFF = [row for row in ZERO_LIMITS if row[0] not in BOTH_RATES_ON]
 
 
 @pytest.mark.parametrize("watts", [0, 0.1])
-@pytest.mark.parametrize(("mode", "setter", "other"), ZERO_LIMITS)
+@pytest.mark.parametrize(("mode", "setter", "other"), ZERO_LIMITS_BOTH_ON)
 async def test_a_zero_limit_that_blocks_both_ways_is_refused(
     control, writes, inverter_unit, mode, setter, other, watts
 ):
@@ -404,7 +418,17 @@ async def test_a_zero_limit_that_blocks_both_ways_is_refused(
     0.1 W passed the check to become a 0 in the register.
     """
     await control.set_mode(mode)
-    inverter_unit.holding[other] = 0
+    # Home Assistant's own 0 on the other side; written past it, it is another
+    # controller's, and the image no longer the selected mode's.
+    other_setter = (
+        "set_discharge_limit_w"
+        if setter == "set_charge_limit_w"
+        else "set_charge_limit_w"
+    )
+    if mode is ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT:
+        await getattr(control, other_setter)(0)
+    else:
+        inverter_unit.holding[other] = 0
     del writes[:]
 
     with pytest.raises(ControlRefused) as refused:
@@ -412,6 +436,26 @@ async def test_a_zero_limit_that_blocks_both_ways_is_refused(
 
     assert refused.value.key == "limit_blocks_both_ways"
     assert writes == []
+
+
+@pytest.mark.parametrize(("mode", "setter", "other"), ZERO_LIMITS_OTHER_OFF)
+async def test_a_zero_limit_beside_a_rate_that_is_off_is_written(
+    control, writes, inverter_unit, mode, setter, other
+):
+    """StorCtl_Mod 1 and 2 switch the other rate off, and the device takes (1, 0, 0).
+
+    Refused as "both ways blocked", a 0 W PV charge or discharge limit could
+    not be set after another controller had left the other rate at 0.
+    """
+    await control.set_mode(mode)
+    inverter_unit.holding[other] = 0
+    del writes[:]
+
+    await getattr(control, setter)(0)
+
+    assert [event.address for event in writes] == [
+        IN_W_RTE if setter == "set_charge_limit_w" else OUT_W_RTE
+    ]
 
 
 @pytest.mark.parametrize(("mode", "setter", "other"), ZERO_LIMITS)
@@ -528,6 +572,7 @@ async def test_a_negative_discharge_rate_reads_as_charging(inverter_unit):
     A negative discharge rate is how charging from the grid is expressed; showing
     the raw mode there would say "discharge" while the battery fills.
     """
+    inverter_unit.holding[STOR_CTL_MOD] = 2
     inverter_unit.holding[OUT_W_RTE] = -3000 & 0xFFFF
     chain = await scan(inverter_unit, 40000)
     storage = Storage(inverter_unit, chain.first(STORAGE_MODEL_ID))
@@ -538,6 +583,35 @@ async def test_a_negative_discharge_rate_reads_as_charging(inverter_unit):
     control.sync_from_device()
 
     assert control.control_mode == 1
+
+
+@pytest.mark.parametrize(
+    ("image", "core_mode"),
+    [
+        ((1, -20, -30), 2),
+        ((0, 100, -50), 0),
+        ((0, -50, 100), 0),
+    ],
+)
+async def test_the_core_mode_ignores_a_rate_storctl_mod_keeps_off(
+    inverter_unit, image, core_mode
+):
+    """A negative rate the inverter ignores still named the direction.
+
+    evcc leaves the rate it does not write as it was: (1, -20, -30) is
+    Discharge to Grid, and the sensor said charging.
+    """
+    stor_ctl_mod, in_rate, out_rate = image
+    control = await _control_on(
+        inverter_unit,
+        {
+            STOR_CTL_MOD: stor_ctl_mod,
+            IN_W_RTE: _raw(in_rate),
+            OUT_W_RTE: _raw(out_rate),
+        },
+    )
+
+    assert control.control_mode == core_mode
 
 
 async def test_charging_from_the_grid_reads_as_charging(control, inverter_unit):
@@ -615,7 +689,11 @@ def no_comparison(monkeypatch):
     async def nothing_holds(_component, _wanted):
         return set()
 
+    async def as_given(_component, _name, value):
+        return value
+
     monkeypatch.setattr(storage_module, "registers_holding", nothing_holds)
+    monkeypatch.setattr(storage_module, "written_value", as_given)
 
 
 @pytest.mark.usefixtures("no_comparison")
@@ -641,7 +719,8 @@ async def test_a_rate_queued_behind_a_mode_switch_is_judged_by_the_new_mode():
     )
     control.sync_from_device()
     mode_task = asyncio.create_task(control.set_mode(ExtendedMode.BLOCK_CHARGING))
-    await entered.wait()
+    # A mode switch that fails before its first write must fail the test, not hang it.
+    await asyncio.wait_for(entered.wait(), timeout=5)
     rate_task = asyncio.create_task(control.set_charge_limit_w(5000))
     await asyncio.sleep(0)
     release.set()
@@ -768,7 +847,7 @@ async def test_a_mode_another_controller_wrote_is_adopted_once_not_every_poll(
     assert control.extended_mode is expected
 
     caplog.clear()
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.INFO):
         await control._storage.async_update()
         control.sync_from_device()
     assert control.extended_mode is expected
@@ -828,7 +907,10 @@ async def test_a_rate_over_an_image_that_fits_the_mode_is_written(
     for setter, address in SETTERS_IN[control.extended_mode]:
         del writes[:]
         await getattr(control, setter)(2560)
-        assert [event.address for event in writes] == [address]
+        switched_on = _rate_on(stor_ctl_mod, address)
+        assert [event.address for event in writes] == (
+            [address] if switched_on else [address, STOR_CTL_MOD]
+        )
 
 
 # A mode, and the image of another mode on the same StorCtl_Mod.
@@ -948,3 +1030,716 @@ async def test_a_grid_power_inside_a_combined_window_is_written(
     await getattr(control, setter)(2560)
 
     assert _words(writes, address) == [(-2500) & 0xFFFF]
+
+
+def _rate_on(stor_ctl_mod: int, address: int) -> bool:
+    """Whether StorCtl_Mod switches the rate at ``address`` on (bit 0 InWRte, bit 1 OutWRte)."""
+    return bool(stor_ctl_mod & (1 if address == IN_W_RTE else 2))
+
+
+def _raw(percent: float) -> int:
+    return round(percent * 100) & 0xFFFF
+
+
+# (StorCtl_Mod, InWRte %, OutWRte %) measured on a GEN24 (fw 1.42.9-1) with an
+# outside writer, and their mirrors: the rate StorCtl_Mod keeps off is ignored.
+OFF_RATE_IMAGES = [
+    ((2, -10, 0), ExtendedMode.BLOCK_DISCHARGING),
+    ((1, 0, -10), ExtendedMode.BLOCK_CHARGING),
+    ((2, -100, 0), ExtendedMode.BLOCK_DISCHARGING),
+    ((1, 0, -50), ExtendedMode.BLOCK_CHARGING),
+    ((1, 50, -10), ExtendedMode.PV_CHARGE_LIMIT),
+    ((2, -50, 50), ExtendedMode.DISCHARGE_LIMIT),
+    ((1, -20, -30), ExtendedMode.DISCHARGE_TO_GRID),
+    ((2, -20, -30), ExtendedMode.CHARGE_FROM_GRID),
+    ((1, 0, 0), ExtendedMode.BLOCK_CHARGING),
+    ((2, 0, 0), ExtendedMode.BLOCK_DISCHARGING),
+]
+
+
+@pytest.mark.parametrize(("image", "expected"), OFF_RATE_IMAGES)
+async def test_a_rate_storctl_mod_keeps_off_does_not_decide_the_mode(
+    inverter_unit, image, expected
+):
+    """evcc's hold after discharge read as Discharge to Grid, holdcharge after charge as Charge from Grid.
+
+    StorCtl_Mod is a bitfield: bit 0 switches InWRte on, bit 1 OutWRte. The
+    device ignores the other rate (measured), and evcc leaves it as it was.
+    """
+    stor_ctl_mod, in_rate, out_rate = image
+    control = await _control_on(
+        inverter_unit,
+        {
+            STOR_CTL_MOD: stor_ctl_mod,
+            IN_W_RTE: _raw(in_rate),
+            OUT_W_RTE: _raw(out_rate),
+        },
+    )
+
+    assert control.extended_mode is expected
+
+
+@pytest.mark.parametrize(("image", "expected"), OFF_RATE_IMAGES)
+async def test_a_rate_that_is_off_shows_as_no_limit(inverter_unit, image, expected):
+    """A limit or grid power the device ignores is no limit; it showed the stale register."""
+    stor_ctl_mod, in_rate, out_rate = image
+    control = await _control_on(
+        inverter_unit,
+        {
+            STOR_CTL_MOD: stor_ctl_mod,
+            IN_W_RTE: _raw(in_rate),
+            OUT_W_RTE: _raw(out_rate),
+        },
+    )
+
+    if not stor_ctl_mod & 1:
+        assert (control.charge_limit_pct, control.grid_discharge_power_pct) == (
+            100.0,
+            0.0,
+        )
+    if not stor_ctl_mod & 2:
+        assert (control.discharge_limit_pct, control.grid_charge_power_pct) == (
+            100.0,
+            0.0,
+        )
+
+
+# evcc's battery modes (fronius-gen24 template, evcc 25a8e25): the registers it
+# writes, in order. The rate it leaves out keeps whatever the last writer left.
+EVCC_SEQUENCES = {
+    "normal": [(STOR_CTL_MOD, 0), (OUT_W_RTE, 100), (IN_W_RTE, 100)],
+    "hold": [(STOR_CTL_MOD, 2), (OUT_W_RTE, 0)],
+    "charge": [(STOR_CTL_MOD, 2), (OUT_W_RTE, -50)],
+    "holdcharge": [(STOR_CTL_MOD, 1), (IN_W_RTE, 0)],
+    "discharge": [
+        (STOR_CTL_MOD, 0),
+        (IN_W_RTE, -100),
+        (OUT_W_RTE, 100),
+        (STOR_CTL_MOD, 3),
+    ],
+}
+EVCC_MEANS = {
+    "normal": ExtendedMode.AUTO,
+    "hold": ExtendedMode.BLOCK_DISCHARGING,
+    "charge": ExtendedMode.CHARGE_FROM_GRID,
+    "holdcharge": ExtendedMode.BLOCK_CHARGING,
+    "discharge": ExtendedMode.DISCHARGE_TO_GRID,
+}
+
+
+def _after(image: tuple[int, float, float], sequence) -> tuple[int, float, float]:
+    registers = {STOR_CTL_MOD: image[0], IN_W_RTE: image[1], OUT_W_RTE: image[2]}
+    registers.update(sequence)
+    return registers[STOR_CTL_MOD], registers[IN_W_RTE], registers[OUT_W_RTE]
+
+
+# Where evcc starts from: where each of its own modes leaves the registers,
+# and every image this integration writes for a mode.
+EVCC_STARTS = {
+    **{
+        f"evcc {name}": _after((0, 100, 100), sequence)
+        for name, sequence in EVCC_SEQUENCES.items()
+    },
+    **{f"ha {mode.name}": storage_module._MODE_TABLE[mode] for mode in ExtendedMode},
+}
+
+
+# One evcc mode after another: the rate the second leaves out keeps the first's
+# value, and only a StorCtl_Mod that keeps that rate off makes the image valid.
+EVCC_IMAGES_IN_A_ROW = sorted(
+    {
+        _after(_after((0, 100, 100), EVCC_SEQUENCES[first]), EVCC_SEQUENCES[second])
+        for first in EVCC_SEQUENCES
+        for second in EVCC_SEQUENCES
+    }
+)
+
+
+def _registers(image: tuple[int, float, float]) -> dict[int, int]:
+    return {
+        STOR_CTL_MOD: image[0],
+        IN_W_RTE: _raw(image[1]),
+        OUT_W_RTE: _raw(image[2]),
+    }
+
+
+@pytest.mark.parametrize("mode", list(ExtendedMode))
+@pytest.mark.parametrize("image", EVCC_IMAGES_IN_A_ROW)
+async def test_a_mode_over_an_evcc_image_passes_no_refused_window(
+    inverter_unit, image, mode
+):
+    """Measured on a GEN24: from (1, 0, -10) and (2, -100, 0) StorCtl_Mod 3 got exception 3."""
+    control = await _control_on(inverter_unit, _registers(image))
+    refused = _refused_windows(inverter_unit)
+
+    await control.set_mode(mode)
+
+    assert refused == []
+    assert inverter_unit.holding[STOR_CTL_MOD] == storage_module._MODE_TABLE[mode][0]
+    for _ in range(MODE_WRITE_GRACE_POLLS):
+        await _poll(control)
+    assert control.extended_mode is mode
+
+
+LIMIT_SETTERS = [
+    "set_charge_limit_w",
+    "set_discharge_limit_w",
+    "set_grid_charge_power_w",
+    "set_grid_discharge_power_w",
+]
+
+
+@pytest.mark.parametrize("watts", [0, 3000])
+@pytest.mark.parametrize("setter", LIMIT_SETTERS)
+@pytest.mark.parametrize("image", EVCC_IMAGES_IN_A_ROW)
+async def test_a_limit_over_an_evcc_image_passes_no_refused_window(
+    inverter_unit, image, setter, watts
+):
+    control = await _control_on(inverter_unit, _registers(image))
+    refused = _refused_windows(inverter_unit)
+
+    with contextlib.suppress(ControlRefused):
+        await getattr(control, setter)(watts)
+
+    assert refused == []
+
+
+@pytest.mark.parametrize("start", sorted(EVCC_STARTS))
+@pytest.mark.parametrize("evcc_mode", sorted(EVCC_SEQUENCES))
+async def test_every_evcc_mode_reads_as_its_mode_whatever_came_before(
+    inverter_unit, start, evcc_mode
+):
+    """evcc writes one rate per mode, so the other is what the last writer left.
+
+    Judged by both, the mode depended on the one before: hold after discharge
+    read as Discharge to Grid.
+    """
+    stor_ctl_mod, in_rate, out_rate = _after(
+        EVCC_STARTS[start], EVCC_SEQUENCES[evcc_mode]
+    )
+    control = await _control_on(
+        inverter_unit,
+        {
+            STOR_CTL_MOD: stor_ctl_mod,
+            IN_W_RTE: _raw(in_rate),
+            OUT_W_RTE: _raw(out_rate),
+        },
+    )
+
+    assert control.extended_mode is EVCC_MEANS[evcc_mode]
+
+
+# A block mode another controller holds with one rate only, the limit the
+# integration leaves to the user there, and the rate that limit is written to.
+ONE_RATE_BLOCK_MODES = [
+    ((1, 0, 100), "set_discharge_limit_w", OUT_W_RTE),
+    ((2, 100, 0), "set_charge_limit_w", IN_W_RTE),
+]
+
+
+@pytest.mark.parametrize(("image", "setter", "address"), ONE_RATE_BLOCK_MODES)
+async def test_a_limit_written_into_a_rate_that_is_off_switches_it_on(
+    inverter_unit, writes, image, setter, address
+):
+    """Under evcc's hold or holdcharge the limit went into a register the device ignores."""
+    stor_ctl_mod, in_rate, out_rate = image
+    control = await _control_on(
+        inverter_unit,
+        {
+            STOR_CTL_MOD: stor_ctl_mod,
+            IN_W_RTE: _raw(in_rate),
+            OUT_W_RTE: _raw(out_rate),
+        },
+    )
+    mode = control.extended_mode
+    del writes[:]
+
+    await getattr(control, setter)(5120)
+
+    assert [event.address for event in writes] == [address, STOR_CTL_MOD]
+    assert _words(writes, STOR_CTL_MOD) == [3]
+    await control._storage.async_update()
+    control.sync_from_device()
+    assert control.extended_mode is mode
+
+
+# A mode with a rate left to the user, its setter, the register, and the mode
+# its image reads as when that rate is 0: the image both modes share.
+SHARED_AT_ZERO = [
+    (
+        ExtendedMode.PV_CHARGE_LIMIT,
+        "set_charge_limit_w",
+        IN_W_RTE,
+        ExtendedMode.BLOCK_CHARGING,
+    ),
+    (
+        ExtendedMode.DISCHARGE_TO_GRID,
+        "set_grid_discharge_power_w",
+        IN_W_RTE,
+        ExtendedMode.BLOCK_CHARGING,
+    ),
+    (
+        ExtendedMode.DISCHARGE_LIMIT,
+        "set_discharge_limit_w",
+        OUT_W_RTE,
+        ExtendedMode.BLOCK_DISCHARGING,
+    ),
+    (
+        ExtendedMode.CHARGE_FROM_GRID,
+        "set_grid_charge_power_w",
+        OUT_W_RTE,
+        ExtendedMode.BLOCK_DISCHARGING,
+    ),
+    (
+        ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT,
+        "set_charge_limit_w",
+        IN_W_RTE,
+        ExtendedMode.BLOCK_CHARGING,
+    ),
+    (
+        ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT,
+        "set_discharge_limit_w",
+        OUT_W_RTE,
+        ExtendedMode.BLOCK_DISCHARGING,
+    ),
+]
+
+
+async def _poll(control) -> None:
+    await control._storage.async_update()
+    control.sync_from_device()
+
+
+@pytest.mark.parametrize(("mode", "setter", "address", "shared"), SHARED_AT_ZERO)
+async def test_a_rate_another_controller_sets_to_zero_leaves_the_mode(
+    control, inverter_unit, caplog, mode, setter, address, shared
+):
+    """callifo 141: evcc's hold charge after a 2500 W PV charge limit kept showing the limit.
+
+    At 0 the image is both modes; Home Assistant had written another rate, so
+    someone else wrote this one.
+    """
+    await control.set_mode(mode)
+    await getattr(control, setter)(2560)
+    await _poll(control)
+    inverter_unit.holding[address] = 0
+
+    await _poll(control)
+
+    assert control.extended_mode is shared
+    assert "Storage mode changed outside Home Assistant" in caplog.text
+
+
+@pytest.mark.parametrize(("mode", "setter", "address", "shared"), SHARED_AT_ZERO)
+async def test_a_rate_home_assistant_set_to_zero_keeps_the_mode(
+    control, mode, setter, address, shared
+):
+    """Home Assistant's own 0 W reads like the other mode; the choice must survive."""
+    await control.set_mode(mode)
+    await getattr(control, setter)(0)
+
+    for _ in range(MODE_WRITE_GRACE_POLLS + 1):
+        await _poll(control)
+
+    assert control.extended_mode is mode
+
+
+async def test_a_mode_change_half_written_is_not_taken_for_another_controller(
+    control, inverter_unit
+):
+    """A poll that reads a mode change half written sees the rate of the old mode."""
+    await control.set_mode(ExtendedMode.BLOCK_CHARGING)
+    await _poll(control)
+    await control.set_mode(ExtendedMode.PV_CHARGE_LIMIT)
+    inverter_unit.holding[IN_W_RTE] = 0
+
+    await _poll(control)
+    assert control.extended_mode is ExtendedMode.PV_CHARGE_LIMIT
+    inverter_unit.holding[IN_W_RTE] = 10000
+    await _poll(control)
+    assert control.extended_mode is ExtendedMode.PV_CHARGE_LIMIT
+
+
+async def test_after_a_restart_a_rate_set_to_zero_leaves_the_mode(inverter_unit):
+    """Nothing written by Home Assistant since the restart: the registers decide."""
+    control = await _control_on(
+        inverter_unit, {STOR_CTL_MOD: 1, IN_W_RTE: 5000, OUT_W_RTE: 10000}
+    )
+    assert control.extended_mode is ExtendedMode.PV_CHARGE_LIMIT
+    inverter_unit.holding[IN_W_RTE] = 0
+
+    await _poll(control)
+
+    assert control.extended_mode is ExtendedMode.BLOCK_CHARGING
+
+
+async def test_a_rate_another_controller_changes_keeps_the_mode_until_it_is_zero(
+    control, inverter_unit
+):
+    """1500 W instead of 2500 W is still a PV charge limit; 0 then is evcc's hold."""
+    await control.set_mode(ExtendedMode.PV_CHARGE_LIMIT)
+    await control.set_charge_limit_w(2560)
+    await _poll(control)
+    inverter_unit.holding[IN_W_RTE] = 1500
+
+    await _poll(control)
+    assert control.extended_mode is ExtendedMode.PV_CHARGE_LIMIT
+    inverter_unit.holding[IN_W_RTE] = 0
+    await _poll(control)
+    assert control.extended_mode is ExtendedMode.BLOCK_CHARGING
+
+
+async def test_a_limit_is_refused_after_another_controller_took_the_shared_image(
+    control, inverter_unit, writes
+):
+    """Written before the next poll noticed, the limit replaced evcc's hold charge."""
+    await control.set_mode(ExtendedMode.PV_CHARGE_LIMIT)
+    await control.set_charge_limit_w(2560)
+    await _poll(control)
+    inverter_unit.holding[IN_W_RTE] = 0
+    del writes[:]
+
+    with pytest.raises(ControlRefused) as refused:
+        await control.set_charge_limit_w(1000)
+
+    assert refused.value.key == "storage_mode_left"
+    assert writes == []
+
+
+async def test_a_grid_power_kept_at_reselection_counts_as_home_assistant_s(
+    control, inverter_unit
+):
+    """Selecting Discharge to Grid again keeps the power another controller set.
+
+    Taken over as the mode's own, a later 0 from outside is outside again.
+    """
+    await control.set_mode(ExtendedMode.DISCHARGE_TO_GRID)
+    await _poll(control)
+    inverter_unit.holding[IN_W_RTE] = (-2000) & 0xFFFF
+    await _poll(control)
+    await control.set_mode(ExtendedMode.DISCHARGE_TO_GRID)
+    await _poll(control)
+    inverter_unit.holding[IN_W_RTE] = 0
+
+    await _poll(control)
+
+    assert control.extended_mode is ExtendedMode.BLOCK_CHARGING
+
+
+async def test_a_poll_read_before_a_limit_write_keeps_the_mode(control):
+    """The poll read the old 0 W, the limit went out, then the poll was judged.
+
+    Against the limit just written, Home Assistant's own image looked foreign.
+    """
+    await control.set_mode(ExtendedMode.PV_CHARGE_LIMIT)
+    await control.set_charge_limit_w(0)
+    await _poll(control)
+    await control._storage.async_update()
+    await control.set_charge_limit_w(2560)
+
+    control.sync_from_device()
+    assert control.extended_mode is ExtendedMode.PV_CHARGE_LIMIT
+    await _poll(control)
+    assert control.extended_mode is ExtendedMode.PV_CHARGE_LIMIT
+
+
+async def test_a_failed_mode_write_leaves_the_record_of_the_last_one(
+    control, inverter_unit
+):
+    """A mode change that failed half way must not count as written by Home Assistant."""
+    await control.set_mode(ExtendedMode.PV_CHARGE_LIMIT)
+    await control.set_charge_limit_w(2560)
+    await _poll(control)
+    inverter_unit.fail_write(IN_W_RTE, ServerDeviceFailureError())
+    with pytest.raises(ServerDeviceFailureError):
+        await control.set_mode(ExtendedMode.DISCHARGE_TO_GRID)
+    inverter_unit.fail_write(IN_W_RTE, None)
+    inverter_unit.holding[IN_W_RTE] = 0
+
+    await _poll(control)
+
+    assert control.extended_mode is ExtendedMode.BLOCK_CHARGING
+
+
+async def test_a_mode_taken_from_the_registers_owns_no_rate_of_home_assistant(
+    control, inverter_unit
+):
+    """Discharge to Grid at 0 W, then evcc's PV charge limit, then its hold charge.
+
+    Home Assistant's 0 W from before matched evcc's hold charge, so the PV
+    charge limit evcc had left stayed on show.
+    """
+    await control.set_mode(ExtendedMode.DISCHARGE_TO_GRID)
+    await _poll(control)
+    inverter_unit.holding[IN_W_RTE] = 5000
+    await _poll(control)
+    assert control.extended_mode is ExtendedMode.PV_CHARGE_LIMIT
+    inverter_unit.holding[IN_W_RTE] = 0
+
+    await _poll(control)
+
+    assert control.extended_mode is ExtendedMode.BLOCK_CHARGING
+
+
+async def test_discharge_to_grid_selected_again_at_zero_watts_keeps_its_mode(control):
+    """Selecting it again keeps the 0 W it holds; that 0 W is still Home Assistant's own."""
+    await control.set_mode(ExtendedMode.DISCHARGE_TO_GRID)
+    await _poll(control)
+    await control.set_mode(ExtendedMode.DISCHARGE_TO_GRID)
+
+    for _ in range(MODE_WRITE_GRACE_POLLS + 1):
+        await _poll(control)
+
+    assert control.extended_mode is ExtendedMode.DISCHARGE_TO_GRID
+
+
+# A limit mode, its setter and register, and the block mode evcc's hold of
+# that register leaves.
+LIMIT_LOSES_ITS_MODE = [
+    (
+        ExtendedMode.PV_CHARGE_LIMIT,
+        "set_charge_limit_w",
+        IN_W_RTE,
+        ExtendedMode.BLOCK_CHARGING,
+    ),
+    (
+        ExtendedMode.DISCHARGE_LIMIT,
+        "set_discharge_limit_w",
+        OUT_W_RTE,
+        ExtendedMode.BLOCK_DISCHARGING,
+    ),
+]
+# Each await a rate write passes before its register write reaches the device.
+# The live read sits between the first and the second; the last is the
+# component's own scale read inside the write.
+WRITE_AWAITS = ["written_value", "registers_holding", "component_write"]
+
+
+def _inside(stage, control, inverter_unit, monkeypatch, action):
+    """Run ``action`` once, while the next rate write waits at ``stage``."""
+    if stage == "component_write":
+        real_write = control._storage.write
+        real_read = inverter_unit.read_holding_registers
+        entered = False
+
+        async def write(field_name, value):
+            nonlocal entered
+            entered = True
+            return await real_write(field_name, value)
+
+        async def read(address, count):
+            if entered:
+                monkeypatch.setattr(inverter_unit, "read_holding_registers", real_read)
+                await action()
+            return await real_read(address, count)
+
+        monkeypatch.setattr(control._storage, "write", write)
+        monkeypatch.setattr(inverter_unit, "read_holding_registers", read)
+        return
+    real = getattr(storage_module, stage)
+
+    async def first(*args):
+        monkeypatch.setattr(storage_module, stage, real)
+        await action()
+        return await real(*args)
+
+    monkeypatch.setattr(storage_module, stage, first)
+
+
+async def _limit_on(control, mode, setter):
+    await control.set_mode(mode)
+    await getattr(control, setter)(2560)
+    await _poll(control)
+
+
+@pytest.mark.parametrize("stage", WRITE_AWAITS)
+@pytest.mark.parametrize(("mode", "setter", "address", "blocked"), LIMIT_LOSES_ITS_MODE)
+async def test_a_poll_during_a_limit_write_takes_no_mode(
+    control, inverter_unit, monkeypatch, mode, setter, address, blocked, stage
+):
+    """A poll inside a write took evcc's hold, and the write then went out under it.
+
+    What the select showed and whether the limit went out depended on which
+    await the poll fell into; the library's own scale read was one more.
+    """
+    await _limit_on(control, mode, setter)
+    seen = []
+
+    async def evcc_holds_and_a_poll_runs():
+        inverter_unit.holding[address] = 0
+        await _poll(control)
+        seen.append(control.extended_mode)
+
+    _inside(stage, control, inverter_unit, monkeypatch, evcc_holds_and_a_poll_runs)
+
+    with contextlib.suppress(ControlRefused):
+        await getattr(control, setter)(1000)
+
+    assert seen == [mode]
+
+
+@pytest.mark.parametrize(("mode", "setter", "address", "blocked"), LIMIT_LOSES_ITS_MODE)
+async def test_a_hold_before_the_live_read_refuses_the_limit(
+    control, inverter_unit, writes, monkeypatch, mode, setter, address, blocked
+):
+    """evcc's hold landed before the write read the registers: evcc's mode stays."""
+    await _limit_on(control, mode, setter)
+
+    async def evcc_holds():
+        inverter_unit.holding[address] = 0
+
+    _inside("written_value", control, inverter_unit, monkeypatch, evcc_holds)
+    del writes[:]
+
+    with pytest.raises(ControlRefused) as refused:
+        await getattr(control, setter)(1000)
+    await _poll(control)
+
+    assert refused.value.key == "storage_mode_left"
+    assert writes == []
+    assert control.extended_mode is blocked
+
+
+@pytest.mark.parametrize("stage", WRITE_AWAITS[1:])
+@pytest.mark.parametrize(("mode", "setter", "address", "blocked"), LIMIT_LOSES_ITS_MODE)
+async def test_a_hold_after_the_live_read_is_overwritten_by_the_limit(
+    control, inverter_unit, writes, monkeypatch, mode, setter, address, blocked, stage
+):
+    """evcc's hold landed after the live read: Home Assistant writes last, its mode stays.
+
+    A poll that saw the hold in between refused the limit or switched the
+    select to evcc's mode, which the registers no longer held.
+    """
+    await _limit_on(control, mode, setter)
+
+    async def evcc_holds_and_a_poll_runs():
+        inverter_unit.holding[address] = 0
+        await _poll(control)
+
+    _inside(stage, control, inverter_unit, monkeypatch, evcc_holds_and_a_poll_runs)
+    del writes[:]
+
+    await getattr(control, setter)(1000)
+    await _poll(control)
+
+    assert _words(writes, address) != []
+    assert control.extended_mode is mode
+
+
+# Registers a restart finds each shared-image mode on, with its free rate not 0.
+RESTART_IMAGES = {
+    ExtendedMode.PV_CHARGE_LIMIT: (1, 50, 100),
+    ExtendedMode.DISCHARGE_TO_GRID: (1, -20, 100),
+    ExtendedMode.DISCHARGE_LIMIT: (2, 100, 50),
+    ExtendedMode.CHARGE_FROM_GRID: (2, 100, -20),
+    ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT: (3, 50, 50),
+}
+
+
+@pytest.mark.parametrize(("mode", "setter", "address", "shared"), SHARED_AT_ZERO)
+async def test_after_a_restart_home_assistant_s_own_zero_keeps_the_mode(
+    inverter_unit, mode, setter, address, shared
+):
+    """Home Assistant's 0 W is its own also when it wrote nothing before it.
+
+    Remembering only the rate written, the other one had no counterpart and the
+    image went to the block mode after the grace polls.
+    """
+    stor_ctl_mod, in_rate, out_rate = RESTART_IMAGES[mode]
+    control = await _control_on(
+        inverter_unit,
+        {
+            STOR_CTL_MOD: stor_ctl_mod,
+            IN_W_RTE: _raw(in_rate),
+            OUT_W_RTE: _raw(out_rate),
+        },
+    )
+    assert control.extended_mode is mode
+
+    await getattr(control, setter)(0)
+    for _ in range(MODE_WRITE_GRACE_POLLS + 1):
+        await _poll(control)
+
+    assert control.extended_mode is mode
+
+
+# The rate another controller changes in the combined mode, and the setter
+# Home Assistant then brings the other rate to 0 W with.
+COUNTERPART_CHANGES = [
+    (OUT_W_RTE, "set_charge_limit_w"),
+    (IN_W_RTE, "set_discharge_limit_w"),
+]
+
+
+@pytest.mark.parametrize(("changed", "setter"), COUNTERPART_CHANGES)
+async def test_a_zero_limit_beside_a_rate_another_controller_changed_keeps_the_mode(
+    control, inverter_unit, changed, setter
+):
+    """The other rate is whatever the registers held when Home Assistant wrote its 0 W."""
+    await control.set_mode(ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT)
+    await _poll(control)
+    inverter_unit.holding[changed] = 5000
+    await _poll(control)
+
+    await getattr(control, setter)(0)
+    for _ in range(MODE_WRITE_GRACE_POLLS + 1):
+        await _poll(control)
+
+    assert control.extended_mode is ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT
+
+
+async def test_a_rounded_limit_beside_a_zero_one_stays_home_assistant_s(control):
+    """2441 W of 10240 W is 23.84 % in the register; remembered unrounded, it is no match."""
+    await control.set_mode(ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT)
+    await control.set_charge_limit_w(0)
+    await control.set_discharge_limit_w(2441)
+
+    for _ in range(MODE_WRITE_GRACE_POLLS + 1):
+        await _poll(control)
+
+    assert control.extended_mode is ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT
+
+
+def _storage_lines(caplog, start: str) -> list[int]:
+    return [
+        record.levelno
+        for record in caplog.records
+        if record.name == storage_module.__name__
+        and record.getMessage().startswith(start)
+    ]
+
+
+async def test_another_controller_s_mode_change_is_no_warning(
+    control, inverter_unit, caplog
+):
+    """evcc switches modes many times a day; each switch was a warning in the log.
+
+    Another controller changing the mode is normal operation; the select's
+    history shows it. A mode Home Assistant wrote that the inverter did not
+    take stays a warning.
+    """
+    caplog.set_level(logging.INFO)
+    inverter_unit.holding[STOR_CTL_MOD] = 2
+    inverter_unit.holding[OUT_W_RTE] = 0
+
+    await _poll(control)
+
+    assert _storage_lines(caplog, "Storage mode changed outside") == [logging.INFO]
+
+
+async def test_a_mode_the_inverter_did_not_take_is_a_warning(
+    control, inverter_unit, caplog
+):
+    caplog.set_level(logging.INFO)
+    written = []
+    inverter_unit.on_write(written.append)
+    await control.set_mode(ExtendedMode.BLOCK_DISCHARGING)
+    for event in written:
+        inverter_unit.holding[event.address] = (
+            0 if event.address == STOR_CTL_MOD else 10000
+        )
+
+    for _ in range(MODE_WRITE_GRACE_POLLS):
+        await _poll(control)
+
+    assert _storage_lines(caplog, "The inverter did not take") == [logging.WARNING]

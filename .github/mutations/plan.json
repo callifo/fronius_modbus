@@ -114,8 +114,8 @@
   {
     "label": "storage: a rate write reads back inside the write lock",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "            await self._write_changed(field_name, value)\n",
-    "new": "            await self._write_changed(field_name, value)\n            await self._storage.async_update()\n",
+    "old": "            if field_name not in holding:\n                await self._storage.write(field_name, value)\n",
+    "new": "            if field_name not in holding:\n                await self._storage.write(field_name, value)\n            await self._storage.async_update()\n",
     "tests": "a_rate_write_succeeds_when_the_read_right_after_it_is_refused"
   },
   {
@@ -408,7 +408,7 @@
   {
     "label": "storage: an image that derives to the chosen mode fits it",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "    if _derive_extended_mode(mode, in_rate, out_rate) is extended_mode:\n        return True\n",
+    "old": "        if _derive_extended_mode(mode, in_rate, out_rate) is selected:\n            return True\n",
     "new": "",
     "tests": "a_mode_another_controller_wrote_is_adopted_once_not_every_poll"
   },
@@ -1841,6 +1841,13 @@
     "tests": "passes_no_refused_window or raises_the_discharge_rate_first"
   },
   {
+    "label": "storage: StorCtl_Mod is written after the rates",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            writes = [*rate_writes, (\"stor_ctl_mod\", sunspec_mode)]\n",
+    "new": "            writes = [(\"stor_ctl_mod\", sunspec_mode), *rate_writes]\n",
+    "tests": "over_an_evcc_image_passes_no_refused_window"
+  },
+  {
     "label": "platforms: numbers leave a burst to the write locks",
     "path": "custom_components/fronius_modbus/number.py",
     "old": "PARALLEL_UPDATES = 0",
@@ -2158,15 +2165,15 @@
   {
     "label": "storage: a re-selected grid mode keeps its power only while the image fits",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "        if image is None or _registers_fit(mode, *image):\n",
-    "new": "        if True:\n",
+    "old": "        if self._holds_selected(mode, *image):\n            return field_name,",
+    "new": "        if True:\n            return field_name,",
     "tests": "over_a_non_grid_rate_restores_it"
   },
   {
     "label": "storage: an unreadable grid power is kept",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "        if image is None or _registers_fit(mode, *image):\n",
-    "new": "        if image is not None and _registers_fit(mode, *image):\n",
+    "old": "        if image is None:\n            return field_name, self._written.get(field_name, 0.0)\n",
+    "new": "        if image is None:\n            return None, None\n",
     "tests": "keeps_the_power_when_it_cannot_be_read"
   },
   {
@@ -2186,8 +2193,8 @@
   {
     "label": "storage: a rate in a mode the inverter left is refused",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "        if not _registers_fit(self.extended_mode, *image):\n",
-    "new": "        if False:\n",
+    "old": "        if not self._holds_selected(self.extended_mode, *image):\n            raise _mode_left()\n",
+    "new": "        if False:\n            raise _mode_left()\n",
     "tests": "left_the_mode or both_limits_of_another_controller"
   },
   {
@@ -2249,15 +2256,15 @@
   {
     "label": "storage: a rate image is judged whole, not by StorCtl_Mod",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "        if not _registers_fit(self.extended_mode, *image):\n",
-    "new": "        if image[0] != _MODE_TABLE[self.extended_mode][0]:\n",
+    "old": "        if not self._holds_selected(self.extended_mode, *image):\n            raise _mode_left()\n",
+    "new": "        if image[0] != _MODE_TABLE[self.extended_mode][0]:\n            raise _mode_left()\n",
     "tests": "fits_the_mode_is_written"
   },
   {
     "label": "storage: a rate over another mode on the same base is refused",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "        if not _registers_fit(self.extended_mode, *image):\n",
-    "new": "        if image[0] != _MODE_TABLE[self.extended_mode][0] and not _registers_fit(self.extended_mode, *image):\n",
+    "old": "        if not self._holds_selected(self.extended_mode, *image):\n            raise _mode_left()\n",
+    "new": "        if image[0] != _MODE_TABLE[self.extended_mode][0] and not self._holds_selected(self.extended_mode, *image):\n            raise _mode_left()\n",
     "tests": "another_mode_on_the_same_base_is_refused"
   },
   {
@@ -2270,15 +2277,15 @@
   {
     "label": "storage: a grid power beyond a combined window is refused",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "            if mode == MODE_CHARGE_AND_DISCHARGE and -in_rate > out_rate:\n",
+    "old": "            if switched_on == MODE_CHARGE_AND_DISCHARGE and -in_rate > out_rate:\n",
     "new": "            if False:\n",
     "tests": "beyond_a_combined_window"
   },
   {
     "label": "storage: the combined window's own bound is legal",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "            if mode == MODE_CHARGE_AND_DISCHARGE and -in_rate > out_rate:\n",
-    "new": "            if mode == MODE_CHARGE_AND_DISCHARGE and -in_rate >= out_rate:\n",
+    "old": "            if switched_on == MODE_CHARGE_AND_DISCHARGE and -in_rate > out_rate:\n",
+    "new": "            if switched_on == MODE_CHARGE_AND_DISCHARGE and -in_rate >= out_rate:\n",
     "tests": "inside_a_combined_window"
   },
   {
@@ -2408,6 +2415,97 @@
     "tests": "without_a_usable_address"
   },
   {
+    "label": "storage: InWRte off under StorCtl_Mod limits nothing",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "    if not mode & MODE_CHARGE:\n        in_rate = FULL_RATE_PCT\n",
+    "new": "    if False:\n        in_rate = FULL_RATE_PCT\n",
+    "tests": "rate_storctl_mod_keeps_off_does_not_decide_the_mode or rate_that_is_off_shows_as_no_limit"
+  },
+  {
+    "label": "storage: OutWRte off under StorCtl_Mod limits nothing",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "    if not mode & MODE_DISCHARGE:\n        out_rate = FULL_RATE_PCT\n",
+    "new": "    if False:\n        out_rate = FULL_RATE_PCT\n",
+    "tests": "rate_storctl_mod_keeps_off_does_not_decide_the_mode or rate_that_is_off_shows_as_no_limit"
+  },
+  {
+    "label": "storage: a limit written into a rate that is off switches it on",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            if switched_on != mode:\n",
+    "new": "            if False:\n",
+    "tests": "limit_written_into_a_rate_that_is_off_switches_it_on"
+  },
+  {
+    "label": "storage: a rate write judges the live rates the device applies",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        return mode, *_effective_rates(mode, float(image[1]), float(image[2]))\n",
+    "new": "        return mode, float(image[1]), float(image[2])\n",
+    "tests": "zero_limit_beside_a_rate_that_is_off_is_written"
+  },
+  {
+    "label": "storage: an image another controller set to a shared 0 leaves the mode",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        return self._written == {\"in_w_rte\": in_rate, \"out_w_rte\": out_rate}\n",
+    "new": "        return True\n",
+    "tests": "sets_to_zero_leaves_the_mode"
+  },
+  {
+    "label": "storage: Home Assistant's own 0 keeps the mode",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        return self._written == {\"in_w_rte\": in_rate, \"out_w_rte\": out_rate}\n",
+    "new": "        return False\n",
+    "tests": "home_assistant_set_to_zero_keeps"
+  },
+  {
+    "label": "storage: a limit write opens the grace window",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            self._written = {\"in_w_rte\": in_rate, \"out_w_rte\": out_rate}\n            self._unconfirmed_polls = 0\n",
+    "new": "            self._written = {\"in_w_rte\": in_rate, \"out_w_rte\": out_rate}\n",
+    "tests": "poll_read_before_a_limit"
+  },
+  {
+    "label": "storage: a mode write is recorded after it succeeded",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            self._unconfirmed_polls = 0\n            self._written = written\n",
+    "new": "            self._unconfirmed_polls = 0\n",
+    "tests": "failed_mode_write or home_assistant_set_to_zero_keeps"
+  },
+  {
+    "label": "storage: a kept grid power counts as Home Assistant's",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "                written[kept[0]] = kept[1]\n",
+    "new": "                pass\n",
+    "tests": "selected_again_at_zero_watts"
+  },
+  {
+    "label": "storage: a rate write judges ownership of a shared image",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        if not self._holds_selected(self.extended_mode, *image):\n            raise _mode_left()\n",
+    "new": "        if not _registers_fit(self.extended_mode, *image):\n            raise _mode_left()\n",
+    "tests": "took_the_shared_image"
+  },
+  {
+    "label": "storage: a mode taken from the registers owns no rate of Home Assistant",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        self._unconfirmed_polls = None\n        self._written = {}\n",
+    "new": "        self._unconfirmed_polls = None\n",
+    "tests": "owns_no_rate_of_home_assistant"
+  },
+  {
+    "label": "storage: Home Assistant owns the whole image a limit write leaves",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            self._written = {\"in_w_rte\": in_rate, \"out_w_rte\": out_rate}\n",
+    "new": "            self._written = {field_name: value}\n",
+    "tests": "restart_home_assistant_s_own_zero or rate_another_controller_changed_keeps"
+  },
+  {
+    "label": "storage: the memory holds a limit as its register holds it",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            value = await written_value(self._storage, field_name, percent())\n",
+    "new": "            value = percent()\n",
+    "tests": "rounded_limit_beside_a_zero_one"
+  },
+  {
     "label": "migrations: callifo's module temperatures move to their keys",
     "path": "custom_components/fronius_modbus/migrations.py",
     "old": "        registry.async_update_entity(entity_id, new_unique_id=f\"{prefix}_{key}\")\n",
@@ -2434,6 +2532,27 @@
     "old": "        if registry.async_get_entity_id(entity_entry.domain, DOMAIN, target):\n",
     "new": "        if False:\n",
     "tests": "update_through_callifo_0_3_4_rc2_keeps_the_original_entity"
+  },
+  {
+    "label": "storage: another controller's mode change is no warning",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            _LOGGER.info(\n                \"Storage mode changed outside Home Assistant: %s -> %s\",\n",
+    "new": "            _LOGGER.warning(\n                \"Storage mode changed outside Home Assistant: %s -> %s\",\n",
+    "tests": "controller_s_mode_change_is_no_warning"
+  },
+  {
+    "label": "storage: a poll during a write takes no mode",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        if self._write_lock.locked():\n            return\n",
+    "new": "",
+    "tests": "poll_during_a_limit_write_takes_no_mode"
+  },
+  {
+    "label": "storage: every reader of the polled rates sees only the active ones",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        return mode, *_effective_rates(mode, in_rate, out_rate)\n\n    @property\n    def _rates",
+    "new": "        return mode, in_rate, out_rate\n\n    @property\n    def _rates",
+    "tests": "every_evcc_mode_reads_as_its_mode_whatever_came_before or core_mode_ignores_a_rate_storctl_mod_keeps_off"
   },
   {
     "label": "device: the meters are read right after the inverter",

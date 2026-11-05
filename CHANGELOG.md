@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- A storage mode another controller such as evcc sets is logged at info instead of as a warning: with evcc it is normal operation, many times a day. The select's history keeps every change; a mode Home Assistant wrote that the inverter does not take stays a warning.
+
+### Fixed
+- With another controller such as evcc, the storage mode could show the wrong mode: StorCtl_Mod switches only one rate on in its charge and discharge modes, and the inverter ignores the other, but the integration judged both. evcc's hold after discharging showed *Discharge to Grid*, its hold charge after charging *Charge from Grid*; the limit and grid power numbers showed the ignored register, and the `Core storage control mode` sensor could name the direction of a rate the inverter ignores. They now follow only the rates the inverter applies.
+- In those one-rate block modes, a charge or discharge limit set in Home Assistant went into the rate the inverter ignores and had no effect; setting it now also switches that rate on. A 0 W limit beside a rate that is off is no longer refused as blocking both ways.
+- Block Charging, Block Discharging and Charge and Discharge Limit failed with Modbus exception 3 after another controller such as evcc had left a rate the inverter ignores below 0, for example hold after forced discharge (issue 126). The rates are now written before the mode.
+- A storage mode another controller left by setting only a rate to 0 kept showing (issue 141): for example evcc's hold charge after a PV charge limit set in Home Assistant still showed the PV charge limit until a restart. Such an image is shared by two modes; it now counts as the selected mode only while it holds what Home Assistant wrote, so Home Assistant's own 0 W keeps its mode and another controller's switches it. A limit set in Home Assistant in that moment, before the next update, is refused instead of overwriting the other controller's setting.
+
 ## 1.4.0b2
 
 Released 2026-11-05. The first release with the 1.x code, which replaces 0.3.x. `Load` keeps its sign, and updates from redpomodoro 0.1.9 and from 0.3.3 and later keep their entities. Coming from 0.3.x, read the breaking changes under 1.0.0b1 below and the README's *Coming from 0.3.x* first.

@@ -127,7 +127,10 @@ def _signed(word):
 
 
 def _refused_windows(inverter_unit):
-    """Every register image the firmware refuses (exception 3), as the writes pass it."""
+    """Every register image the firmware refuses (exception 3), as the writes pass it.
+
+    Only StorCtl_Mod 3 has a window: (1, 0, 0) is accepted (GEN24, fw 1.42.9-1).
+    """
     image = {
         address: inverter_unit.holding[address]
         for address in (STOR_CTL_MOD, IN_W_RTE, OUT_W_RTE)
@@ -139,7 +142,8 @@ def _refused_windows(inverter_unit):
             image[event.address + offset] = word
         mode = image[STOR_CTL_MOD]
         in_rate, out_rate = _signed(image[IN_W_RTE]), _signed(image[OUT_W_RTE])
-        if (in_rate <= 0 and out_rate <= 0) or (mode == 3 and -in_rate > out_rate):
+        both_closed = in_rate <= 0 and out_rate <= 0
+        if mode == 3 and (both_closed or -in_rate > out_rate):
             refused.append((mode, in_rate, out_rate))
 
     inverter_unit.on_write(track)
@@ -1137,6 +1141,63 @@ EVCC_STARTS = {
     },
     **{f"ha {mode.name}": storage_module._MODE_TABLE[mode] for mode in ExtendedMode},
 }
+
+
+# One evcc mode after another: the rate the second leaves out keeps the first's
+# value, and only a StorCtl_Mod that keeps that rate off makes the image valid.
+EVCC_IMAGES_IN_A_ROW = sorted(
+    {
+        _after(_after((0, 100, 100), EVCC_SEQUENCES[first]), EVCC_SEQUENCES[second])
+        for first in EVCC_SEQUENCES
+        for second in EVCC_SEQUENCES
+    }
+)
+
+
+def _registers(image: tuple[int, float, float]) -> dict[int, int]:
+    return {
+        STOR_CTL_MOD: image[0],
+        IN_W_RTE: _raw(image[1]),
+        OUT_W_RTE: _raw(image[2]),
+    }
+
+
+@pytest.mark.parametrize("mode", list(ExtendedMode))
+@pytest.mark.parametrize("image", EVCC_IMAGES_IN_A_ROW)
+async def test_a_mode_over_an_evcc_image_passes_no_refused_window(
+    inverter_unit, image, mode
+):
+    """Measured on a GEN24: from (1, 0, -10) and (2, -100, 0) StorCtl_Mod 3 got exception 3."""
+    control = await _control_on(inverter_unit, _registers(image))
+    refused = _refused_windows(inverter_unit)
+
+    await control.set_mode(mode)
+
+    assert refused == []
+    assert inverter_unit.holding[STOR_CTL_MOD] == storage_module._MODE_TABLE[mode][0]
+
+
+LIMIT_SETTERS = [
+    "set_charge_limit_w",
+    "set_discharge_limit_w",
+    "set_grid_charge_power_w",
+    "set_grid_discharge_power_w",
+]
+
+
+@pytest.mark.parametrize("watts", [0, 3000])
+@pytest.mark.parametrize("setter", LIMIT_SETTERS)
+@pytest.mark.parametrize("image", EVCC_IMAGES_IN_A_ROW)
+async def test_a_limit_over_an_evcc_image_passes_no_refused_window(
+    inverter_unit, image, setter, watts
+):
+    control = await _control_on(inverter_unit, _registers(image))
+    refused = _refused_windows(inverter_unit)
+
+    with contextlib.suppress(ControlRefused):
+        await getattr(control, setter)(watts)
+
+    assert refused == []
 
 
 @pytest.mark.parametrize("start", sorted(EVCC_STARTS))

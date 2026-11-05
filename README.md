@@ -34,7 +34,7 @@ See [Entities](https://github.com/callifo/fronius_modbus/wiki/Entities) and [Bat
 
 ## Supported devices
 
-Verified against a Symo GEN24 10.0 with a BYD Battery-Box Premium HV and a Fronius Smart Meter TS 65A-3. Other GEN24, Verto and Tauro models (Tauro ECO included), batteries and meters should work through SunSpec discovery, but are untested here; Fronius publishes the same SunSpec register maps for them, the Tauro without the storage model.
+Developed against a Symo GEN24 10.0 with a BYD Battery-Box Premium HV and a Fronius Smart Meter TS 65A-3, and also confirmed on a Verto 30.0 Plus with a Fronius Reserva battery. Users ran the earlier 0.3.x versions on other models as well, such as other Symo and Primo GEN24, Verto Plus, BYD Battery-Box batteries, and Smart Meter TS 100A-1 and 63A. The 1.x code discovers each device through SunSpec and should work on them too. Tauro models (Tauro ECO included) should work the same way but have no reports yet; Fronius publishes the same SunSpec register maps for them, without the storage model.
 
 Older Fronius inverters with a Datamanager (the SnapINverter family: Symo, Primo, Eco, Galvo without GEN24) are untested. Their Web API has other logins and paths, so they can only be set up *Without the web API*, and only with the Datamanager's Modbus set to the `int+SF` SunSpec model type; with `float` the inverter model is not found and the setup stops, reporting that Modbus did not answer.
 

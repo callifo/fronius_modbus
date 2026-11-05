@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 1.4.0b2
+
+Released 2026-11-05. The first release with the 1.x code, which replaces 0.3.x. `Load` keeps its sign, and updates from redpomodoro 0.1.9 and from 0.3.3 and later keep their entities. Coming from 0.3.x, read the breaking changes under 1.0.0b1 below and the README's *Coming from 0.3.x* first.
 
 ### Moved
 - Development continues in [callifo/fronius_modbus](https://github.com/callifo/fronius_modbus): the 1.x code from the Varitras/fronius_modbus fork replaces 0.3.x there, with the history of both. The domain stays the same, so entries, entities and history are kept.

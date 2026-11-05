@@ -23,11 +23,10 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .component_readings import limits_reached
 from .const import web_api_disabled
-from .derived import LoadEstimator, grid_status, throttle_reason
+from .derived import grid_status, household_load, throttle_reason
 from .fronius_modbus_api.controls import InverterControls
 from .fronius_modbus_api.device import (
     REPORT_INVERTER,
-    REPORT_MPPT,
     FroniusInverter,
     MeterInfo,
     UpdateReport,
@@ -119,7 +118,7 @@ class ModbusPoll:
     grid_status: str | None
     operating_state: int | None
     # True when this is the previous poll served again during a tolerated
-    # outage: usable for display, but not a new reading (audit B05).
+    # outage: usable for display, but not a new reading.
     retained: bool = False
 
 
@@ -135,13 +134,13 @@ class FroniusRuntimeData:
     meter_power: FroniusMeterPowerCoordinator | None = None
     primary_meter_unit_id: int = 200
     # False while the meter topology could not be read: the meters beyond the
-    # default one are then undecided, not gone (audit A04).
+    # default one are then undecided, not gone.
     topology_confirmed: bool = True
     # Reported at an earlier start: a power module seen once stays, since one
-    # answer without it would otherwise retire it (reaudit RE26-03).
+    # answer without it would otherwise retire it.
     reported_keys: frozenset[str] = frozenset()
     # Registered before this setup: one 404 from an endpoint that answered
-    # before is no proof the firmware lacks it (audit FA0FB-03).
+    # before is no proof the firmware lacks it.
     registered_keys: frozenset[str] = frozenset()
 
     @property
@@ -178,7 +177,7 @@ class FroniusRuntimeData:
 
         The web control owns the sequence: it serialises both writes against
         competing web changes, and a minimum the web API refuses reaches
-        neither protocol (audit A05).
+        neither protocol.
         """
         percent = int(round(value))
         storage = assume_present(self.storage_control)
@@ -214,7 +213,7 @@ class FroniusRuntimeData:
             )
         except (ModbusError, RuntimeError, ValueError, OSError) as err:
             # The Modbus mode is already set and stays; the owner has to
-            # know that grid charging is not (audit F24-02).
+            # know that grid charging is not.
             raise ControlUnavailable(
                 "grid_charge_sources_failed",
                 f"Charge from Grid is set, but grid charging was refused: {err}",
@@ -252,11 +251,10 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
         self.inverter_controls: InverterControls | None = None
         self._primary_meter_unit_id = primary_meter_unit_id
         self._meter_locations = meter_locations
-        self._load = LoadEstimator()
         self._failed: frozenset[str] = frozenset()
         # Sub-systems the platforms were built for: the ones that had answered
         # by the first refresh. One that answers only later has no entities
-        # yet, so the entry reloads once to build them (audit F03).
+        # yet, so the entry reloads once to build them.
         self._built_for: frozenset[str] | None = None
         # Set by an outage: a firmware update restarts the inverter, so the
         # identity read at setup is read again once it answers.
@@ -388,7 +386,7 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
         Fronius defines InWRte/OutWRte as percentages of WChaMax (model 124);
         the nameplate ratings only stand in for a device that reports no
         WChaMax. A first poll without either built it on the fallback maximum;
-        every later read refreshes it (audit F09), the same way max_power_w
+        every later read refreshes it, the same way max_power_w
         follows the settings.
         """
         device = self.device
@@ -424,8 +422,7 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
     def _primary_meter_fresh(self, report: UpdateReport) -> AcMeter | None:
         """The primary meter, only when both it and the inverter answered this poll.
 
-        Every derived value mixes the two; a stale half would pass as current
-        (audit F14).
+        Every derived value mixes the two; a stale half would pass as current.
         """
         meter = self._primary_meter()
         if (
@@ -440,16 +437,15 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
         meter = self._primary_meter_fresh(report)
         if meter is None:
             return None
-        mppt_fresh = REPORT_MPPT in report.updated
-        charge = self.device.mppt_channels.charge if mppt_fresh else None
-        charge_module = None if charge is None else self.device.mppt_module(charge)
-        return self._load.update(
+        inverter_started, _ = report.read_spans[REPORT_INVERTER]
+        _, meter_finished = report.read_spans[
+            meter_report_name(self._primary_meter_unit_id)
+        ]
+        return household_load(
             meter_power_w=meter.w,
             inverter_power_w=assume_present(self.device.inverter).w,
             meter_location=self._meter_locations.get(self._primary_meter_unit_id),
-            pv_power_w=self.device.pv_power_w if mppt_fresh else None,
-            storage_charge_power_w=None if charge_module is None else charge_module.dcw,
-            storage_present=self.device.storage is not None,
+            sample_window_s=meter_finished - inverter_started,
         )
 
     def _operating_state(self, report: UpdateReport) -> int | None:
@@ -541,7 +537,7 @@ class FroniusWebCoordinator(DataUpdateCoordinator["WebData"]):
         return data
 
     async def _async_recheck_topology(self) -> None:
-        """Look once more for meters a failed topology read hid (audit A04).
+        """Look once more for meters a failed topology read hid.
 
         Only a confirmed answer reloads the entry, once, so a permanently
         broken endpoint cannot loop.
@@ -554,8 +550,8 @@ class FroniusWebCoordinator(DataUpdateCoordinator["WebData"]):
         if not topology.confirmed:
             return
         # The answer carries the locations and the primary meter too, so it is
-        # applied even when it names the meter the entry already polls (audit
-        # B04). Setup then confirms it and arms no further recheck.
+        # applied even when it names the meter the entry already polls. Setup
+        # then confirms it and arms no further recheck.
         self._recheck_topology = False
         _LOGGER.info(
             "The web API confirmed meters %s; reloading the entry to apply it",

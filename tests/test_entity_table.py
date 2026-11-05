@@ -90,7 +90,7 @@ def test_every_translation_key_has_a_name_in_every_language():
 
 
 def test_every_sensor_that_carried_statistics_still_has_a_state_class():
-    """Discussion #6: dropping a state class hands every user a statistics repair.
+    """Dropping a state class hands every user a statistics repair.
 
     The 0.3 line recorded long-term statistics for these; a sensor that loses its
     state class makes Home Assistant offer to delete that history.

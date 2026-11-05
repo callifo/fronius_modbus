@@ -65,6 +65,18 @@ INVERTER_UNIT_ID = 1
 METER_UNIT_ID = 200
 
 
+class SteppingClock:
+    """A monotonic clock that moves `step` seconds on every reading."""
+
+    def __init__(self, step: float) -> None:
+        self.now = 0.0
+        self.step = step
+
+    def monotonic(self) -> float:
+        self.now += self.step
+        return self.now
+
+
 def load_fixture(name: str) -> dict[int, dict[str, dict[int, int]]]:
     """A captured device as {unit_id: {"holding": {address: word}}}."""
     raw = json.loads((FIXTURES / name).read_text(encoding="utf-8"))

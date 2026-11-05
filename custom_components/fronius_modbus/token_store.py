@@ -18,7 +18,7 @@ def canonical_host(host: str) -> str:
     """The host as an identity: what the stored credential is keyed by.
 
     Two spellings of one host are one host. Comparing the raw strings deleted
-    the live token when only the case changed (audit A06).
+    the live token when only the case changed.
     """
     if "://" not in host:
         host = f"http://{host}"
@@ -31,7 +31,7 @@ def _token_key(host: str, user: str = API_USERNAME) -> str:
 
 class FroniusTokenStore:
     def __init__(self, hass: HomeAssistant) -> None:
-        # The token alone authenticates to the inverter (audit A24-03).
+        # The token alone authenticates to the inverter.
         self._store = Store[dict[str, dict[str, str]]](
             hass, _TOKEN_STORE_VERSION, _TOKEN_STORE_KEY, private=True
         )
@@ -62,7 +62,7 @@ class FroniusTokenStore:
 
         No await: the caller checks and updates the entry around this, and an
         await in between let another flow take the address, or a second move
-        leave a token under a host no entry uses (audit R3B-01, R3B-02).
+        leave a token under a host no entry uses.
         """
         data = self._cache
         if data is None:
@@ -109,7 +109,7 @@ class FroniusTokenStore:
 async def async_forget_unused_tokens(hass: HomeAssistant, host: str) -> None:
     """Delete the tokens for ``host`` that no config entry logs in with any more.
 
-    Called whenever an entry leaves a host or a role (audit A24-04). An entry
+    Called whenever an entry leaves a host or a role. An entry
     without a role predates single roles: its migration reads the role from
     the stored tokens, so both stay.
     """

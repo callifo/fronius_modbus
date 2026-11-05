@@ -44,7 +44,7 @@ class ModbusRestriction(StrEnum):
     """What setup does with the inverter's Modbus IP restriction.
 
     Keeping is the default: lifting a restriction opens the Modbus server to
-    every host, so it has to be chosen, never implied (audit A24-02).
+    every host, so it has to be chosen, never implied.
     """
 
     KEEP = "keep"
@@ -147,7 +147,7 @@ THROTTLE_REASONS = (
     "several",
 )
 # No longer reported: both meant a limit that was switched on, not one that held
-# the output (#26). Kept so the states in history keep their label.
+# the output. Kept so the states in history keep their label.
 LEGACY_THROTTLE_REASONS = ("active_power_control", "export_limit")
 
 GRID_STATUS = {
@@ -259,7 +259,7 @@ def entry_title_after(
 ) -> str:
     """The title for changed settings: only a generated one follows them.
 
-    A title the owner gave is theirs (reaudit Z-02, audit F18).
+    A title the owner gave is theirs.
     """
     return entry_title(after) if title == entry_title(before) else title
 

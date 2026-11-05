@@ -21,7 +21,10 @@ param(
     [string]$InverterHost,
     [int]$ModbusPort = 502,
     # Fronius numbers the meters from a configurable offset, 200 by default.
-    [int]$FirstMeterUnit = 200
+    [int]$FirstMeterUnit = 200,
+    # A meter on Modbus TCP is not bound to that numbering; finding it takes a
+    # look at every unit, about twelve minutes if absent units stay silent.
+    [switch]$AllUnits
 )
 
 $ErrorActionPreference = 'Stop'
@@ -100,6 +103,7 @@ $EndOfChain = 0xFFFF
 $MaxModels = 100
 $InverterUnit = 1
 $MeterCandidates = 10
+$LastModbusUnit = 247
 $MaxRegistersPerRead = 125
 # The common model carries the serial number in registers 48 to 63 of its body.
 $CommonModel = 1
@@ -512,6 +516,7 @@ function Read-Modbus([bool]$Redact) {
     try {
         Connect-Modbus
         $units = @($InverterUnit) + @($FirstMeterUnit..($FirstMeterUnit + $MeterCandidates - 1))
+        if ($AllUnits) { $units = @($InverterUnit..$LastModbusUnit) }
         return [ordered]@{ port = $ModbusPort; units = (Read-ModbusUnits $read $units $Redact) }
     } catch {
         return [ordered]@{ port = $ModbusPort; error = $_.Exception.GetBaseException().Message }

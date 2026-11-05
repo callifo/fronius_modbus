@@ -12,7 +12,7 @@ class FroniusWebUnreachable(OSError):
 
     Carries the requests error type only. Requests puts the URL, and with it
     the host, into its messages, and Home Assistant logs travel with bug
-    reports (audit E01).
+    reports.
     """
 
 

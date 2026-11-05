@@ -178,12 +178,12 @@ jobs:
           # on some other package still happening to pull it in.
           pip install "$PHCC_SPEC" pytest-timeout -r requirements.txt
           # The Modbus libraries core pins, not the newest: an installation
-          # shares core's connection and runs these (audit F29).
+          # shares core's connection and runs these.
           pip install $(python .github/scripts/core_modbus_pins.py)
       - name: Install gitleaks for the allowlist tests
         # The gitleaks job scans with the change's own rules, so a widened
         # allowlist passes it; tests/test_secret_scan.py holds the rules to a
-        # known token and needs the binary (audit F30). Pinned and checked
+        # known token and needs the binary. Pinned and checked
         # against the release's published checksum.
         env:
           GITLEAKS_VERSION: "8.30.1"

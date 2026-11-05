@@ -186,7 +186,7 @@ async def test_a_comparison_that_cannot_read_still_writes(
 
 @pytest.mark.usefixtures("no_comparison")
 async def test_a_failed_limit_write_leaves_the_limit_enabled(clock):
-    """Audit F01: the pulse switched the limit off and never back on when the value write failed."""
+    """The pulse switched the limit off and never back on when the value write failed."""
 
     class FakeControls:
         w_max_lim_ena = 1
@@ -236,7 +236,7 @@ async def test_a_limit_that_cannot_be_re_enabled_is_reported_as_left_disabled(cl
 
 @pytest.mark.usefixtures("no_comparison")
 async def test_a_control_left_disabled_names_no_host(clock):
-    """Reaudit W-01: the report carried the lost connection's text, host and all.
+    """The report carried the lost connection's text, host and all.
 
     It reaches the write_failed message the owner pastes into an issue.
     """
@@ -273,7 +273,7 @@ async def test_a_control_left_disabled_names_no_host(clock):
 async def test_a_cancelled_write_leaves_the_control_enabled(
     controls, inverter_unit, enable_address, setter, value
 ):
-    """Audit A01: cancelling during the pulse left a live limit switched off for good."""
+    """Cancelling during the pulse left a live limit switched off for good."""
     inverter_unit.holding[enable_address] = 1
     entered = asyncio.Event()
     release = asyncio.Event()
@@ -301,7 +301,7 @@ async def test_a_cancelled_write_leaves_the_control_enabled(
 async def test_a_cancelled_disable_write_leaves_the_control_enabled(
     controls, inverter_unit, enable_address, setter, value
 ):
-    """Audit B01: the device may already have applied the disable when the call is cancelled."""
+    """The device may already have applied the disable when the call is cancelled."""
     inverter_unit.holding[enable_address] = 1
     entered = asyncio.Event()
     release = asyncio.Event()
@@ -333,7 +333,7 @@ async def test_a_cancelled_disable_write_leaves_the_control_enabled(
 async def test_a_value_the_device_cannot_scale_leaves_the_control_enabled(
     controls, inverter_unit, enable_address, setter, value
 ):
-    """Audit FA0FB-01: a scale-factor ValueError after the disable skipped the restore."""
+    """A scale-factor ValueError after the disable skipped the restore."""
     inverter_unit.holding[enable_address] = 1
     write = controls._controls.write
 

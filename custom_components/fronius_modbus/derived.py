@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from typing import NamedTuple
 
 from .const import GRID_STATUS, THROTTLE_REASONS
+
+_LOGGER = logging.getLogger(__name__)
 
 GRID_FREQUENCY_HZ = 50.0
 METER_GRID_BAND_HZ = 0.2
@@ -13,13 +16,9 @@ STANDSTILL_HZ = 1.0
 METER_LOCATION_FEED_IN = 0
 METER_LOCATION_CONSUMPTION = 1
 METER_LOCATION_CONSUMPTION_RANGE = range(256, 512)
-# Fronius occasionally drops the inverter AC power to ~0 for one poll while PV is clearly active.
-LOAD_GLITCH_MIN_EXPORT_W = 1000.0
-LOAD_GLITCH_MAX_ABS_INVERTER_W = 50.0
-LOAD_GLITCH_MIN_PV_W = 1000.0
-# During strong battery charging on Verto the meter export can exceed the inverter
-# AC power and the grid-meter formula produces a bogus negative load.
-LOAD_STORAGE_CHARGE_MIN_W = 1000.0
+# From the start of the inverter read to the end of the primary meter read; a
+# pair further apart than this is not one moment.
+LOAD_SAMPLE_WINDOW_S = 0.5
 
 
 # Model 103 St: the operating state the inverter names itself.
@@ -37,7 +36,7 @@ def throttle_reason(
 
     A limit that is set is no throttling: only one the output has reached is.
     The component endpoint says so for a percentage limit and for one in watts
-    apart; the Modbus signals only say a limit is switched on (#26). A GEN24
+    apart; the Modbus signals only say a limit is switched on. A GEN24
     left the operating state at normal while it throttled; other firmware
     may not.
     """
@@ -84,72 +83,35 @@ def grid_status(inverter_hz: float | None, meter_hz: float | None) -> str | None
     return None
 
 
-class LoadEstimator:
-    """The household load from the primary meter and the inverter, glitch-guarded."""
+def household_load(
+    *,
+    meter_power_w: float | None,
+    inverter_power_w: float | None,
+    meter_location: int | None,
+    sample_window_s: float,
+) -> float | None:
+    """The household's net demand from the primary meter, signed.
 
-    def __init__(self) -> None:
-        """Initialize with no prior good reading."""
-        self._last_good_load_w: float | None = None
-        self._last_good_inverter_power_w: float | None = None
-        self._consecutive_bad_polls = 0
-
-    def _good(self, load_w: float, inverter_power_w: float | None = None) -> float:
-        self._last_good_load_w = round(load_w, 2)
-        if inverter_power_w is not None:
-            self._last_good_inverter_power_w = inverter_power_w
-        self._consecutive_bad_polls = 0
-        return self._last_good_load_w
-
-    def update(
-        self,
-        *,
-        meter_power_w: float | None,
-        inverter_power_w: float | None,
-        meter_location: int | None,
-        pv_power_w: float | None,
-        storage_charge_power_w: float | None,
-        storage_present: bool,
-    ) -> float | None:
-        """Derive the current household load from this poll's meter and inverter data."""
-        if meter_power_w is None or meter_location is None:
-            self._consecutive_bad_polls = 0
-            return None
-        if (
-            meter_location == METER_LOCATION_CONSUMPTION
-            or meter_location in METER_LOCATION_CONSUMPTION_RANGE
-        ):
-            load = -meter_power_w
-            if meter_power_w <= 0:
-                return self._good(load)
-            self._consecutive_bad_polls = 0
-            return round(load, 2)
-        if meter_location != METER_LOCATION_FEED_IN or inverter_power_w is None:
-            self._consecutive_bad_polls = 0
-            return None
-        candidate = meter_power_w + inverter_power_w
-        pv_active = pv_power_w is not None and pv_power_w >= LOAD_GLITCH_MIN_PV_W
-        previously_active = (
-            self._last_good_inverter_power_w or 0.0
-        ) >= LOAD_GLITCH_MIN_PV_W
-        glitch = (
-            candidate < 0
-            and meter_power_w <= -LOAD_GLITCH_MIN_EXPORT_W
-            and abs(inverter_power_w) <= LOAD_GLITCH_MAX_ABS_INVERTER_W
-            and (pv_active or previously_active)
+    Generation behind the meter the inverter does not see (a balcony inverter,
+    an AC-coupled battery) is not in it: the value is the consumption minus
+    that generation, and negative while that generation exports.
+    """
+    if meter_power_w is None or meter_location is None:
+        return None
+    if (
+        meter_location == METER_LOCATION_CONSUMPTION
+        or meter_location in METER_LOCATION_CONSUMPTION_RANGE
+    ):
+        return round(-meter_power_w, 2)
+    if meter_location != METER_LOCATION_FEED_IN or inverter_power_w is None:
+        return None
+    if sample_window_s > LOAD_SAMPLE_WINDOW_S:
+        _LOGGER.debug(
+            "No load: the inverter and meter reads lay %.0f ms apart",
+            sample_window_s * 1000,
         )
-        if glitch:
-            self._consecutive_bad_polls += 1
-            return self._last_good_load_w if self._consecutive_bad_polls == 1 else None
-        # An unknown charge (the MPPT block did not answer) may explain a
-        # negative load as well as a strong one; it is no 0 W.
-        charge_may_explain_it = storage_present and (
-            storage_charge_power_w is None
-            or storage_charge_power_w >= LOAD_STORAGE_CHARGE_MIN_W
-        )
-        if candidate < 0 and charge_may_explain_it:
-            self._consecutive_bad_polls = 0
-            return None
-        return self._good(max(candidate, 0.0), inverter_power_w)
+        return None
+    return round(meter_power_w + inverter_power_w, 2)
 
 
 class TotalVerdict(NamedTuple):
@@ -165,7 +127,7 @@ class TotalGuard:
     A single lower or far-too-high sample is a bad reading and is ignored.
     ``confirmations`` consecutive samples that agree with each other are the
     device telling the truth - a counter reset after a hardware swap, or a
-    large but genuine gap while Home Assistant was offline (audit F05/F06) -
+    large but genuine gap while Home Assistant was offline -
     and are accepted. Property reads never advance this state: only observe()
     does.
     """
@@ -197,7 +159,7 @@ class TotalGuard:
             self._last_suspect = None
             return None
         # Only samples that agree with each other confirm a new range: a spike
-        # between two low readings is no reset (audit F24-03).
+        # between two low readings is no reset.
         continues = self._last_suspect is not None and self._plausible_after(
             self._last_suspect, reading
         )

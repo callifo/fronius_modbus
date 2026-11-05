@@ -63,7 +63,7 @@ def _scan(tmp_path: pathlib.Path, source: str) -> int:
 @pytest.fixture(autouse=True)
 def _gitleaks_installed():
     if shutil.which("gitleaks") is None:
-        # In CI a skip read as green while the allowlist went unguarded (audit F30).
+        # In CI a skip read as green while the allowlist went unguarded.
         if os.environ.get("CI"):
             pytest.fail("gitleaks is missing in CI; the allowlist goes unguarded")
         pytest.skip(

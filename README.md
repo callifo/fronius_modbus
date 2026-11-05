@@ -4,9 +4,9 @@
 
 Home Assistant custom component for reading data from Fronius GEN24 and Verto inverters, connected smart meters, and battery storage. Modbus TCP (SunSpec) is the primary source; the authenticated Fronius Web API is optional and adds setup assistance and battery controls that are not available over Modbus. The inverter's web interface also reports module temperatures, fans, battery health and the inverter's event log, without a login.
 
-This is a fork of [callifo/fronius_modbus](https://github.com/callifo/fronius_modbus) (itself derived from redpomodoro/fronius_modbus), rewritten in 1.0 onto Home Assistant's shared Modbus connection and the `modbus-connection` library. Upstream issues fixed here are listed in the CHANGELOG.
+It began as redpomodoro/fronius_modbus and continued here. Version 1.0 is a rewrite onto Home Assistant's shared Modbus connection and the `modbus-connection` library.
 
-**The full documentation is in the [wiki](https://github.com/Varitras/fronius_modbus/wiki):** every entity, the battery and inverter controls, the inverter's events, how data updates, examples, troubleshooting and migration.
+**The full documentation is in the [wiki](https://github.com/callifo/fronius_modbus/wiki):** every entity, the battery and inverter controls, the inverter's events, how data updates, examples, troubleshooting and migration.
 
 > [!CAUTION]
 > This is an unofficial implementation and not supported by Fronius. It might stop working at any point in time.
@@ -24,28 +24,28 @@ This is a fork of [callifo/fronius_modbus](https://github.com/callifo/fronius_mo
 - Without a login, from the inverter's web interface: module temperatures, fans, per-phase power, battery health, the inverter's event log as entities and events, and why the inverter throttles.
 - Discovery over mDNS, diagnostics download with the raw register map.
 
-See [Entities](https://github.com/Varitras/fronius_modbus/wiki/Entities) and [Battery Control](https://github.com/Varitras/fronius_modbus/wiki/Battery-Control) in the wiki.
+See [Entities](https://github.com/callifo/fronius_modbus/wiki/Entities) and [Battery Control](https://github.com/callifo/fronius_modbus/wiki/Battery-Control) in the wiki.
 
 ## Requirements
 
 - Home Assistant 2026.9.0 or newer. The integration depends on the built-in `modbus` integration for its connection.
 - Modbus TCP enabled on the inverter. The setup can enable it for you when a Web API password is provided.
-- Optional: the password of a local Web API role. Without it the integration runs on Modbus alone; see [Web API](https://github.com/Varitras/fronius_modbus/wiki/Web-API) in the wiki.
+- Optional: the password of a local Web API role. Without it the integration runs on Modbus alone; see [Web API](https://github.com/callifo/fronius_modbus/wiki/Web-API) in the wiki.
 
 ## Supported devices
 
-Verified against a Symo GEN24 10.0 with a BYD Battery-Box Premium HV and a Fronius Smart Meter TS 65A-3. Other GEN24, Verto and Tauro models (Tauro ECO included), batteries and meters should work through SunSpec discovery, but are untested here; Fronius publishes the same SunSpec register maps for them, the Tauro without the storage model.
+Developed against a Symo GEN24 10.0 with a BYD Battery-Box Premium HV and a Fronius Smart Meter TS 65A-3, and also confirmed on a Verto 30.0 Plus with a Fronius Reserva battery. Users ran the earlier 0.3.x versions on other models as well, such as other Symo and Primo GEN24, Verto Plus, BYD Battery-Box batteries, and Smart Meter TS 100A-1 and 63A. The 1.x code discovers each device through SunSpec and should work on them too. Tauro models (Tauro ECO included) should work the same way but have no reports yet; Fronius publishes the same SunSpec register maps for them, without the storage model.
 
 Older Fronius inverters with a Datamanager (the SnapINverter family: Symo, Primo, Eco, Galvo without GEN24) are untested. Their Web API has other logins and paths, so they can only be set up *Without the web API*, and only with the Datamanager's Modbus set to the `int+SF` SunSpec model type; with `float` the inverter model is not found and the setup stops, reporting that Modbus did not answer.
 
-## Coming from upstream
+## Coming from 0.3.x
 
-Entity IDs, unique IDs, history/statistics and existing options of [callifo/fronius_modbus](https://github.com/callifo/fronius_modbus) are kept; existing entries are migrated on the first start. Coming straight from 0.2.7 or older, the MPPT and storage module sensors (`mppt1_power`, `mppt1_lfte` and the like) come back under new entity ids, as they did with callifo 0.2.8. Breaking changes are listed in the CHANGELOG; what changes in detail is in [Migration](https://github.com/Varitras/fronius_modbus/wiki/Migration) in the wiki.
+Entity IDs, unique IDs, history/statistics and existing options of the 0.3.x releases are kept; existing entries are migrated on the first start. Take a Home Assistant backup first: going back to 0.3.x afterwards needs that backup. Coming straight from 0.2.7 or older, the MPPT and storage module sensors (`mppt1_power`, `mppt1_lfte` and the like) come back under new entity ids, as they did with 0.2.8. Entries from redpomodoro 0.1.9 are migrated as well. Breaking changes are listed in the CHANGELOG; what changes in detail is in [Migration](https://github.com/callifo/fronius_modbus/wiki/Migration) in the wiki.
 
 > [!IMPORTANT]
 > Enum states are translation keys now: `Auto` became `auto`, `Charge from Grid` became `charge_from_grid`, `On grid operating` became `on_grid_operating`, `Enabled`/`Disabled` became `enabled`/`disabled`. Update automations and templates that compare against the old texts; see the CHANGELOG for the rule.
 
-- **Minimum Home Assistant version: 2026.9.0**.
+- **Minimum Home Assistant version: 2026.9.0**. HACS refuses the installation on an older Home Assistant; a 0.3.x release stays available there.
 - The checkbox "Restrict Modbus to this IP" became the option **Modbus IP restriction**; checked becomes "restrict and allow this Home Assistant", unchecked becomes "keep". Allowing Home Assistant adds its address to the hosts already allowed while the inverter's restriction is on; while it is off, Home Assistant's address becomes the only allowed host.
 - The SoC window follows the inverter's own switch: `SoC Maximum` and the new `SoC Minimum (Web API)` are writable while the new `Web API SoC mode` is manual, instead of following `Self-consumption optimisation`.
 
@@ -56,7 +56,7 @@ Entity IDs, unique IDs, history/statistics and existing options of [callifo/fron
 1. Go to HACS.
 2. Click on the three dots in the top right corner.
 3. Select "Custom repositories".
-4. Add the [URL](https://github.com/Varitras/fronius_modbus) of this repository.
+4. Add the [URL](https://github.com/callifo/fronius_modbus) of this repository.
 5. Select the "Integration" type.
 6. Click "ADD".
 7. Open the repository in HACS and download it.
@@ -73,13 +73,13 @@ The setup asks for the inverter's host, the Web API access role (`customer`, `te
 
 With a role, the setup sets the inverter's Modbus itself. Without the web API, set it first in the inverter's web UI: Modbus TCP on, port 502, the SunSpec model type `int + SF`, inverter address 1 and meter address offset 200, and *Allow Control* on for the Modbus controls.
 
-Every parameter, discovery, the Modbus IP restriction and reconfiguring are in [Installation and Setup](https://github.com/Varitras/fronius_modbus/wiki/Installation-and-Setup) in the wiki.
+Every parameter, discovery, the Modbus IP restriction and reconfiguring are in [Installation and Setup](https://github.com/callifo/fronius_modbus/wiki/Installation-and-Setup) in the wiki.
 
 ## Troubleshooting
 
 - **Diagnostics:** Settings -> Devices & services -> Fronius Modbus -> device -> Download diagnostics. Serial numbers and the Modbus restriction IP are redacted.
-- **Everything the inverter reads out:** on Windows, run [`tools/inverter_dump.bat`](tools/inverter_dump.bat) (it starts `inverter_dump.ps1` next to it; both files are needed). It only reads, and by default replaces serial numbers, addresses and names with `<redacted>`; still look through the file before you share it. Attached to an issue, such a file helps to support a device that is not verified yet.
-- Error messages, repair notices, logs and known limitations: [Troubleshooting and Diagnostics](https://github.com/Varitras/fronius_modbus/wiki/Troubleshooting-and-Diagnostics) in the wiki.
+- **Everything the inverter reads out:** on Windows, run [`tools/inverter_dump.bat`](tools/inverter_dump.bat) (it starts `inverter_dump.ps1` next to it; both files are needed). It only reads, and by default replaces serial numbers, addresses and names with `<redacted>`; still look through the file before you share it. Attached to an issue, such a file helps to support a device that is not verified yet. To look for a meter on every Modbus unit, not only the usual ones, add the address and `-AllUnits`: `inverter_dump.bat <address> -AllUnits`.
+- Error messages, repair notices, logs and known limitations: [Troubleshooting and Diagnostics](https://github.com/callifo/fronius_modbus/wiki/Troubleshooting-and-Diagnostics) in the wiki.
 
 ## Removal
 

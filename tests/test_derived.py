@@ -1,14 +1,16 @@
 """Tests for household load and grid status derivation."""
 
 import json
+import logging
 import pathlib
 
 import pytest
 
 from custom_components.fronius_modbus.derived import (
-    LoadEstimator,
+    LOAD_SAMPLE_WINDOW_S,
     TotalGuard,
     grid_status,
+    household_load,
     throttle_reason,
 )
 
@@ -22,70 +24,60 @@ def test_grid_status_from_both_frequencies():
     assert grid_status(None, 50.0) is None
 
 
-def _update(estimator, **overrides):
+def _load(**overrides):
     values = {
         "meter_power_w": -2000.0,
         "inverter_power_w": 3000.0,
         "meter_location": 0,
-        "pv_power_w": 3100.0,
-        "storage_charge_power_w": 0.0,
-        "storage_present": True,
+        "sample_window_s": 0.01,
     }
     values.update(overrides)
-    return estimator.update(**values)
+    return household_load(**values)
 
 
 def test_load_at_the_feed_in_point_is_meter_plus_inverter():
     """At a feed-in meter, load is meter power plus inverter power."""
-    assert _update(LoadEstimator()) == 1000.0
+    assert _load() == 1000.0
+
+
+def test_load_at_the_feed_in_point_keeps_its_sign():
+    """Other generation behind the meter exporting more than the house uses."""
+    assert _load(meter_power_w=-2000.0, inverter_power_w=500.0) == -1500.0
 
 
 def test_load_needs_a_meter_location():
     """Without a known meter location, load cannot be derived."""
-    assert _update(LoadEstimator(), meter_location=None) is None
+    assert _load(meter_location=None) is None
 
 
-def test_a_consumption_meter_reports_its_own_power():
-    """A consumption-location meter reports load directly."""
-    assert _update(LoadEstimator(), meter_location=1, meter_power_w=-450.0) == 450.0
+def test_load_needs_a_meter_reading():
+    assert _load(meter_power_w=None) is None
 
 
-def test_an_inverter_glitch_keeps_the_last_good_value_once():
-    """A single-poll inverter glitch reuses the last good load, then goes unavailable."""
-    estimator = LoadEstimator()
-    assert _update(estimator) == 1000.0
-    assert _update(estimator, inverter_power_w=0.0) == 1000.0
-    assert _update(estimator, inverter_power_w=0.0) is None
+def test_load_at_the_feed_in_point_needs_the_inverter():
+    assert _load(inverter_power_w=None) is None
 
 
-def test_strong_charging_makes_a_negative_load_unavailable():
-    """Heavy battery charging that would yield a negative load is unavailable instead."""
-    assert (
-        _update(
-            LoadEstimator(),
-            meter_power_w=-5000.0,
-            inverter_power_w=3000.0,
-            storage_charge_power_w=2500.0,
-        )
-        is None
-    )
+def test_a_meter_at_another_location_gives_no_load():
+    """An external generator meter (location 3) measures no household demand."""
+    assert _load(meter_location=3) is None
 
 
-def test_a_negative_load_with_an_unknown_charge_is_no_reading():
-    """The MPPT block did not answer, so the charge that may explain it is unknown.
+@pytest.mark.parametrize("location", [1, 256, 511])
+def test_a_consumption_meter_reports_its_own_power_signed(location):
+    """A consumption-path meter reports load directly, generation in that path included."""
+    assert _load(meter_location=location, meter_power_w=-450.0) == 450.0
+    assert _load(meter_location=location, meter_power_w=200.0) == -200.0
 
-    Taken for 0 W, it let the negative load pass as a measured 0 W.
-    """
-    assert (
-        _update(
-            LoadEstimator(),
-            meter_power_w=-5000.0,
-            inverter_power_w=3000.0,
-            pv_power_w=None,
-            storage_charge_power_w=None,
-        )
-        is None
-    )
+
+def test_a_feed_in_pair_read_up_to_the_window_apart_is_one_moment():
+    assert _load(sample_window_s=LOAD_SAMPLE_WINDOW_S) == 1000.0
+    assert _load(sample_window_s=LOAD_SAMPLE_WINDOW_S + 0.001) is None
+
+
+def test_a_consumption_meter_needs_no_pair():
+    """Its reading alone is the load, so the inverter's read time does not matter."""
+    assert _load(meter_location=1, meter_power_w=-450.0, sample_window_s=5.0) == 450.0
 
 
 def _guard(value=1000.0):
@@ -126,7 +118,7 @@ def test_three_far_higher_polls_are_a_genuine_gap():
     [(10.0, 100000.0, 10.0), (100000.0, 10.0, 100000.0), (10.0, 5000.0, 20.0)],
 )
 def test_contradicting_samples_confirm_nothing(readings):
-    """Audit F24-03: 10, 100000, 10 counted as three confirmations and reset the total.
+    """10, 100000, 10 counted as three confirmations and reset the total.
 
     A spike between two low readings contradicts a real reset; only samples
     that agree with each other may move the accepted range.
@@ -177,7 +169,7 @@ def test_a_reached_percentage_limit_is_the_ac_limit():
 
 
 def test_a_reached_limit_in_watts_is_the_feed_in_limit():
-    """Measured in #26: an export limit held at 400 W set only the absolute flag."""
+    """Measured: an export limit held at 400 W set only the absolute flag."""
     assert _reason(absolute_reached=True) == "feed_in_limit"
 
 
@@ -203,7 +195,7 @@ def test_a_found_reason_stands_even_while_another_source_is_silent():
 
 
 def test_the_limit_reason_is_named_after_the_ac_limit_it_reads():
-    """Discussion #6: "Export limit" read as the grid feed-in limit, which the
+    """The sensor "Export limit" read as the grid feed-in limit, which the
     inverter reports in none of these signals; the reason is the AC limit."""
     root = pathlib.Path(__file__).parent.parent / "custom_components/fronius_modbus"
     for language in ("en", "de"):
@@ -236,3 +228,11 @@ def test_the_production_limit_pair_is_a_power_limit_apart_from_the_battery_s():
         assert sensors["storage_power_limit"]["name"] not in pair
         # WMax is the fixed nameplate setting; this value drops with an AC limit.
         assert sensors["max_power"]["name"] not in pair
+
+
+def test_a_feed_in_pair_too_far_apart_says_so_in_the_debug_log(caplog):
+    """Load went unknown on a slow link with no word why."""
+    with caplog.at_level(logging.DEBUG, logger="custom_components.fronius_modbus"):
+        assert _load(sample_window_s=0.75) is None
+
+    assert "750 ms" in caplog.text

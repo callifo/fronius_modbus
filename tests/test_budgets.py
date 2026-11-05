@@ -37,14 +37,14 @@ LINE_BUDGETS = {
     # the value_fn factories that replaced the loop-bound lambda defaults.
     # +29: the translation-key map that keeps hassfest happy (upstream data keys
     # are not valid translation keys), table file, ~85 % declarative
-    # 1832 + the throttling sensor (callifo #112)
-    # 1888 + the backup reserve, the SoC mode, the web SoC minimum (callifo #136), the capacity note
+    # 1832 + the throttling sensor (issue 112)
+    # 1888 + the backup reserve, the SoC mode, the web SoC minimum (issue 136), the capacity note
     # 1909 + translated write errors (quality scale exception-translations)
     # 1842 - the icons, now in icons.json (quality scale icon-translations)
-    # 1850 + the translated error for an unreachable web interface (R24-02)
+    # 1850 + the translated error for an unreachable web interface
     # 1910 + the component sensor builder; the table is component_readings.py
     # 1889 - the two web temperatures, now rows of that table
-    # 1900 + a power module kept once registered (RE26-03)
+    # 1900 + a power module kept once registered
     # 1625 - the base entity and the device info, now entity_base.py
     # 1680 + the inverter event entities
     # 1625 - the description types, now descriptions.py; + the service event entities
@@ -66,7 +66,6 @@ COMPLEXITY_LIMIT = 15
 # adoption - the point of the guard is that nothing gets worse and every
 # improvement is written down.
 COMPLEXITY_BUDGETS = {
-    "derived.py::LoadEstimator.update": 19,
     "froniuswebclient.py::_parse_power_meter_info": 24,
     "migrations.py::async_migrate_v019_mppt_statistics": 19,
 }

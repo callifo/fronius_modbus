@@ -1,6 +1,6 @@
 """The names the entities show: one term per thing, in both languages.
 
-Discussion #6 and a review of the German texts: the same limit had two names,
+A review of the German texts: the same limit had two names,
 active power read as plain power next to a reactive power sensor, and the
 charge reference read as a maximum power.
 """

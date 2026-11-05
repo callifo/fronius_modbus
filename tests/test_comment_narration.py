@@ -1,8 +1,8 @@
 """Heuristic guard against narrating comments.
 
 A comment states a decision or a constraint, not what the next line already
-says - a narrating comment is noise today and doc-drift tomorrow (the recurring
-audit class "comment describes behaviour the code no longer has"). A prose rule
+says - a narrating comment is noise today and doc-drift tomorrow (a comment
+that describes behaviour the code no longer has). A prose rule
 does not reach the moment of writing; this scan does, over the shipped package
 and the test suite alike.
 

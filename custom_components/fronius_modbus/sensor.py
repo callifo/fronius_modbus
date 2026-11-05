@@ -82,7 +82,7 @@ class FroniusSensor(FroniusEntity, SensorEntity):
 
         A state outside the options fails every state write. A flag or code
         the device sends that no option names reads as unknown, as an
-        unmapped code does (audit F21).
+        unmapped code does.
         """
         fast_reading = self._fast_reading
         # A failed fast read leaves the full poll's reading, as without the option.

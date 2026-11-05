@@ -13,7 +13,7 @@ def soft_limit_location(active_power: dict[str, Any]) -> tuple[dict[str, Any], s
 
     Firmware 1.42 moved them from softLimit.powerLimit up to
     activePower.exportLimit; its new protection limit keeps its own value
-    (upstream #154). A write to the old place is refused there.
+    (issue 154). A write to the old place is refused there.
     """
     if EXPORT_LIMIT_KEY in active_power:
         return active_power, EXPORT_LIMIT_KEY

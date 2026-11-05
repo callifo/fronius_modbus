@@ -1,6 +1,6 @@
 """Every write action of the entity tables, and the call it must make.
 
-Audit F10: 20 of 25 write actions ran in no test. A Conn select that took the
+20 of 25 write actions ran in no test. A Conn select that took the
 inverter off the grid on "enabled", or swapped Solar API switch actions, kept
 the whole suite green.
 """

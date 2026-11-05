@@ -2,18 +2,34 @@
 
 ## Unreleased
 
-### Added
-- A brand icon, shown on the integration's pages in Home Assistant.
-
 ### Changed
 - A storage mode another controller such as evcc sets is logged at info instead of as a warning: with evcc it is normal operation, many times a day. The select's history keeps every change; a mode Home Assistant wrote that the inverter does not take stays a warning.
 
 ### Fixed
-- Updating from callifo 0.3.3 or later replaced the `AC Module Temperature`, `DC Module Temperature` and `Battery Module Temperature` sensors with new ones under new entity ids; their history stayed behind. They now continue as `AC module 1 temperature`, `DC module temperature (3)` and `DC or battery module temperature` with their entity ids, also when the update comes while the inverter does not report the module.
-- Updating from the callifo 0.3.4-rc2 pre-release replaced several sensors and the `Inverter connection` select with new ones under new entity ids, because that version wrote their unique ids in lowercase: the AC currents, voltages and per-phase power of the inverter and the meters, the inverter's control status sensors and the storage ratings. They now continue under their entity ids; where 0.3.4-rc2 had left the earlier entity beside its own, the earlier one is kept with its history.
 - With another controller such as evcc, the storage mode could show the wrong mode: StorCtl_Mod switches only one rate on in its charge and discharge modes, and the inverter ignores the other, but the integration judged both. evcc's hold after discharging showed *Discharge to Grid*, its hold charge after charging *Charge from Grid*; the limit and grid power numbers showed the ignored register, and the `Core storage control mode` sensor could name the direction of a rate the inverter ignores. They now follow only the rates the inverter applies.
 - In those one-rate block modes, a charge or discharge limit set in Home Assistant went into the rate the inverter ignores and had no effect; setting it now also switches that rate on. A 0 W limit beside a rate that is off is no longer refused as blocking both ways.
 - A storage mode another controller left by setting only a rate to 0 kept showing (issue 141): for example evcc's hold charge after a PV charge limit set in Home Assistant still showed the PV charge limit until a restart. Such an image is shared by two modes; it now counts as the selected mode only while it holds what Home Assistant wrote, so Home Assistant's own 0 W keeps its mode and another controller's switches it. A limit set in Home Assistant in that moment, before the next update, is refused instead of overwriting the other controller's setting.
+
+## 1.4.0b2
+
+Released 2026-11-05. The first release with the 1.x code, which replaces 0.3.x. `Load` keeps its sign, and updates from redpomodoro 0.1.9 and from 0.3.3 and later keep their entities. Coming from 0.3.x, read the breaking changes under 1.0.0b1 below and the README's *Coming from 0.3.x* first.
+
+### Moved
+- Development continues in [callifo/fronius_modbus](https://github.com/callifo/fronius_modbus): the 1.x code from the Varitras/fronius_modbus fork replaces 0.3.x there, with the history of both. The domain stays the same, so entries, entities and history are kept.
+
+### Added
+- A brand icon, shown on the integration's pages in Home Assistant.
+- `tools/inverter_dump.bat` reads every Modbus unit with `-AllUnits`, to find a meter outside the usual numbering.
+
+### Changed
+- **`Load` can be negative.** With other generation behind the grid meter that the inverter does not see, such as a balcony inverter or an AC-coupled battery, it is the household's consumption minus that generation, and negative while that generation exports; it used to stop at 0 W. Automations, templates and energy calculations that expect 0 W or more need a look.
+- `Load` no longer repeats the previous reading when the inverter reports about 0 W while the house exports, and is no longer unknown when a negative sum comes with battery charging: with other generation behind the meter, both are real readings.
+
+### Fixed
+- Updating from redpomodoro 0.1.9 kept only the MPPT sensors: the other entities stayed behind unavailable beside new ones, some with a `_2` suffix, each device showed up twice, and the first start with a web login deleted the old entities. They now continue under their entity ids with their history, and the devices keep their area, name and automations. `Storage power` has no successor. The temperature follows once the web login is in place. Going through 0.3.x first still loses most of them; that step cannot be undone.
+- A load step between the inverter read and the meter read showed in `Load` as a spike, because the other inverter models were read in between. The meter is now read right after the inverter, and `Load` is unknown for an update in which the two reads lie more than half a second apart.
+- Updating from callifo 0.3.3 or later replaced the `AC Module Temperature`, `DC Module Temperature` and `Battery Module Temperature` sensors with new ones under new entity ids; their history stayed behind. They now continue as `AC module 1 temperature`, `DC module temperature (3)` and `DC or battery module temperature` with their entity ids, also when the update comes while the inverter does not report the module.
+- Updating from the callifo 0.3.4-rc2 pre-release replaced several sensors and the `Inverter connection` select with new ones under new entity ids, because that version wrote their unique ids in lowercase: the AC currents, voltages and per-phase power of the inverter and the meters, the inverter's control status sensors and the storage ratings. They now continue under their entity ids; where 0.3.4-rc2 had left the earlier entity beside its own, the earlier one is kept with its history.
 
 ## 1.4.0b1
 
@@ -26,8 +42,8 @@ Released 2026-10-31. A beta on 1.3.0: an optional fast read of the grid meter's 
 - An invalid reported meter address could stop entry setup. Only Modbus units 1-247 are now kept; leaving out a unit makes the meter list unconfirmed, so no entity is removed because of it.
 - A smart meter the inverter's web interface listed without a usable address was left out as if it were gone, so a reload could remove the entities of a meter that still exists. Such an answer now leaves the meter list unconfirmed.
 - An MPPT model whose module count disagrees with its length, or reports none, read the following model as a module or dropped all modules, which could move the battery's charge and discharge paths. The module layout now follows the model length; a disagreeing count marks the MPPT read as failed until it fits again.
-- On inverter firmware 1.42, `Export soft limit` read unknown and setting it failed with *400 Bad Request* (upstream #154): that firmware keeps the limit's watts in another place of its export limit settings. Both are now read and written where the firmware keeps them; older firmware is unchanged.
-- A setting the inverter's web interface rejected with an error status, such as `Export soft limit` answered with *400 Bad Request* (upstream #154), failed with the status alone. The error now names the fields the inverter reports as refused.
+- On inverter firmware 1.42, `Export soft limit` read unknown and setting it failed with *400 Bad Request* (issue 154): that firmware keeps the limit's watts in another place of its export limit settings. Both are now read and written where the firmware keeps them; older firmware is unchanged.
+- A setting the inverter's web interface rejected with an error status, such as `Export soft limit` answered with *400 Bad Request* (issue 154), failed with the status alone. The error now names the fields the inverter reports as refused.
 
 ## 1.3.0
 
@@ -42,7 +58,7 @@ Released 2026-10-22. First stable release of 1.3. It contains everything from 1.
 
 ## 1.3.0b1
 
-A beta on 1.2.0 with the fixes of a full audit and its re-audits. Storage writes now judge the inverter's live registers and refuse, with a reason, what the firmware would refuse; updates from callifo keep entities, names, titles and the chosen role; enabling Modbus TCP keeps an RS485 client served; the README lists every entity. No new entry migration; unique ids and entity ids do not change.
+A beta on 1.2.0 with a broad round of fixes. Storage writes now judge the inverter's live registers and refuse, with a reason, what the firmware would refuse; updates from callifo keep entities, names, titles and the chosen role; enabling Modbus TCP keeps an RS485 client served; the README lists every entity. No new entry migration; unique ids and entity ids do not change.
 
 ### Added
 - A device the inverter no longer reports, such as a removed meter or battery, can be deleted on its device page. The integration still deletes none on its own: one short answer must not take a device with its history.
@@ -52,11 +68,11 @@ A beta on 1.2.0 with the fixes of a full audit and its re-audits. Storage writes
 
 ### Fixed
 - Enabling Modbus TCP on an inverter whose Modbus server served RTU alone switched it to TCP alone and cut off the device reading it over RS485. It now becomes `TCP & RTU`.
-- A second storage mode change before the next poll could pass through a rate window the inverter refuses (both rates at or below zero), for example Charge from Grid followed quickly by Block Charging; the inverter stayed in the old mode. The rates are now ordered by the target, not by the last poll (upstream #126).
+- A second storage mode change before the next poll could pass through a rate window the inverter refuses (both rates at or below zero), for example Charge from Grid followed quickly by Block Charging; the inverter stayed in the old mode. The rates are now ordered by the target, not by the last poll (issue 126).
 - A burst of values for one web number (such as `Backup reserve` stepped from 10 to 50, or an automation setting several values) reached the inverter as every single value, each stalling its Modbus side, instead of the first and the last as 1.2.0 promised: Home Assistant ran the numbers one at a time and the burst never piled up.
 - A new password entered in Configure with every other setting unchanged was stored, but the running entry kept the old token: nothing reloaded it, and the next refused poll could delete the new token and ask again. A host fixed in Configure on an entry that had not loaded did not take effect either. Configure now reloads the entry whenever no update listener does.
 - Updating from callifo 0.3.0 or older migrated only one of two entities that shared a unique id there (the sensor and the control of `Conn`, `ac_limit_enable`, `ac_limit_rate`, `soc_minimum`, `export_soft_limit`). The other was deleted and came back under a new entity id, so automations using it stopped working. Both now keep their entity ids.
-- On an inverter whose SunSpec map ends in a refused read (upstream #105), a link that stopped answering was never recognised as down: every poll waited out a timeout per sub-system, the stale connection was never replaced, the bridge after a web write did not hold, and the outage was logged as an error instead of once at info.
+- On an inverter whose SunSpec map ends in a refused read (redpomodoro issue 105), a link that stopped answering was never recognised as down: every poll waited out a timeout per sub-system, the stale connection was never replaced, the bridge after a web write did not hold, and the outage was logged as an error instead of once at info.
 - The export soft limit stopped at 15 kW and `Target feed in` at ±20 kW, whatever the inverter: a Verto or a Tauro could not set a realistic export limit. Both now span the inverter's rated power (`WMax`), as `AC limit rate` already did.
 - A restart while an MPPT string was dark (at night it reports no current, voltage or power) deleted that string's sensors, with the names and entity ids the owner had given them, until a later reload created them anew. A sensor once registered now stays and reads unknown.
 - `tools/inverter_dump.bat` learned harmless words from a field description (`_psk_meta`: "String", "Password") and from a sensitive object's settings (an address mode "manual"), then cut them out of every answer, keys included: channel names broke apart and option lists lost entries. It now learns only the values right under a sensitive key; everything beneath one is still replaced.
@@ -83,7 +99,7 @@ A beta on 1.2.0 with the fixes of a full audit and its re-audits. Storage writes
 First stable release of 1.2. It contains everything from the six 1.2.0 pre-releases below, and the changes here on 1.2.0b6. Entries from 1.1.x migrate on their own to minor version 14; unique ids and entity ids do not change. Automations that wait for the throttle states `export_limit` or `active_power_control` need the new states: neither is reported any more (see 1.2.0b5).
 
 ### Changed
-- `Active event`, `Active events` and `Inverter event` show the events the web interface shows a customer login, whatever login the entry uses: an event of the technician or service level could stay active for weeks there without the owner finding it anywhere (#39).
+- `Active event`, `Active events` and `Inverter event` show the events the web interface shows a customer login, whatever login the entry uses: an event of the technician or service level could stay active for weeks there without the owner finding it anywhere.
 - The Modbus sensor `Events` is `Event severity` ("Ereignisstufe"), so it no longer reads like the active events next to it. Its entity id does not change.
 
 ### Added
@@ -114,7 +130,7 @@ A beta on 1.2.0b4 that makes the throttle reason report a limit that actually ho
 
 ### Throttle reason
 
-The sensor used the Modbus signals, which only say a limit is switched on: an AC limit left at 100 % read as throttling, and an export limit holding the output read as "not throttled" (#26). It now follows the inverter's component endpoint, which reports whether a limit holds the output, and it follows the web poll too.
+The sensor used the Modbus signals, which only say a limit is switched on: an AC limit left at 100 % read as throttling, and an export limit holding the output read as "not throttled". It now follows the inverter's component endpoint, which reports whether a limit holds the output, and it follows the web poll too.
 
 | Raw state | 1.2.0b4 (EN) | 1.2.0b4 (DE) | 1.2.0b5 (EN) | 1.2.0b5 (DE) | Reported when … |
 |---|---|---|---|---|---|
@@ -155,7 +171,7 @@ Only the displayed names change; entity ids, history and automations stay. A nam
 - The price automation example in the README compares the price on every change, at start, and after a reload of the automations or the integration.
 
 ### Fixed
-- The sensors from the inverter's component endpoints show as many digits as their unit is worth (fans and power without decimals, temperatures and voltages with one, frequency with two) instead of the raw float32 value (#27). Only the display changes; the stored state keeps its value.
+- The sensors from the inverter's component endpoints show as many digits as their unit is worth (fans and power without decimals, temperatures and voltages with one, frequency with two) instead of the raw float32 value. Only the display changes; the stored state keeps its value.
 
 ## 1.2.0b4
 
@@ -195,7 +211,7 @@ If discovery or the new login behaves unexpectedly on your setup, please open an
 
 ## 1.2.0b2
 
-An audit round on 1.2.0b1, a write policy, and new sensors. The integration writes only what
+Fixes on 1.2.0b1, a write policy, and new sensors. The integration writes only what
 differs from what the inverter holds and keeps the inverter settings it does not own, and it
 shows what the inverter's component endpoints add beyond Modbus. A pre-release because the
 Modbus restriction checkbox becomes a choice and entries migrate to a new minor version;
@@ -270,7 +286,7 @@ write bursts are coalesced instead of hidden behind sliders.
 
 ## 1.1.1
 
-An audit round on 1.1.0: log hygiene on the web side, two sentinel and retry edge cases, and
+Fixes on 1.1.0: log hygiene on the web side, two sentinel and retry edge cases, and
 reproducible CI pins. No entity changes.
 
 ### Fixed
@@ -305,7 +321,7 @@ below; upgrading from 0.3.x follows the migration notes under 1.0.0b1.
 
 ## 1.0.0b3
 
-Four independent audit rounds worked off, plus the single-role Web API login. Entries migrate on
+A broad round of fixes, plus the single-role Web API login. Entries migrate on
 their own; an entry that had a technician token keeps technician access.
 
 ### Changed
@@ -328,14 +344,14 @@ their own; an entry that had a technician token keeps technician access.
 
 ## 1.0.0b2
 
-Fixes from an independent audit of 1.0.0b1 plus two upstream issues; no entity, unique id or option changes.
+Fixes on 1.0.0b1 plus two upstream issues; no entity, unique id or option changes.
 
 ### Fixed
 - The idle inverter-control state read `Normal` while its option list said `normal`, so Home Assistant refused the sensor (regression in 1.0.0b1).
 - A failed AC-limit or power-factor value write left a previously active limit switched off; the enable flag is now restored and a failure to restore it is reported.
 - A rate change queued behind a storage mode switch was validated against the old mode and could undo a fresh charging block; mode checks now happen under the write lock.
-- The storage mode select followed what was written, not what the inverter did: the extended mode is now re-derived from the registers on every poll, a silently refused mode write is given up after three polls, and forced discharge is recognised after a restart (upstream #127).
-- A storage mode change writes the rate that rises first, so Charge from Grid → Block Charging no longer trips the firmware's exception 3 (upstream #126).
+- The storage mode select followed what was written, not what the inverter did: the extended mode is now re-derived from the registers on every poll, a silently refused mode write is given up after three polls, and forced discharge is recognised after a restart (issue 127).
+- A storage mode change writes the rate that rises first, so Charge from Grid → Block Charging no longer trips the firmware's exception 3 (issue 126).
 - A meter that did not answer during discovery was treated as absent for the life of the entry; it is now probed again on every poll, and a sub-system that answers for the first time later (meter, MPPT) reloads the entry so its entities appear.
 - Cumulative energy sensors: a sustained gap above 100 kWh (Home Assistant offline) is now accepted after three consecutive polls instead of freezing the sensor forever, and reading the sensor no longer counts as a poll.
 - A first poll without the nameplate model fixed the storage rate maxima on 11 000 W; they now follow every later nameplate read.
@@ -359,7 +375,7 @@ First beta of the rewrite; the 1.0.0 release follows once the beta has run on mo
 
 ### Changed
 - Entity translation keys derived from the 0.3 data keys (`A`, `AphA`, `Conn`, `WHRtg`, ...) are renamed to lowercase names so hassfest validates the translations; unique ids and existing entity ids are unaffected.
-- A storage mode change writes the rate that rises first, so a transition such as Charge from Grid to Block Charging no longer leaves both rates at zero for an instant (refused by the firmware with exception 3, upstream #126).
+- A storage mode change writes the rate that rises first, so a transition such as Charge from Grid to Block Charging no longer leaves both rates at zero for an instant (refused by the firmware with exception 3, issue 126).
 
 - The register map is discovered at runtime via SunSpec model walking through the `modbus-connection` library (models 1, 101/103, 120, 121, 122, 123, 124, 160, 201-204) instead of a fixed, hand-written register list. Storage entities are present if and only if model 124 is in the chain; meter phase count is derived from the meter model id.
 - The Web API is polled on its own interval instead of once per Modbus poll, so a slow or unreachable Web API no longer stalls the Modbus poll or blocks the Modbus entities.

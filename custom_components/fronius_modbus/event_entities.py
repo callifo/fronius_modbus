@@ -10,7 +10,7 @@ from .coordinator import FroniusRuntimeData
 from .inverter_events import CUSTOMER_LEVEL, InverterEvent, leading_event
 
 # Whom an event entity serves: the customer sees what the web interface shows
-# a customer login, whatever the entry's own login (#39); the service
+# a customer login, whatever the entry's own login; the service
 # entities, off by default, get the rest.
 type EventAudience = Literal["customer", "service"]
 CUSTOMER: EventAudience = "customer"

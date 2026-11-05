@@ -56,11 +56,11 @@
     "tests": "raw_diagnostics_drop_the_serial_number"
   },
   {
-    "label": "derived: a negative load while the battery charges hard is unavailable",
+    "label": "derived: a negative load at the feed-in point keeps its sign",
     "path": "custom_components/fronius_modbus/derived.py",
-    "old": "        if candidate < 0 and charge_may_explain_it:",
-    "new": "        if False:",
-    "tests": "strong_charging_makes_a_negative_load_unavailable"
+    "old": "    return round(meter_power_w + inverter_power_w, 2)\n",
+    "new": "    return round(max(meter_power_w + inverter_power_w, 0.0), 2)\n",
+    "tests": "negative_load or keeps_its_sign"
   },
   {
     "label": "coordinator: three timeouts recycle the link",
@@ -268,7 +268,7 @@
   {
     "label": "controls: the disable write is inside the restore guard",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/controls.py",
-    "old": "            try:\n                # Inside the guard from here: the device may have applied the\n                # disable before this call is cancelled (audit A01/B01).\n                await self._controls.write(enable_field, DISABLED)\n",
+    "old": "            try:\n                # Inside the guard from here: the device may have applied the\n                # disable before this call is cancelled.\n                await self._controls.write(enable_field, DISABLED)\n",
     "new": "            await self._controls.write(enable_field, DISABLED)\n            try:\n",
     "tests": "cancelled_disable_write_leaves_the_control_enabled"
   },
@@ -387,8 +387,8 @@
   {
     "label": "device: a recovered meter's first read goes through the report",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
-    "old": "                self._polled = (*self._polled, name)\n                await self._async_update_component(name, report)",
-    "new": "                self._polled = (*self._polled, name)\n                await self._component(name).async_update()\n                report.updated.append(name)",
+    "old": "            if unit_id in self.meters:\n                await self._async_update_component(name, report)",
+    "new": "            if unit_id in self.meters:\n                await self._component(name).async_update()\n                report.updated.append(name)",
     "tests": "a_recovered_meters_first_bad_read_stays_in_its_report"
   },
   {
@@ -947,7 +947,7 @@
   {
     "label": "setup: the runtime learns the registered keys",
     "path": "custom_components/fronius_modbus/__init__.py",
-    "old": "        registered_keys=migrations.registered_keys(hass, entry),\n",
+    "old": "        registered_keys=migrations.registered_keys(hass, entry, primary),\n",
     "new": "",
     "tests": "single_404_keeps_the_registered_component_sensors"
   },
@@ -1010,8 +1010,8 @@
   {
     "label": "config flow: the password step rechecks the host",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "                # was open (audit RR770-01).\n                await claim_host(state.settings)\n",
-    "new": "                # was open (audit RR770-01).\n",
+    "old": "                # was open.\n                await claim_host(state.settings)\n",
+    "new": "                # was open.\n",
     "tests": "during_the_password_step"
   },
   {
@@ -1297,8 +1297,8 @@
   {
     "label": "reauth: a reauth whose entry is gone aborts",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "            # then taken back (audit R6D-03).\n            raise data_entry_flow.AbortFlow(\"entry_not_found\")\n        # The form asked",
-    "new": "            # then taken back (audit R6D-03).\n            return self.async_abort(reason=\"reauth_successful\")\n        # The form asked",
+    "old": "            # then taken back.\n            raise data_entry_flow.AbortFlow(\"entry_not_found\")\n        # The form asked",
+    "new": "            # then taken back.\n            return self.async_abort(reason=\"reauth_successful\")\n        # The form asked",
     "tests": "entry_deleted_during_the_reauth_keeps_no_token"
   },
   {
@@ -1533,11 +1533,11 @@
     "tests": "a_modbus_outage_without_a_reached_limit_is_no_answer"
   },
   {
-    "label": "derived: an unknown charge is no 0 W",
+    "label": "derived: a pair read further apart than the window is no load",
     "path": "custom_components/fronius_modbus/derived.py",
-    "old": "            storage_charge_power_w is None\n            or storage_charge_power_w >= LOAD_STORAGE_CHARGE_MIN_W\n",
-    "new": "            storage_charge_power_w is not None\n            and storage_charge_power_w >= LOAD_STORAGE_CHARGE_MIN_W\n",
-    "tests": "negative_load_with_an_unknown_charge_is_no_reading"
+    "old": "    if sample_window_s > LOAD_SAMPLE_WINDOW_S:\n",
+    "new": "    if sample_window_s >= LOAD_SAMPLE_WINDOW_S:\n",
+    "tests": "window_apart_is_one_moment or too_far_apart"
   },
   {
     "label": "token store: concurrent first loads share one dictionary",
@@ -1857,8 +1857,8 @@
   {
     "label": "migrations: a legacy twin is migrated per platform",
     "path": "custom_components/fronius_modbus/migrations.py",
-    "old": "            or (entity_entry.domain, new_unique_id) in taken\n",
-    "new": "            or any(taken_id == new_unique_id for _, taken_id in taken)\n",
+    "old": "    if new_unique_id not in expected or target in taken:\n",
+    "new": "    if new_unique_id not in expected or any(taken_id == new_unique_id for _, taken_id in taken):\n",
     "tests": "both_twins_of_a_legacy_unique_id"
   },
   {
@@ -2020,13 +2020,13 @@
     "path": "custom_components/fronius_modbus/migrations.py",
     "old": "            device_registry.async_remove_device(device.id)\n",
     "new": "            pass\n",
-    "tests": "pre_web_api_entry_is_upgraded"
+    "tests": "legacy_device_beside_the_current_one_goes"
   },
   {
     "label": "migrations: name-based unique ids are moved",
     "path": "custom_components/fronius_modbus/migrations.py",
-    "old": "        registry.async_update_entity(\n            entity_entry.entity_id, new_unique_id=new_unique_id\n        )\n",
-    "new": "        pass\n",
+    "old": "    registry.async_update_entity(entity_entry.entity_id, new_unique_id=new_unique_id)\n    taken.add(target)\n",
+    "new": "    taken.add(target)\n",
     "tests": "twins_of_a_legacy_unique_id"
   },
   {
@@ -2546,5 +2546,54 @@
     "old": "        return mode, *_effective_rates(mode, in_rate, out_rate)\n\n    @property\n    def _rates",
     "new": "        return mode, in_rate, out_rate\n\n    @property\n    def _rates",
     "tests": "every_evcc_mode_reads_as_its_mode_whatever_came_before or core_mode_ignores_a_rate_storctl_mod_keeps_off"
+  },
+  {
+    "label": "device: the meters are read right after the inverter",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "            REPORT_INVERTER,\n            *(meter_report_name(unit_id) for unit_id in self.meters),\n            *self._polled_models,\n",
+    "new": "            REPORT_INVERTER,\n            *self._polled_models,\n            *(meter_report_name(unit_id) for unit_id in self.meters),\n",
+    "tests": "right_after_the_inverter or too_far_apart"
+  },
+  {
+    "label": "derived: a pair too far apart says so in the debug log",
+    "path": "custom_components/fronius_modbus/derived.py",
+    "old": "        _LOGGER.debug(\n            \"No load: the inverter and meter reads lay %.0f ms apart\",\n            sample_window_s * 1000,\n        )\n",
+    "new": "",
+    "tests": "too_far_apart_says_so_in_the_debug_log"
+  },
+  {
+    "label": "migrations: 0.1.9's meter keys continue on the primary meter",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "        return f\"meter_{primary_meter_unit_id}_{meter_key}\"\n",
+    "new": "        return key\n",
+    "tests": "0_1_9_entry_keeps_its_entity_ids"
+  },
+  {
+    "label": "migrations: 0.1.9's renamed keys are followed",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "    return _V019_RENAMED_KEYS.get(key, key)\n",
+    "new": "    return key\n",
+    "tests": "0_1_9_entry_keeps_its_entity_ids"
+  },
+  {
+    "label": "migrations: a 0.1.9 id counts as registered",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "        else:\n            keys.add(_v019_key(unique_id, primary_meter_unit_id))\n",
+    "new": "",
+    "tests": "0_1_9_id_counts_as_registered"
+  },
+  {
+    "label": "migrations: 0.1.9's devices keep their entries",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "                device_registry.async_update_device(device.id, new_identifiers={target})\n",
+    "new": "                pass\n",
+    "tests": "0_1_9_entry_keeps_its_devices"
+  },
+  {
+    "label": "setup: 0.1.9's ids move before the cleanup",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "    migrations.async_migrate_v019_unique_ids(hass, entry)\n",
+    "new": "",
+    "tests": "0_1_9_entry_keeps_its_entities_through_the_first_login"
   }
 ]

@@ -1841,6 +1841,13 @@
     "tests": "passes_no_refused_window or raises_the_discharge_rate_first"
   },
   {
+    "label": "storage: StorCtl_Mod is written after the rates",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            writes = [*rate_writes, (\"stor_ctl_mod\", sunspec_mode)]\n",
+    "new": "            writes = [(\"stor_ctl_mod\", sunspec_mode), *rate_writes]\n",
+    "tests": "over_an_evcc_image_passes_no_refused_window"
+  },
+  {
     "label": "platforms: numbers leave a burst to the write locks",
     "path": "custom_components/fronius_modbus/number.py",
     "old": "PARALLEL_UPDATES = 0",

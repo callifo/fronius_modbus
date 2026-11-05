@@ -98,12 +98,13 @@ async def test_the_extended_mode_is_derived_from_the_registers(
     assert control.extended_mode is expected
 
 
-async def test_charge_from_grid_writes_mode_then_rates(control, writes, inverter_unit):
+async def test_charge_from_grid_writes_rates_then_mode(control, writes, inverter_unit):
     inverter_unit.holding[IN_W_RTE] = 5000
     await control.set_mode(ExtendedMode.CHARGE_FROM_GRID)
     assert _words(writes, STOR_CTL_MOD) == [2]
     assert _words(writes, IN_W_RTE) == [10000]
     assert _words(writes, OUT_W_RTE) == [0]
+    assert writes[-1].address == STOR_CTL_MOD
     assert control.extended_mode is ExtendedMode.CHARGE_FROM_GRID
 
 

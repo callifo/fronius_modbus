@@ -316,18 +316,20 @@ class StorageControl:
             # The device refuses a read for a moment right after a write (real
             # GEN24, fw 1.38.6-1: exception 4 on the block read that follows).
             # The coordinator's next poll picks the new values up instead.
-            # The higher rate goes first: every mode has one at full, which
-            # keeps the window valid whatever the other still holds. With both
-            # at or below zero for an instant the firmware refuses the second
-            # write (exception 3, issue 126). Ordered by the target alone:
-            # the last poll may not hold what the previous write left.
+            # The firmware refuses an invalid window on StorCtl_Mod 3 (exception
+            # 3, issue 126), so that mode comes last: a rate it keeps off may
+            # hold anything, and evcc leaves (1, 0, -50) or (2, -100, 0) there.
+            # The higher rate goes first for a device already on 3: every mode
+            # has one at full, which keeps the window valid whatever the other
+            # still holds. Ordered by the target alone: the last poll may not
+            # hold what the previous write left.
             rate_writes = sorted(
                 [("in_w_rte", in_rate), ("out_w_rte", out_rate)],
                 key=lambda write: -write[1],
             )
             kept = await self._grid_power_kept(mode)
             rate_writes = [write for write in rate_writes if write[0] != kept[0]]
-            writes = [("stor_ctl_mod", sunspec_mode), *rate_writes]
+            writes = [*rate_writes, ("stor_ctl_mod", sunspec_mode)]
             holding = await registers_holding(self._storage, dict(writes))
             # Encoded before the first write: the device refuses a read right after one.
             written = {

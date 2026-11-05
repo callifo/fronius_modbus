@@ -1176,6 +1176,9 @@ async def test_a_mode_over_an_evcc_image_passes_no_refused_window(
 
     assert refused == []
     assert inverter_unit.holding[STOR_CTL_MOD] == storage_module._MODE_TABLE[mode][0]
+    for _ in range(MODE_WRITE_GRACE_POLLS):
+        await _poll(control)
+    assert control.extended_mode is mode
 
 
 LIMIT_SETTERS = [
@@ -1344,7 +1347,7 @@ async def test_a_rate_home_assistant_set_to_zero_keeps_the_mode(
 async def test_a_mode_change_half_written_is_not_taken_for_another_controller(
     control, inverter_unit
 ):
-    """A poll between StorCtl_Mod and the rate of a mode change sees the image of the old mode."""
+    """A poll that reads a mode change half written sees the rate of the old mode."""
     await control.set_mode(ExtendedMode.BLOCK_CHARGING)
     await _poll(control)
     await control.set_mode(ExtendedMode.PV_CHARGE_LIMIT)

@@ -511,6 +511,86 @@
       "mppt_module_lifetime_energy": {
         "name": "MPPT-Modul {module} Energie gesamt"
       },
+      "energy_output_1": {
+        "name": "Energiemanagement-Ausgang 1",
+        "state": {
+          "on": "Ein",
+          "off": "Aus"
+        }
+      },
+      "energy_output_1_reason": {
+        "name": "Energiemanagement-Ausgang 1 Grund",
+        "state": {
+          "not_configured": "Nicht eingerichtet",
+          "power_invalid": "Leistungswert ungültig",
+          "maximum_runtime_exceeded": "Tägliche Höchstlaufzeit überschritten",
+          "minimum_runtime_running": "Mindestlaufzeit läuft noch",
+          "power_below_threshold": "Leistung unter dem Schwellwert",
+          "power_above_threshold": "Leistung über dem Schwellwert",
+          "target_runtime_not_reached": "Ziellaufzeit nicht erreicht",
+          "unknown": "Unbekannt"
+        }
+      },
+      "energy_output_2": {
+        "name": "Energiemanagement-Ausgang 2",
+        "state": {
+          "on": "Ein",
+          "off": "Aus"
+        }
+      },
+      "energy_output_2_reason": {
+        "name": "Energiemanagement-Ausgang 2 Grund",
+        "state": {
+          "not_configured": "Nicht eingerichtet",
+          "power_invalid": "Leistungswert ungültig",
+          "maximum_runtime_exceeded": "Tägliche Höchstlaufzeit überschritten",
+          "minimum_runtime_running": "Mindestlaufzeit läuft noch",
+          "power_below_threshold": "Leistung unter dem Schwellwert",
+          "power_above_threshold": "Leistung über dem Schwellwert",
+          "target_runtime_not_reached": "Ziellaufzeit nicht erreicht",
+          "unknown": "Unbekannt"
+        }
+      },
+      "energy_output_3": {
+        "name": "Energiemanagement-Ausgang 3",
+        "state": {
+          "on": "Ein",
+          "off": "Aus"
+        }
+      },
+      "energy_output_3_reason": {
+        "name": "Energiemanagement-Ausgang 3 Grund",
+        "state": {
+          "not_configured": "Nicht eingerichtet",
+          "power_invalid": "Leistungswert ungültig",
+          "maximum_runtime_exceeded": "Tägliche Höchstlaufzeit überschritten",
+          "minimum_runtime_running": "Mindestlaufzeit läuft noch",
+          "power_below_threshold": "Leistung unter dem Schwellwert",
+          "power_above_threshold": "Leistung über dem Schwellwert",
+          "target_runtime_not_reached": "Ziellaufzeit nicht erreicht",
+          "unknown": "Unbekannt"
+        }
+      },
+      "energy_output_4": {
+        "name": "Energiemanagement-Ausgang 4",
+        "state": {
+          "on": "Ein",
+          "off": "Aus"
+        }
+      },
+      "energy_output_4_reason": {
+        "name": "Energiemanagement-Ausgang 4 Grund",
+        "state": {
+          "not_configured": "Nicht eingerichtet",
+          "power_invalid": "Leistungswert ungültig",
+          "maximum_runtime_exceeded": "Tägliche Höchstlaufzeit überschritten",
+          "minimum_runtime_running": "Mindestlaufzeit läuft noch",
+          "power_below_threshold": "Leistung unter dem Schwellwert",
+          "power_above_threshold": "Leistung über dem Schwellwert",
+          "target_runtime_not_reached": "Ziellaufzeit nicht erreicht",
+          "unknown": "Unbekannt"
+        }
+      },
       "throttle_reason": {
         "name": "Drosselungsgrund",
         "state": {

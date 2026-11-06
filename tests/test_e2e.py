@@ -34,6 +34,7 @@ from custom_components.fronius_modbus.diagnostics import (
     async_get_config_entry_diagnostics,
 )
 from custom_components.fronius_modbus.froniuswebclient import (
+    ENDPOINT_MISSING,
     FroniusWebAuthError,
     FroniusWebClient,
 )
@@ -1539,6 +1540,96 @@ def _log_entry(uuid, prefix, event_id, label, severity, viewer, start, end=None)
         "uuid": uuid,
         "viewer": viewer,
     }
+
+
+class _WebClientWithEnergyOutputs(_FakeWebClientWithTopology):
+    """The relay states of an inverter with its first output switched on."""
+
+    answer: object = {
+        "pin1": {"reason": "PSTR_EMRS_REASON_5", "state": True},
+        "pin2": {"reason": "PSTR_EMRS_REASON_0", "state": False},
+    }
+
+    def get_optional_json(self, path):
+        return self.answer if path == "/api/status/emrs" else None
+
+
+async def _entry_with_energy_outputs(hass, mock_modbus, monkeypatch):
+    mock_modbus.add_unit(201, like=METER_UNIT_ID)
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientWithEnergyOutputs)
+    entry = make_entry(hass)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+    await setup_entry(hass, entry)
+    return entry
+
+
+def _energy_output_entry(hass, entry, key):
+    unique_id = f"{entity_prefix(entry.entry_id)}_{key}"
+    registry = er.async_get(hass)
+    entity_id = registry.async_get_entity_id("sensor", DOMAIN, unique_id)
+    return None if entity_id is None else registry.async_get(entity_id)
+
+
+@pytest.mark.parametrize("key", ["energy_output_1", "energy_output_1_reason"])
+async def test_an_energy_output_sensor_is_off_by_default(
+    hass, mock_modbus, monkeypatch, key
+):
+    """An output nobody configured would only ever say off."""
+    entry = await _entry_with_energy_outputs(hass, mock_modbus, monkeypatch)
+    disabled_by = _energy_output_entry(hass, entry, key).disabled_by
+    assert disabled_by is er.RegistryEntryDisabler.INTEGRATION
+
+
+@pytest.mark.parametrize(
+    ("key", "expected"),
+    [
+        ("energy_output_1", "on"),
+        ("energy_output_1_reason", "power_above_threshold"),
+        ("energy_output_2", "off"),
+        ("energy_output_2_reason", "not_configured"),
+    ],
+)
+async def test_an_enabled_energy_output_sensor_shows_what_the_inverter_reports(
+    hass, mock_modbus, monkeypatch, key, expected
+):
+    entry = await _entry_with_energy_outputs(hass, mock_modbus, monkeypatch)
+    registry = er.async_get(hass)
+    registry.async_update_entity(
+        _energy_output_entry(hass, entry, key).entity_id, disabled_by=None
+    )
+    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert state_of(hass, entry, key) == expected
+
+
+async def test_firmware_without_the_endpoint_gets_no_energy_output_sensors(
+    hass, mock_modbus, monkeypatch
+):
+    monkeypatch.setattr(_WebClientWithEnergyOutputs, "answer", ENDPOINT_MISSING)
+    entry = await _entry_with_energy_outputs(hass, mock_modbus, monkeypatch)
+    assert _energy_output_entry(hass, entry, "energy_output_1") is None
+
+
+async def test_a_single_404_keeps_the_registered_energy_output_sensors(
+    hass, mock_modbus, monkeypatch
+):
+    """One 404 at a restart must not retire what firmware reported before."""
+    entry = await _entry_with_energy_outputs(hass, mock_modbus, monkeypatch)
+
+    monkeypatch.setattr(_WebClientWithEnergyOutputs, "answer", ENDPOINT_MISSING)
+    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert _energy_output_entry(hass, entry, "energy_output_1") is not None
+
+
+async def test_a_failed_read_at_startup_keeps_the_energy_output_sensors(
+    hass, mock_modbus, monkeypatch
+):
+    monkeypatch.setattr(_WebClientWithEnergyOutputs, "answer", None)
+    entry = await _entry_with_energy_outputs(hass, mock_modbus, monkeypatch)
+    assert _energy_output_entry(hass, entry, "energy_output_1") is not None
 
 
 class _WebClientWithEvents(_FakeWebClientWithTopology):

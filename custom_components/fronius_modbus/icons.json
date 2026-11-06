@@ -140,6 +140,30 @@
       "storage_temperature": {
         "default": "mdi:thermometer"
       },
+      "energy_output_1": {
+        "default": "mdi:electric-switch"
+      },
+      "energy_output_1_reason": {
+        "default": "mdi:information-outline"
+      },
+      "energy_output_2": {
+        "default": "mdi:electric-switch"
+      },
+      "energy_output_2_reason": {
+        "default": "mdi:information-outline"
+      },
+      "energy_output_3": {
+        "default": "mdi:electric-switch"
+      },
+      "energy_output_3_reason": {
+        "default": "mdi:information-outline"
+      },
+      "energy_output_4": {
+        "default": "mdi:electric-switch"
+      },
+      "energy_output_4_reason": {
+        "default": "mdi:information-outline"
+      },
       "throttle_reason": {
         "default": "mdi:speedometer-slow"
       },

@@ -305,6 +305,8 @@ files = [
   "custom_components/fronius_modbus/descriptions.py",
   "custom_components/fronius_modbus/entities.py",
   "custom_components/fronius_modbus/entity_base.py",
+  "custom_components/fronius_modbus/energy_output_entities.py",
+  "custom_components/fronius_modbus/energy_outputs.py",
   "custom_components/fronius_modbus/event_entities.py",
   "custom_components/fronius_modbus/mppt_entities.py",
   "custom_components/fronius_modbus/meter_topology.py",

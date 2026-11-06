@@ -12,6 +12,10 @@ from custom_components.fronius_modbus.const import (
     DOMAIN,
     SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX,
 )
+from custom_components.fronius_modbus.energy_outputs import (
+    ENERGY_OUTPUTS_PATH,
+    EnergyOutput,
+)
 from custom_components.fronius_modbus.fronius_modbus_api.exceptions import (
     ControlRefused,
     ControlUnavailable,
@@ -1197,6 +1201,7 @@ class RecordingPublicClient(FakeWebClient):
     # The event list, its log and their texts answered a GEN24 without a login.
     PUBLIC_PATHS = (
         "/api/status/activeEvents",
+        "/api/status/emrs",
         "/api/status/events",
         "/app/assets/i18n/",
     )
@@ -1252,6 +1257,25 @@ async def test_a_refused_public_read_deletes_nothing(hass):
     assert data.inverter_readings is None
     assert await async_get_token_store(hass).async_load_token("192.0.2.1") is not None
     assert not ir.async_get(hass).issues
+
+
+async def test_a_lost_login_keeps_the_energy_outputs(hass):
+    class LosingLoginClient(FakeWebClient):
+        def get_modbus_config(self):
+            raise FroniusWebAuthError("token rejected")
+
+        def get_optional_json(self, path):
+            if path != ENERGY_OUTPUTS_PATH:
+                return None
+            return {"pin1": {"reason": "PSTR_EMRS_REASON_5", "state": True}}
+
+    control = make_control(hass, client=LosingLoginClient())
+    try:
+        data = await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert data.energy_outputs == {1: EnergyOutput("on", "power_above_threshold")}
 
 
 async def test_a_lost_login_keeps_the_public_reads(hass):

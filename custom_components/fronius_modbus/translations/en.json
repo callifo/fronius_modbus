@@ -511,6 +511,86 @@
       "mppt_module_lifetime_energy": {
         "name": "MPPT module {module} Lifetime energy"
       },
+      "energy_output_1": {
+        "name": "Energy management output 1",
+        "state": {
+          "on": "On",
+          "off": "Off"
+        }
+      },
+      "energy_output_1_reason": {
+        "name": "Energy management output 1 reason",
+        "state": {
+          "not_configured": "Not configured",
+          "power_invalid": "Power value invalid",
+          "maximum_runtime_exceeded": "Daily maximum runtime exceeded",
+          "minimum_runtime_running": "Minimum on-time still running",
+          "power_below_threshold": "Power below the threshold",
+          "power_above_threshold": "Power above the threshold",
+          "target_runtime_not_reached": "Target runtime not reached",
+          "unknown": "Unknown"
+        }
+      },
+      "energy_output_2": {
+        "name": "Energy management output 2",
+        "state": {
+          "on": "On",
+          "off": "Off"
+        }
+      },
+      "energy_output_2_reason": {
+        "name": "Energy management output 2 reason",
+        "state": {
+          "not_configured": "Not configured",
+          "power_invalid": "Power value invalid",
+          "maximum_runtime_exceeded": "Daily maximum runtime exceeded",
+          "minimum_runtime_running": "Minimum on-time still running",
+          "power_below_threshold": "Power below the threshold",
+          "power_above_threshold": "Power above the threshold",
+          "target_runtime_not_reached": "Target runtime not reached",
+          "unknown": "Unknown"
+        }
+      },
+      "energy_output_3": {
+        "name": "Energy management output 3",
+        "state": {
+          "on": "On",
+          "off": "Off"
+        }
+      },
+      "energy_output_3_reason": {
+        "name": "Energy management output 3 reason",
+        "state": {
+          "not_configured": "Not configured",
+          "power_invalid": "Power value invalid",
+          "maximum_runtime_exceeded": "Daily maximum runtime exceeded",
+          "minimum_runtime_running": "Minimum on-time still running",
+          "power_below_threshold": "Power below the threshold",
+          "power_above_threshold": "Power above the threshold",
+          "target_runtime_not_reached": "Target runtime not reached",
+          "unknown": "Unknown"
+        }
+      },
+      "energy_output_4": {
+        "name": "Energy management output 4",
+        "state": {
+          "on": "On",
+          "off": "Off"
+        }
+      },
+      "energy_output_4_reason": {
+        "name": "Energy management output 4 reason",
+        "state": {
+          "not_configured": "Not configured",
+          "power_invalid": "Power value invalid",
+          "maximum_runtime_exceeded": "Daily maximum runtime exceeded",
+          "minimum_runtime_running": "Minimum on-time still running",
+          "power_below_threshold": "Power below the threshold",
+          "power_above_threshold": "Power above the threshold",
+          "target_runtime_not_reached": "Target runtime not reached",
+          "unknown": "Unknown"
+        }
+      },
       "throttle_reason": {
         "name": "Throttle reason",
         "state": {

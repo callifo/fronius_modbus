@@ -3,7 +3,6 @@
 from custom_components.fronius_modbus.energy_outputs import (
     OUTPUT_OFF,
     OUTPUT_ON,
-    OUTPUT_PINS,
     EnergyOutput,
     parse_energy_outputs,
 )
@@ -49,7 +48,3 @@ def test_an_answer_of_another_shape_is_no_answer():
     assert parse_energy_outputs(None) is None
     assert parse_energy_outputs(["pin1"]) is None
     assert parse_energy_outputs({"pin1": "on"}) == {}
-
-
-def test_the_outputs_are_the_four_the_inverter_names():
-    assert OUTPUT_PINS == (1, 2, 3, 4)

@@ -24,9 +24,15 @@ from .const import (
     SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX,
     TECHNICIAN_USERNAME,
 )
+from .energy_outputs import ENERGY_OUTPUTS_PATH, EnergyOutput, parse_energy_outputs
 from .export_limit import soft_limit_value
 from .fronius_modbus_api.exceptions import ControlRefused, ControlUnavailable
-from .froniuswebclient import FroniusWebAuthError, FroniusWebClient, is_enabled
+from .froniuswebclient import (
+    ENDPOINT_MISSING,
+    FroniusWebAuthError,
+    FroniusWebClient,
+    is_enabled,
+)
 from .inverter_events import (
     ACTIVE_EVENTS_PATH,
     EVENT_LOG_PATH,
@@ -143,6 +149,9 @@ class WebData:
     # The endpoint answered 404: firmware without it, so no component sensors.
     inverter_endpoint_missing: bool = False
     storage_endpoint_missing: bool = False
+    # None while the endpoint has not answered: unread, not absent.
+    energy_outputs: dict[int, EnergyOutput] | None = None
+    energy_outputs_missing: bool = False
     # None while the event list has not answered; new_events holds the log
     # entries no published poll has carried yet.
     active_events: tuple[InverterEvent, ...] | None = None
@@ -156,6 +165,8 @@ _PUBLIC_FIELDS = (
     "inverter_endpoint_missing",
     "storage_readings",
     "storage_endpoint_missing",
+    "energy_outputs",
+    "energy_outputs_missing",
     "storage_manufacturer",
     "storage_model",
     "storage_serial",
@@ -514,6 +525,9 @@ class FroniusWebControl:
         self.data.inverter_readings = inverter.get("readings")
         self.data.inverter_endpoint_missing = bool(inverter.get("missing"))
         await self._async_refresh_events()
+        energy_outputs = await self._async_public_read(ENERGY_OUTPUTS_PATH)
+        self.data.energy_outputs = parse_energy_outputs(energy_outputs)
+        self.data.energy_outputs_missing = energy_outputs is ENDPOINT_MISSING
 
         modbus_config = await self._async_client_job("get_modbus_config")
         if isinstance(modbus_config, dict):

@@ -2602,5 +2602,61 @@
     "old": "    migrations.async_migrate_v019_unique_ids(hass, entry)\n",
     "new": "",
     "tests": "0_1_9_entry_keeps_its_entities_through_the_first_login"
+  },
+  {
+    "label": "energy outputs: the sensors start off",
+    "path": "custom_components/fronius_modbus/energy_output_entities.py",
+    "old": "        entity_registry_enabled_default=False,\n",
+    "new": "        entity_registry_enabled_default=True,\n",
+    "tests": "energy_output_sensor_is_off_by_default"
+  },
+  {
+    "label": "energy outputs: a 404 keeps what is registered",
+    "path": "custom_components/fronius_modbus/energy_output_entities.py",
+    "old": "    return [d for d in _DESCRIPTIONS if d.key in runtime.registered_keys]\n",
+    "new": "    return []\n",
+    "tests": "single_404_keeps_the_registered_energy_output"
+  },
+  {
+    "label": "energy outputs: firmware without the endpoint gets none",
+    "path": "custom_components/fronius_modbus/energy_output_entities.py",
+    "old": "    if web_data is None or not web_data.energy_outputs_missing:\n",
+    "new": "    if web_data is None or web_data is not None:\n",
+    "tests": "firmware_without_the_endpoint_gets_no_energy_output"
+  },
+  {
+    "label": "energy outputs: a 404 is told from a failed read",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        self.data.energy_outputs_missing = energy_outputs is ENDPOINT_MISSING\n",
+    "new": "        self.data.energy_outputs_missing = False\n",
+    "tests": "firmware_without_the_endpoint_gets_no_energy_output"
+  },
+  {
+    "label": "energy outputs: a lost login keeps them",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "    \"energy_outputs\",\n",
+    "new": "",
+    "tests": "lost_login_keeps_the_energy_outputs"
+  },
+  {
+    "label": "energy outputs: an unknown reason is no configured one",
+    "path": "custom_components/fronius_modbus/energy_outputs.py",
+    "old": "_REASONS.get(str(answer.get(\"reason\")), UNKNOWN_STATE)",
+    "new": "_REASONS.get(str(answer.get(\"reason\")), \"not_configured\")",
+    "tests": "reason_of_a_newer_firmware"
+  },
+  {
+    "label": "energy outputs: only a boolean is a state",
+    "path": "custom_components/fronius_modbus/energy_outputs.py",
+    "old": "    if isinstance(state, bool):\n",
+    "new": "    if state is not None:\n",
+    "tests": "state_that_is_no_boolean"
+  },
+  {
+    "label": "energy outputs: an answer of another shape is none",
+    "path": "custom_components/fronius_modbus/energy_outputs.py",
+    "old": "    if not isinstance(payload, dict):\n",
+    "new": "    if payload is None:\n",
+    "tests": "answer_of_another_shape"
   }
 ]

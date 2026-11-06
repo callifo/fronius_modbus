@@ -63,6 +63,7 @@ from .descriptions import (
     Source,
     WebClientKind,
 )
+from .energy_output_entities import energy_output_sensor_descriptions
 from .event_entities import (
     CUSTOMER,
     EVENT_AUDIENCES,
@@ -1055,6 +1056,7 @@ def sensor_descriptions(runtime: FroniusRuntimeData) -> list[FroniusSensorDescri
     for index in runtime.device.mppt_channels.pv:
         descriptions += _mppt_sensor_descriptions(index, runtime)
     if runtime.web is not None:
+        descriptions += energy_output_sensor_descriptions(runtime)
         descriptions += [
             _component_sensor(reading)
             for reading in COMPONENT_READINGS

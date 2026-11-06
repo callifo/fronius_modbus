@@ -1556,9 +1556,7 @@ class _WebClientWithEnergyOutputs(_FakeWebClientWithTopology):
 
 async def _entry_with_energy_outputs(hass, mock_modbus, monkeypatch):
     mock_modbus.add_unit(201, like=METER_UNIT_ID)
-    monkeypatch.setattr(
-        fronius_modbus, "FroniusWebClient", _WebClientWithEnergyOutputs
-    )
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientWithEnergyOutputs)
     entry = make_entry(hass)
     await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
     await setup_entry(hass, entry)
@@ -1576,7 +1574,7 @@ def _energy_output_entry(hass, entry, key):
 async def test_an_energy_output_sensor_is_off_by_default(
     hass, mock_modbus, monkeypatch, key
 ):
-    """Most inverters use no output: four sensors that only ever say off."""
+    """An output nobody configured would only ever say off."""
     entry = await _entry_with_energy_outputs(hass, mock_modbus, monkeypatch)
     disabled_by = _energy_output_entry(hass, entry, key).disabled_by
     assert disabled_by is er.RegistryEntryDisabler.INTEGRATION

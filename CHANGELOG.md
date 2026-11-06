@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- Sensors for the inverter's four energy management outputs: `Energy management output 1` to `4` show whether a relay is on, and `Energy management output 1 reason` to `4 reason` why. They read the web interface without a login and are off by default.
+
 ### Changed
 - A storage mode another controller such as evcc sets is logged at info instead of as a warning: with evcc it is normal operation, many times a day. The select's history keeps every change; a mode Home Assistant wrote that the inverter does not take stays a warning.
 

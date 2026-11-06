@@ -49,7 +49,8 @@ LINE_BUDGETS = {
     # 1680 + the inverter event entities
     # 1625 - the description types, now descriptions.py; + the service event entities
     # 1560 - the MPPT module sensors, now mppt_entities.py
-    "entities.py": 1560,
+    # 1562 + the energy output sensors, whose rows are energy_output_entities.py
+    "entities.py": 1562,
     # 898 + a meter the answer names without a usable address marks the
     # answer incomplete; the parser shares _body_data,
     # _clean_text and _as_int with the other payloads, so it stays here.

@@ -4,8 +4,35 @@ from __future__ import annotations
 
 from typing import Any
 
+from .component_readings import flag_value
+from .fronius_modbus_api.exceptions import ControlRefused
+
 # Present in the activePower block from firmware 1.42 on.
 EXPORT_LIMIT_KEY = "exportLimit"
+# "Power Control" on the inverter's Export Limitation page.
+POWER_CONTROL_KEY = "activated"
+
+
+def power_control_off(active_power: Any) -> bool:
+    """Whether the inverter reports its export limitation as switched off.
+
+    Firmware 1.41 then refuses a soft limit with softLimit_disabled (issue 154),
+    and with the limitation off the soft limit has no effect anyway.
+    Firmware that does not report the switch counts as on.
+    """
+    if not isinstance(active_power, dict):
+        return False
+    return flag_value(active_power.get(POWER_CONTROL_KEY)) is False
+
+
+def require_power_control(active_power: Any) -> None:
+    """Refuse a soft limit while Power Control is reported off."""
+    if power_control_off(active_power):
+        raise ControlRefused(
+            "export_limit_power_control_off",
+            "Export limitation is off on the inverter: switch on Power Control "
+            "on its Export Limitation page first",
+        )
 
 
 def soft_limit_location(active_power: dict[str, Any]) -> tuple[dict[str, Any], str]:

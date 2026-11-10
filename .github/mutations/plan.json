@@ -2658,5 +2658,33 @@
     "old": "    if not isinstance(payload, dict):\n",
     "new": "    if payload is None:\n",
     "tests": "answer_of_another_shape"
+  },
+  {
+    "label": "export limit: Power Control counts as off only when reported off",
+    "path": "custom_components/fronius_modbus/export_limit.py",
+    "old": "    return flag_value(active_power.get(POWER_CONTROL_KEY)) is False\n",
+    "new": "    return not flag_value(active_power.get(POWER_CONTROL_KEY))\n",
+    "tests": "greyed_out_while_power_control_is_off"
+  },
+  {
+    "label": "web client: a soft limit is refused while Power Control is off",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "        require_power_control(active_power)\n",
+    "new": "",
+    "tests": "soft_limit_while_power_control_is_off_is_refused_before_any_write"
+  },
+  {
+    "label": "web control: the poll reads the Power Control switch",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        self.data.export_power_control_off = power_control_off(active_power)\n",
+    "new": "",
+    "tests": "greyed_out_while_power_control_is_off"
+  },
+  {
+    "label": "web control: the soft limit is not settable while Power Control is off",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": " and not self.data.export_power_control_off",
+    "new": "",
+    "tests": "greyed_out_while_power_control_is_off"
   }
 ]

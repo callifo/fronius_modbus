@@ -17,7 +17,7 @@ from requests.utils import parse_dict_header
 
 from .component_readings import flag_value, json_object, take_readings
 from .const import API_USERNAME, ModbusRestriction
-from .export_limit import soft_limit_location
+from .export_limit import require_power_control, soft_limit_location
 from .fronius_modbus_api.exceptions import ControlRefused
 from .web_errors import (
     ClientIpResolutionError,
@@ -899,6 +899,7 @@ class FroniusWebClient:
         """
         config = self._get_json("/api/config/limit_settings/powerLimits")
         active_power = config["exportLimits"]["activePower"]
+        require_power_control(active_power)
         soft = active_power["softLimit"]
         holder, key = soft_limit_location(active_power)
         if is_enabled(soft.get("enabled")) and _same(holder.get(key), int(power_w)):

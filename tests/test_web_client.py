@@ -1283,7 +1283,7 @@ def test_an_export_limit_in_place_on_firmware_1_42_is_not_written(client, invert
 def test_a_soft_limit_while_power_control_is_off_is_refused_before_any_write(
     client, inverter, power_limits
 ):
-    """Issue 154: the inverter answered 400 softLimit_disabled, and the owner saw no reason."""
+    """Issue 154: firmware 1.41 answered 400 softLimit_disabled while Power Control was off."""
     inverter.bodies["/api/config/limit_settings/powerLimits"] = power_limits
 
     with pytest.raises(ControlRefused) as refused:

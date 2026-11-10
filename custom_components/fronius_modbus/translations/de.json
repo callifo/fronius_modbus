@@ -986,6 +986,9 @@
     "value_out_of_range": {
       "message": "Der Wert muss zwischen {minimum} und {maximum} liegen."
     },
+    "export_limit_power_control_off": {
+      "message": "Die Einspeisebegrenzung ist am Wechselrichter ausgeschaltet. Zuerst muss dort auf der Seite Einspeisebegrenzung die Leistungsbegrenzung eingeschaltet werden."
+    },
     "soc_minimum_above_maximum": {
       "message": "Das SoC-Minimum darf das SoC-Maximum nicht überschreiten."
     },

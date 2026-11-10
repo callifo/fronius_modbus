@@ -25,7 +25,7 @@ from .const import (
     TECHNICIAN_USERNAME,
 )
 from .energy_outputs import ENERGY_OUTPUTS_PATH, EnergyOutput, parse_energy_outputs
-from .export_limit import soft_limit_value
+from .export_limit import power_control_off, soft_limit_value
 from .fronius_modbus_api.exceptions import ControlRefused, ControlUnavailable
 from .froniuswebclient import (
     ENDPOINT_MISSING,
@@ -140,6 +140,7 @@ class WebData:
     charge_from_ac: bool | None = None
     charge_from_grid: bool | None = None
     export_soft_limit_w: int | None = None
+    export_power_control_off: bool = False
     storage_manufacturer: str | None = None
     storage_model: str | None = None
     storage_serial: str | None = None
@@ -311,6 +312,11 @@ class FroniusWebControl:
     def technician_configured(self) -> bool:
         """Whether the one configured login is the technician role."""
         return self.configured and self._api_username == TECHNICIAN_USERNAME
+
+    @property
+    def export_soft_limit_settable(self) -> bool:
+        """The technician role, and export limitation not off on the inverter."""
+        return self.technician_configured and not self.data.export_power_control_off
 
     @property
     def battery_mode_is_manual(self) -> bool:
@@ -560,6 +566,7 @@ class FroniusWebControl:
         config = export_limit_config if isinstance(export_limit_config, dict) else None
         limits = _config_part(config, "exportLimits")
         active_power = _config_part(limits, "activePower")
+        self.data.export_power_control_off = power_control_off(active_power)
         soft = _config_part(active_power, "softLimit")
         if soft is not None and flag_value(soft.get("enabled")) is True:
             self.data.export_soft_limit_w = _as_int(soft_limit_value(active_power))

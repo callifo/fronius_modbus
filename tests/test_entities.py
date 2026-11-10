@@ -643,7 +643,7 @@ def power_limits(**active_power) -> dict:
 async def test_the_export_soft_limit_is_greyed_out_while_power_control_is_off(
     hass, entry, connection, config, available
 ):
-    """Issue 154: with Power Control off the inverter refuses any soft limit."""
+    """Issue 154: with Power Control off, firmware 1.41 refused every soft limit."""
     runtime = await make_runtime(hass, entry, connection)
     web_control = make_control(hass, api_username="technician")
     web_control._client.get_export_limit_config = lambda: config

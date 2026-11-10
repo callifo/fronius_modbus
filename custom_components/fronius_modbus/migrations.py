@@ -5,6 +5,7 @@ import json
 import logging
 import re
 from pathlib import Path
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_NAME, Platform
@@ -103,6 +104,10 @@ _V019_RENAMED_KEYS = {
     "tempcab": "inverter_temperature",
 }
 _V019_METER_KEY_PREFIX = "m1_"
+_V019_METER_UNIQUE_ID_PREFIX = f"{ENTITY_PREFIX}_{_V019_METER_KEY_PREFIX}"
+# The meter address 0.1.9 was set up with; its config migration drops the
+# setting, and the ids move only at setup, once the meters are known.
+_V019_METER_UNIT_ID = "_v019_meter_unit_id"
 
 
 def _entry_value(entry: ConfigEntry, key: str, default=None):
@@ -120,20 +125,49 @@ def _marked_reported(entity_entry: er.RegistryEntry) -> bool:
     return bool(entity_entry.options.get(DOMAIN, {}).get(REPORTED_OPTION))
 
 
-def _v019_key(unique_id: str, primary_meter_unit_id: int) -> str:
+def v019_meter_unit_id(
+    entry: ConfigEntry, meter_unit_ids: Iterable[int], primary_meter_unit_id: int
+) -> int | None:
+    """The meter 0.1.9's meter ids belong to; None while it is not on the bus.
+
+    0.1.9 read the meter set in its setup, not necessarily the primary one, and
+    giving its ids to another meter joins the history of two meters.
+    """
+    configured = entry.data.get(_V019_METER_UNIT_ID)
+    if configured is None:
+        return primary_meter_unit_id
+    return configured if configured in meter_unit_ids else None
+
+
+def _v019_meter_setting(data: dict[str, Any]) -> dict[str, int]:
+    meter_unit_id = data.get(CONF_METER_UNIT_ID)
+    if not isinstance(meter_unit_id, int):
+        return {}
+    return {_V019_METER_UNIT_ID: meter_unit_id}
+
+
+def _runtime_v019_meter_unit_id(entry: ConfigEntry) -> int | None:
+    runtime = entry.runtime_data
+    return v019_meter_unit_id(
+        entry, runtime.device.meters, runtime.primary_meter_unit_id
+    )
+
+
+def _v019_key(unique_id: str, meter_unit_id: int | None) -> str:
     """The key a unique id of 0.1.9 continues under.
 
-    Any later id reads as a key no entity has, so it is never expected.
+    Any later id reads as a key no entity has, so it is never expected; so does
+    a meter id while its meter is not on the bus.
     """
     key = unique_id.removeprefix(f"{ENTITY_PREFIX}_")
-    if key.startswith(_V019_METER_KEY_PREFIX):
+    if key.startswith(_V019_METER_KEY_PREFIX) and meter_unit_id is not None:
         meter_key = key.removeprefix(_V019_METER_KEY_PREFIX)
-        return f"meter_{primary_meter_unit_id}_{meter_key}"
+        return f"meter_{meter_unit_id}_{meter_key}"
     return _V019_RENAMED_KEYS.get(key, key)
 
 
 def registered_keys(
-    hass: HomeAssistant, entry: ConfigEntry, primary_meter_unit_id: int
+    hass: HomeAssistant, entry: ConfigEntry, v019_meter: int | None
 ) -> frozenset[str]:
     """The description keys of every entity the registry holds for this entry.
 
@@ -154,7 +188,7 @@ def registered_keys(
         elif unique_id in v019_keys:
             keys.add(v019_keys[unique_id])
         else:
-            keys.add(_v019_key(unique_id, primary_meter_unit_id))
+            keys.add(_v019_key(unique_id, v019_meter))
     return frozenset(keys)
 
 
@@ -376,6 +410,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     title = entry.title
 
     if entry.minor_version < _WEB_API_MINOR_VERSION:
+        new_data.update(_v019_meter_setting(new_data))
         new_data.pop(CONF_METER_UNIT_ID, None)
         new_data.pop(CONF_METER_UNIT_IDS, None)
         new_options.pop(CONF_METER_UNIT_ID, None)
@@ -583,9 +618,9 @@ def async_migrate_v019_unique_ids(hass: HomeAssistant, entry: ConfigEntry) -> No
     entity_entries = _entity_entries_for_config_entry(registry, entry)
     taken = {(candidate.domain, candidate.unique_id) for candidate in entity_entries}
     expected = expected_unique_ids(entry, entry.runtime_data)
-    primary_meter_unit_id = entry.runtime_data.primary_meter_unit_id
+    meter_unit_id = _runtime_v019_meter_unit_id(entry)
     for entity_entry in entity_entries:
-        key = _v019_key(entity_entry.unique_id or "", primary_meter_unit_id)
+        key = _v019_key(entity_entry.unique_id or "", meter_unit_id)
         _move_unique_id(
             registry, entity_entry, _entity_unique_id(entry, key), expected, taken
         )
@@ -605,8 +640,9 @@ def async_migrate_v019_devices(hass: HomeAssistant, entry: ConfigEntry) -> None:
     moves = {
         f"{name}_inverter": f"{key}_inverter",
         f"{name}_battery_storage": f"{key}_battery_storage",
-        f"{name}_meter1": f"{key}_meter_{runtime.primary_meter_unit_id}",
     }
+    if (meter_unit_id := _runtime_v019_meter_unit_id(entry)) is not None:
+        moves[f"{name}_meter1"] = f"{key}_meter_{meter_unit_id}"
     current = expected_device_identifiers(runtime, entry)
     devices = dr.async_entries_for_config_entry(device_registry, entry.entry_id)
     present = {identifier for device in devices for identifier in device.identifiers}
@@ -696,6 +732,9 @@ async def async_remove_legacy_devices(
     # so a reload retired live meter devices - and their entities with them.
     # Never retire what the runtime just registered.
     current = expected_device_identifiers(entry.runtime_data, entry)
+    if _runtime_v019_meter_unit_id(entry) is None:
+        # Its ids wait for the meter 0.1.9 read to come back on the bus.
+        current.add(f"{_entry_value(entry, CONF_NAME, 'Fronius')}_meter1")
 
     removed_devices = 0
     for device in dr.async_entries_for_config_entry(device_registry, entry.entry_id):
@@ -724,10 +763,13 @@ async def async_remove_unexpected_entities(
 
     registry = er.async_get(hass)
     expected = expected_unique_ids(entry, entry.runtime_data)
+    v019_meter_waits = _runtime_v019_meter_unit_id(entry) is None
     removed = 0
     for entity_entry in _entity_entries_for_config_entry(registry, entry):
         unique_id = entity_entry.unique_id or ""
         if not unique_id or unique_id in expected:
+            continue
+        if v019_meter_waits and unique_id.startswith(_V019_METER_UNIQUE_ID_PREFIX):
             continue
         registry.async_remove(entity_entry.entity_id)
         removed += 1

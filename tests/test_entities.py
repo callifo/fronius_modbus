@@ -620,6 +620,46 @@ async def test_the_web_soc_limits_are_writable_in_manual_soc_mode_alone(
     assert web_control._client.calls[-1] == ("soc", 25, None)
 
 
+def power_limits(**active_power) -> dict:
+    return {
+        "exportLimits": {
+            "activePower": {
+                "softLimit": {"enabled": True, "powerLimit": 7000},
+                **active_power,
+            }
+        }
+    }
+
+
+@pytest.mark.parametrize(
+    ("config", "available"),
+    [
+        (power_limits(activated=False), False),
+        (power_limits(activated=True), True),
+        # Firmware without the switch: as before, the number stays usable.
+        (power_limits(), True),
+    ],
+)
+async def test_the_export_soft_limit_is_greyed_out_while_power_control_is_off(
+    hass, entry, connection, config, available
+):
+    """Issue 154: with Power Control off the inverter refuses any soft limit."""
+    runtime = await make_runtime(hass, entry, connection)
+    web_control = make_control(hass, api_username="technician")
+    web_control._client.get_export_limit_config = lambda: config
+    await web_control.async_refresh()
+    runtime = replace(
+        runtime, web_control=web_control, web=SimpleNamespace(data=web_control.data)
+    )
+    try:
+        soft_limit = _description(
+            entities.number_descriptions(runtime), "export_soft_limit"
+        )
+        assert soft_limit.available_fn(runtime) is available
+    finally:
+        web_control.shutdown()
+
+
 # Model-203 TotWhExp of the captured meter: two registers, 0 is SunSpec's "not accumulated".
 METER_EXPORTED_ADDRESS = 40107
 

@@ -947,7 +947,7 @@
   {
     "label": "setup: the runtime learns the registered keys",
     "path": "custom_components/fronius_modbus/__init__.py",
-    "old": "        registered_keys=migrations.registered_keys(hass, entry, primary),\n",
+    "old": "        registered_keys=migrations.registered_keys(\n            hass, entry, migrations.v019_meter_unit_id(entry, meter_unit_ids, primary)\n        ),\n",
     "new": "",
     "tests": "single_404_keeps_the_registered_component_sensors"
   },
@@ -2569,9 +2569,9 @@
     "tests": "too_far_apart_says_so_in_the_debug_log"
   },
   {
-    "label": "migrations: 0.1.9's meter keys continue on the primary meter",
+    "label": "migrations: 0.1.9's meter keys continue on their meter",
     "path": "custom_components/fronius_modbus/migrations.py",
-    "old": "        return f\"meter_{primary_meter_unit_id}_{meter_key}\"\n",
+    "old": "        return f\"meter_{meter_unit_id}_{meter_key}\"\n",
     "new": "        return key\n",
     "tests": "0_1_9_entry_keeps_its_entity_ids"
   },
@@ -2585,7 +2585,7 @@
   {
     "label": "migrations: a 0.1.9 id counts as registered",
     "path": "custom_components/fronius_modbus/migrations.py",
-    "old": "        else:\n            keys.add(_v019_key(unique_id, primary_meter_unit_id))\n",
+    "old": "        else:\n            keys.add(_v019_key(unique_id, v019_meter))\n",
     "new": "",
     "tests": "0_1_9_id_counts_as_registered"
   },
@@ -2686,5 +2686,40 @@
     "old": " and not self.data.export_power_control_off",
     "new": "",
     "tests": "greyed_out_while_power_control_is_off"
+  },
+  {
+    "label": "migrations: the 0.1.9 meter address is kept through the config migration",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "        new_data.update(_v019_meter_setting(new_data))\n",
+    "new": "",
+    "tests": "meter_keeps_the_address_it_was_configured_with or meter_that_is_gone"
+  },
+  {
+    "label": "migrations: a 0.1.9 meter not on the bus takes no other meter's ids",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "    return configured if configured in meter_unit_ids else None\n",
+    "new": "    return configured\n",
+    "tests": "meter_that_is_gone_is_neither_moved_nor_removed"
+  },
+  {
+    "label": "migrations: the cleanup spares the ids of a 0.1.9 meter that waits",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "        if v019_meter_waits and unique_id.startswith(_V019_METER_UNIQUE_ID_PREFIX):\n",
+    "new": "        if False:\n",
+    "tests": "meter_that_is_gone_is_neither_moved_nor_removed"
+  },
+  {
+    "label": "migrations: the legacy device cleanup spares a 0.1.9 meter that waits",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "    if _runtime_v019_meter_unit_id(entry) is None:\n        # Its ids wait",
+    "new": "    if False:\n        # Its ids wait",
+    "tests": "meter_that_is_gone_is_neither_moved_nor_removed"
+  },
+  {
+    "label": "migrations: the 0.1.9 meter device follows the meter 0.1.9 read",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "        moves[f\"{name}_meter1\"] = f\"{key}_meter_{meter_unit_id}\"\n",
+    "new": "        moves[f\"{name}_meter1\"] = f\"{key}_meter_{runtime.primary_meter_unit_id}\"\n",
+    "tests": "meter_keeps_the_address_it_was_configured_with"
   }
 ]

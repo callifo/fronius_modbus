@@ -1258,6 +1258,41 @@ def test_an_export_limit_in_place_on_firmware_1_42_is_not_written(client, invert
     assert posts(inverter) == []
 
 
+@pytest.mark.parametrize(
+    "power_limits",
+    [
+        {
+            "exportLimits": {
+                "activePower": {
+                    "activated": False,
+                    "softLimit": {"enabled": False, "powerLimit": 0},
+                }
+            }
+        },
+        {
+            "exportLimits": {
+                "activePower": {
+                    **power_limits_1_42(False, 0.0)["exportLimits"]["activePower"],
+                    "activated": False,
+                }
+            }
+        },
+    ],
+    ids=["1.41", "1.42"],
+)
+def test_a_soft_limit_while_power_control_is_off_is_refused_before_any_write(
+    client, inverter, power_limits
+):
+    """Issue 154: firmware 1.41 answered 400 softLimit_disabled while Power Control was off."""
+    inverter.bodies["/api/config/limit_settings/powerLimits"] = power_limits
+
+    with pytest.raises(ControlRefused) as refused:
+        client.set_export_soft_limit(7000)
+
+    assert refused.value.key == "export_limit_power_control_off"
+    assert posts(inverter) == []
+
+
 def test_the_modbus_control_reset_is_a_bare_command(client, inverter):
     assert client.reset_modbus_control() is True
 

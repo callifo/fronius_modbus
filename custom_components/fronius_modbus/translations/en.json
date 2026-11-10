@@ -986,6 +986,9 @@
     "value_out_of_range": {
       "message": "The value must be between {minimum} and {maximum}."
     },
+    "export_limit_power_control_off": {
+      "message": "Export limitation is switched off on the inverter. Switch on Power Control on its Export Limitation page first."
+    },
     "soc_minimum_above_maximum": {
       "message": "The SoC minimum must not exceed the SoC maximum."
     },

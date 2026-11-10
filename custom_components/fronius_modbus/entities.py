@@ -1329,7 +1329,7 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
         exists_fn=_web_configured,
         available_fn=lambda r: (
             r.web_control is not None
-            and assume_present(r.web_control).technician_configured
+            and assume_present(r.web_control).export_soft_limit_settable
         ),
     ),
 )

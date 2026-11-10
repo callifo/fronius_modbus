@@ -2243,6 +2243,35 @@ async def test_a_0_1_9_meter_that_is_gone_is_neither_moved_nor_removed(
     assert device.identifiers == {(DOMAIN, "Fronius_meter1")}
 
 
+async def test_a_0_1_9_meter_that_was_missing_moves_once_it_is_back(
+    hass, mock_modbus, monkeypatch
+):
+    """Waiting is only worth it if the next start finishes the move."""
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    two_meters = _FakeWebClientWithTopology.topology
+    monkeypatch.setattr(
+        _FakeWebClientWithTopology,
+        "topology",
+        {"unit_ids": [200], "primary_unit_id": 200, "locations_by_unit_id": {200: 0}},
+    )
+    entry, _ = _redpomodoro_entry(hass)
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, CONF_METER_UNIT_ID: 201}
+    )
+    registry = er.async_get(hass)
+    entity_id = registry.async_get_entity_id("sensor", DOMAIN, "fm_m1_power")
+    await setup_entry(hass, entry)
+    assert registry.async_get(entity_id).unique_id == "fm_m1_power"
+
+    monkeypatch.setattr(_FakeWebClientWithTopology, "topology", two_meters)
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert registry.async_get(entity_id).unique_id == (
+        f"{entity_prefix(entry.entry_id)}_meter_201_power"
+    )
+
+
 async def test_a_0_1_9_entry_keeps_its_entities_through_the_first_login(
     hass, mock_modbus, monkeypatch
 ):

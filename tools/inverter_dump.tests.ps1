@@ -301,7 +301,7 @@ Assert-True ($script:LoginStatus -eq 200) "the login reports its status: $($scri
 
 # -- the dump's login -----------------------------------------------------
 
-function Invoke-TestDump([int]$LoginStatus, [hashtable]$Answers) {
+function Invoke-TestDump([int]$LoginStatus, [hashtable]$Answers, [int]$CommonStatus = 200) {
     # Runs the dump against faked answers up to the file and keeps what it would export.
     # A prompt no answer names gets Enter, its default.
     $script:Reads = New-Object System.Collections.Generic.List[object]
@@ -320,8 +320,9 @@ function Invoke-TestDump([int]$LoginStatus, [hashtable]$Answers) {
         }
         function Read-Endpoint([string]$Path, [bool]$WithLogin) {
             $script:Reads.Add(@($Path, $WithLogin))
-            if ($Path -eq '/api/status/common') { return @{ status = 200; body = $versions } }
+            if ($Path -eq '/api/status/common') { return @{ status = $CommonStatus; body = $versions } }
             if ($Path -like '/api/commands/Login*') { return @{ status = $LoginStatus; body = '' } }
+            if ($Path -eq $DatamanagerLoginPath -and $WithLogin) { return @{ status = $LoginStatus; body = '{}' } }
             return @{ status = 200; body = '{}' }
         }
         function Read-Modbus([bool]$Redact) { return 'synthetic registers' }
@@ -361,11 +362,117 @@ Invoke-TestDump 200 @{ 'Modbus TCP' = 'n'; 'Replace serial' = 'n' }
 Assert-True ($null -eq $script:Export.Modbus) "n reads no registers: $($script:Export.Modbus)"
 Assert-True ($script:Export.Redact -eq $false) "n turns the replacement off: $($script:Export.Redact)"
 
+# -- a Datamanager ---------------------------------------------------------
+
+function Get-DigestFields([string]$Header) {
+    $fields = @{}
+    foreach ($match in [regex]::Matches($Header, '(\w+)="?([^",]*)"?')) { $fields[$match.Groups[1].Value] = $match.Groups[2].Value }
+    return $fields
+}
+
+function Get-StandardHeader([string]$Challenge) {
+    # The header the tool answers a plain digest challenge with, as service.
+    $script:Role = 'service'
+    $script:Password = 'synthetic-password'
+    $script:DigestScheme = 'standard'
+    $script:Requests = New-Object System.Collections.Generic.List[object]
+    & {
+        function Send-Get([string]$Path, [string]$Authorization) {
+            $script:Requests.Add(@($Path, $Authorization))
+            $response = New-Object System.Net.Http.HttpResponseMessage ([System.Net.HttpStatusCode]::OK)
+            if (-not $Authorization) {
+                $response.StatusCode = [System.Net.HttpStatusCode]::Unauthorized
+                [void]$response.Headers.TryAddWithoutValidation('WWW-Authenticate', $Challenge)
+            }
+            $response.Content = New-Object System.Net.Http.StringContent '{}'
+            return $response
+        }
+        $null = Read-Endpoint '/config/exportlimit/' $true
+    }
+    return [string]$script:Requests[$script:Requests.Count - 1][1]
+}
+
+$md5 = [System.Security.Cryptography.MD5]::Create()
+$header = Get-StandardHeader 'Digest realm="synthetic-realm", nonce="synthetic-nonce", qop="auth"'
+$field = Get-DigestFields $header
+$ha1 = Get-TestHex $md5 'service:synthetic-realm:synthetic-password'
+$expected = Get-TestHex $md5 "${ha1}:synthetic-nonce:$($field.nc):$($field.cnonce):auth:$(Get-TestHex $md5 'GET:/config/exportlimit/')"
+Assert-True ($field.response -eq $expected) "a plain digest without an algorithm is MD5: $header"
+Assert-True ($field.uri -eq '/config/exportlimit/' -and $field.username -eq 'service') "a plain digest signs the path as service: $header"
+Assert-True ($script:Challenge.realm -eq 'synthetic-realm' -and -not $script:Challenge.ContainsKey('nonce')) 'the challenge is kept without its nonce'
+
+$header = Get-StandardHeader 'Digest realm="synthetic-realm", nonce="synthetic-nonce", qop="auth", algorithm=SHA-256'
+$field = Get-DigestFields $header
+$ha1 = Get-TestHex $sha256 'service:synthetic-realm:synthetic-password'
+$expected = Get-TestHex $sha256 "${ha1}:synthetic-nonce:$($field.nc):$($field.cnonce):auth:$(Get-TestHex $sha256 'GET:/config/exportlimit/')"
+Assert-True ($field.response -eq $expected -and $field.algorithm -eq 'SHA-256') "a plain digest named SHA-256 hashes with it: $header"
+
+$header = Get-StandardHeader 'Digest realm="synthetic-realm", nonce="synthetic-nonce"'
+$field = Get-DigestFields $header
+$ha1 = Get-TestHex $md5 'service:synthetic-realm:synthetic-password'
+$expected = Get-TestHex $md5 "${ha1}:synthetic-nonce:$(Get-TestHex $md5 'GET:/config/exportlimit/')"
+Assert-True ($field.response -eq $expected -and -not $field.qop) "a plain digest without qop answers without it: $header"
+
+$header = Get-StandardHeader 'Digest realm="synthetic-realm", nonce="synthetic-nonce", algorithm=SHA-512-256'
+Assert-True (-not $header) "a digest the tool does not know is not answered: $header"
+
+function Invoke-TestLogin([int[]]$Statuses) {
+    $script:Tries = New-Object System.Collections.Generic.List[string]
+    $script:Answers = $Statuses
+    & {
+        function Read-Endpoint([string]$Path, [bool]$WithLogin) {
+            $script:Tries.Add($script:DigestScheme)
+            return @{ status = $script:Answers[$script:Tries.Count - 1]; body = '' }
+        }
+        $script:Scheme = Invoke-DatamanagerLogin
+    }
+    return $script:Scheme
+}
+$scheme = Invoke-TestLogin @(401, 401, 200)
+Assert-True ($scheme -eq 'gen24-sha256' -and ($script:Tries -join ',') -eq 'standard,gen24-md5,gen24-sha256') "a refused digest is followed by the next: $scheme after $($script:Tries -join ', ')"
+$scheme = Invoke-TestLogin @(200)
+Assert-True ($scheme -eq 'standard' -and $script:Tries.Count -eq 1) "an accepted digest stops the tries: $($script:Tries -join ', ')"
+$scheme = Invoke-TestLogin @(404)
+Assert-True ($null -eq $scheme -and $script:Tries.Count -eq 1) "an answer other than 401 ends the tries: $($script:Tries -join ', ')"
+$scheme = Invoke-TestLogin @(401, 401, 401)
+Assert-True ($null -eq $scheme -and $script:LoginStatus -eq 401) "every digest refused is no login: $scheme"
+
+& {
+    function Read-Endpoint([string]$Path, [bool]$WithLogin) {
+        $bodies = @{
+            '/' = '<script src="app.js"></script><script src="https://cdn.example/x.js"></script> "/config/meter"'
+            '/app.js' = "get('/config/powerunit/'); get(`"/status/version`"); post('/config/commands/reboot'); post('/config/reset/all')"
+        }
+        $script:Asked += , $Path
+        return @{ status = 200; body = $bodies[$Path] }
+    }
+    $script:Asked = @()
+    $script:Found = Find-DatamanagerPaths
+}
+$expected = '/config/batteries,/config/exportlimit/,/config/meter,/config/powerunit/,/status/version'
+Assert-True (($script:Found -join ',') -eq $expected) "the interface names the paths, the actions left out: $($script:Found -join ', ')"
+Assert-True (($script:Asked -join ',') -eq '/,/app.js') "only the device's own scripts are read: $($script:Asked -join ', ')"
+
+$withService = @{ 'Datamanager' = 'y' }
+Invoke-TestDump 200 $withService 404
+Assert-True ($script:Export.Role -eq 'service') "Enter at the Datamanager's role logs in as service: $($script:Export.Role)"
+$withLogin = Get-PathsReadWithLogin
+Assert-True ($withLogin -contains '/config/exportlimit/' -and $withLogin -contains '/config/batteries') "a Datamanager's settings are read with its login: $($withLogin -join ', ')"
+Assert-True (-not ($withLogin | Where-Object { $_ -like '/api/config/*' })) "a Datamanager is not asked the GEN24 settings: $($withLogin -join ', ')"
+Invoke-TestDump 401 $withService 404
+Assert-True ([string]::IsNullOrEmpty($script:Export.Role)) "a refused Datamanager login is exported without a role: $($script:Export.Role)"
+$read = @($script:Reads | ForEach-Object { $_[0] })
+Assert-True ($read -contains '/config/exportlimit/') "a refused Datamanager login still reads its paths: $($read -join ', ')"
+Invoke-TestDump 200 @{} 404
+Assert-True ([string]::IsNullOrEmpty($script:Export.Role) -and (Get-PathsReadWithLogin).Count -eq 0) "Enter logs in nowhere on a Datamanager: $($script:Export.Role)"
+
 # -- read only -------------------------------------------------------------
 
 # The login is the one command the tool calls, and it is not on these lists.
 $commands = @($PublicPaths + $LoginPaths) | Where-Object { $_ -like '/api/commands/*' }
 Assert-True (@($commands).Count -eq 0) "no command endpoint is read: $($commands -join ', ')"
+$actions = @($DatamanagerPaths) | Where-Object { $_ -match $DatamanagerSkip }
+Assert-True (@($actions).Count -eq 0) "no Datamanager path named like an action is read: $($actions -join ', ')"
 
 # -----------------------------------------------------------------------------------
 

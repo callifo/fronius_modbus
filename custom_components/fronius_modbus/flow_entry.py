@@ -16,14 +16,20 @@ from .token_store import async_forget_unused_tokens
 def host_holder(
     hass: HomeAssistant, unique_id: str
 ) -> config_entries.ConfigEntry | None:
-    """The entry that holds this host: by its unique id, or by its host without one.
-
-    0.1.9 set no unique id, and an entry disabled since never claims one at
-    setup; checking the unique id alone let a second entry for its host through.
-    """
+    """The entry that holds this host: by its unique id, or by its host without one."""
     holder = hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, unique_id)
-    if holder is not None:
-        return holder
+    return holder or host_without_unique_id(hass, unique_id)
+
+
+def host_without_unique_id(
+    hass: HomeAssistant, unique_id: str
+) -> config_entries.ConfigEntry | None:
+    """An entry without a unique id whose host this is.
+
+    0.1.9 set no unique id and nothing gives one later; checking the unique id
+    alone let a second entry for its host through. An ignored discovery card
+    always has one.
+    """
     return next(
         (
             entry

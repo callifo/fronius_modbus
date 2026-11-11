@@ -43,7 +43,7 @@ from .flow_entry import (
     _async_reload_unless_listened,
     _claim_host,
     async_update_entry_from_input,
-    host_holder,
+    host_without_unique_id,
 )
 from .flow_forms import password_schema, role_schema, settings_schema
 from .flow_settings import (
@@ -628,8 +628,9 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
 
     def _abort_if_host_held(self) -> None:
         """Abort for a host another entry holds, with or without a unique id."""
+        # Home Assistant lets a host whose card was ignored be set up by hand.
         self._abort_if_unique_id_configured()
-        if host_holder(self.hass, str(self.unique_id)) is not None:
+        if host_without_unique_id(self.hass, str(self.unique_id)) is not None:
             raise data_entry_flow.AbortFlow("already_configured")
 
     async def _async_claim_reconfigured_host(self, settings: dict[str, Any]) -> None:

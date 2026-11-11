@@ -3,7 +3,7 @@
 ## Unreleased
 
 ### Added
-- `tools/inverter_dump.bat` also reads the settings of a Datamanager (the SnapINverter family) with its `admin` or `service` login: the export limit and the other settings its web interface names (issue 110). It still only reads.
+- `tools/inverter_dump.bat` can also read the settings of a Datamanager (SnapINverter) with its `admin` or `service` login (issue 110). It still only reads.
 - Sensors for the inverter's four energy management outputs: `Energy management output 1` to `4` show whether a relay is on, and `Energy management output 1 reason` to `4 reason` why. They read the web interface without a login and are off by default.
 
 ### Changed

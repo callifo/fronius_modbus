@@ -10,7 +10,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.fronius_modbus.const import DOMAIN, entity_prefix, instance_key
 from custom_components.fronius_modbus.token_store import async_get_token_store
-from homeassistant.config_entries import ConfigEntryState
+from homeassistant.config_entries import SOURCE_IGNORE, ConfigEntryState
 from homeassistant.helpers import (
     area_registry as ar,
     device_registry as dr,
@@ -408,11 +408,14 @@ async def test_nothing_is_taken_over_from_two_deleted_entries(hass, mock_modbus)
     assert _untouched(hass, first_key) and _untouched(hass, second_key)
 
 
-async def test_rows_of_a_later_version_are_not_taken_over(hass, mock_modbus):
+@pytest.mark.parametrize(
+    "unique_id",
+    [f"{entity_prefix(OTHER_ENTRY_ID)}_PhVphA", "fm_fronius__PhVphA"],
+    ids=["per entry", "named after the entry"],
+)
+async def test_rows_of_a_later_version_are_not_taken_over(hass, mock_modbus, unique_id):
     """Only a switch from 0.1.9 is taken over; a later entry's rows stay deleted."""
-    old, (key,) = _deleted_rows(
-        hass, OTHER_ENTRY_ID, f"{entity_prefix(OTHER_ENTRY_ID)}_PhVphA"
-    )
+    old, (key,) = _deleted_rows(hass, OTHER_ENTRY_ID, unique_id)
     await _remove(hass, old)
     new = make_entry(hass)
 
@@ -446,3 +449,17 @@ async def test_an_entry_already_set_up_takes_nothing_over(hass, mock_modbus):
     await hass.async_block_till_done()
 
     assert _untouched(hass, key)
+
+
+async def test_an_ignored_discovery_does_not_stop_the_takeover(hass, mock_modbus):
+    """An ignored discovery card is no second inverter."""
+    MockConfigEntry(
+        domain=DOMAIN, source=SOURCE_IGNORE, unique_id="192.0.2.99"
+    ).add_to_hass(hass)
+    old, (key,) = _deleted_rows(hass, OTHER_ENTRY_ID, "fm_PhVphA")
+    await _remove(hass, old)
+    new = make_entry(hass)
+
+    await setup_entry(hass, new)
+
+    assert not _untouched(hass, key)

@@ -23,6 +23,15 @@ class MeterTopology:
     primary_unit_id: int
     locations: dict[int, int]
     confirmed: bool
+    # False for the default, which counts as confirmed without a web client.
+    answered: bool = False
+
+    @property
+    def reported_unit_ids(self) -> tuple[int, ...]:
+        """The meters a confirmed answer of the web API lists; none otherwise."""
+        if not (self.answered and self.confirmed):
+            return ()
+        return tuple(self.unit_ids)
 
 
 def parse_meter_topology(info: dict | None) -> MeterTopology:
@@ -48,4 +57,5 @@ def parse_meter_topology(info: dict | None) -> MeterTopology:
         # A meter left out is not proof that it is gone: keep the topology
         # unconfirmed so it cannot retire entities.
         confirmed=len(unit_ids) == len(reported) and not info.get("incomplete"),
+        answered=True,
     )

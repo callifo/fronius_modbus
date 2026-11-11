@@ -103,11 +103,14 @@ _V019_RENAMED_KEYS = {
     "minimum_reserve": "soc_minimum",
     "tempcab": "inverter_temperature",
 }
+_V019_MPPT_KEYS = {old_id: key for old_id, key, _, _ in _V019_MPPT_UNIQUE_ID_MAPPINGS}
 _V019_METER_KEY_PREFIX = "m1_"
 _V019_METER_UNIQUE_ID_PREFIX = f"{ENTITY_PREFIX}_{_V019_METER_KEY_PREFIX}"
 # The meter address 0.1.9 was set up with; its config migration drops the
 # setting, and the ids move only at setup, once the meters are known.
-_V019_METER_UNIT_ID = "_v019_meter_unit_id"
+V019_METER_UNIT_ID = "_v019_meter_unit_id"
+# Set when a new entry took over a deleted 0.1.9 entry, whose setting went with it.
+V019_METER_UNKNOWN = "unknown"
 
 
 def _entry_value(entry: ConfigEntry, key: str, default=None):
@@ -126,30 +129,56 @@ def _marked_reported(entity_entry: er.RegistryEntry) -> bool:
 
 
 def v019_meter_unit_id(
-    entry: ConfigEntry, meter_unit_ids: Iterable[int], primary_meter_unit_id: int
+    entry: ConfigEntry,
+    meter_unit_ids: Iterable[int],
+    primary_meter_unit_id: int,
+    reported_unit_ids: tuple[int, ...],
 ) -> int | None:
-    """The meter 0.1.9's meter ids belong to; None while it is not on the bus.
+    """The meter 0.1.9's meter ids belong to; None while it is absent or unknown.
 
     0.1.9 read the meter set in its setup, not necessarily the primary one, and
     giving its ids to another meter joins the history of two meters.
     """
-    configured = entry.data.get(_V019_METER_UNIT_ID)
+    return resolve_v019_meter(
+        entry.data.get(V019_METER_UNIT_ID),
+        meter_unit_ids,
+        primary_meter_unit_id,
+        reported_unit_ids,
+    )
+
+
+def resolve_v019_meter(
+    configured: Any,
+    meter_unit_ids: Iterable[int],
+    primary_meter_unit_id: int,
+    reported_unit_ids: tuple[int, ...],
+) -> int | None:
+    """The meter for a 0.1.9 meter setting: absent, an address, or unknown.
+
+    An unknown address is certain only for the single meter the web API
+    reports: among two the primary may be the wrong one.
+    """
     if configured is None:
         return primary_meter_unit_id
-    return configured if configured in meter_unit_ids else None
+    if configured == V019_METER_UNKNOWN:
+        return reported_unit_ids[0] if len(reported_unit_ids) == 1 else None
+    return configured if configured in list(meter_unit_ids) else None
 
 
 def _v019_meter_setting(data: dict[str, Any]) -> dict[str, int]:
     meter_unit_id = data.get(CONF_METER_UNIT_ID)
     if not isinstance(meter_unit_id, int):
         return {}
-    return {_V019_METER_UNIT_ID: meter_unit_id}
+    return {V019_METER_UNIT_ID: meter_unit_id}
 
 
 def _runtime_v019_meter_unit_id(entry: ConfigEntry) -> int | None:
     runtime = entry.runtime_data
     return v019_meter_unit_id(
-        entry, runtime.device.meters, runtime.primary_meter_unit_id
+        entry,
+        runtime.device.meters,
+        runtime.primary_meter_unit_id,
+        runtime.reported_meter_unit_ids,
     )
 
 
@@ -175,21 +204,27 @@ def registered_keys(
     the migrations run after this is read, and a sensor dark at the first start
     after an upgrade counted as never registered and was deleted.
     """
+    return frozenset(
+        successor_key(entry, candidate.unique_id or "", v019_meter)
+        for candidate in _entity_entries_for_config_entry(er.async_get(hass), entry)
+    )
+
+
+def successor_key(entry: ConfigEntry, unique_id: str, v019_meter: int | None) -> str:
+    """The description key an id of this entry's history continues under.
+
+    A per-entry id of another entry, or one in no known form, reads as a key no
+    entity has.
+    """
     prefix = f"{entity_prefix(entry.entry_id)}_"
     legacy_prefix = _legacy_entity_unique_id(entry, "")
-    v019_keys = {old_id: key for old_id, key, _, _ in _V019_MPPT_UNIQUE_ID_MAPPINGS}
-    keys = set()
-    for candidate in _entity_entries_for_config_entry(er.async_get(hass), entry):
-        unique_id = candidate.unique_id or ""
-        if unique_id.startswith(prefix):
-            keys.add(unique_id.removeprefix(prefix))
-        elif unique_id.startswith(legacy_prefix):
-            keys.add(unique_id.removeprefix(legacy_prefix))
-        elif unique_id in v019_keys:
-            keys.add(v019_keys[unique_id])
-        else:
-            keys.add(_v019_key(unique_id, v019_meter))
-    return frozenset(keys)
+    if unique_id.startswith(prefix):
+        return unique_id.removeprefix(prefix)
+    if unique_id.startswith(legacy_prefix):
+        return unique_id.removeprefix(legacy_prefix)
+    if unique_id in _V019_MPPT_KEYS:
+        return _V019_MPPT_KEYS[unique_id]
+    return _v019_key(unique_id, v019_meter)
 
 
 def reported_keys(hass: HomeAssistant, entry: ConfigEntry) -> frozenset[str]:
@@ -626,6 +661,19 @@ def async_migrate_v019_unique_ids(hass: HomeAssistant, entry: ConfigEntry) -> No
         )
 
 
+def v019_device_moves(entry: ConfigEntry) -> dict[str, str]:
+    """The device identifiers of 0.1.9 and the ones they continue as."""
+    name = str(_entry_value(entry, CONF_NAME, "Fronius"))
+    key = _entry_instance_key(entry)
+    moves = {
+        f"{name}_inverter": f"{key}_inverter",
+        f"{name}_battery_storage": f"{key}_battery_storage",
+    }
+    if (meter_unit_id := _runtime_v019_meter_unit_id(entry)) is not None:
+        moves[f"{name}_meter1"] = f"{key}_meter_{meter_unit_id}"
+    return moves
+
+
 @callback
 def async_migrate_v019_devices(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Give the devices of 0.1.9 this entry's identifiers.
@@ -635,14 +683,7 @@ def async_migrate_v019_devices(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """
     runtime = entry.runtime_data
     device_registry = dr.async_get(hass)
-    name = str(_entry_value(entry, CONF_NAME, "Fronius"))
-    key = _entry_instance_key(entry)
-    moves = {
-        f"{name}_inverter": f"{key}_inverter",
-        f"{name}_battery_storage": f"{key}_battery_storage",
-    }
-    if (meter_unit_id := _runtime_v019_meter_unit_id(entry)) is not None:
-        moves[f"{name}_meter1"] = f"{key}_meter_{meter_unit_id}"
+    moves = v019_device_moves(entry)
     current = expected_device_identifiers(runtime, entry)
     devices = dr.async_entries_for_config_entry(device_registry, entry.entry_id)
     present = {identifier for device in devices for identifier in device.identifiers}

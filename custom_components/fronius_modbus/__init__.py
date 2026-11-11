@@ -15,7 +15,7 @@ from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL, Platfo
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 
-from . import migrations
+from . import adoption, migrations
 from .component_readings import reported_rows
 from .const import (
     API_USERNAME,
@@ -218,12 +218,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
         meter_power=meter_power,
         primary_meter_unit_id=primary,
         topology_confirmed=topology.confirmed,
+        reported_meter_unit_ids=topology.reported_unit_ids,
         reported_keys=migrations.reported_keys(hass, entry),
         registered_keys=migrations.registered_keys(
-            hass, entry, migrations.v019_meter_unit_id(entry, meter_unit_ids, primary)
+            hass,
+            entry,
+            migrations.v019_meter_unit_id(
+                entry, meter_unit_ids, primary, topology.reported_unit_ids
+            ),
         ),
     )
 
+    # Before the migrations: they move the 0.1.9 ids taken over.
+    adoption.async_adopt_deleted_entities(hass, entry)
+    adoption.async_adopt_deleted_devices(hass, entry)
     await migrations.async_migrate_v019_mppt_statistics(hass, entry)
     migrations.async_migrate_v019_unique_ids(hass, entry)
     migrations.async_migrate_v019_devices(hass, entry)

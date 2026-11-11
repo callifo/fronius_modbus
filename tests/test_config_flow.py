@@ -16,7 +16,7 @@ from custom_components.fronius_modbus.const import DOMAIN, entry_title, instance
 from custom_components.fronius_modbus.fronius_modbus_api.device import DeviceIdentity
 from custom_components.fronius_modbus.froniuswebclient import FroniusWebResponseError
 from custom_components.fronius_modbus.token_store import async_get_token_store
-from homeassistant.config_entries import ConfigEntryState
+from homeassistant.config_entries import ConfigEntryDisabler, ConfigEntryState
 from homeassistant.data_entry_flow import FlowResultType, UnknownFlow
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
@@ -1657,3 +1657,72 @@ async def test_the_password_step_keeps_its_state_after_a_late_error(
     assert result["step_id"] == "password"
     assert result["errors"] == {"base": "already_configured"}
     assert result["description_placeholders"]["host"] == target
+
+
+def _entry_without_unique_id(hass) -> MockConfigEntry:
+    """A 0.1.9 entry, disabled before it ever ran here: no unique id was claimed."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={"host": HOST, "name": "Fronius"},
+        unique_id=None,
+        disabled_by=ConfigEntryDisabler.USER,
+        version=1,
+        minor_version=1,
+    )
+    entry.add_to_hass(hass)
+    return entry
+
+
+async def test_a_host_an_entry_without_unique_id_has_is_not_set_up_again(
+    hass, mock_modbus
+):
+    """Only the unique id was checked: a second entry for the host came through."""
+    _entry_without_unique_id(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+
+
+async def test_a_host_an_entry_without_unique_id_has_is_not_offered(hass):
+    """A discovery card for it would set the host up a second time."""
+    _entry_without_unique_id(hass)
+
+    result = await discover(hass, discovered())
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+
+
+async def test_no_entry_moves_to_a_host_an_entry_without_unique_id_has(
+    hass, mock_modbus, monkeypatch
+):
+    """A reconfigure checked the unique id only and moved onto the host."""
+    _entry_without_unique_id(hass)
+    other = _other_entry(hass)
+    _record_contact(monkeypatch)
+    _record_modbus_setup(monkeypatch)
+    moved = {
+        "host": HOST,
+        "scan_interval": 10,
+        "web_scan_interval": 60,
+        "modbus_restriction": "keep",
+        "api_username": "customer",
+    }
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "reconfigure", "entry_id": other.entry_id}
+    )
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], moved)
+    if result.get("step_id", "").endswith("password"):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"api_password": "secret"}
+        )
+
+    assert result["errors"]["base"] == "already_configured"

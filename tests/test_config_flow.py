@@ -16,7 +16,11 @@ from custom_components.fronius_modbus.const import DOMAIN, entry_title, instance
 from custom_components.fronius_modbus.fronius_modbus_api.device import DeviceIdentity
 from custom_components.fronius_modbus.froniuswebclient import FroniusWebResponseError
 from custom_components.fronius_modbus.token_store import async_get_token_store
-from homeassistant.config_entries import ConfigEntryDisabler, ConfigEntryState
+from homeassistant.config_entries import (
+    SOURCE_IGNORE,
+    ConfigEntryDisabler,
+    ConfigEntryState,
+)
 from homeassistant.data_entry_flow import FlowResultType, UnknownFlow
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
@@ -1726,3 +1730,38 @@ async def test_no_entry_moves_to_a_host_an_entry_without_unique_id_has(
         )
 
     assert result["errors"]["base"] == "already_configured"
+
+
+async def test_a_host_whose_discovery_was_ignored_can_be_set_up_by_hand(
+    hass, mock_modbus
+):
+    """Home Assistant lets the owner set up an ignored host by hand; the host check refused it."""
+    MockConfigEntry(domain=DOMAIN, source=SOURCE_IGNORE, unique_id=HOST).add_to_hass(
+        hass
+    )
+
+    result = await run_flow(hass)
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+
+
+async def test_a_moved_inverter_is_not_followed_to_a_host_an_entry_without_unique_id_has(
+    hass,
+):
+    """The move checked the unique id only and took the host of a disabled 0.1.9 entry."""
+    entry = make_entry(hass)
+    with_inverter_device(hass, entry)
+    store = async_get_token_store(hass)
+    await store.async_save_token(HOST, realm="r", token="t")
+    MockConfigEntry(
+        domain=DOMAIN,
+        data={"host": MOVED_HOST, "name": "Fronius"},
+        unique_id=None,
+        disabled_by=ConfigEntryDisabler.USER,
+    ).add_to_hass(hass)
+
+    await discover(hass, discovered(host=MOVED_HOST))
+
+    assert config_flow.entry_defaults(entry)["host"] == HOST
+    assert entry.unique_id == HOST
+    assert await store.async_load_token(MOVED_HOST) is None

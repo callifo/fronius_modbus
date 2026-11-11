@@ -21,7 +21,7 @@ It began as redpomodoro/fronius_modbus and continued here. Version 1.0 is a rewr
 - Battery control over Modbus: eight storage modes (such as *Charge from Grid*, *Block Discharging*), charge and discharge limits, grid charge power, storage reserve.
 - Inverter control over Modbus: AC limit, power factor, grid connection.
 - With a Web API login: the inverter's own battery management (SoC window, backup reserve, self-consumption optimisation, charge sources), the export soft limit (`technician` role), the Solar API switch, and the setup of the inverter's Modbus.
-- Without a login, from the inverter's web interface: module temperatures, fans, per-phase power, battery health, the inverter's event log as entities and events, and why the inverter throttles.
+- Without a login, from the inverter's web interface: module temperatures, fans, per-phase power, battery health, the inverter's event log as entities and events, why the inverter throttles, and the state of the energy management outputs.
 - Discovery over mDNS, diagnostics download with the raw register map.
 
 See [Entities](https://github.com/callifo/fronius_modbus/wiki/Entities) and [Battery Control](https://github.com/callifo/fronius_modbus/wiki/Battery-Control) in the wiki.

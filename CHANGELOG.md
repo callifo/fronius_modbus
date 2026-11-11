@@ -9,7 +9,7 @@
 - A storage mode another controller such as evcc sets is logged at info instead of as a warning: with evcc it is normal operation, many times a day. The select's history keeps every change; a mode Home Assistant wrote that the inverter does not take stays a warning.
 
 ### Fixed
-- Setting up the host of an entry updated from redpomodoro 0.1.9 again added a second entry for the same inverter, with every entity twice. Such an entry now holds its host, also while it is disabled, and a new setup of it stops as already configured.
+- If an inverter was still set up from redpomodoro 0.1.9, adding it again created a second entry with every entity twice. It now stops as already configured.
 - Home Assistant 2026.11 logged `The deprecated constant CONN_CLASS_LOCAL_POLL was used from fronius_modbus` at every start, and Home Assistant 2027.5 removes that constant. The integration no longer uses it.
 - With another controller such as evcc, the storage mode could show the wrong mode: StorCtl_Mod switches only one rate on in its charge and discharge modes, and the inverter ignores the other, but the integration judged both. evcc's hold after discharging showed *Discharge to Grid*, its hold charge after charging *Charge from Grid*; the limit and grid power numbers showed the ignored register, and the `Core storage control mode` sensor could name the direction of a rate the inverter ignores. They now follow only the rates the inverter applies.
 - In those one-rate block modes, a charge or discharge limit set in Home Assistant went into the rate the inverter ignores and had no effect; setting it now also switches that rate on. A 0 W limit beside a rate that is off is no longer refused as blocking both ways.

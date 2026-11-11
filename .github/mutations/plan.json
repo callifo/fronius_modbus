@@ -2735,5 +2735,26 @@
     "old": "    if hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, unique_id):\n        return\n",
     "new": "",
     "tests": "host_another_entry_holds"
+  },
+  {
+    "label": "flow: a host an entry without unique id has is held",
+    "path": "custom_components/fronius_modbus/flow_entry.py",
+    "old": "            if entry.unique_id is None\n            and entry_unique_id({**entry.data, **entry.options}) == unique_id\n",
+    "new": "            if False\n",
+    "tests": "entry_without_unique_id"
+  },
+  {
+    "label": "flow: a new setup aborts for a held host",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "        if host_holder(self.hass, str(self.unique_id)) is not None:\n            raise data_entry_flow.AbortFlow(\"already_configured\")\n",
+    "new": "",
+    "tests": "host_an_entry_without_unique_id_has"
+  },
+  {
+    "label": "flow: a reconfigure is refused for a held host",
+    "path": "custom_components/fronius_modbus/flow_entry.py",
+    "old": "    holder = host_holder(hass, unique_id)\n",
+    "new": "    holder = hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, unique_id)\n",
+    "tests": "moves_to_a_host_an_entry_without_unique_id_has"
   }
 ]

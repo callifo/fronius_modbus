@@ -13,6 +13,28 @@ from .flow_state import _AlreadyConfigured
 from .token_store import async_forget_unused_tokens
 
 
+def host_holder(
+    hass: HomeAssistant, unique_id: str
+) -> config_entries.ConfigEntry | None:
+    """The entry that holds this host: by its unique id, or by its host without one.
+
+    0.1.9 set no unique id, and an entry disabled since never claims one at
+    setup; checking the unique id alone let a second entry for its host through.
+    """
+    holder = hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, unique_id)
+    if holder is not None:
+        return holder
+    return next(
+        (
+            entry
+            for entry in hass.config_entries.async_entries(DOMAIN, include_ignore=False)
+            if entry.unique_id is None
+            and entry_unique_id({**entry.data, **entry.options}) == unique_id
+        ),
+        None,
+    )
+
+
 def _claim_host(
     hass: HomeAssistant, entry: config_entries.ConfigEntry, settings: dict[str, Any]
 ) -> str:
@@ -23,7 +45,7 @@ def _claim_host(
     old host and lets a second entry for the new one through.
     """
     unique_id = entry_unique_id(settings)
-    holder = hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, unique_id)
+    holder = host_holder(hass, unique_id)
     if holder is not None and holder.entry_id != entry.entry_id:
         raise _AlreadyConfigured
     return unique_id

@@ -85,6 +85,9 @@ $DatamanagerMaxPaths = 80
 # then the GEN24 one with both of its hashings.
 $DatamanagerSchemes = @('standard', 'gen24-md5', 'gen24-sha256')
 $DatamanagerLoginPath = '/config/exportlimit/'
+# Paths tried per digest when the first answers neither with the settings nor
+# with a refusal.
+$DatamanagerLoginTries = 5
 
 $Redacted = '<redacted>'
 # Everything beneath these keys is replaced; a value right under one is also
@@ -156,6 +159,7 @@ function Get-DigestHeader($Response, [string]$Uri) {
     $qop = ($challenge.qop -split ',')[0]
     if ($challenge.nonce -eq $script:LastNonce) { $script:NonceCount++ } else { $script:NonceCount = 1 }
     $script:LastNonce = $challenge.nonce
+    $script:Challenged = $true
     $script:Challenge = @{}
     foreach ($key in $challenge.Keys) {
         if ($key -notin @('nonce', 'opaque')) { $script:Challenge[$key] = $challenge[$key] }
@@ -239,17 +243,24 @@ function Read-Endpoint([string]$Path, [bool]$WithLogin) {
     }
 }
 
-function Invoke-DatamanagerLogin {
+function Invoke-DatamanagerLogin([string[]]$Candidates) {
     # Logs in as $script:Role, trying each digest in turn; returns the one
-    # accepted, or $null. A read of the export limit stands in for the login,
-    # which a Datamanager does not have as an endpoint of its own.
+    # accepted, or $null. A Datamanager has no login endpoint: a read of a
+    # setting that asked for the digest stands in for it, the export limit
+    # first. One that is missing or answers without a login proves nothing.
+    $probes = @($DatamanagerLoginPath) + @($Candidates | Where-Object { $_ -like '/config/*' -and $_ -ne $DatamanagerLoginPath })
+    $probes = @($probes | Select-Object -First $DatamanagerLoginTries)
     foreach ($scheme in $DatamanagerSchemes) {
         $script:DigestScheme = $scheme
         $script:SecretHasher = [System.Security.Cryptography.SHA256]::Create()
         if ($scheme -eq 'gen24-md5') { $script:SecretHasher = [System.Security.Cryptography.MD5]::Create() }
-        $status = (Read-Endpoint $DatamanagerLoginPath $true).status
-        $script:LoginStatus = $status
-        if ($status -eq 200) { return $scheme }
+        foreach ($path in $probes) {
+            $script:Challenged = $false
+            $status = (Read-Endpoint $path $true).status
+            $script:LoginStatus = $status
+            if ($status -eq 401) { break }
+            if ($status -eq 200 -and $script:Challenged) { return $scheme }
+        }
         if ($status -ne 401) { return $null }
     }
     return $null
@@ -657,12 +668,13 @@ function Read-DatamanagerSettings($Paths) {
     $secure = Read-Host "Password of $($script:Role)" -AsSecureString
     $script:Password = [Runtime.InteropServices.Marshal]::PtrToStringBSTR(
         [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
-    $scheme = Invoke-DatamanagerLogin
+    $found = Find-DatamanagerPaths
+    $scheme = Invoke-DatamanagerLogin $found
     $accepted = $null -ne $scheme
     if (-not $accepted) {
-        Write-Host "The Datamanager refused the login (HTTP $($script:LoginStatus)); reading without it."
+        Write-Host "The Datamanager did not take the login (HTTP $($script:LoginStatus)); reading without it."
     }
-    foreach ($path in (Find-DatamanagerPaths)) { $Paths[$path] = $accepted }
+    foreach ($path in $found) { $Paths[$path] = $accepted }
     if ($accepted) { return $script:Role }
     return $null
 }

@@ -322,7 +322,10 @@ function Invoke-TestDump([int]$LoginStatus, [hashtable]$Answers, [int]$CommonSta
             $script:Reads.Add(@($Path, $WithLogin))
             if ($Path -eq '/api/status/common') { return @{ status = $CommonStatus; body = $versions } }
             if ($Path -like '/api/commands/Login*') { return @{ status = $LoginStatus; body = '' } }
-            if ($Path -eq $DatamanagerLoginPath -and $WithLogin) { return @{ status = $LoginStatus; body = '{}' } }
+            if ($Path -eq $DatamanagerLoginPath -and $WithLogin) {
+                $script:Challenged = $true
+                return @{ status = $LoginStatus; body = '{}' }
+            }
             return @{ status = 200; body = '{}' }
         }
         function Read-Modbus([bool]$Redact) { return 'synthetic registers' }
@@ -416,25 +419,33 @@ Assert-True ($field.response -eq $expected -and -not $field.qop) "a plain digest
 $header = Get-StandardHeader 'Digest realm="synthetic-realm", nonce="synthetic-nonce", algorithm=SHA-512-256'
 Assert-True (-not $header) "a digest the tool does not know is not answered: $header"
 
-function Invoke-TestLogin([int[]]$Statuses) {
+function Invoke-TestLogin([string[]]$Answers, [string[]]$Candidates = @('/config/meter', '/status/version')) {
+    # Each answer: a status, with "+" when the device asked for the digest.
     $script:Tries = New-Object System.Collections.Generic.List[string]
-    $script:Answers = $Statuses
+    $script:Answers = $Answers
     & {
         function Read-Endpoint([string]$Path, [bool]$WithLogin) {
-            $script:Tries.Add($script:DigestScheme)
-            return @{ status = $script:Answers[$script:Tries.Count - 1]; body = '' }
+            $script:Tries.Add("$($script:DigestScheme) $Path")
+            $answer = $script:Answers[$script:Tries.Count - 1]
+            $script:Challenged = $answer.EndsWith('+')
+            return @{ status = [int]$answer.TrimEnd('+'); body = '' }
         }
-        $script:Scheme = Invoke-DatamanagerLogin
+        $script:Scheme = Invoke-DatamanagerLogin $Candidates
     }
     return $script:Scheme
 }
-$scheme = Invoke-TestLogin @(401, 401, 200)
-Assert-True ($scheme -eq 'gen24-sha256' -and ($script:Tries -join ',') -eq 'standard,gen24-md5,gen24-sha256') "a refused digest is followed by the next: $scheme after $($script:Tries -join ', ')"
-$scheme = Invoke-TestLogin @(200)
+$scheme = Invoke-TestLogin @('401+', '401+', '200+')
+$tried = $script:Tries -join ','
+Assert-True ($scheme -eq 'gen24-sha256' -and $tried -eq 'standard /config/exportlimit/,gen24-md5 /config/exportlimit/,gen24-sha256 /config/exportlimit/') "a refused digest is followed by the next: $scheme after $tried"
+$scheme = Invoke-TestLogin @('200+')
 Assert-True ($scheme -eq 'standard' -and $script:Tries.Count -eq 1) "an accepted digest stops the tries: $($script:Tries -join ', ')"
-$scheme = Invoke-TestLogin @(404)
-Assert-True ($null -eq $scheme -and $script:Tries.Count -eq 1) "an answer other than 401 ends the tries: $($script:Tries -join ', ')"
-$scheme = Invoke-TestLogin @(401, 401, 401)
+$scheme = Invoke-TestLogin @('404', '200+')
+Assert-True ($scheme -eq 'standard' -and $script:Tries[1] -eq 'standard /config/meter') "a missing export limit is followed by another setting: $($script:Tries -join ', ')"
+$scheme = Invoke-TestLogin @('200', '401+', '200+')
+Assert-True ($scheme -eq 'gen24-md5') "a setting read without a login proves no login: $scheme after $($script:Tries -join ', ')"
+$scheme = Invoke-TestLogin @('404', '404')
+Assert-True ($null -eq $scheme -and $script:Tries.Count -eq 2) "no setting asking for the digest is no login, with one try each: $($script:Tries -join ', ')"
+$scheme = Invoke-TestLogin @('401+', '401+', '401+')
 Assert-True ($null -eq $scheme -and $script:LoginStatus -eq 401) "every digest refused is no login: $scheme"
 
 & {

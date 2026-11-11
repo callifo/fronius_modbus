@@ -2333,3 +2333,19 @@ async def test_a_second_start_changes_nothing_on_a_0_1_9_entry(hass, mock_modbus
     await hass.async_block_till_done()
 
     assert ids() == first
+
+
+async def test_a_new_setup_of_the_host_of_a_0_1_9_entry_aborts(hass, mock_modbus):
+    """0.1.9 left its entry without a unique id: setting the host up again made a second entry."""
+    entry, _ = _redpomodoro_entry(hass)
+    await setup_entry(hass, entry)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"host": HOST, "scan_interval": 10}
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"

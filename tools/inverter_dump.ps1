@@ -9,7 +9,8 @@ the configuration endpoints of the customer or technician login and the raw
 SunSpec registers over Modbus TCP. Only reads: no command endpoint is called
 except the login, and Modbus is only asked to read holding registers. A device
 without the GEN24 web interface, such as a Datamanager, still gets its Solar
-API and Modbus read.
+API and Modbus read, and on request the settings its own interface reads with
+the admin or service login.
 
 The file is meant for debugging and for adding support for a new device; by
 default serial numbers, addresses and names are replaced with <redacted>.
@@ -70,6 +71,23 @@ $LoginPaths = @(
     '/api/config/region-gridcode/gridcode/safety',
     '/api/config/region-gridcode/gridcode/setupinfo'
 )
+
+# A Datamanager (the SnapINverter family) has an interface of its own: other
+# users, its settings under /config/ and a plain HTTP digest (issue 110). Its
+# interface's code names the paths; these two are read in any case.
+$DatamanagerPaths = @('/config/exportlimit/', '/config/batteries')
+$DatamanagerPathPattern = '["''](/(?:config|status)/[A-Za-z0-9_./-]*)["'']'
+# Only reads: a path named like an action is left out.
+$DatamanagerSkip = '(?i)command|reset|reboot|restart|update|upgrade|factory|delete|remove|upload|login|logout'
+$DatamanagerScriptPattern = '(?i)src="([^"]+\.js(?:\?[^"]*)?)"'
+$DatamanagerMaxPaths = 80
+# Tried in turn until one is accepted: the plain digest the challenge names,
+# then the GEN24 one with both of its hashings.
+$DatamanagerSchemes = @('standard', 'gen24-md5', 'gen24-sha256')
+$DatamanagerLoginPath = '/config/exportlimit/'
+# Paths tried per digest when the first answers neither with the settings nor
+# with a refusal.
+$DatamanagerLoginTries = 5
 
 $Redacted = '<redacted>'
 # Everything beneath these keys is replaced; a value right under one is also
@@ -141,6 +159,12 @@ function Get-DigestHeader($Response, [string]$Uri) {
     $qop = ($challenge.qop -split ',')[0]
     if ($challenge.nonce -eq $script:LastNonce) { $script:NonceCount++ } else { $script:NonceCount = 1 }
     $script:LastNonce = $challenge.nonce
+    $script:Challenged = $true
+    $script:Challenge = @{}
+    foreach ($key in $challenge.Keys) {
+        if ($key -notin @('nonce', 'opaque')) { $script:Challenge[$key] = $challenge[$key] }
+    }
+    if ($script:DigestScheme -eq 'standard') { return Get-StandardDigestHeader $challenge $Uri }
     $nc = '{0:x8}' -f $script:NonceCount
     $cnonce = -join ((1..16) | ForEach-Object { '{0:x}' -f (Get-Random -Maximum 16) })
     $secret = Get-Hex $script:SecretHasher "$($script:Role):$($challenge.realm):$($script:Password)"
@@ -149,6 +173,35 @@ function Get-DigestHeader($Response, [string]$Uri) {
     $digest = Get-Hex $sha256 "${secret}:$($challenge.nonce):${nc}:${cnonce}:${qop}:$ha2"
     $header = "Digest username=`"$($script:Role)`", realm=`"$($challenge.realm)`", nonce=`"$($challenge.nonce)`", uri=`"$Uri`", response=`"$digest`", qop=$qop, nc=$nc, cnonce=`"$cnonce`""
     if ($challenge.opaque) { $header += ", opaque=`"$($challenge.opaque)`"" }
+    return $header
+}
+
+function Get-StandardDigestHeader([hashtable]$Challenge, [string]$Uri) {
+    # RFC 7616 as a Datamanager is expected to answer it: one hashing for all
+    # three steps, MD5 unless the challenge names SHA-256.
+    $algorithm = $Challenge.algorithm
+    if (-not $algorithm -or $algorithm -eq 'MD5') {
+        $hasher = [System.Security.Cryptography.MD5]::Create()
+    } elseif ($algorithm -eq 'SHA-256') {
+        $hasher = [System.Security.Cryptography.SHA256]::Create()
+    } else {
+        Write-Host "The device asks for the digest $algorithm, which this tool does not know."
+        return $null
+    }
+    $nc = '{0:x8}' -f $script:NonceCount
+    $cnonce = -join ((1..16) | ForEach-Object { '{0:x}' -f (Get-Random -Maximum 16) })
+    $ha1 = Get-Hex $hasher "$($script:Role):$($Challenge.realm):$($script:Password)"
+    $ha2 = Get-Hex $hasher "GET:$Uri"
+    $qop = ($Challenge.qop -split ',')[0]
+    $header = "Digest username=`"$($script:Role)`", realm=`"$($Challenge.realm)`", nonce=`"$($Challenge.nonce)`", uri=`"$Uri`""
+    if ($qop) {
+        $digest = Get-Hex $hasher "${ha1}:$($Challenge.nonce):${nc}:${cnonce}:${qop}:$ha2"
+        $header += ", response=`"$digest`", qop=$qop, nc=$nc, cnonce=`"$cnonce`""
+    } else {
+        $header += ", response=`"$(Get-Hex $hasher "${ha1}:$($Challenge.nonce):$ha2")`""
+    }
+    if ($algorithm) { $header += ", algorithm=$algorithm" }
+    if ($Challenge.opaque) { $header += ", opaque=`"$($Challenge.opaque)`"" }
     return $header
 }
 
@@ -169,6 +222,7 @@ function Get-SecretHasher([string]$CommonBody, [string]$Role) {
 function Invoke-Login($Common) {
     # Logs in as $script:Role with the hashing $Common (the answer of
     # /api/status/common) names; returns the HTTP status of the login.
+    $script:DigestScheme = 'gen24'
     $script:SecretHasher = Get-SecretHasher $Common.body $script:Role
     return (Read-Endpoint "/api/commands/Login?user=$($script:Role)" $true).status
 }
@@ -177,15 +231,80 @@ function Read-Endpoint([string]$Path, [bool]$WithLogin) {
     try {
         $response = Send-Get $Path
         if ($WithLogin -and [int]$response.StatusCode -eq 401) {
-            # The login signs its path without the query; the others carry none.
-            $header = Get-DigestHeader $response $Path.Split('?')[0]
+            # The GEN24 login signs its path without the query; the others carry none.
+            $uri = $Path
+            if ($script:DigestScheme -ne 'standard') { $uri = $Path.Split('?')[0] }
+            $header = Get-DigestHeader $response $uri
             if ($header) { $response = Send-Get $Path $header }
         }
         $body = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
-        return @{ status = [int]$response.StatusCode; body = $body }
+        # Where the answer came from: the client follows redirects.
+        $answered = $response.RequestMessage.RequestUri.PathAndQuery
+        return @{ status = [int]$response.StatusCode; body = $body; path = $answered }
     } catch {
-        return @{ status = 0; body = $_.Exception.GetBaseException().Message }
+        return @{ status = 0; body = $_.Exception.GetBaseException().Message; path = $Path }
     }
+}
+
+function Invoke-DatamanagerLogin([string[]]$Candidates) {
+    # Logs in as $script:Role, trying each digest in turn; returns the one
+    # accepted, or $null, and leaves accepted, refused or unverified in
+    # $script:LoginOutcome. A Datamanager has no login endpoint: a read of a
+    # setting that asked for the digest stands in for it, the export limit
+    # first. One that is missing or answers without a login proves nothing.
+    $probes = @($DatamanagerLoginPath) + @($Candidates | Where-Object { $_ -like '/config/*' -and $_ -ne $DatamanagerLoginPath })
+    $probes = @($probes | Select-Object -First $DatamanagerLoginTries)
+    foreach ($scheme in $DatamanagerSchemes) {
+        $script:DigestScheme = $scheme
+        $script:SecretHasher = [System.Security.Cryptography.SHA256]::Create()
+        if ($scheme -eq 'gen24-md5') { $script:SecretHasher = [System.Security.Cryptography.MD5]::Create() }
+        foreach ($path in $probes) {
+            $script:Challenged = $false
+            $status = (Read-Endpoint $path $true).status
+            $script:LoginStatus = $status
+            if ($status -eq 401) { break }
+            if ($status -eq 200 -and $script:Challenged) {
+                $script:LoginOutcome = 'accepted'
+                return $scheme
+            }
+        }
+        if ($status -ne 401) {
+            $script:LoginOutcome = 'unverified'
+            return $null
+        }
+    }
+    $script:LoginOutcome = 'refused'
+    return $null
+}
+
+function Find-DatamanagerPaths {
+    # The /config/ and /status/ paths the interface's page and scripts name,
+    # with the two asked for in any case; the count of those left out by the
+    # cap goes to $script:PathsLeftOut.
+    $named = New-Object 'System.Collections.Generic.SortedSet[string]'
+    $page = Read-Endpoint '/' $false
+    $pagePath = '/'
+    if ($page.path) { $pagePath = $page.path }
+    # Only the device's own scripts, relative to the page that answered.
+    $base = New-Object Uri ("http://$($script:InverterHost)$pagePath")
+    $texts = @([string]$page.body)
+    foreach ($match in [regex]::Matches([string]$page.body, $DatamanagerScriptPattern)) {
+        $source = New-Object Uri ($base, $match.Groups[1].Value)
+        if ($source.Authority -ne $base.Authority) { continue }
+        $texts += [string](Read-Endpoint $source.PathAndQuery $false).body
+    }
+    foreach ($text in $texts) {
+        foreach ($match in [regex]::Matches($text, $DatamanagerPathPattern)) {
+            $path = $match.Groups[1].Value
+            if ($path -notmatch $DatamanagerSkip -and $path -notin $DatamanagerPaths) { [void]$named.Add($path) }
+        }
+    }
+    $room = $DatamanagerMaxPaths - $DatamanagerPaths.Count
+    $script:PathsLeftOut = [Math]::Max(0, $named.Count - $room)
+    if ($script:PathsLeftOut) { Write-Host "$($script:PathsLeftOut) of the paths the interface names are left out." }
+    $kept = New-Object 'System.Collections.Generic.SortedSet[string]'
+    foreach ($path in @($DatamanagerPaths) + @($named | Select-Object -First $room)) { [void]$kept.Add($path) }
+    return @($kept)
 }
 
 # -- JSON and redaction ------------------------------------------------------------
@@ -550,9 +669,44 @@ function New-ExportText([string]$Login, [bool]$Redact, $Modbus, [string[]]$Paths
     }
     $loginJson = 'null'
     if ($Login) { $loginJson = ConvertTo-JsonString $Login }
-    $text = "{`n  `"tool`": `"inverter_dump`",`n  `"created`": `"$((Get-Date).ToString('s'))`",`n  `"login`": $loginJson,`n  `"redacted`": $($Redact.ToString().ToLower()),`n  `"modbus`": $modbusJson,`n  `"endpoints`": {`n$($entries -join ",`n")`n  }`n}`n"
+    $digestJson = 'null'
+    if ($script:Challenge) {
+        # The challenge without its nonce: which digest the device asks for.
+        # Redacted after the bodies, whose sensitive values it learns.
+        $fields = @($script:Challenge.Keys | Sort-Object | ForEach-Object {
+            "$(ConvertTo-JsonString $_): $(ConvertTo-JsonString (Protect-TextIf ([string]$script:Challenge[$_]) $Redact))"
+        })
+        $digestJson = "{`"scheme`": $(ConvertTo-JsonString ([string]$script:DigestScheme)), `"challenge`": {$($fields -join ', ')}}"
+    }
+    $text = "{`n  `"tool`": `"inverter_dump`",`n  `"created`": `"$((Get-Date).ToString('s'))`",`n  `"login`": $loginJson,`n  `"digest`": $digestJson,`n  `"paths_left_out`": $([int]$script:PathsLeftOut),`n  `"redacted`": $($Redact.ToString().ToLower()),`n  `"modbus`": $modbusJson,`n  `"endpoints`": {`n$($entries -join ",`n")`n  }`n}`n"
     if (-not (Test-JsonText $text)) { throw 'The export came out as invalid JSON; nothing was saved.' }
     return $text
+}
+
+function Get-LoginOutcomeText([string]$Outcome) {
+    # Unverified covers a setting that asked nothing and one that failed after
+    # the challenge: neither says whether the password is right.
+    if ($Outcome -eq 'refused') {
+        return "The Datamanager refused the login (HTTP $($script:LoginStatus)); reading without it."
+    }
+    return 'The login could not be verified; reading without it.'
+}
+
+function Read-DatamanagerSettings($Paths) {
+    # Asks for the login, logs in and files the Datamanager's paths; returns
+    # the role accepted, or $null.
+    $script:Role = (Read-Host 'Login (admin or service) [service]').Trim().ToLower()
+    if (-not $script:Role) { $script:Role = 'service' }
+    $secure = Read-Host "Password of $($script:Role)" -AsSecureString
+    $script:Password = [Runtime.InteropServices.Marshal]::PtrToStringBSTR(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
+    $found = Find-DatamanagerPaths
+    $scheme = Invoke-DatamanagerLogin $found
+    $accepted = $null -ne $scheme
+    if (-not $accepted) { Write-Host (Get-LoginOutcomeText $script:LoginOutcome) }
+    foreach ($path in $found) { $Paths[$path] = $accepted }
+    if ($accepted) { return $script:Role }
+    return $null
 }
 
 function Invoke-Dump {
@@ -570,8 +724,21 @@ function Invoke-Dump {
     if ($webAnswers) { foreach ($path in $PublicPaths) { $paths[$path] = $false } }
 
     $loginRole = $null
+    $script:Challenge = $null
+    $script:DigestScheme = $null
+    $script:PathsLeftOut = 0
     $answer = 'n'
+    $datamanager = $webAnswers -and -not $webInterface
     if ($webInterface) { $answer = Read-Host 'Also read the settings that need a login? [y/N]' }
+    if ($datamanager) {
+        $answer = Read-Host 'This looks like a Datamanager (SnapINverter). Also read its settings with the admin or service login? [y/N]'
+        if ($answer -match '^[yYjJ]') {
+            $loginRole = Read-DatamanagerSettings $paths
+        } else {
+            foreach ($path in (Find-DatamanagerPaths)) { $paths[$path] = $false }
+        }
+        $answer = 'n'
+    }
     if ($answer -match '^[yYjJ]') {
         $script:Role = (Read-Host 'Login (customer or technician) [customer]').Trim().ToLower()
         if (-not $script:Role) { $script:Role = 'customer' }

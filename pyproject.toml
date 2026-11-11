@@ -314,6 +314,7 @@ files = [
   "custom_components/fronius_modbus/inverter_events.py",
   "custom_components/fronius_modbus/flow_forms.py",
   "custom_components/fronius_modbus/export_limit.py",
+  "custom_components/fronius_modbus/adoption.py",
 ]
 
 # Path tracking rules

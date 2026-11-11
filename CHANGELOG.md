@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- Switching from redpomodoro 0.1.9 through the Marketplace now keeps entity ids, names, areas and history: the first setup takes over what the deleted 0.1.9 entry left. Home Assistant keeps it for 30 days. Anything unclear, such as which of several meters 0.1.9 read, is left out. Devices come along only if deleting 0.1.9 worked and its entry was named Fronius.
 - `tools/inverter_dump.bat` can also read the settings of a Datamanager (SnapINverter) with its `admin` or `service` login (issue 110). It still only reads.
 - Sensors for the inverter's four energy management outputs: `Energy management output 1` to `4` show whether a relay is on, and `Energy management output 1 reason` to `4 reason` why. They read the web interface without a login and are off by default.
 
@@ -10,6 +11,7 @@
 - A storage mode another controller such as evcc sets is logged at info instead of as a warning: with evcc it is normal operation, many times a day. The select's history keeps every change; a mode Home Assistant wrote that the inverter does not take stays a warning.
 
 ### Fixed
+- If an inverter was still set up from redpomodoro 0.1.9, adding it again created a second entry with every entity twice. It now stops as already configured.
 - Home Assistant 2026.11 logged `The deprecated constant CONN_CLASS_LOCAL_POLL was used from fronius_modbus` at every start, and Home Assistant 2027.5 removes that constant. The integration no longer uses it.
 - With another controller such as evcc, the storage mode could show the wrong mode: StorCtl_Mod switches only one rate on in its charge and discharge modes, and the inverter ignores the other, but the integration judged both. evcc's hold after discharging showed *Discharge to Grid*, its hold charge after charging *Charge from Grid*; the limit and grid power numbers showed the ignored register, and the `Core storage control mode` sensor could name the direction of a rate the inverter ignores. They now follow only the rates the inverter applies.
 - In those one-rate block modes, a charge or discharge limit set in Home Assistant went into the rate the inverter ignores and had no effect; setting it now also switches that rate on. A 0 W limit beside a rate that is off is no longer refused as blocking both ways.

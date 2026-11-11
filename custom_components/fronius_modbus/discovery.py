@@ -27,6 +27,7 @@ from .const import (
     entry_unique_id,
     instance_key,
 )
+from .flow_entry import host_holder
 from .fronius_modbus_api.device import FroniusInverter
 from .fronius_modbus_api.exceptions import error_text
 from .token_store import async_get_token_store, canonical_host
@@ -150,7 +151,7 @@ async def async_follow_host(
         return
     values = {**entry.data, **entry.options}
     unique_id = entry_unique_id({CONF_HOST: host})
-    holder = hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, unique_id)
+    holder = host_holder(hass, unique_id)
     if holder is not None and holder.entry_id != entry.entry_id:
         _LOGGER.warning(
             "The inverter of %s announces an address another entry serves; "

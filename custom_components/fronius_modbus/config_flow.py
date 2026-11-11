@@ -43,6 +43,7 @@ from .flow_entry import (
     _async_reload_unless_listened,
     _claim_host,
     async_update_entry_from_input,
+    host_without_unique_id,
 )
 from .flow_forms import password_schema, role_schema, settings_schema
 from .flow_settings import (
@@ -623,7 +624,14 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
             if card["context"]["source"] == config_entries.SOURCE_ZEROCONF:
                 self.hass.config_entries.flow.async_abort(card["flow_id"])
         await self.async_set_unique_id(unique_id)
+        self._abort_if_host_held()
+
+    def _abort_if_host_held(self) -> None:
+        """Abort for a host another entry holds, with or without a unique id."""
+        # Home Assistant lets a host whose card was ignored be set up by hand.
         self._abort_if_unique_id_configured()
+        if host_without_unique_id(self.hass, str(self.unique_id)) is not None:
+            raise data_entry_flow.AbortFlow("already_configured")
 
     async def _async_claim_reconfigured_host(self, settings: dict[str, Any]) -> None:
         await self._async_claim_entry_host(self._get_reconfigure_entry(), settings)
@@ -631,7 +639,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
     async def _async_finish_user(self, settings, info, previous_host):
         del previous_host
         await self.async_set_unique_id(entry_unique_id(settings))
-        self._abort_if_unique_id_configured()
+        self._abort_if_host_held()
         return self.async_create_entry(
             title=info["title"],
             data=_entry_payload(settings, reconfigure_required=False),
@@ -660,7 +668,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
         if discovery_info.ip_address.version != 4:
             return self.async_abort(reason="not_ipv4_address")
         await self.async_set_unique_id(entry_unique_id({CONF_HOST: host}))
-        self._abort_if_unique_id_configured()
+        self._abort_if_host_held()
         self._discovered_host = host
         self.context["title_placeholders"] = {
             "name": discovered_model(discovery_info.name)

@@ -136,6 +136,9 @@ class FroniusRuntimeData:
     # False while the meter topology could not be read: the meters beyond the
     # default one are then undecided, not gone.
     topology_confirmed: bool = True
+    # Only these prove a site has a single meter: the meters that answered may
+    # leave one out, and without a web client its one meter is a default.
+    reported_meter_unit_ids: tuple[int, ...] = ()
     # Reported at an earlier start: a power module seen once stays, since one
     # answer without it would otherwise retire it.
     reported_keys: frozenset[str] = frozenset()

@@ -68,7 +68,7 @@ COMPLEXITY_LIMIT = 15
 # improvement is written down.
 COMPLEXITY_BUDGETS = {
     "froniuswebclient.py::_parse_power_meter_info": 24,
-    "migrations.py::async_migrate_v019_mppt_statistics": 19,
+    "migrations.py::async_migrate_v019_mppt_statistics": 14,
 }
 
 

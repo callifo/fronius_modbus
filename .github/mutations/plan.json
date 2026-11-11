@@ -947,7 +947,7 @@
   {
     "label": "setup: the runtime learns the registered keys",
     "path": "custom_components/fronius_modbus/__init__.py",
-    "old": "        registered_keys=migrations.registered_keys(\n            hass, entry, migrations.v019_meter_unit_id(entry, meter_unit_ids, primary)\n        ),\n",
+    "old": "        registered_keys=migrations.registered_keys(\n            hass,\n            entry,\n            migrations.v019_meter_unit_id(\n                entry, meter_unit_ids, primary, topology.reported_unit_ids\n            ),\n        ),\n",
     "new": "",
     "tests": "single_404_keeps_the_registered_component_sensors"
   },
@@ -2081,15 +2081,15 @@
   {
     "label": "migrations: a name-based id counts as registered under its key",
     "path": "custom_components/fronius_modbus/migrations.py",
-    "old": "            keys.add(unique_id.removeprefix(legacy_prefix))\n",
-    "new": "            pass\n",
+    "old": "        return unique_id.removeprefix(legacy_prefix)\n",
+    "new": "        return unique_id\n",
     "tests": "upgrade_keeps_its_legacy_sensors"
   },
   {
     "label": "migrations: a v0.1.9 id counts as registered under its key",
     "path": "custom_components/fronius_modbus/migrations.py",
-    "old": "            keys.add(v019_keys[unique_id])\n",
-    "new": "            pass\n",
+    "old": "        return _V019_MPPT_KEYS[unique_id]\n",
+    "new": "        return unique_id\n",
     "tests": "upgrade_keeps_its_legacy_sensors"
   },
   {
@@ -2585,8 +2585,8 @@
   {
     "label": "migrations: a 0.1.9 id counts as registered",
     "path": "custom_components/fronius_modbus/migrations.py",
-    "old": "        else:\n            keys.add(_v019_key(unique_id, v019_meter))\n",
-    "new": "",
+    "old": "    return _v019_key(unique_id, v019_meter)\n",
+    "new": "    return unique_id\n",
     "tests": "0_1_9_id_counts_as_registered"
   },
   {
@@ -2697,7 +2697,7 @@
   {
     "label": "migrations: a 0.1.9 meter not on the bus takes no other meter's ids",
     "path": "custom_components/fronius_modbus/migrations.py",
-    "old": "    return configured if configured in meter_unit_ids else None\n",
+    "old": "    return configured if configured in list(meter_unit_ids) else None\n",
     "new": "    return configured\n",
     "tests": "meter_that_is_gone_is_neither_moved_nor_removed"
   },
@@ -2719,7 +2719,7 @@
     "label": "migrations: the 0.1.9 meter device follows the meter 0.1.9 read",
     "path": "custom_components/fronius_modbus/migrations.py",
     "old": "        moves[f\"{name}_meter1\"] = f\"{key}_meter_{meter_unit_id}\"\n",
-    "new": "        moves[f\"{name}_meter1\"] = f\"{key}_meter_{runtime.primary_meter_unit_id}\"\n",
+    "new": "        moves[f\"{name}_meter1\"] = f\"{key}_meter_{entry.runtime_data.primary_meter_unit_id}\"\n",
     "tests": "meter_keeps_the_address_it_was_configured_with"
   },
   {
@@ -2756,5 +2756,166 @@
     "old": "        if host_without_unique_id(self.hass, str(self.unique_id)) is not None:\n",
     "new": "        if host_holder(self.hass, str(self.unique_id)) is not None:\n",
     "tests": "ignored_can_be_set_up_by_hand"
+  },
+  {
+    "label": "migrations: an unknown 0.1.9 meter is the one meter reported",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "        return reported_unit_ids[0] if len(reported_unit_ids) == 1 else None\n",
+    "new": "        return None\n",
+    "tests": "takes_over_a_deleted_0_1_9_entry"
+  },
+  {
+    "label": "migrations: an unknown 0.1.9 meter needs the web API's word",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "        return reported_unit_ids[0] if len(reported_unit_ids) == 1 else None\n",
+    "new": "        meters = list(meter_unit_ids)\n        return meters[0] if len(meters) == 1 else None\n",
+    "tests": "waits_for_a_confirmed_single_meter"
+  },
+  {
+    "label": "meter topology: an answer of the web API is marked as one",
+    "path": "custom_components/fronius_modbus/meter_topology.py",
+    "old": "        answered=True,\n",
+    "new": "",
+    "tests": "takes_over_a_deleted_0_1_9_entry"
+  },
+  {
+    "label": "meter topology: the default without a web client reports no meter",
+    "path": "custom_components/fronius_modbus/meter_topology.py",
+    "old": "        if not (self.answered and self.confirmed):\n",
+    "new": "        if not self.confirmed:\n",
+    "tests": "waits_for_a_confirmed_single_meter"
+  },
+  {
+    "label": "setup: the runtime learns the meters the web API reported",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "        reported_meter_unit_ids=topology.reported_unit_ids,\n",
+    "new": "",
+    "tests": "takes_over_a_deleted_0_1_9_entry"
+  },
+  {
+    "label": "adoption: only this integration's deleted rows are an origin",
+    "path": "custom_components/fronius_modbus/adoption.py",
+    "old": "        if row.platform == DOMAIN and _left_behind(hass, row):\n",
+    "new": "        if _left_behind(hass, row):\n",
+    "tests": "rows_of_another_integration_count_for_nothing"
+  },
+  {
+    "label": "adoption: a row whose entry is gone counts as left behind",
+    "path": "custom_components/fronius_modbus/adoption.py",
+    "old": "        or hass.config_entries.async_get_entry(row.config_entry_id) is None\n",
+    "new": "        or False\n",
+    "tests": "takes_over_a_deleted_0_1_9_entry"
+  },
+  {
+    "label": "adoption: nothing is taken over from two deleted entries",
+    "path": "custom_components/fronius_modbus/adoption.py",
+    "old": "    if len(removals) != 1:\n",
+    "new": "    if not removals:\n",
+    "tests": "nothing_is_taken_over_from_two_deleted_entries"
+  },
+  {
+    "label": "adoption: rows of a later version are not taken over",
+    "path": "custom_components/fronius_modbus/adoption.py",
+    "old": "    if any(_LATER_UNIQUE_ID.match(row.unique_id) for row in rows):\n        return []\n",
+    "new": "",
+    "tests": "rows_of_a_later_version_are_not_taken_over"
+  },
+  {
+    "label": "adoption: ids named after the entry are a later version",
+    "path": "custom_components/fronius_modbus/adoption.py",
+    "old": "    rf\"^{ENTITY_PREFIX}_(?:(?:[0-9a-z]{{26}}|[0-9a-f]{{32}})_(?!_)|.+__)\"\n",
+    "new": "    rf\"^{ENTITY_PREFIX}_(?:(?:[0-9a-z]{{26}}|[0-9a-f]{{32}})_(?!_))\"\n",
+    "tests": "rows_of_a_later_version_are_not_taken_over"
+  },
+  {
+    "label": "adoption: nothing is taken over beside another entry",
+    "path": "custom_components/fronius_modbus/adoption.py",
+    "old": "    if entries != [entry]:\n        return False\n",
+    "new": "",
+    "tests": "nothing_is_taken_over_beside_another_entry"
+  },
+  {
+    "label": "adoption: an ignored discovery is no other entry",
+    "path": "custom_components/fronius_modbus/adoption.py",
+    "old": "        if candidate.source != SOURCE_IGNORE\n",
+    "new": "",
+    "tests": "ignored_discovery_does_not_stop_the_takeover"
+  },
+  {
+    "label": "adoption: an entry already set up takes nothing over",
+    "path": "custom_components/fronius_modbus/adoption.py",
+    "old": "    return not er.async_entries_for_config_entry(registry, entry.entry_id)\n",
+    "new": "    return True\n",
+    "tests": "an_entry_already_set_up_takes_nothing_over"
+  },
+  {
+    "label": "adoption: a deleted 0.1.9 meter's address counts as unknown",
+    "path": "custom_components/fronius_modbus/adoption.py",
+    "old": "    meter = resolve_v019_meter(\n        V019_METER_UNKNOWN,\n",
+    "new": "    meter = resolve_v019_meter(\n        None,\n",
+    "tests": "deleted_0_1_9_meter_is_not_guessed_among_two"
+  },
+  {
+    "label": "adoption: a row taken over counts as registered",
+    "path": "custom_components/fronius_modbus/adoption.py",
+    "old": "        runtime, registered_keys=runtime.registered_keys | set(keys.values())\n",
+    "new": "        runtime, registered_keys=runtime.registered_keys\n",
+    "tests": "string_dark_at_the_new_setup_keeps_its_sensor"
+  },
+  {
+    "label": "adoption: a row with no entity now stays deleted",
+    "path": "custom_components/fronius_modbus/adoption.py",
+    "old": "    chosen = [row for row in rows if f\"{prefix}_{keys[row.unique_id]}\" in expected]\n",
+    "new": "    chosen = list(rows)\n",
+    "tests": "deleted_row_with_no_entity_now_stays_deleted"
+  },
+  {
+    "label": "adoption: the runtime learns the keys taken over",
+    "path": "custom_components/fronius_modbus/adoption.py",
+    "old": "        | {keys[row.unique_id] for row in chosen},\n",
+    "new": "        | set(),\n",
+    "tests": "string_dark_at_the_new_setup_keeps_its_sensor"
+  },
+  {
+    "label": "adoption: the takeover is noted for the devices",
+    "path": "custom_components/fronius_modbus/adoption.py",
+    "old": "        data={**entry.data, ADOPTED_V019: True, V019_METER_UNIT_ID: V019_METER_UNKNOWN},\n",
+    "new": "        data={**entry.data, V019_METER_UNIT_ID: V019_METER_UNKNOWN},\n",
+    "tests": "owners_changes_of_a_deleted_0_1_9_entry_are_kept or first_setup_is_retried"
+  },
+  {
+    "label": "adoption: a device taken over is not taken over again",
+    "path": "custom_components/fronius_modbus/adoption.py",
+    "old": "        if new in current and new not in done\n",
+    "new": "        if new in current\n",
+    "tests": "comes_back_as_it_was_after_its_removal"
+  },
+  {
+    "label": "adoption: the devices taken over are remembered",
+    "path": "custom_components/fronius_modbus/adoption.py",
+    "old": "        data={**entry.data, ADOPTED_DEVICES: sorted(done | set(pending.values()))},\n",
+    "new": "        data={**entry.data},\n",
+    "tests": "comes_back_as_it_was_after_its_removal"
+  },
+  {
+    "label": "migrations: a 0.1.9 string with no device takes the inverter's name",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "    if inverter is not None and inverter.name_by_user:\n        return inverter.name_by_user\n",
+    "new": "",
+    "tests": "string_taken_over_is_named_after_its_device"
+  },
+  {
+    "label": "migrations: a 0.1.9 string named after the inverter device to come",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "    return device_info(entry.runtime_data, entry, \"inverter\").get(\"name\")\n",
+    "new": "    return None\n",
+    "tests": "string_of_an_entry_without_devices_is_named_after_the_inverter"
+  },
+  {
+    "label": "adoption: a device already there is left as it is",
+    "path": "custom_components/fronius_modbus/adoption.py",
+    "old": "        if registry.async_get_device_by_identifier((DOMAIN, new), entry.entry_id):\n            continue\n",
+    "new": "",
+    "tests": "no_old_meter_device_stays_while_the_cleanup_waits"
   }
 ]

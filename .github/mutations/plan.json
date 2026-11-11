@@ -2875,5 +2875,12 @@
     "old": "    return device_info(entry.runtime_data, entry, \"inverter\").get(\"name\")\n",
     "new": "    return None\n",
     "tests": "string_of_an_entry_without_devices_is_named_after_the_inverter"
+  },
+  {
+    "label": "adoption: a device already there is left as it is",
+    "path": "custom_components/fronius_modbus/adoption.py",
+    "old": "        if registry.async_get_device_by_identifier((DOMAIN, new), entry.entry_id):\n            continue\n",
+    "new": "",
+    "tests": "no_old_meter_device_stays_while_the_cleanup_waits"
   }
 ]

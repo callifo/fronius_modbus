@@ -2719,7 +2719,7 @@
     "label": "migrations: the 0.1.9 meter device follows the meter 0.1.9 read",
     "path": "custom_components/fronius_modbus/migrations.py",
     "old": "        moves[f\"{name}_meter1\"] = f\"{key}_meter_{meter_unit_id}\"\n",
-    "new": "        moves[f\"{name}_meter1\"] = f\"{key}_meter_{runtime.primary_meter_unit_id}\"\n",
+    "new": "        moves[f\"{name}_meter1\"] = f\"{key}_meter_{entry.runtime_data.primary_meter_unit_id}\"\n",
     "tests": "meter_keeps_the_address_it_was_configured_with"
   },
   {
@@ -2847,13 +2847,6 @@
     "old": "        data={**entry.data, ADOPTED_V019: True, V019_METER_UNIT_ID: V019_METER_UNKNOWN},\n",
     "new": "        data={**entry.data, V019_METER_UNIT_ID: V019_METER_UNKNOWN},\n",
     "tests": "owners_changes_of_a_deleted_0_1_9_entry_are_kept or first_setup_is_retried"
-  },
-  {
-    "label": "adoption: a device already there is left as it is",
-    "path": "custom_components/fronius_modbus/adoption.py",
-    "old": "        if registry.async_get_device_by_identifier((DOMAIN, new), entry.entry_id):\n            continue\n",
-    "new": "",
-    "tests": "platforms_made_stays_once_the_0_1_9_meter_is_known"
   },
   {
     "label": "adoption: a device taken over is not taken over again",

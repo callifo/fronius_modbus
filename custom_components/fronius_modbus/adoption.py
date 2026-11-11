@@ -172,11 +172,7 @@ def async_adopt_deleted_devices(hass: HomeAssistant, entry: ConfigEntry) -> None
     if not pending:
         return
     registry = dr.async_get(hass)
-    for old, new in pending.items():
-        # Made by the platforms while the 0.1.9 meter was not certain: the
-        # old device could not take its identifier and would stay beside it.
-        if registry.async_get_device_by_identifier((DOMAIN, new), entry.entry_id):
-            continue
+    for old in pending:
         registry.async_get_or_create(
             config_entry_id=entry.entry_id, identifiers={(DOMAIN, old)}
         )

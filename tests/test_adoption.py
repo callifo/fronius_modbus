@@ -270,6 +270,13 @@ async def test_a_meter_device_the_platforms_made_stays_once_the_0_1_9_meter_is_k
 
     assert new.state is ConfigEntryState.LOADED
     assert _device(hass, new, "meter_200").id == meter.id
+    # The old meter device would stay beside it, empty, until a cleanup.
+    assert not any(
+        (DOMAIN, "Fronius_meter1") in device.identifiers
+        for device in dr.async_entries_for_config_entry(
+            dr.async_get(hass), new.entry_id
+        )
+    )
 
 
 async def test_a_deleted_0_1_9_meter_is_not_guessed_among_two(

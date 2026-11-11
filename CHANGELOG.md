@@ -3,7 +3,7 @@
 ## Unreleased
 
 ### Added
-- Switching from redpomodoro 0.1.9 to this repository through the Marketplace keeps entity ids, names, areas and history: the first setup after the switch takes over what the deleted 0.1.9 entry left, as far as it matches an entity of the inverter. Home Assistant keeps deleted entries for 30 days. A meter is taken over only when the web API reports a single meter, and nothing is taken over while more than one deleted entry is kept. If deleting the 0.1.9 entry fails because it no longer loads, as on Home Assistant 2026.7 and later, its devices are not taken over.
+- Switching from redpomodoro 0.1.9 to this repository through the Marketplace keeps entity ids, names, areas and history: the first setup after the switch takes over what the deleted 0.1.9 entry left, as far as it matches an entity of the inverter. Home Assistant keeps deleted entries for 30 days. A meter is taken over only when the web API reports a single meter, and nothing is taken over while more than one deleted entry is kept. If deleting the 0.1.9 entry fails because it no longer loads, as on Home Assistant 2026.7 and later, its devices are not taken over, nor are the devices of a 0.1.9 entry named other than Fronius.
 - Sensors for the inverter's four energy management outputs: `Energy management output 1` to `4` show whether a relay is on, and `Energy management output 1 reason` to `4 reason` why. They read the web interface without a login and are off by default.
 
 ### Changed

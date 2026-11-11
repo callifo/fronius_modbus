@@ -135,6 +135,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
     )
 
     api_username = str(_entry_value(entry, CONF_API_USERNAME, API_USERNAME))
+    migrations.async_claim_unique_id(hass, entry)
     api_token = await migrations.async_prepare_entry_token(hass, entry, host)
     await migrations.async_sync_login_request(
         hass, entry, has_token=api_token is not None

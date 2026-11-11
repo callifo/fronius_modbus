@@ -27,6 +27,7 @@ from .const import (
     TECHNICIAN_USERNAME,
     entity_prefix,
     entry_title,
+    entry_unique_id,
     instance_key,
     ModbusRestriction,
 )
@@ -137,6 +138,20 @@ def v019_meter_unit_id(
     if configured is None:
         return primary_meter_unit_id
     return configured if configured in meter_unit_ids else None
+
+
+@callback
+def async_claim_unique_id(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Give an entry without a unique id its host, unless another entry holds it.
+
+    0.1.9 set none, so a new setup of the same host made a second entry.
+    """
+    unique_id = entry_unique_id({**entry.data, **entry.options})
+    if entry.unique_id is not None or not unique_id:
+        return
+    if hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, unique_id):
+        return
+    hass.config_entries.async_update_entry(entry, unique_id=unique_id)
 
 
 def _v019_meter_setting(data: dict[str, Any]) -> dict[str, int]:

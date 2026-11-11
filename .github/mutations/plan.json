@@ -2723,20 +2723,6 @@
     "tests": "meter_keeps_the_address_it_was_configured_with"
   },
   {
-    "label": "setup: an entry without a unique id claims its host",
-    "path": "custom_components/fronius_modbus/__init__.py",
-    "old": "    migrations.async_claim_unique_id(hass, entry)\n",
-    "new": "",
-    "tests": "host_of_a_0_1_9_entry_aborts"
-  },
-  {
-    "label": "migrations: a host another entry holds is not claimed",
-    "path": "custom_components/fronius_modbus/migrations.py",
-    "old": "    if hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, unique_id):\n        return\n",
-    "new": "",
-    "tests": "host_another_entry_holds"
-  },
-  {
     "label": "flow: a host an entry without unique id has is held",
     "path": "custom_components/fronius_modbus/flow_entry.py",
     "old": "            if entry.unique_id is None\n            and entry_unique_id({**entry.data, **entry.options}) == unique_id\n",

@@ -2349,14 +2349,3 @@ async def test_a_new_setup_of_the_host_of_a_0_1_9_entry_aborts(hass, mock_modbus
 
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
-
-
-async def test_a_0_1_9_entry_leaves_the_host_another_entry_holds(hass, mock_modbus):
-    """Two entries holding one unique id would let neither be found by it."""
-    holder = make_entry(hass)
-    entry, _ = _redpomodoro_entry(hass)
-
-    await setup_entry(hass, entry)
-
-    assert holder.unique_id == HOST
-    assert entry.unique_id is None

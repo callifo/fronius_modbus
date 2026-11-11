@@ -298,6 +298,7 @@ $expected = Get-TestHex $sha256 "${secret}:synthetic-nonce:$($field.nc):$($field
 Assert-True ($field.uri -eq '/api/commands/Login') "the login signs its path without the query: $header"
 Assert-True ($field.response -eq $expected) "the digest answers the challenge: $header"
 Assert-True ($script:LoginStatus -eq 200) "the login reports its status: $($script:LoginStatus)"
+Assert-True ($script:DigestScheme -eq 'gen24') "the GEN24 login names its digest: '$($script:DigestScheme)'"
 
 # -- the dump's login -----------------------------------------------------
 
@@ -445,8 +446,12 @@ $scheme = Invoke-TestLogin @('200', '401+', '200+')
 Assert-True ($scheme -eq 'gen24-md5') "a setting read without a login proves no login: $scheme after $($script:Tries -join ', ')"
 $scheme = Invoke-TestLogin @('404', '404')
 Assert-True ($null -eq $scheme -and $script:Tries.Count -eq 2) "no setting asking for the digest is no login, with one try each: $($script:Tries -join ', ')"
+Assert-True ($script:LoginOutcome -eq 'unverified') "no setting asking for the digest leaves the login unverified: $($script:LoginOutcome)"
 $scheme = Invoke-TestLogin @('401+', '401+', '401+')
 Assert-True ($null -eq $scheme -and $script:LoginStatus -eq 401) "every digest refused is no login: $scheme"
+Assert-True ($script:LoginOutcome -eq 'refused') "every digest refused reads as refused: $($script:LoginOutcome)"
+$scheme = Invoke-TestLogin @('200+')
+Assert-True ($script:LoginOutcome -eq 'accepted') "an accepted digest reads as accepted: $($script:LoginOutcome)"
 
 & {
     function Read-Endpoint([string]$Path, [bool]$WithLogin) {
@@ -463,6 +468,48 @@ Assert-True ($null -eq $scheme -and $script:LoginStatus -eq 401) "every digest r
 $expected = '/config/batteries,/config/exportlimit/,/config/meter,/config/powerunit/,/status/version'
 Assert-True (($script:Found -join ',') -eq $expected) "the interface names the paths, the actions left out: $($script:Found -join ', ')"
 Assert-True (($script:Asked -join ',') -eq '/,/app.js') "only the device's own scripts are read: $($script:Asked -join ', ')"
+
+function Find-TestPaths([hashtable]$Pages) {
+    # Discovery against the given pages; a value is a body, or @(path after redirects, body).
+    $script:Asked = @()
+    & {
+        function Read-Endpoint([string]$Path, [bool]$WithLogin) {
+            $script:Asked += , $Path
+            $page = $Pages[$Path]
+            if ($page -is [array]) { return @{ status = 200; body = $page[1]; path = $page[0] } }
+            return @{ status = 200; body = $page; path = $Path }
+        }
+        $script:Found = Find-DatamanagerPaths
+    }
+    return $script:Found
+}
+
+$found = Find-TestPaths @{ '/' = '<script src="app.js?v=3"></script>'; '/app.js?v=3' = '"/config/meter"' }
+Assert-True ($found -contains '/config/meter') "a script with a version query is read: $($script:Asked -join ', ')"
+$found = Find-TestPaths @{ '/' = @('/ui/index.html', '<script src="app.js"></script>'); '/ui/app.js' = '"/config/meter"' }
+Assert-True ($found -contains '/config/meter') "a script beside a redirected page is read there: $($script:Asked -join ', ')"
+$found = Find-TestPaths @{ '/' = '<script src="//cdn.example/x.js"></script><script src="http://cdn.example/y.js"></script>' }
+Assert-True (($script:Asked -join ',') -eq '/') "a script of another host is not read: $($script:Asked -join ', ')"
+
+$many = -join (1..85 | ForEach-Object { "'/config/a{0:d3}' " -f $_ })
+$found = Find-TestPaths @{ '/' = $many }
+Assert-True ($found -contains '/config/exportlimit/' -and $found -contains '/config/batteries') "the two asked for stay beyond the cap: $($found.Count) paths"
+Assert-True ($script:PathsLeftOut -eq 85 + 2 - $DatamanagerMaxPaths) "the paths left out are counted: $($script:PathsLeftOut)"
+
+# -- the export -----------------------------------------------------------
+
+$script:InverterHost = '192.0.2.1'
+$script:Challenge = @{ realm = 'Datamanager LAB0000012345'; domain = 'http://192.0.2.1/'; qop = 'auth' }
+$script:DigestScheme = 'standard'
+$script:PathsLeftOut = 3
+$export = New-ExportText 'service' $true $null @('/config/info') @(200) @('{"serial":"LAB0000012345"}')
+Assert-True (Test-ValidJson $export) "the export with a challenge is valid JSON: $export"
+Assert-True (-not $export.Contains('LAB0000012345') -and -not $export.Contains('192.0.2.1')) "the challenge is redacted like the answers: $export"
+Assert-True ($export.Contains('"paths_left_out": 3')) "the export names the paths left out: $export"
+$export = New-ExportText 'service' $false $null @('/config/info') @(200) @('{"serial":"LAB0000012345"}')
+Assert-True ($export.Contains('Datamanager LAB0000012345')) "without redaction the challenge is kept: $export"
+$script:Challenge = $null
+$script:PathsLeftOut = 0
 
 $withService = @{ 'Datamanager' = 'y' }
 Invoke-TestDump 200 $withService 404

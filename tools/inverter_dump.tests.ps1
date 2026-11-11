@@ -476,6 +476,7 @@ Assert-True (($script:Asked -join ',') -eq '/,/app.js') "only the device's own s
 
 function Find-TestPaths([hashtable]$Pages) {
     # Discovery against the given pages; a value is a body, or @(path after redirects, body).
+    $script:InverterHost = '192.0.2.1'
     $script:Asked = @()
     & {
         function Read-Endpoint([string]$Path, [bool]$WithLogin) {

@@ -286,7 +286,7 @@ function Find-DatamanagerPaths {
     $pagePath = '/'
     if ($page.path) { $pagePath = $page.path }
     # Only the device's own scripts, relative to the page that answered.
-    $base = New-Object Uri ("http://device$pagePath")
+    $base = New-Object Uri ("http://$($script:InverterHost)$pagePath")
     $texts = @([string]$page.body)
     foreach ($match in [regex]::Matches([string]$page.body, $DatamanagerScriptPattern)) {
         $source = New-Object Uri ($base, $match.Groups[1].Value)
@@ -683,6 +683,15 @@ function New-ExportText([string]$Login, [bool]$Redact, $Modbus, [string[]]$Paths
     return $text
 }
 
+function Get-LoginOutcomeText([string]$Outcome) {
+    # Unverified covers a setting that asked nothing and one that failed after
+    # the challenge: neither says whether the password is right.
+    if ($Outcome -eq 'refused') {
+        return "The Datamanager refused the login (HTTP $($script:LoginStatus)); reading without it."
+    }
+    return 'The login could not be verified; reading without it.'
+}
+
 function Read-DatamanagerSettings($Paths) {
     # Asks for the login, logs in and files the Datamanager's paths; returns
     # the role accepted, or $null.
@@ -694,11 +703,7 @@ function Read-DatamanagerSettings($Paths) {
     $found = Find-DatamanagerPaths
     $scheme = Invoke-DatamanagerLogin $found
     $accepted = $null -ne $scheme
-    if ($script:LoginOutcome -eq 'refused') {
-        Write-Host "The Datamanager refused the login (HTTP $($script:LoginStatus)); reading without it."
-    } elseif (-not $accepted) {
-        Write-Host 'No setting asked for the login, so it is not checked; reading without it.'
-    }
+    if (-not $accepted) { Write-Host (Get-LoginOutcomeText $script:LoginOutcome) }
     foreach ($path in $found) { $Paths[$path] = $accepted }
     if ($accepted) { return $script:Role }
     return $null

@@ -8,6 +8,7 @@ from modbus_connection import ModbusConnectionError, ModbusTimeoutError
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.fronius_modbus import migrations
 from custom_components.fronius_modbus.const import DOMAIN, entity_prefix, instance_key
 from custom_components.fronius_modbus.token_store import async_get_token_store
 from homeassistant.config_entries import SOURCE_IGNORE, ConfigEntryState
@@ -508,3 +509,35 @@ async def test_a_string_of_an_entry_without_devices_is_named_after_the_inverter(
     )
     device_name = f"Fronius {new.runtime_data.device.identity.model}"
     assert entity_id.startswith(f"sensor.{slugify(device_name)}_"), entity_id
+
+
+async def test_no_old_meter_device_stays_while_the_cleanup_waits(
+    hass, mock_modbus, monkeypatch
+):
+    """The 0.1.9 meter device came back beside the platforms' one, empty.
+
+    Only the cleanup removed it, and a setup with a failed read leaves the
+    cleanup for later.
+    """
+    await _deleted_0_1_9_entry(hass)
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    new = make_entry(hass)
+    await setup_entry(hass, new)
+    meter = _device(hass, new, "meter_200")
+    monkeypatch.setattr(
+        _FakeWebClientWithTopology,
+        "topology",
+        {"unit_ids": [200], "primary_unit_id": 200, "locations_by_unit_id": {200: 0}},
+    )
+    monkeypatch.setattr(migrations, "_retirement_blocked", lambda *_args: True)
+
+    assert await hass.config_entries.async_reload(new.entry_id)
+    await hass.async_block_till_done()
+
+    assert _device(hass, new, "meter_200").id == meter.id
+    assert not any(
+        (DOMAIN, "Fronius_meter1") in device.identifiers
+        for device in dr.async_entries_for_config_entry(
+            dr.async_get(hass), new.entry_id
+        )
+    )

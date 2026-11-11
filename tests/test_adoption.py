@@ -16,6 +16,7 @@ from homeassistant.helpers import (
     device_registry as dr,
     entity_registry as er,
 )
+from homeassistant.util import slugify
 
 from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID
 from .test_e2e import (
@@ -470,3 +471,40 @@ async def test_an_ignored_discovery_does_not_stop_the_takeover(hass, mock_modbus
     await setup_entry(hass, new)
 
     assert not _untouched(hass, key)
+
+
+async def test_a_string_taken_over_is_named_after_its_device(
+    hass, mock_modbus, monkeypatch
+):
+    """A deleted row has no device; the migration named the string sensor without one.
+
+    It came as sensor.mppt_module_0_dc_power, where an update in place names
+    it after the inverter.
+    """
+    await _deleted_0_1_9_entry(hass)
+    await _log_in_with_one_meter(hass, mock_modbus, monkeypatch)
+    new = make_entry(hass)
+
+    await setup_entry(hass, new)
+
+    entity_id = er.async_get(hass).async_get_entity_id(
+        "sensor", DOMAIN, f"{entity_prefix(new.entry_id)}_mppt_module_0_dc_power"
+    )
+    assert entity_id.startswith("sensor.pv_roof_"), entity_id
+
+
+async def test_a_string_of_an_entry_without_devices_is_named_after_the_inverter(
+    hass, mock_modbus
+):
+    """With no device of the deleted entry left, the name the inverter device gets."""
+    old, _ = _deleted_rows(hass, OTHER_ENTRY_ID, "fm_mppt1_power")
+    await _remove(hass, old)
+    new = make_entry(hass)
+
+    await setup_entry(hass, new)
+
+    entity_id = er.async_get(hass).async_get_entity_id(
+        "sensor", DOMAIN, f"{entity_prefix(new.entry_id)}_mppt_module_0_dc_power"
+    )
+    device_name = f"Fronius {new.runtime_data.device.identity.model}"
+    assert entity_id.startswith(f"sensor.{slugify(device_name)}_"), entity_id

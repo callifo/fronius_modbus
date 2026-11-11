@@ -450,6 +450,11 @@ Assert-True ($script:LoginOutcome -eq 'unverified') "no setting asking for the d
 $scheme = Invoke-TestLogin @('401+', '401+', '401+')
 Assert-True ($null -eq $scheme -and $script:LoginStatus -eq 401) "every digest refused is no login: $scheme"
 Assert-True ($script:LoginOutcome -eq 'refused') "every digest refused reads as refused: $($script:LoginOutcome)"
+$scheme = Invoke-TestLogin @('500+', '404')
+Assert-True ($null -eq $scheme -and $script:LoginOutcome -eq 'unverified') "a device error after the challenge leaves the login unverified: $($script:LoginOutcome)"
+$text = Get-LoginOutcomeText 'unverified'
+Assert-True ($text -like '*could not be verified*' -and $text -notlike '*no setting*') "an unverified login names no cause: $text"
+Assert-True ((Get-LoginOutcomeText 'refused') -like '*refused*') "a refused login says so: $(Get-LoginOutcomeText 'refused')"
 $scheme = Invoke-TestLogin @('200+')
 Assert-True ($script:LoginOutcome -eq 'accepted') "an accepted digest reads as accepted: $($script:LoginOutcome)"
 
@@ -490,6 +495,9 @@ $found = Find-TestPaths @{ '/' = @('/ui/index.html', '<script src="app.js"></scr
 Assert-True ($found -contains '/config/meter') "a script beside a redirected page is read there: $($script:Asked -join ', ')"
 $found = Find-TestPaths @{ '/' = '<script src="//cdn.example/x.js"></script><script src="http://cdn.example/y.js"></script>' }
 Assert-True (($script:Asked -join ',') -eq '/') "a script of another host is not read: $($script:Asked -join ', ')"
+$script:InverterHost = '192.0.2.1'
+$found = Find-TestPaths @{ '/' = '<script src="http://192.0.2.1/abs.js"></script><script src="//192.0.2.1/rel.js"></script>'; '/abs.js' = '"/config/meter"'; '/rel.js' = '"/config/powerunit"' }
+Assert-True ($found -contains '/config/meter' -and $found -contains '/config/powerunit') "a script the device names by its own address is read: $($script:Asked -join ', ')"
 
 $many = -join (1..85 | ForEach-Object { "'/config/a{0:d3}' " -f $_ })
 $found = Find-TestPaths @{ '/' = $many }

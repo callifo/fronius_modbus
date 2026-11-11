@@ -2861,5 +2861,19 @@
     "old": "        data={**entry.data, ADOPTED_DEVICES: sorted(done | set(pending.values()))},\n",
     "new": "        data={**entry.data},\n",
     "tests": "comes_back_as_it_was_after_its_removal"
+  },
+  {
+    "label": "migrations: a 0.1.9 string with no device takes the inverter's name",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "    if inverter is not None and inverter.name_by_user:\n        return inverter.name_by_user\n",
+    "new": "",
+    "tests": "string_taken_over_is_named_after_its_device"
+  },
+  {
+    "label": "migrations: a 0.1.9 string named after the inverter device to come",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "    return device_info(entry.runtime_data, entry, \"inverter\").get(\"name\")\n",
+    "new": "    return None\n",
+    "tests": "string_of_an_entry_without_devices_is_named_after_the_inverter"
   }
 ]

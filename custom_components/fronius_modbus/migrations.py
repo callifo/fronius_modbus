@@ -33,7 +33,7 @@ from .const import (
 from .const import web_api_disabled as entry_values_web_api_disabled
 from .component_readings import ONCE_REPORTED_KEYS
 from .entities import expected_unique_ids
-from .entity_base import expected_device_identifiers
+from .entity_base import device_info, expected_device_identifiers
 from .token_store import async_forget_unused_tokens, async_get_token_store
 
 _LOGGER = logging.getLogger(__name__)
@@ -597,12 +597,10 @@ async def async_migrate_v019_mppt_statistics(
             hass, translation_key, placeholders
         )
         suggested_object_id = sensor_name
-        if entity_entry.device_id and (
-            device_entry := device_registry.async_get(entity_entry.device_id)
+        if device_name := _v019_string_device_name(
+            entry, device_registry, entity_entry
         ):
-            device_name = device_entry.name_by_user or device_entry.name
-            if device_name:
-                suggested_object_id = f"{device_name} {sensor_name}"
+            suggested_object_id = f"{device_name} {sensor_name}"
 
         reserved_entity_ids.discard(old_entity_id)
         new_entity_id = registry.async_get_available_entity_id(
@@ -623,6 +621,31 @@ async def async_migrate_v019_mppt_statistics(
             old_entity_id,
             new_entity_id,
         )
+
+
+def _v019_string_device_name(
+    entry: ConfigEntry,
+    device_registry: dr.DeviceRegistry,
+    entity_entry: er.RegistryEntry,
+) -> str | None:
+    """The name a 0.1.9 string sensor is named after: its device, else the inverter.
+
+    A row taken over from a deleted entry has no device. Every 0.1.9 string
+    sensor belongs to the inverter: the owner's name for it, if its 0.1.9
+    device came back, or the name its device gets.
+    """
+    if entity_entry.device_id:
+        device = device_registry.async_get(entity_entry.device_id)
+        return (device.name_by_user or device.name) if device else None
+    inverter = device_registry.async_get_device_by_identifier(
+        (DOMAIN, f"{_entry_value(entry, CONF_NAME, 'Fronius')}_inverter"),
+        entry.entry_id,
+    )
+    if inverter is not None and inverter.name_by_user:
+        return inverter.name_by_user
+    if entry.runtime_data.device.identity is None:
+        return None
+    return device_info(entry.runtime_data, entry, "inverter").get("name")
 
 
 def _move_unique_id(

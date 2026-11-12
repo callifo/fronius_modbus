@@ -15,7 +15,7 @@
   "requirements": [
     "modbus-connection[tmodbus]>=4.10.0"
   ],
-  "version": "1.4.0b2",
+  "version": "1.4.0b3",
   "zeroconf": [
     "_Fronius-SE-Inverter._tcp.local."
   ]

@@ -1,9 +1,11 @@
 # Changelog
 
-## Unreleased
+## 1.4.0b3
+
+Released 2026-11-12. Storage modes set by another controller such as evcc show what the inverter does, a switch from redpomodoro 0.1.9 through the Marketplace keeps the entities, and the energy management outputs are new sensors.
 
 ### Added
-- Switching from redpomodoro 0.1.9 through the Marketplace now keeps entity ids, names, areas and history: the first setup takes over what the deleted 0.1.9 entry left. Home Assistant keeps it for 30 days. Anything unclear, such as which of several meters 0.1.9 read, is left out. Devices come along only if deleting 0.1.9 worked and its entry was named Fronius.
+- Switching from redpomodoro 0.1.9 through the Marketplace now keeps entity ids, names, areas and history: the first setup takes over what the deleted 0.1.9 entry left. Anything unclear, such as which of several meters 0.1.9 read, is left out. The devices usually start new, so set their names and areas again.
 - `tools/inverter_dump.bat` can also read the settings of a Datamanager (SnapINverter) with its `admin` or `service` login (issue 110). It still only reads.
 - Sensors for the inverter's four energy management outputs: `Energy management output 1` to `4` show whether a relay is on, and `Energy management output 1 reason` to `4 reason` why. They read the web interface without a login and are off by default.
 

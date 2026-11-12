@@ -40,10 +40,10 @@ Older Fronius inverters with a Datamanager (the SnapINverter family: Symo, Primo
 
 ## Coming from 0.3.x
 
-Entity IDs, unique IDs, history/statistics and existing options of the 0.3.x releases are kept; existing entries are migrated on the first start. Take a Home Assistant backup first: going back to 0.3.x afterwards needs that backup. Coming straight from 0.2.7 or older, the MPPT and storage module sensors (`mppt1_power`, `mppt1_lfte` and the like) come back under new entity ids, as they did with 0.2.8. Entries from redpomodoro 0.1.9 are migrated as well. Breaking changes are listed in the CHANGELOG; what changes in detail is in [Migration](https://github.com/callifo/fronius_modbus/wiki/Migration) in the wiki.
+Entity IDs, unique IDs, history/statistics and existing options of the 0.3.x releases are kept; existing entries are migrated on the first start. Take a Home Assistant backup first: going back to 0.3.x afterwards needs that backup. Coming straight from 0.2.7 or older, the MPPT and storage module sensors (`mppt1_power`, `mppt1_lfte` and the like) come back under new entity ids, as they did with 0.2.8. Entries from redpomodoro 0.1.9 are migrated as well. Breaking changes are listed in the [CHANGELOG](CHANGELOG.md#100b1); what changes in detail is in [Migration](https://github.com/callifo/fronius_modbus/wiki/Migration) in the wiki.
 
 > [!IMPORTANT]
-> Enum states are translation keys now: `Auto` became `auto`, `Charge from Grid` became `charge_from_grid`, `On grid operating` became `on_grid_operating`, `Enabled`/`Disabled` became `enabled`/`disabled`. Update automations and templates that compare against the old texts; see the CHANGELOG for the rule.
+> Enum states are translation keys now: `Auto` became `auto`, `Charge from Grid` became `charge_from_grid`, `On grid operating` became `on_grid_operating`, `Enabled`/`Disabled` became `enabled`/`disabled`. Update automations and templates that compare against the old texts; see the [CHANGELOG](CHANGELOG.md#100b1) for the rule.
 
 - **Minimum Home Assistant version: 2026.9.0**. HACS refuses the installation on an older Home Assistant; a 0.3.x release stays available there.
 - The checkbox "Restrict Modbus to this IP" became the option **Modbus IP restriction**; checked becomes "restrict and allow this Home Assistant", unchecked becomes "keep". Allowing Home Assistant adds its address to the hosts already allowed while the inverter's restriction is on; while it is off, Home Assistant's address becomes the only allowed host.

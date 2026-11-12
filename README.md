@@ -44,14 +44,22 @@ Older Fronius inverters with a Datamanager (the SnapINverter family: Symo, Primo
 
 ## Coming from 0.3.x
 
-Entity IDs, unique IDs, history/statistics and existing options of the 0.3.x releases are kept; existing entries are migrated on the first start. Take a Home Assistant backup first: going back to 0.3.x afterwards needs that backup. Coming straight from 0.2.7 or older, the MPPT and storage module sensors (`mppt1_power`, `mppt1_lfte` and the like) come back under new entity ids, as they did with 0.2.8. Entries from redpomodoro 0.1.9 are migrated as well. Breaking changes are listed in the [CHANGELOG](CHANGELOG.md#100b1); what changes in detail is in [Migration](https://github.com/callifo/fronius_modbus/wiki/Migration) in the wiki.
+Entries, entity IDs, history, statistics and options are kept; existing entries are migrated on the first start. Before you update:
 
-> [!IMPORTANT]
-> Enum states are translation keys now: `Auto` became `auto`, `Charge from Grid` became `charge_from_grid`, `On grid operating` became `on_grid_operating`, `Enabled`/`Disabled` became `enabled`/`disabled`. Update automations and templates that compare against the old texts; see the [CHANGELOG](CHANGELOG.md#100b1) for the rule.
+1. **Take a Home Assistant backup.** Going back to 0.3.x afterwards needs it.
+2. **Home Assistant 2026.9.0 or newer** is required. HACS refuses the installation on an older Home Assistant; a 0.3.x release stays available there.
+3. **Check your automations and templates:**
+   - Enum states are keys now: `Auto` became `auto`, `Charge from Grid` became `charge_from_grid`, `Enabled`/`Disabled` became `enabled`/`disabled` ([rule](https://github.com/callifo/fronius_modbus/wiki/Migration#enum-states-are-keys-now)).
+   - `Grid charge power`, `Grid discharge power`, `PV charge limit` and `Discharge limit` can give another power for the same value than in 0.3.x. Check the values you set ([Battery](https://github.com/callifo/fronius_modbus/wiki/Migration#battery)).
+   - `Target feed in` and `Export soft limit` now go up to the inverter's rated power instead of a fixed ±20000 W and 15000 W. On a smaller inverter, a higher value your automations set is refused ([Battery](https://github.com/callifo/fronius_modbus/wiki/Migration#battery)).
+   - `SoC Maximum` and `SoC Minimum (Web API)` can only be changed while the new `Web API SoC mode` is *Manual*. In 0.3.x they followed `Battery API mode`, now called `Self-consumption optimisation` ([Battery](https://github.com/callifo/fronius_modbus/wiki/Migration#battery)).
+   - `Load` can be negative when other generation behind the grid meter, such as a balcony inverter, feeds in ([Connection and data](https://github.com/callifo/fronius_modbus/wiki/Migration#connection-and-data)).
+   - Values from the web interface update every 60 seconds by default, not with every Modbus poll ([Connection and data](https://github.com/callifo/fronius_modbus/wiki/Migration#connection-and-data)).
+4. **After the update:** if Home Assistant asks for the web login, log in again. Until then the values from the web interface, the events and a second smart meter are missing ([Entries without a valid login](https://github.com/callifo/fronius_modbus/wiki/Migration#entries-without-a-valid-login)). The checkbox "Restrict Modbus to this IP" is now the option *Modbus IP restriction*: a migrated entry keeps its choice, but an unchecked box no longer lifts the inverter's restriction ([Setup and security](https://github.com/callifo/fronius_modbus/wiki/Migration#setup-and-security)).
 
-- **Minimum Home Assistant version: 2026.9.0**. HACS refuses the installation on an older Home Assistant; a 0.3.x release stays available there.
-- The checkbox "Restrict Modbus to this IP" became the option **Modbus IP restriction**; checked becomes "restrict and allow this Home Assistant", unchecked becomes "keep". Allowing Home Assistant adds its address to the hosts already allowed while the inverter's restriction is on; while it is off, Home Assistant's address becomes the only allowed host.
-- The SoC window follows the inverter's own switch: `SoC Maximum` and the new `SoC Minimum (Web API)` are writable while the new `Web API SoC mode` is manual, instead of following `Self-consumption optimisation`.
+Some entities show a new name; their entity IDs stay ([New names](https://github.com/callifo/fronius_modbus/wiki/Migration#new-names)). Every change in detail is in [Migration](https://github.com/callifo/fronius_modbus/wiki/Migration#coming-from-03x), the breaking changes in the [CHANGELOG](CHANGELOG.md#100b1).
+
+Coming straight from 0.2.7 or older, the MPPT and storage module sensors (`mppt1_power`, `mppt1_lfte` and the like) come back under new entity IDs, as they did with 0.2.8. Entries from redpomodoro 0.1.9 are migrated as well ([Migration](https://github.com/callifo/fronius_modbus/wiki/Migration#coming-from-redpomodorofronius_modbus)).
 
 ## Installation
 

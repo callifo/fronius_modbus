@@ -71,9 +71,6 @@ class FroniusNumberDescription(NumberEntityDescription, FroniusDescriptionMixin)
     max_fn: Callable[[FroniusRuntimeData], float | None] = staticmethod(
         lambda runtime: None
     )
-    min_fn: Callable[[FroniusRuntimeData], float | None] = staticmethod(
-        lambda runtime: None
-    )
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- `Export soft limit` and `Target feed in` stopped at the inverter's rated power. Both count at the grid meter, where other inverters and generation add up, so a 6 kW inverter beside a balcony inverter could not get an 8 kW export limit (issue 154). The soft limit now goes up to the inverter's hard limit or protection limit while one of them is switched on, as the inverter requires; otherwise neither has a practical bound.
+
 ## 1.4.0b3
 
 Released 2026-11-12. Storage modes set by another controller such as evcc show what the inverter does, a switch from redpomodoro 0.1.9 through the Marketplace keeps the entities, and the energy management outputs are new sensors.

@@ -1876,18 +1876,11 @@
     "tests": "silent_link_behind_an_incomplete_chain"
   },
   {
-    "label": "entities: a power number spans the rated power",
+    "label": "entities: the AC limit spans the rated power",
     "path": "custom_components/fronius_modbus/entities.py",
-    "old": "    FroniusNumberDescription,\n    max_fn=_rated_power_w,\n",
-    "new": "    FroniusNumberDescription,\n",
-    "tests": "every_power_number_spans_the_rated_power"
-  },
-  {
-    "label": "number: the target feed-in reaches down to the rated power",
-    "path": "custom_components/fronius_modbus/number.py",
-    "old": "        dynamic_min = self.entity_description.min_fn(self._runtime)\n",
-    "new": "        dynamic_min = None\n",
-    "tests": "every_power_number_spans_the_rated_power"
+    "old": "        exists_fn=_controls_present,\n        max_fn=_rated_power_w,\n",
+    "new": "        exists_fn=_controls_present,\n",
+    "tests": "only_the_ac_limit_stops_at_the_rated_power"
   },
   {
     "label": "mppt: a registered sensor survives a missing value",
@@ -2917,5 +2910,40 @@
     "old": "        if registry.async_get_device_by_identifier((DOMAIN, new), entry.entry_id):\n            continue\n",
     "new": "",
     "tests": "no_old_meter_device_stays_while_the_cleanup_waits"
+  },
+  {
+    "label": "entities: the export soft limit follows the inverter's own limits",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "        max_fn=lambda r: _web_field(r, \"export_soft_limit_ceiling_w\"),\n",
+    "new": "",
+    "tests": "bounded_by_the_inverters_limits_not_its_power"
+  },
+  {
+    "label": "entities: the target feed-in reaches past the rated power",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "        native_min_value=-SITE_POWER_CEILING_W,\n",
+    "new": "        native_min_value=-RATED_POWER_FALLBACK_W,\n",
+    "tests": "only_the_ac_limit_stops_at_the_rated_power"
+  },
+  {
+    "label": "export limit: a limit switched off does not cap the soft limit",
+    "path": "custom_components/fronius_modbus/export_limit.py",
+    "old": "        if not isinstance(block, dict) or flag_value(block.get(\"enabled\")) is not True:\n",
+    "new": "        if not isinstance(block, dict):\n",
+    "tests": "bounded_by_the_inverters_limits_not_its_power"
+  },
+  {
+    "label": "export limit: the lowest of the limits above caps the soft limit",
+    "path": "custom_components/fronius_modbus/export_limit.py",
+    "old": "    return min(ceilings, default=None)\n",
+    "new": "    return max(ceilings, default=None)\n",
+    "tests": "bounded_by_the_inverters_limits_not_its_power"
+  },
+  {
+    "label": "web control: the poll learns the soft limit's ceiling",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        self.data.export_soft_limit_ceiling_w = soft_limit_ceiling(active_power)\n",
+    "new": "",
+    "tests": "bounded_by_the_inverters_limits_not_its_power"
   }
 ]

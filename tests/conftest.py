@@ -63,6 +63,9 @@ def pytest_sessionfinish(session, exitstatus):
 FIXTURES = pathlib.Path(__file__).with_name("fixtures")
 INVERTER_UNIT_ID = 1
 METER_UNIT_ID = 200
+# The bound of a number the inverter itself does not cap; tests keep their own
+# value, as one taken from the code would pass if the code went back to WMax.
+NO_INVERTER_CAP_W = 1_000_000
 
 
 class SteppingClock:

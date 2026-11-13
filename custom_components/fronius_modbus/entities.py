@@ -95,6 +95,9 @@ from .web_control import WebData
 
 # The rated power while settings.w_max is unknown: 0.3's static AC limit maximum.
 RATED_POWER_FALLBACK_W = 50_000
+# The export limit and the target feed-in count at the grid meter, where other
+# generation adds up, and the inverter caps neither (issue 154); no site reaches 1 MW.
+SITE_POWER_CEILING_W = 1_000_000
 
 
 # -- value helpers -----------------------------------------------------------------
@@ -1154,10 +1157,8 @@ def _storage_percent_number(
     )
 
 
-# A number in watts: no power control goes beyond the inverter's rated power.
 _power_number = partial(
     FroniusNumberDescription,
-    max_fn=_rated_power_w,
     native_min_value=0,
     native_max_value=RATED_POWER_FALLBACK_W,
     native_step=10,
@@ -1239,6 +1240,7 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
         value_fn=lambda r: _controls_value(r, lambda c: c.ac_limit_w),
         set_fn=lambda r, v: assume_present(r.inverter_controls).set_ac_limit_w(v),
         exists_fn=_controls_present,
+        max_fn=_rated_power_w,
     ),
     FroniusNumberDescription(
         key="power_factor",
@@ -1265,8 +1267,8 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
         available_fn=lambda r: (
             _web_configured(r) and assume_present(r.web_control).battery_mode_is_manual
         ),
-        min_fn=lambda r: -_rated_power_w(r),
-        native_min_value=-RATED_POWER_FALLBACK_W,
+        native_min_value=-SITE_POWER_CEILING_W,
+        native_max_value=SITE_POWER_CEILING_W,
     ),
     FroniusNumberDescription(
         key="soc_maximum",
@@ -1331,6 +1333,8 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
             r.web_control is not None
             and assume_present(r.web_control).export_soft_limit_settable
         ),
+        max_fn=lambda r: _web_field(r, "export_soft_limit_ceiling_w"),
+        native_max_value=SITE_POWER_CEILING_W,
     ),
 )
 

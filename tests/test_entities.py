@@ -660,6 +660,59 @@ async def test_the_export_soft_limit_is_greyed_out_while_power_control_is_off(
         web_control.shutdown()
 
 
+# The bound of a number the inverter itself does not cap: no site reaches it.
+NO_INVERTER_CAP_W = 1_000_000
+
+
+@pytest.mark.parametrize(
+    ("active_power", "highest"),
+    [
+        ({"hardLimit": {"enabled": False, "powerLimit": 0}}, NO_INVERTER_CAP_W),
+        # Above the inverter's own rated power: other generation adds up at the meter.
+        ({"hardLimit": {"enabled": True, "powerLimit": 30000}}, 30000),
+        ({"hardLimit": {"enabled": True, "powerLimit": 9000}}, 9000),
+        # Firmware 1.42: the protection limit may not be below the soft limit either.
+        (
+            {
+                "hardLimit": {"enabled": True, "powerLimit": 9000},
+                "protectionLimit": {"enabled": True, "acPowerInstalled": 8000},
+            },
+            8000,
+        ),
+        (
+            {"protectionLimit": {"enabled": False, "acPowerInstalled": 8000}},
+            NO_INVERTER_CAP_W,
+        ),
+    ],
+)
+async def test_the_export_soft_limit_is_bounded_by_the_inverters_limits_not_its_power(
+    hass, entry, connection, active_power, highest
+):
+    """Issue 154: the export limit acts at the grid meter, not at one inverter.
+
+    The inverter refuses a soft limit above an enabled hard or protection limit
+    and sets no other bound; capping it at the rated power blocked an 8 kW limit
+    for a 6 kW inverter beside other generation.
+    """
+    runtime = await make_runtime(hass, entry, connection)
+    web_control = make_control(hass, api_username="technician")
+    web_control._client.get_export_limit_config = lambda: power_limits(
+        activated=True, **active_power
+    )
+    await web_control.async_refresh()
+    runtime = replace(
+        runtime, web_control=web_control, web=SimpleNamespace(data=web_control.data)
+    )
+    try:
+        soft_limit = _description(
+            entities.number_descriptions(runtime), "export_soft_limit"
+        )
+        dynamic = soft_limit.max_fn(runtime)
+        assert (soft_limit.native_max_value if dynamic is None else dynamic) == highest
+    finally:
+        web_control.shutdown()
+
+
 # Model-203 TotWhExp of the captured meter: two registers, 0 is SunSpec's "not accumulated".
 METER_EXPORTED_ADDRESS = 40107
 

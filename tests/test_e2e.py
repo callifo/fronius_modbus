@@ -1945,8 +1945,18 @@ async def test_an_update_through_callifo_0_3_4_rc2_keeps_the_original_entity(
     assert entity_id_for(hass, entry, "sensor", "AphA") == original.entity_id
 
 
-async def test_every_power_number_spans_the_rated_power(hass, mock_modbus, monkeypatch):
-    """The export limit stopped at 15 kW and the target feed-in at 20 kW."""
+# The bound of a number the inverter itself does not cap: no site reaches it.
+NO_INVERTER_CAP_W = 1_000_000
+
+
+async def test_only_the_ac_limit_stops_at_the_rated_power(
+    hass, mock_modbus, monkeypatch
+):
+    """The export limit and the target feed-in act at the grid meter (issue 154).
+
+    Other inverters and generation behind the meter add up there: a 6 kW
+    inverter beside a balcony inverter could not be given an 8 kW export limit.
+    """
     await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
     entry = make_entry(hass)
     await setup_entry(hass, entry)
@@ -1957,8 +1967,8 @@ async def test_every_power_number_spans_the_rated_power(hass, mock_modbus, monke
         return state.attributes["min"], state.attributes["max"]
 
     assert bounds("ac_limit_rate") == (0, rated)
-    assert bounds("export_soft_limit") == (0, rated)
-    assert bounds("api_battery_power") == (-rated, rated)
+    assert bounds("export_soft_limit") == (0, NO_INVERTER_CAP_W)
+    assert bounds("api_battery_power") == (-NO_INVERTER_CAP_W, NO_INVERTER_CAP_W)
 
 
 @pytest.mark.parametrize(

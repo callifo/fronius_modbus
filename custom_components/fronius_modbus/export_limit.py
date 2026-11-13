@@ -58,8 +58,8 @@ def soft_limit_ceiling(active_power: Any) -> float | None:
     """The highest soft limit the inverter takes: its lowest enabled limit above it.
 
     None while neither limit is on: the inverter then sets no bound of its own.
-    The rated power is none, as the limit counts at the grid meter, where other
-    inverters and generation add up (issue 154).
+    The inverter's rated power is no bound: the limit counts at the grid meter,
+    where other inverters and generation add up (issue 154).
     """
     if not isinstance(active_power, dict):
         return None

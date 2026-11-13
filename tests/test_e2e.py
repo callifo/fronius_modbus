@@ -51,7 +51,7 @@ from homeassistant.helpers import (
 from homeassistant.helpers.entity_platform import async_get_platforms
 from homeassistant.setup import async_setup_component
 
-from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID
+from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID, NO_INVERTER_CAP_W
 
 pytestmark = [pytest.mark.e2e, pytest.mark.timeout(120)]
 
@@ -1943,10 +1943,6 @@ async def test_an_update_through_callifo_0_3_4_rc2_keeps_the_original_entity(
     await setup_entry(hass, entry)
 
     assert entity_id_for(hass, entry, "sensor", "AphA") == original.entity_id
-
-
-# The bound of a number the inverter itself does not cap: no site reaches it.
-NO_INVERTER_CAP_W = 1_000_000
 
 
 async def test_only_the_ac_limit_stops_at_the_rated_power(

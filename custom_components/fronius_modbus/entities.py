@@ -96,7 +96,7 @@ from .web_control import WebData
 # The rated power while settings.w_max is unknown: 0.3's static AC limit maximum.
 RATED_POWER_FALLBACK_W = 50_000
 # The export limit and the target feed-in count at the grid meter, where other
-# generation adds up, and the inverter caps neither (issue 154): no site gets here.
+# generation adds up, and the inverter caps neither (issue 154); no site reaches 1 MW.
 SITE_POWER_CEILING_W = 1_000_000
 
 

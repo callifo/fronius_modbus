@@ -43,7 +43,7 @@ from custom_components.fronius_modbus.sensor import FroniusSensor
 from custom_components.fronius_modbus.web_control import WebData
 from homeassistant.exceptions import HomeAssistantError
 
-from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID
+from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID, NO_INVERTER_CAP_W
 from .test_web_control import make_control
 
 # MinRsvPct in the captured fixture; the model-124 scale factor is -2.
@@ -658,10 +658,6 @@ async def test_the_export_soft_limit_is_greyed_out_while_power_control_is_off(
         assert soft_limit.available_fn(runtime) is available
     finally:
         web_control.shutdown()
-
-
-# The bound of a number the inverter itself does not cap: no site reaches it.
-NO_INVERTER_CAP_W = 1_000_000
 
 
 @pytest.mark.parametrize(

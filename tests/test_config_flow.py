@@ -12,10 +12,16 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components import fronius_modbus
 from custom_components.fronius_modbus import config_flow, discovery, froniuswebclient
-from custom_components.fronius_modbus.const import DOMAIN, entry_title, instance_key
+from custom_components.fronius_modbus.const import (
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+    entry_title,
+    instance_key,
+)
 from custom_components.fronius_modbus.fronius_modbus_api.device import DeviceIdentity
 from custom_components.fronius_modbus.froniuswebclient import FroniusWebResponseError
 from custom_components.fronius_modbus.token_store import async_get_token_store
+from custom_components.fronius_modbus.web_errors import ClientIpResolutionError
 from homeassistant.config_entries import (
     SOURCE_IGNORE,
     ConfigEntryDisabler,
@@ -1765,3 +1771,245 @@ async def test_a_moved_inverter_is_not_followed_to_a_host_an_entry_without_uniqu
     assert config_flow.entry_defaults(entry)["host"] == HOST
     assert entry.unique_id == HOST
     assert await store.async_load_token(MOVED_HOST) is None
+
+
+# -- refusals and restarts ------------------------------------------------------------
+
+
+async def _password_step(hass) -> dict:
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT
+    )
+    assert result["step_id"] == "user_password"
+    return result
+
+
+async def test_a_token_request_that_fails_shows_cannot_connect(
+    hass, mock_modbus, monkeypatch
+):
+    def fail(host, user, password):
+        raise OSError("no answer")
+
+    monkeypatch.setattr(config_flow, "mint_token", fail)
+    result = await _password_step(hass)
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+
+    assert result["errors"] == {"base": "cannot_connect"}
+
+
+async def test_a_refused_password_asks_for_it_again(hass, mock_modbus, monkeypatch):
+    monkeypatch.setattr(config_flow, "mint_token", lambda host, user, password: None)
+    result = await _password_step(hass)
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_password": "wrong"}
+    )
+
+    assert result["step_id"] == "user_password"
+    assert result["errors"] == {"base": "invalid_api_credentials"}
+
+
+async def test_a_stored_token_the_inverter_refuses_asks_for_the_password(
+    hass, mock_modbus, monkeypatch
+):
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="old")
+    monkeypatch.setattr(config_flow.FroniusWebClient, "login", lambda self: False)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT
+    )
+
+    assert result["step_id"] == "user_password"
+
+
+async def test_a_host_taken_while_a_stored_token_is_checked_aborts(
+    hass, mock_modbus, monkeypatch
+):
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+    validate = config_flow._validate_input
+
+    async def validate_then_take(hass, *args, **kwargs):
+        info = await validate(hass, *args, **kwargs)
+        MockConfigEntry(domain=DOMAIN, data={"host": HOST}, unique_id=HOST).add_to_hass(
+            hass
+        )
+        return info
+
+    monkeypatch.setattr(config_flow, "_validate_input", validate_then_take)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+
+
+async def test_an_entry_that_kept_modbus_untouched_is_not_set_up_on_reauth(
+    hass, mock_modbus, monkeypatch
+):
+    """0.3.x stored the choice to leave the inverter's Modbus alone; it still holds."""
+    entry = make_entry(hass)
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, "auto_enable_modbus": False}
+    )
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+    calls = []
+    monkeypatch.setattr(
+        config_flow.FroniusWebClient,
+        "ensure_modbus_enabled",
+        lambda self, *args: calls.append(args),
+    )
+    monkeypatch.setattr(
+        hass.config_entries, "async_reload", AsyncMock(return_value=True)
+    )
+
+    result = await entry.start_reauth_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_username": "customer"}
+    )
+
+    assert result["reason"] == "reauth_successful"
+    assert calls == []
+
+
+async def test_a_local_address_that_cannot_be_found_says_so(
+    hass, mock_modbus, monkeypatch
+):
+    def unresolvable(self, *args):
+        raise ClientIpResolutionError("no local address")
+
+    monkeypatch.setattr(
+        config_flow.FroniusWebClient, "ensure_modbus_enabled", unresolvable
+    )
+    result = await _password_step(hass)
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+
+    assert result["errors"] == {"base": "cannot_resolve_local_ip"}
+
+
+def _probed(monkeypatch, *, manufacturer: str, model: str) -> None:
+    identity = DeviceIdentity(
+        manufacturer=manufacturer,
+        model=model,
+        serial="1",
+        version="1.0",
+        options="",
+        address=1.0,
+    )
+    monkeypatch.setattr(
+        config_flow.FroniusInverter, "async_probe", AsyncMock(return_value=identity)
+    )
+
+
+async def test_an_inverter_of_another_maker_is_refused(hass, mock_modbus, monkeypatch):
+    _probed(monkeypatch, manufacturer="Other", model="Primo GEN24")
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], NO_WEB_INPUT
+    )
+
+    assert result["errors"] == {"base": "unsupported_hardware"}
+
+
+async def test_an_unknown_fronius_model_is_set_up_with_a_warning(
+    hass, mock_modbus, monkeypatch, caplog
+):
+    _probed(monkeypatch, manufacturer="Fronius", model="Unknown 8.0")
+
+    await config_flow._validate_input(
+        hass, config_flow._expand_settings_input(NO_WEB_INPUT)
+    )
+
+    assert "Untested model Unknown 8.0" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "step", ["async_step_user_password", "async_step_user_sunspec"]
+)
+async def test_a_follow_up_step_without_its_settings_starts_over(hass, step):
+    """Nothing to log in with: the step shows the settings form again."""
+    flow = config_flow.ConfigFlow()
+    flow.hass = hass
+    flow.context = {"source": "user"}
+
+    result = await getattr(flow, step)({"api_password": "secret"})
+
+    assert result["step_id"] == "user"
+
+
+async def test_reconfiguring_onto_a_float_map_asks_before_switching(
+    hass, mock_modbus, monkeypatch
+):
+    entry = make_entry(hass)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+    applied = _float_map(monkeypatch)
+    monkeypatch.setattr(
+        hass.config_entries, "async_reload", AsyncMock(return_value=True)
+    )
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "reconfigure", "entry_id": entry.entry_id}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            "host": HOST,
+            "scan_interval": 10,
+            "web_scan_interval": 60,
+            "modbus_restriction": "keep",
+            "api_username": "customer",
+        },
+    )
+    assert result["step_id"] == "reconfigure_sunspec"
+    assert applied == []
+
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+
+    assert result["reason"] == "reconfigure_successful"
+    assert [args[4] for args in applied] == [True]
+
+
+async def test_a_reauth_whose_entry_went_aborts_at_the_password(
+    hass, mock_modbus, monkeypatch
+):
+    """Removing the entry aborts its flows, but a step already running sees it gone."""
+    entry = make_entry(hass)
+    result = await entry.start_reauth_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_username": "technician"}
+    )
+    assert result["step_id"] == "reauth_password"
+    monkeypatch.setattr(hass.config_entries, "async_get_entry", lambda entry_id: None)
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "entry_not_found"
+
+
+def test_an_unreadable_update_interval_shows_the_default(hass):
+    entry = MockConfigEntry(
+        domain=DOMAIN, data={**USER_INPUT, "scan_interval": "often"}, unique_id=HOST
+    )
+
+    assert config_flow.entry_defaults(entry)["scan_interval"] == DEFAULT_SCAN_INTERVAL

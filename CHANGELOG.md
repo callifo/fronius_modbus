@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 1.4.0
+
+Released 2026-11-16. The first stable release of the 1.x code here, which replaces 0.3.x. It contains every change from 1.0.0b1 to 1.4.0b3 below, and the change here on 1.4.0b3. Coming from 0.3.x, read the breaking changes under 1.0.0b1 below and the README's *Coming from 0.3.x* first.
 
 ### Fixed
 - `Export soft limit` and `Target feed in` stopped at the inverter's rated power. Both count at the grid meter, where other inverters and generation add up, so a 6 kW inverter beside a balcony inverter could not get an 8 kW export limit (issue 154). The soft limit now goes up to the inverter's hard limit or protection limit while one of them is switched on, as the inverter requires; otherwise neither has a practical bound.

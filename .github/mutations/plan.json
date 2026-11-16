@@ -889,6 +889,13 @@
     "tests": "power_module_missing_from_one_answer_keeps_its_entity"
   },
   {
+    "label": "setup: an inverter silent at the first refresh puts the entry into retry",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "    await modbus.async_config_entry_first_refresh()\n",
+    "new": "    await modbus.async_refresh()\n",
+    "tests": "inverter_silent_at_setup_is_retried_until_it_answers"
+  },
+  {
     "label": "config flow: an aborted flow restores the token held before",
     "path": "custom_components/fronius_modbus/config_flow.py",
     "old": "            return\n        await _async_save_token(self.hass, host, username, previous)\n",

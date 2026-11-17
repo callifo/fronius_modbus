@@ -1856,10 +1856,9 @@ async def test_a_host_taken_while_a_stored_token_is_checked_aborts(
     assert result["reason"] == "already_configured"
 
 
-async def test_an_entry_that_kept_modbus_untouched_is_not_set_up_on_reauth(
+async def test_an_entry_set_to_leave_modbus_alone_is_not_set_up_on_reauth(
     hass, mock_modbus, monkeypatch
 ):
-    """0.3.x stored the choice to leave the inverter's Modbus alone; it still holds."""
     entry = make_entry(hass)
     hass.config_entries.async_update_entry(
         entry, data={**entry.data, "auto_enable_modbus": False}

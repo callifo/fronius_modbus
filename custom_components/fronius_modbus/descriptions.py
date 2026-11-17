@@ -1,6 +1,6 @@
 """The description types: what a row of the entity table carries.
 
-The rows themselves are in entities.py; the entity classes in entity_base.py
+The rows themselves are in entities.py; the entity classes in entity.py
 and the platform modules.
 """
 

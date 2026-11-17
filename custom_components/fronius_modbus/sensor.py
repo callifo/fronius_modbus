@@ -11,7 +11,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import UNKNOWN_STATE
 from .coordinator import FroniusConfigEntry, FroniusMeterPowerCoordinator
 from .entities import FroniusSensorDescription, sensor_descriptions
-from .entity_base import FroniusEntity, FroniusTotalSensor
+from .entity import FroniusEntity, FroniusTotalSensor
 
 # The coordinator polls; entities never fetch on their own.
 PARALLEL_UPDATES = 0

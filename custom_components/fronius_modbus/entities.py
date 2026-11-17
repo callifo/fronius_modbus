@@ -1,4 +1,4 @@
-"""Entity descriptions for every platform; the base entity is in entity_base.py.
+"""Entity descriptions for every platform; the base entity is in entity.py.
 
 Each description carries a ``value_fn`` (and, for writable platforms, a
 ``set_fn``/``turn_on``/``turn_off``/``press``) closing over a

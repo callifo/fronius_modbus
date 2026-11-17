@@ -15,7 +15,7 @@ from modbus_connection import (
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.fronius_modbus import entities, entity_base
+from custom_components.fronius_modbus import entities, entity as entity_module
 from custom_components.fronius_modbus.const import (
     DOMAIN,
     INVERTER_CONTROL_STATE_VALUES,
@@ -112,7 +112,7 @@ def _report(sensor, value) -> None:
 
 def _total_sensor(runtime, entry, hass):
     description = _description(entities.sensor_descriptions(runtime), "acenergy")
-    sensor = entity_base.FroniusTotalSensor(runtime, entry, description)
+    sensor = entity_module.FroniusTotalSensor(runtime, entry, description)
     sensor.hass = hass
     sensor._observe_poll()
     return sensor
@@ -132,7 +132,7 @@ async def test_a_meter_entity_is_unavailable_after_its_meter_fails(
     hass, entry, runtime, connection
 ):
     description = _description(entities.sensor_descriptions(runtime), "meter_200_power")
-    entity = entity_base.FroniusEntity(runtime, entry, description)
+    entity = entity_module.FroniusEntity(runtime, entry, description)
     entity.hass = hass
     assert entity.available is True
 
@@ -183,7 +183,7 @@ async def test_a_total_sensor_accepts_a_plausible_higher_value(hass, entry, runt
 
     assert sensor.native_value == 33187794.59
 
-    higher = 33187794.59 + entity_base.TOTAL_INCREASING_MAX_STEP_WH - 1
+    higher = 33187794.59 + entity_module.TOTAL_INCREASING_MAX_STEP_WH - 1
     _report(sensor, higher)
     assert sensor.native_value == higher
 
@@ -266,7 +266,7 @@ async def test_a_total_sensor_follows_a_genuine_counter_reset(hass, entry, runti
     sensor = _total_sensor(runtime, entry, hass)
     assert sensor.native_value == 33187794.59
 
-    for _ in range(entity_base.TOTAL_INCREASING_RESET_POLLS - 1):
+    for _ in range(entity_module.TOTAL_INCREASING_RESET_POLLS - 1):
         _report(sensor, 120.0)
         assert sensor.native_value == 33187794.59
     _report(sensor, 120.0)
@@ -277,15 +277,19 @@ async def test_an_ignored_counter_glitch_is_no_warning(hass, entry, runtime, cap
     """A meter briefly reporting less is handled; only an adopted jump is worth a warning."""
     sensor = _total_sensor(runtime, entry, hass)
 
-    with caplog.at_level(logging.DEBUG, logger=entity_base.__name__):
-        for _ in range(entity_base.TOTAL_INCREASING_RESET_POLLS - 1):
+    with caplog.at_level(logging.DEBUG, logger=entity_module.__name__):
+        for _ in range(entity_module.TOTAL_INCREASING_RESET_POLLS - 1):
             _report(sensor, 120.0)
-        ignored = [r.levelno for r in caplog.records if r.name == entity_base.__name__]
+        ignored = [
+            r.levelno for r in caplog.records if r.name == entity_module.__name__
+        ]
         caplog.clear()
         _report(sensor, 120.0)
-        adopted = [r.levelno for r in caplog.records if r.name == entity_base.__name__]
+        adopted = [
+            r.levelno for r in caplog.records if r.name == entity_module.__name__
+        ]
 
-    assert ignored == [logging.DEBUG] * (entity_base.TOTAL_INCREASING_RESET_POLLS - 1)
+    assert ignored == [logging.DEBUG] * (entity_module.TOTAL_INCREASING_RESET_POLLS - 1)
     assert adopted == [logging.WARNING]
 
 
@@ -306,7 +310,7 @@ async def test_a_total_sensor_reset_needs_consecutive_lower_polls(hass, entry, r
     # Three CONSECUTIVE lower polls, with no gap, still adopt the reset.
     other_sensor = _total_sensor(runtime, entry, hass)
     assert other_sensor.native_value == 33187794.59
-    for _ in range(entity_base.TOTAL_INCREASING_RESET_POLLS - 1):
+    for _ in range(entity_module.TOTAL_INCREASING_RESET_POLLS - 1):
         _report(other_sensor, 120.0)
         assert other_sensor.native_value == 33187794.59
     _report(other_sensor, 120.0)
@@ -328,7 +332,7 @@ async def test_an_absent_first_meter_does_not_renumber_the_second(
     )
     assert list(runtime.device.meters) == [METER_UNIT_ID]
 
-    info = entity_base.device_info(runtime, entry, "meter", METER_UNIT_ID)
+    info = entity_module.device_info(runtime, entry, "meter", METER_UNIT_ID)
 
     assert info["name"].endswith("Meter 2")
 
@@ -378,7 +382,7 @@ async def test_storage_rate_numbers_follow_the_storage_report(
     description = next(
         d for d in entities.number_descriptions(runtime) if d.key == "charge_limit"
     )
-    entity = entity_base.FroniusEntity(runtime, entry, description)
+    entity = entity_module.FroniusEntity(runtime, entry, description)
     assert "storage" in runtime.modbus.data.report.failed
     assert entity.available is False
 
@@ -387,8 +391,10 @@ async def test_a_total_sensor_follows_a_large_but_sustained_gap(hass, entry, run
     """After a gap above the step limit every later reading was rejected forever."""
     sensor = _total_sensor(runtime, entry, hass)
     original = sensor.native_value
-    for increment in range(1, entity_base.TOTAL_INCREASING_RESET_POLLS + 1):
-        _report(sensor, original + entity_base.TOTAL_INCREASING_MAX_STEP_WH + increment)
+    for increment in range(1, entity_module.TOTAL_INCREASING_RESET_POLLS + 1):
+        _report(
+            sensor, original + entity_module.TOTAL_INCREASING_MAX_STEP_WH + increment
+        )
     assert sensor.native_value > original
 
 
@@ -398,9 +404,9 @@ async def test_reading_a_total_sensor_does_not_count_as_a_poll(hass, entry, runt
     original = sensor.native_value
     _report(sensor, 120.0)
     reads = [
-        sensor.native_value for _ in range(entity_base.TOTAL_INCREASING_RESET_POLLS)
+        sensor.native_value for _ in range(entity_module.TOTAL_INCREASING_RESET_POLLS)
     ]
-    assert reads == [original] * entity_base.TOTAL_INCREASING_RESET_POLLS
+    assert reads == [original] * entity_module.TOTAL_INCREASING_RESET_POLLS
 
 
 async def test_web_controls_go_unavailable_when_the_customer_login_is_rejected(
@@ -419,7 +425,7 @@ async def test_web_controls_go_unavailable_when_the_customer_login_is_rejected(
             for d in entities.switch_descriptions(runtime)
             if d.key == "api_solar_api_enabled"
         )
-        entity = entity_base.FroniusEntity(runtime, entry, description)
+        entity = entity_module.FroniusEntity(runtime, entry, description)
         assert entity.available
         control._client.get_inverter_info = lambda: (_ for _ in ()).throw(
             FroniusWebAuthError("rejected")
@@ -444,7 +450,7 @@ async def test_failed_polls_do_not_confirm_a_bad_energy_sample(
 
     _report(sensor, 120.0)
     inverter_unit.fail_read(INVERTER_HEADER_ADDRESS, ServerDeviceFailureError())
-    for _ in range(entity_base.TOTAL_INCREASING_RESET_POLLS):
+    for _ in range(entity_module.TOTAL_INCREASING_RESET_POLLS):
         await runtime.modbus.async_refresh()
         assert "inverter" in runtime.modbus.data.report.failed
         _report(sensor, 120.0)
@@ -466,7 +472,7 @@ async def test_a_retained_poll_does_not_confirm_a_bad_energy_sample(
     _report(sensor, 120.0)
     runtime.modbus.tolerate_failures_until(time.monotonic() + TOLERATED_OUTAGE_SECONDS)
     inverter_unit.fail_requests(ModbusConnectionError())
-    for _ in range(entity_base.TOTAL_INCREASING_RESET_POLLS):
+    for _ in range(entity_module.TOTAL_INCREASING_RESET_POLLS):
         await runtime.modbus.async_refresh()
         assert runtime.modbus.last_update_success
         _report(sensor, 120.0)
@@ -726,7 +732,7 @@ async def test_a_zero_accumulator_is_no_reading_not_a_reset(
     description = _description(
         entities.sensor_descriptions(runtime), "meter_200_exported"
     )
-    sensor = entity_base.FroniusTotalSensor(runtime, entry, description)
+    sensor = entity_module.FroniusTotalSensor(runtime, entry, description)
     sensor.hass = hass
     before = sensor.native_value
     assert before
@@ -735,13 +741,13 @@ async def test_a_zero_accumulator_is_no_reading_not_a_reset(
     meter.holding[METER_EXPORTED_ADDRESS] = 0
     meter.holding[METER_EXPORTED_ADDRESS + 1] = 0
     with caplog.at_level(logging.WARNING):
-        for _ in range(entity_base.TOTAL_INCREASING_RESET_POLLS + 1):
+        for _ in range(entity_module.TOTAL_INCREASING_RESET_POLLS + 1):
             await runtime.modbus.async_refresh()
             sensor._observe_poll()
 
     assert description.value_fn(runtime) is None
     assert sensor.native_value == before
-    assert not [r for r in caplog.records if r.name == entity_base.__name__]
+    assert not [r for r in caplog.records if r.name == entity_module.__name__]
 
 
 async def test_an_unreachable_web_interface_is_a_translated_error():
@@ -755,7 +761,7 @@ async def test_an_unreachable_web_interface_is_a_translated_error():
         raise FroniusWebUnreachable("ConnectionError")
 
     with pytest.raises(HomeAssistantError) as raised:
-        await entity_base.FroniusEntity.async_run_write(None, unreachable)
+        await entity_module.FroniusEntity.async_run_write(None, unreachable)
 
     assert raised.value.translation_key == "web_api_unreachable"
 

@@ -38,7 +38,7 @@ from .coordinator import (
     FroniusRuntimeData,
     FroniusWebCoordinator,
 )
-from .entity_base import expected_device_identifiers
+from .entity import expected_device_identifiers
 from .fronius_modbus_api.device import FroniusInverter
 from .froniuswebclient import FroniusWebClient
 from .meter_topology import MeterTopology, parse_meter_topology

@@ -83,7 +83,7 @@ All paths below are under `custom_components/fronius_modbus/`.
 | Device library | `fronius_modbus_api/` (`device`, `storage`, `controls`, `writes`, `sunspec_models`, `exceptions`) | No `homeassistant` or `voluptuous` import, ever. Raises `ControlRefused` / `ControlUnavailable` with a translation key. |
 | Pure parsers | `derived`, `component_readings`, `inverter_events`, `energy_outputs`, `meter_topology`, `export_limit`, `web_errors`, `froniuswebclient` | No Home Assistant. `froniuswebclient` is synchronous `requests`, run in the executor. |
 | Runtime | `coordinator` (Modbus, fast meter power and web coordinators, `FroniusRuntimeData`), `web_control` (web writes, their serialisation, repair issue) | |
-| Entities | `descriptions` (dataclass types), `entities` (the table), `mppt_entities`, `energy_output_entities`, `event_entities`, `entity_base` | Behaviour is data: each row carries `value_fn`, `exists_fn`, `available_fn`, `set_fn`. |
+| Entities | `descriptions` (dataclass types), `entities` (the table), `mppt_entities`, `energy_output_entities`, `event_entities`, `entity` | Behaviour is data: each row carries `value_fn`, `exists_fn`, `available_fn`, `set_fn`. |
 | Platforms | `sensor`, `number`, `select`, `switch`, `button`, `event` | Thin. They build entities from `entities.*_descriptions(runtime)`. |
 | Lifecycle | `__init__`, `config_flow`, `flow_*`, `discovery`, `migrations`, `adoption`, `repairs`, `diagnostics`, `token_store` | |
 

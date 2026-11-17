@@ -10,7 +10,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import DOMAIN
 from .coordinator import FroniusConfigEntry
 from .entities import FroniusSelectDescription, select_descriptions
-from .entity_base import FroniusEntity
+from .entity import FroniusEntity
 
 # One write at a time: the inverter answers requests one after the other.
 PARALLEL_UPDATES = 1

@@ -213,6 +213,7 @@ async def test_an_inverter_silent_at_setup_is_retried_until_it_answers(
     assert not await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     assert entry.state is ConfigEntryState.SETUP_RETRY
+    assert entry.error_reason_translation_key == "modbus_poll_failed"
 
     mock_modbus.fail_requests(INVERTER_UNIT_ID, None)
     async_fire_time_changed(

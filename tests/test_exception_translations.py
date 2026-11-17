@@ -35,11 +35,18 @@ def _call_name(node: ast.Call) -> str | None:
 
 
 def _key_node(node: ast.Call) -> ast.expr | None:
-    """The translation key of an error; entity descriptions carry one too and are skipped."""
+    """The translation key of an error; entity descriptions carry one too and are skipped.
+
+    A Home Assistant error names its domain, an entity description does not: a
+    failed poll is an ``UpdateFailed``, whose name the suffix check misses.
+    """
     name = _call_name(node) or ""
     if name in TRANSLATED_ERRORS and node.args:
         return node.args[0]
-    if not name.endswith("Error"):
+    names_a_domain = any(
+        keyword.arg == "translation_domain" for keyword in node.keywords
+    )
+    if not (name.endswith("Error") or names_a_domain):
         return None
     for keyword in node.keywords:
         if keyword.arg == "translation_key":
@@ -89,6 +96,7 @@ def test_the_scan_finds_the_errors_it_was_written_for():
         "charge_limit_not_in_mode",
         "web_api_not_configured",
         "write_failed",
+        "modbus_poll_failed",
     } <= set(_raised_keys())
 
 

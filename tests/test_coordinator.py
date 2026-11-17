@@ -2,9 +2,12 @@
 
 import asyncio
 from datetime import timedelta
+import json
 import logging
+import pathlib
 import time
-from unittest.mock import MagicMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 from modbus_connection import (
     IllegalDataAddressError,
@@ -20,11 +23,14 @@ from custom_components.fronius_modbus import coordinator as coordinator_module
 from custom_components.fronius_modbus.const import DOMAIN
 from custom_components.fronius_modbus.coordinator import (
     DEFAULT_MAX_RATE_W,
+    FroniusMeterPowerCoordinator,
     FroniusModbusCoordinator,
+    FroniusWebCoordinator,
 )
 from custom_components.fronius_modbus.fronius_modbus_api.device import FroniusInverter
 from custom_components.fronius_modbus.fronius_modbus_api.storage import ExtendedMode
 from custom_components.fronius_modbus.fronius_modbus_api.sunspec_models import Nameplate
+from custom_components.fronius_modbus.web_errors import FroniusWebUnreachable
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID, SteppingClock
@@ -534,3 +540,88 @@ async def test_an_unread_firmware_is_read_again_on_the_next_poll(
     inverter_unit.fail_read(COMMON_ADDRESS, None)
     await coordinator.async_refresh()
     reload.assert_called_once_with(entry.entry_id)
+
+
+# -- translated failures ---------------------------------------------------------------
+
+TRANSLATIONS = pathlib.Path(coordinator_module.__file__).parent / "translations"
+EXCEPTION_TEXTS = {
+    language: json.loads(
+        (TRANSLATIONS / f"{language}.json").read_text(encoding="utf-8")
+    )["exceptions"]
+    for language in ("en", "de")
+}
+
+
+def _assert_translated(failure: UpdateFailed) -> None:
+    """Home Assistant shows a first poll's failure as the reason of the setup retry."""
+    assert failure.translation_domain == DOMAIN
+    for texts in EXCEPTION_TEXTS.values():
+        assert failure.translation_key in texts
+
+
+async def _shifted():
+    raise SunSpecMapShiftError("moved")
+
+
+async def _nothing_answered():
+    return SimpleNamespace(updated=set(), failed={})
+
+
+@pytest.mark.parametrize(
+    "fail",
+    [
+        lambda c, unit: unit.fail_requests(ModbusConnectionError()),
+        lambda c, unit: unit.fail_requests(ServerDeviceFailureError()),
+        lambda c, unit: setattr(c.device, "async_update", _shifted),
+        lambda c, unit: setattr(c.device, "async_update", _nothing_answered),
+    ],
+    ids=["no answer", "refused", "shifted map", "nothing answered"],
+)
+async def test_every_modbus_poll_failure_is_translated(
+    coordinator, inverter_unit, hass, monkeypatch, fail
+):
+    monkeypatch.setattr(hass.config_entries, "async_schedule_reload", MagicMock())
+    fail(coordinator, inverter_unit)
+
+    with pytest.raises(UpdateFailed) as failure:
+        await coordinator._async_update_data()
+
+    _assert_translated(failure.value)
+
+
+@pytest.mark.parametrize("shifted", [False, True], ids=["no answer", "shifted map"])
+async def test_every_meter_power_failure_is_translated(
+    coordinator, hass, entry, meter_unit, monkeypatch, shifted
+):
+    await coordinator._async_update_data()
+    meter_power = FroniusMeterPowerCoordinator(
+        hass,
+        entry,
+        coordinator.device.meters[METER_UNIT_ID],
+        interval=timedelta(seconds=1),
+    )
+    if shifted:
+        monkeypatch.setattr(meter_power._power, "async_update", lambda **_: _shifted())
+    else:
+        meter_unit.fail_requests(ModbusConnectionError())
+
+    with pytest.raises(UpdateFailed) as failure:
+        await meter_power._async_update_data()
+
+    _assert_translated(failure.value)
+
+
+@pytest.mark.parametrize(
+    "error",
+    [FroniusWebUnreachable("no answer"), RuntimeError("refused")],
+    ids=["no answer", "refused"],
+)
+async def test_every_web_poll_failure_is_translated(hass, entry, error):
+    control = SimpleNamespace(async_refresh=AsyncMock(side_effect=error))
+    web = FroniusWebCoordinator(hass, entry, control, interval=timedelta(seconds=60))
+
+    with pytest.raises(UpdateFailed) as failure:
+        await web._async_update_data()
+
+    _assert_translated(failure.value)

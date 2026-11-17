@@ -19,7 +19,7 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 
 from .const import DOMAIN, ENTITY_PREFIX, entity_prefix
 from .entities import expected_unique_ids
-from .entity_base import expected_device_identifiers
+from .entity import expected_device_identifiers
 from .migrations import (
     V019_METER_UNIT_ID,
     V019_METER_UNKNOWN,

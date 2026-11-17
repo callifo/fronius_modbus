@@ -1030,6 +1030,21 @@
     },
     "soc_minimum_web_failed": {
       "message": "The Modbus storage reserve is set, but the inverter's web interface did not take it as SoC minimum; the two minimums now differ: {error}"
+    },
+    "modbus_poll_failed": {
+      "message": "Modbus communication with the inverter failed: {error}"
+    },
+    "meter_power_poll_failed": {
+      "message": "Reading the grid meter's power failed: {error}"
+    },
+    "sunspec_map_changed": {
+      "message": "The inverter's SunSpec register map changed, so the entry is reloaded: {error}"
+    },
+    "no_sub_system_answered": {
+      "message": "No part of the inverter answered over Modbus."
+    },
+    "web_api_refresh_failed": {
+      "message": "Reading the inverter's web interface failed: {error}"
     }
   }
 }

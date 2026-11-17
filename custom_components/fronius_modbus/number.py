@@ -8,7 +8,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import FroniusConfigEntry
 from .entities import FroniusNumberDescription, number_descriptions
-from .entity_base import FroniusEntity
+from .entity import FroniusEntity
 
 # Unlimited: every write path serialises itself (the controls' and the web
 # control's locks, the Modbus connection's queue), and a burst of values for

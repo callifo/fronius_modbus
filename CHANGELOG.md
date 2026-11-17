@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- When the inverter does not answer at Home Assistant's start, the reason shown with *Failed setup, will retry* is now in your language.
+
 ## 1.4.0
 
 Released 2026-11-16. The first stable release of the 1.x code here, which replaces 0.3.x. It contains every change from 1.0.0b1 to 1.4.0b3 below, and the change here on 1.4.0b3. Coming from 0.3.x, read the breaking changes under 1.0.0b1 below and the README's *Coming from 0.3.x* first.

@@ -1,6 +1,7 @@
 """End-to-end: a real Home Assistant sets the entry up on the mocked shared connection."""
 
 from dataclasses import replace
+from datetime import timedelta
 import json
 import logging
 import pathlib
@@ -17,6 +18,7 @@ import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_capture_events,
+    async_fire_time_changed,
 )
 
 from custom_components import fronius_modbus
@@ -40,7 +42,7 @@ from custom_components.fronius_modbus.froniuswebclient import (
 )
 from custom_components.fronius_modbus.token_store import async_get_token_store
 from custom_components.fronius_modbus.web_control import WebData
-from homeassistant.config_entries import ConfigEntryState
+from homeassistant.config_entries import SETUP_RETRY_MAX_WAIT, ConfigEntryState
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import (
@@ -50,6 +52,7 @@ from homeassistant.helpers import (
 )
 from homeassistant.helpers.entity_platform import async_get_platforms
 from homeassistant.setup import async_setup_component
+from homeassistant.util import dt as dt_util
 
 from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID, NO_INVERTER_CAP_W
 
@@ -198,6 +201,29 @@ async def test_a_link_outage_and_recovery(hass, mock_modbus):
     mock_modbus.fail_requests(INVERTER_UNIT_ID, None)
     await entry.runtime_data.modbus.async_refresh()
     await hass.async_block_till_done()
+    assert state_of(hass, entry, "acpower") == "3075.1"
+
+
+async def test_an_inverter_silent_at_setup_is_retried_until_it_answers(
+    hass, mock_modbus
+):
+    """Issue 170: 0.3.x gave up when the inverter was off at Home Assistant's start."""
+    mock_modbus.fail_requests(INVERTER_UNIT_ID, ModbusConnectionError())
+    entry = make_entry(hass)
+    assert not await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+    assert entry.error_reason_translation_key == "modbus_poll_failed"
+
+    mock_modbus.fail_requests(INVERTER_UNIT_ID, None)
+    async_fire_time_changed(
+        hass, dt_util.utcnow() + timedelta(seconds=SETUP_RETRY_MAX_WAIT)
+    )
+    # The retry runs as a background task that holds the entry's setup lock.
+    async with entry.setup_lock:
+        await hass.async_block_till_done()
+
+    assert entry.state is ConfigEntryState.LOADED
     assert state_of(hass, entry, "acpower") == "3075.1"
 
 

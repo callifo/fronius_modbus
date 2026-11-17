@@ -185,7 +185,6 @@ async def _async_mint_token(
 async def _async_prepare_web_api(
     hass: HomeAssistant,
     data: dict[str, Any],
-    api_password: str,
     api_token: dict[str, str] | None,
     apply_modbus_config: bool,
     claim_host: Callable[[], Awaitable[None]] | None,
@@ -200,7 +199,7 @@ async def _async_prepare_web_api(
     client = FroniusWebClient(
         host=data[CONF_HOST],
         username=data[CONF_API_USERNAME],
-        password=api_password or "",
+        password="",
         token=api_token,
     )
     if not await hass.async_add_executor_job(client.login):
@@ -229,7 +228,6 @@ async def _validate_input(
     hass: HomeAssistant,
     data: dict[str, Any],
     *,
-    api_password: str = "",
     api_token: dict[str, str] | None = None,
     apply_modbus_config: bool = False,
     claim_host: Callable[[], Awaitable[None]] | None = None,
@@ -239,15 +237,12 @@ async def _validate_input(
     _validate_static_input(data)
 
     web_api = data[CONF_API_USERNAME] != WEB_API_DISABLED
-    if web_api and not api_password and api_token is None:
-        raise _MissingApiPassword
 
     try:
         if web_api:
             await _async_prepare_web_api(
                 hass,
                 data,
-                api_password,
                 api_token,
                 apply_modbus_config,
                 claim_host,
@@ -570,7 +565,7 @@ class TokenFlowMixin:
 
     def _flow_entry(self) -> config_entries.ConfigEntry | None:
         """The entry this flow changes; none while it creates one."""
-        return None
+        raise NotImplementedError
 
     def _flow_entry_logs_in_with(self, host: str, username: str) -> bool:
         entry = self._flow_entry()
@@ -684,7 +679,6 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
             defaults={**_default_payload(), CONF_HOST: self._discovered_host},
             previous_host=None,
             previous_settings=None,
-            force_apply_modbus_config=True,
             claim_host=self._async_claim_new_host,
             on_success=self._async_finish_user,
         )

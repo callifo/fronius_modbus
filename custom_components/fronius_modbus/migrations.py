@@ -33,7 +33,7 @@ from .const import (
 from .const import web_api_disabled as entry_values_web_api_disabled
 from .component_readings import ONCE_REPORTED_KEYS
 from .entities import expected_unique_ids
-from .entity_base import device_info, expected_device_identifiers
+from .entity import device_info, expected_device_identifiers
 from .token_store import async_forget_unused_tokens, async_get_token_store
 
 _LOGGER = logging.getLogger(__name__)

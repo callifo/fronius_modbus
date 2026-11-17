@@ -1030,6 +1030,21 @@
     },
     "soc_minimum_web_failed": {
       "message": "Die Modbus-Speicherreserve ist gesetzt, aber die Weboberfläche des Wechselrichters hat sie nicht als SoC-Minimum übernommen; die beiden Minima weichen jetzt ab: {error}"
+    },
+    "modbus_poll_failed": {
+      "message": "Die Modbus-Kommunikation mit dem Wechselrichter ist fehlgeschlagen: {error}"
+    },
+    "meter_power_poll_failed": {
+      "message": "Das Lesen der Leistung am Netzzähler ist fehlgeschlagen: {error}"
+    },
+    "sunspec_map_changed": {
+      "message": "Die SunSpec-Registerbelegung des Wechselrichters hat sich geändert, deshalb wird der Eintrag neu geladen: {error}"
+    },
+    "no_sub_system_answered": {
+      "message": "Kein Teil des Wechselrichters hat über Modbus geantwortet."
+    },
+    "web_api_refresh_failed": {
+      "message": "Das Lesen der Weboberfläche des Wechselrichters ist fehlgeschlagen: {error}"
     }
   }
 }

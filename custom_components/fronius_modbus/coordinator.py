@@ -6,7 +6,7 @@ from dataclasses import dataclass, field, replace
 from datetime import timedelta
 import logging
 import time
-from typing import TYPE_CHECKING, NoReturn, cast
+from typing import TYPE_CHECKING, cast
 
 from modbus_connection import (
     GatewayPathUnavailableError,
@@ -22,7 +22,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .component_readings import limits_reached
-from .const import web_api_disabled
+from .const import DOMAIN, web_api_disabled
 from .derived import grid_status, household_load, throttle_reason
 from .fronius_modbus_api.controls import InverterControls
 from .fronius_modbus_api.device import (
@@ -93,14 +93,18 @@ def assume_present[Subsystem](subsystem: Subsystem | None) -> Subsystem:
     return cast(Subsystem, subsystem)
 
 
-def _raise_poll_failure(err: ModbusError, what: str) -> NoReturn:
-    """Fail a poll: no answer is an expected outage, a refusal an error."""
-    failure = DeviceUnreachable if isinstance(err, NO_ANSWER) else UpdateFailed
-    text = error_text(err)
-    # A cause whose text was cut would bring it back in the coordinator's
-    # debug traceback.
-    cause = err if text == str(err) else None
-    raise failure(f"{what}: {text}") from cause
+def _poll_failure_type(err: ModbusError) -> type[UpdateFailed]:
+    """No answer is an expected outage, a refusal an error."""
+    return DeviceUnreachable if isinstance(err, NO_ANSWER) else UpdateFailed
+
+
+def _poll_cause(err: ModbusError) -> ModbusError | None:
+    """The cause to chain to a failed poll.
+
+    One whose text was cut would bring it back in the coordinator's debug
+    traceback.
+    """
+    return err if error_text(err) == str(err) else None
 
 
 # A link that stays up but stops answering: after this many timeouts in a row the
@@ -277,7 +281,11 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
             self.hass.config_entries.async_schedule_reload(
                 assume_present(self.config_entry).entry_id
             )
-            raise UpdateFailed(f"SunSpec map changed, reloading: {err}") from err
+            raise UpdateFailed(
+                translation_domain=DOMAIN,
+                translation_key="sunspec_map_changed",
+                translation_placeholders={"error": error_text(err)},
+            ) from err
         except ModbusTimeoutError as err:
             self._timeouts += 1
             if self._timeouts >= TIMEOUTS_BEFORE_RECYCLE:
@@ -290,7 +298,9 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
         self._tolerate_until = 0.0
         self._tolerated_failures = 0
         if not report.updated:
-            raise UpdateFailed("no sub-system answered")
+            raise UpdateFailed(
+                translation_domain=DOMAIN, translation_key="no_sub_system_answered"
+            )
         self._log_sub_system_changes(report)
         self._reload_for_new_sub_systems(report)
         await self._reload_for_a_new_identity()
@@ -320,7 +330,11 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
             self._tolerate_until = 0.0
             await self.device.unit.disconnect()
         self._identity_check_due = True
-        _raise_poll_failure(err, "Modbus communication failure")
+        raise _poll_failure_type(err)(
+            translation_domain=DOMAIN,
+            translation_key="modbus_poll_failed",
+            translation_placeholders={"error": error_text(err)},
+        ) from _poll_cause(err)
 
     def _log_sub_system_changes(self, report: UpdateReport) -> None:
         """Log each sub-system once when it drops out and once when it is back.
@@ -499,9 +513,17 @@ class FroniusMeterPowerCoordinator(DataUpdateCoordinator[float | None]):
             await self._power.async_update(notify=False)
         except SunSpecMapShiftError as err:
             # The full poll finds the same shift and reloads the entry.
-            raise UpdateFailed(f"Meter power read failed: {err}") from err
+            raise UpdateFailed(
+                translation_domain=DOMAIN,
+                translation_key="sunspec_map_changed",
+                translation_placeholders={"error": error_text(err)},
+            ) from err
         except ModbusError as err:
-            _raise_poll_failure(err, "Meter power read failed")
+            raise _poll_failure_type(err)(
+                translation_domain=DOMAIN,
+                translation_key="meter_power_poll_failed",
+                translation_placeholders={"error": error_text(err)},
+            ) from _poll_cause(err)
         return self._power.w
 
 
@@ -532,9 +554,15 @@ class FroniusWebCoordinator(DataUpdateCoordinator["WebData"]):
         try:
             data = await self.web_control.async_refresh()
         except FroniusWebUnreachable as err:
-            raise DeviceUnreachable(f"Fronius web API unreachable: {err}") from err
+            raise DeviceUnreachable(
+                translation_domain=DOMAIN, translation_key="web_api_unreachable"
+            ) from err
         except Exception as err:  # the client raises plain RuntimeError as well
-            raise UpdateFailed(f"Fronius web API refresh failed: {err}") from err
+            raise UpdateFailed(
+                translation_domain=DOMAIN,
+                translation_key="web_api_refresh_failed",
+                translation_placeholders={"error": error_text(err)},
+            ) from err
         if self._recheck_topology:
             await self._async_recheck_topology()
         return data

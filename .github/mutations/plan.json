@@ -324,8 +324,8 @@
   {
     "label": "coordinator: an unreachable device is not an error",
     "path": "custom_components/fronius_modbus/coordinator.py",
-    "old": "    failure = DeviceUnreachable if isinstance(err, NO_ANSWER) else UpdateFailed",
-    "new": "    failure = UpdateFailed",
+    "old": "    return DeviceUnreachable if isinstance(err, NO_ANSWER) else UpdateFailed",
+    "new": "    return UpdateFailed",
     "tests": "an_unreachable_device_is_not_logged_as_an_error"
   },
   {
@@ -1913,9 +1913,16 @@
   {
     "label": "coordinator: a cut cause stays out of the traceback",
     "path": "custom_components/fronius_modbus/coordinator.py",
-    "old": "    cause = err if text == str(err) else None\n",
-    "new": "    cause = err\n",
+    "old": "    return err if error_text(err) == str(err) else None\n",
+    "new": "    return err\n",
     "tests": "names_no_host_in_logs_or_diagnostics"
+  },
+  {
+    "label": "coordinator: a failed poll names its text for the setup's reason",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "            translation_key=\"modbus_poll_failed\",\n",
+    "new": "",
+    "tests": "every_modbus_poll_failure_is_translated"
   },
   {
     "label": "coordinator: the coordinator's name holds no host",

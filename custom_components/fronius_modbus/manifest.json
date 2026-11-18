@@ -1,6 +1,9 @@
 {
   "domain": "fronius_modbus",
   "name": "Fronius Modbus",
+  "categories": [
+    "energy.solar_batteries"
+  ],
   "codeowners": [
     "@callifo",
     "@Varitras"

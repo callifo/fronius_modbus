@@ -1,9 +1,12 @@
 # Changelog
 
-## Unreleased
+## 1.4.1
+
+Released 2026-11-18. A small update on 1.4.0: the reason shown while the setup waits for the inverter is in your language, and the integration names its category for the Marketplace catalog.
 
 ### Changed
 - When the inverter does not answer at Home Assistant's start, the reason shown with *Failed setup, will retry* is now in your language.
+- The integration names its category, Energy: Solar & batteries, so the Marketplace catalog can list it there.
 
 ## 1.4.0
 

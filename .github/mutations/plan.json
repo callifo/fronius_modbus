@@ -3001,5 +3001,54 @@
     "old": "        _legacy_entity_unique_id(entry, _V019_METER_KEY_PREFIX),\n",
     "new": "",
     "tests": "callifo_0_2_8_meter_that_is_gone"
+  },
+  {
+    "label": "coordinator: the storage mode is judged only on a poll that read it",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "        if REPORT_STORAGE in report.updated:\n            self.storage_control.sync_from_device()\n",
+    "new": "        self.storage_control.sync_from_device()\n",
+    "tests": "mode_write_survives_polls_that_could_not_read"
+  },
+  {
+    "label": "device: a meter model in an incomplete chain is placed",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        if model is None and not complete:\n",
+    "new": "        if not complete:\n",
+    "tests": "meter_model_in_an_incomplete_chain_is_placed"
+  },
+  {
+    "label": "device: a model past the register space ends the chain",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        if model.address + model.span > REGISTER_SPACE:\n            return chain\n",
+    "new": "",
+    "tests": "length_past_the_register_space"
+  },
+  {
+    "label": "device: an undecided meter is reported with its own refusal",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "            self._undecided_causes[unit_id] = err\n",
+    "new": "",
+    "tests": "refuses_its_probe_is_filed_with_its_refusal"
+  },
+  {
+    "label": "web client: a status page of another shape falls back to sha256",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "    except FroniusWebUnreachable, requests.HTTPError, ValueError, AttributeError:\n",
+    "new": "    except FroniusWebUnreachable, requests.HTTPError, ValueError:\n",
+    "tests": "status_page_of_another_shape"
+  },
+  {
+    "label": "web client: a challenge without qop is a refused login",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "        if not {\"realm\", \"nonce\", \"qop\"} <= challenge.keys():\n",
+    "new": "        if not {\"realm\", \"nonce\"} <= challenge.keys():\n",
+    "tests": "challenge_without_qop"
+  },
+  {
+    "label": "entities: the storage mode select waits for readable registers",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "            assume_present(r.storage_control).control_mode is not None\n",
+    "new": "            True\n",
+    "tests": "registers_are_unread"
   }
 ]

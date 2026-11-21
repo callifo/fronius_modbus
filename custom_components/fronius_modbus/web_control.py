@@ -376,7 +376,10 @@ class FroniusWebControl:
             DOMAIN,
             issue_id,
             is_fixable=True,
-            is_persistent=True,
+            # A persistent issue goes into the diagnostics download with its
+            # placeholders, and the entry title usually holds the host. The
+            # warning is raised again on every web refresh anyway.
+            is_persistent=False,
             severity=ir.IssueSeverity.WARNING,
             translation_key=SOLAR_API_WARNING_TRANSLATION_KEY,
             translation_placeholders={

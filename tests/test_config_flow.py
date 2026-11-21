@@ -35,6 +35,8 @@ from .conftest import INVERTER_UNIT_ID
 
 HOST = "192.0.2.10"
 USER_INPUT = {"host": HOST, "scan_interval": 10}
+# Home Assistant's own address towards the inverter, as the socket names it.
+RESOLVED_IP = "192.0.2.50"
 
 
 def make_entry(hass) -> MockConfigEntry:
@@ -61,6 +63,9 @@ def _stub_web_client(monkeypatch):
     monkeypatch.setattr(config_flow.FroniusWebClient, "login", lambda self: True)
     monkeypatch.setattr(
         config_flow.FroniusWebClient, "ensure_modbus_enabled", lambda self, *a: True
+    )
+    monkeypatch.setattr(
+        config_flow.FroniusWebClient, "resolve_client_ip", lambda self: RESOLVED_IP
     )
     monkeypatch.setattr(
         config_flow,
@@ -839,10 +844,15 @@ async def test_turning_the_web_api_on_applies_the_saved_restriction(
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"api_password": "secret"}
     )
+    assert result["step_id"] == "allowed_host"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"allowed_host": RESOLVED_IP}
+    )
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    # port, meter address, inverter id, then the restriction
-    assert [args[3] for args in written] == ["home_assistant"]
+    # port, meter address, inverter id, the restriction, the model type
+    # consent, then the address to allow
+    assert [(args[3], args[5]) for args in written] == [("home_assistant", RESOLVED_IP)]
 
 
 # -- discovery ---------------------------------------------------------------------
@@ -1776,15 +1786,68 @@ async def test_a_moved_inverter_is_not_followed_to_a_host_an_entry_without_uniqu
 # -- refusals and restarts ------------------------------------------------------------
 
 
-async def _password_step(hass) -> dict:
+async def _password_step(hass, restriction: str = "keep") -> dict:
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": "user"}
     )
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], USER_INPUT
+        result["flow_id"], {**USER_INPUT, "modbus_restriction": restriction}
     )
     assert result["step_id"] == "user_password"
     return result
+
+
+async def test_the_address_to_allow_is_shown_and_can_be_changed(
+    hass, mock_modbus, monkeypatch
+):
+    """Behind NAT the inverter sees another address than Home Assistant's own,
+    and allowing the wrong one locked every Modbus control out."""
+    written: list[tuple] = []
+    monkeypatch.setattr(
+        config_flow.FroniusWebClient,
+        "ensure_modbus_enabled",
+        lambda self, *args: written.append(args),
+    )
+    result = await _password_step(hass, restriction="home_assistant")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+
+    assert result["step_id"] == "user_allowed_host"
+    assert result["data_schema"]({}) == {"allowed_host": RESOLVED_IP}
+    assert written == []
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"allowed_host": "192.0.2.77"}
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert [(args[3], args[5]) for args in written] == [
+        ("home_assistant", "192.0.2.77")
+    ]
+
+
+async def test_an_address_to_allow_that_is_no_address_is_refused(
+    hass, mock_modbus, monkeypatch
+):
+    written: list[tuple] = []
+    monkeypatch.setattr(
+        config_flow.FroniusWebClient,
+        "ensure_modbus_enabled",
+        lambda self, *args: written.append(args),
+    )
+    result = await _password_step(hass, restriction="home_assistant")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"allowed_host": "fronius.local"}
+    )
+
+    assert result["step_id"] == "user_allowed_host"
+    assert result["errors"] == {"allowed_host": "invalid_allowed_host"}
+    assert written == []
 
 
 async def test_a_token_request_that_fails_shows_cannot_connect(
@@ -1886,13 +1949,11 @@ async def test_an_entry_set_to_leave_modbus_alone_is_not_set_up_on_reauth(
 async def test_a_local_address_that_cannot_be_found_says_so(
     hass, mock_modbus, monkeypatch
 ):
-    def unresolvable(self, *args):
+    def unresolvable(self):
         raise ClientIpResolutionError("no local address")
 
-    monkeypatch.setattr(
-        config_flow.FroniusWebClient, "ensure_modbus_enabled", unresolvable
-    )
-    result = await _password_step(hass)
+    monkeypatch.setattr(config_flow.FroniusWebClient, "resolve_client_ip", unresolvable)
+    result = await _password_step(hass, restriction="home_assistant")
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {"api_password": "secret"}

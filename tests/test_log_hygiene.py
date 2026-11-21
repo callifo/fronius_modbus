@@ -35,7 +35,25 @@ PACKAGE = pathlib.Path(__file__).resolve().parents[1] / "custom_components"
 
 # Names that identify the installation rather than the problem. `unit_id` and
 # the Modbus addresses stay allowed: they describe the protocol, not the owner.
-DEVICE_IDENTIFIERS = frozenset({"host", "hostname", "serial", "token", "ip", "url"})
+# The entry title holds the host by default, and so did unique ids of 0.3.x.
+DEVICE_IDENTIFIERS = frozenset(
+    {
+        "host",
+        "hostname",
+        "conf_host",
+        "serial",
+        "serial_number",
+        "token",
+        "password",
+        "ip",
+        "url",
+        "title",
+        "unique_id",
+    }
+)
+LOG_METHODS = frozenset(
+    {"debug", "info", "warning", "error", "exception", "critical", "log"}
+)
 
 
 def _identifiers_in(node: ast.AST) -> set[str]:
@@ -45,7 +63,23 @@ def _identifiers_in(node: ast.AST) -> set[str]:
             names.add(child.id.lower())
         elif isinstance(child, ast.Attribute):
             names.add(child.attr.lower().lstrip("_"))
+        elif isinstance(child, ast.Constant) and isinstance(child.value, str):
+            # entry.data["host"] and {"host": ...} name it as a string.
+            names.add(child.value.lower())
     return names
+
+
+def _is_logger(receiver: ast.AST) -> bool:
+    """_LOGGER, LOG, self._logger: the usual names of a logger object."""
+    name = None
+    if isinstance(receiver, ast.Name):
+        name = receiver.id
+    elif isinstance(receiver, ast.Attribute):
+        name = receiver.attr
+    if name is None:
+        return False
+    name = name.lower().lstrip("_")
+    return name == "log" or name.endswith("logger")
 
 
 def _logging_calls(tree: ast.AST):
@@ -53,8 +87,8 @@ def _logging_calls(tree: ast.AST):
         is_logger_call = (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Attribute)
-            and isinstance(node.func.value, ast.Name)
-            and node.func.value.id.lower().endswith("logger")
+            and node.func.attr in LOG_METHODS
+            and _is_logger(node.func.value)
         )
         if is_logger_call:
             yield node
@@ -64,7 +98,8 @@ def _offending_lines(source: pathlib.Path) -> list[str]:
     tree = ast.parse(source.read_text(encoding="utf-8"))
     offences = []
     for call in _logging_calls(tree):
-        for argument in call.args[1:]:
+        arguments = [*call.args[1:], *(keyword.value for keyword in call.keywords)]
+        for argument in arguments:
             named = _identifiers_in(argument) & DEVICE_IDENTIFIERS
             if named:
                 offences.append(f"{source.name}:{call.lineno} passes {sorted(named)}")

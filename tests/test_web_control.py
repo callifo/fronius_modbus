@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+import inspect
 import threading
 import time
 
@@ -25,6 +26,7 @@ from custom_components.fronius_modbus.fronius_modbus_api.exceptions import (
 from custom_components.fronius_modbus.froniuswebclient import (
     ENDPOINT_MISSING,
     FroniusWebAuthError,
+    FroniusWebClient,
     FroniusWebResponseError,
     FroniusWebUnreachable,
 )
@@ -1468,3 +1470,25 @@ async def test_an_export_limit_that_is_no_number_shows_no_limit(hass, limit):
         control.shutdown()
 
     assert data.export_soft_limit_w is None
+
+
+def _fakes():
+    fakes, pending = [], [FakeWebClient]
+    while pending:
+        fake = pending.pop()
+        fakes.append(fake)
+        pending.extend(fake.__subclasses__())
+    return fakes
+
+
+@pytest.mark.parametrize("fake", _fakes(), ids=lambda fake: fake.__name__)
+def test_a_fake_client_takes_the_arguments_the_real_one_takes(fake):
+    """A fake with other parameters passes a call the real client rejects."""
+    for name, method in vars(fake).items():
+        if name.startswith("_") or not callable(method):
+            continue
+        real = getattr(FroniusWebClient, name, None)
+        assert real is not None, f"{fake.__name__}.{name} is no client method"
+        assert list(inspect.signature(method).parameters) == list(
+            inspect.signature(real).parameters
+        ), f"{fake.__name__}.{name}"

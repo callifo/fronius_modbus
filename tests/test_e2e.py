@@ -2277,6 +2277,62 @@ async def test_a_0_1_9_meter_that_is_gone_is_neither_moved_nor_removed(
     assert device.identifiers == {(DOMAIN, "Fronius_meter1")}
 
 
+# What callifo 0.2.0 to 0.2.8 registered: name-based ids, its meter as m1,
+# and the two keys renamed since, as 0.1.9 had them.
+CALLIFO_028_ROWS = [
+    ("sensor", "m1_power", f"meter_{METER_UNIT_ID}_power"),
+    ("sensor", "m1_imported", f"meter_{METER_UNIT_ID}_imported"),
+    ("sensor", "m1_exported", f"meter_{METER_UNIT_ID}_exported"),
+    ("sensor", "minimum_reserve", "soc_minimum"),
+    ("sensor", "tempcab", "inverter_temperature"),
+]
+
+
+def _callifo_028_entry(hass, meter_unit_id: int):
+    """An entry callifo 0.2.8 left, with its name-based entities."""
+    entry = make_entry(hass, minor_version=1, **{CONF_METER_UNIT_ID: meter_unit_id})
+    hass.config_entries.async_update_entry(entry, title="Fronius", unique_id=None)
+    registry = er.async_get(hass)
+    originals = {
+        (domain, new): registry.async_get_or_create(
+            domain,
+            DOMAIN,
+            f"fm_fronius__{old}",
+            config_entry=entry,
+            suggested_object_id=f"callifo_{old}",
+        ).entity_id
+        for domain, old, new in CALLIFO_028_ROWS
+    }
+    return entry, originals
+
+
+async def test_a_callifo_0_2_8_entry_keeps_its_meter_and_renamed_entities(
+    hass, mock_modbus, monkeypatch
+):
+    """The meter's m1 ids and two renamed keys were deleted and came back under new ids."""
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    entry, originals = _callifo_028_entry(hass, METER_UNIT_ID)
+
+    await setup_entry(hass, entry)
+
+    for (domain, key), entity_id in originals.items():
+        assert entity_id_for(hass, entry, domain, key) == entity_id
+
+
+async def test_a_callifo_0_2_8_meter_that_is_gone_is_kept(
+    hass, mock_modbus, monkeypatch
+):
+    """While its meter is not on the bus, the m1 ids wait like 0.1.9's."""
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    entry, originals = _callifo_028_entry(hass, 202)
+
+    await setup_entry(hass, entry)
+
+    registry = er.async_get(hass)
+    entity_id = originals[("sensor", f"meter_{METER_UNIT_ID}_power")]
+    assert registry.async_get(entity_id).unique_id == "fm_fronius__m1_power"
+
+
 async def test_a_0_1_9_meter_that_was_missing_moves_once_it_is_back(
     hass, mock_modbus, monkeypatch
 ):

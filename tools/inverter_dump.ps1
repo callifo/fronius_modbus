@@ -121,8 +121,8 @@ $EndOfChain = 0xFFFF
 $MaxModels = 100
 $InverterUnit = 1
 $MeterCandidates = 10
-# A Datamanager answers for its Smart Meter on unit 240, not in the numbering
-# from 200 (issue 110).
+# A Datamanager's Smart Meter is commonly reported on unit 240, outside the
+# numbering from 200; a SnapINverter's dump showed none at 200 to 209 (issue 110).
 $DatamanagerMeterUnit = 240
 $LastModbusUnit = 247
 $MaxRegistersPerRead = 125

@@ -71,6 +71,9 @@ def _stub_web_client(monkeypatch):
         config_flow.FroniusWebClient, "resolve_client_ip", lambda self: RESOLVED_IP
     )
     monkeypatch.setattr(
+        config_flow.FroniusWebClient, "restriction_allows", lambda self, address: False
+    )
+    monkeypatch.setattr(
         config_flow,
         "mint_token",
         lambda host, user, password: {"realm": "r", "token": "t"},
@@ -1851,6 +1854,39 @@ async def test_an_address_to_allow_that_is_no_address_is_refused(
     assert result["step_id"] == "user_allowed_host"
     assert result["errors"] == {"allowed_host": "invalid_allowed_host"}
     assert written == []
+
+
+async def test_an_address_the_inverter_already_allows_is_not_asked_again(
+    hass, mock_modbus, monkeypatch
+):
+    """Every Configure and reauthentication asked, although nothing was written."""
+    entry = make_entry(hass)
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, "modbus_restriction": "home_assistant"}
+    )
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+    written: list[tuple] = []
+    monkeypatch.setattr(
+        config_flow.FroniusWebClient,
+        "ensure_modbus_enabled",
+        lambda self, *args: written.append(args),
+    )
+    monkeypatch.setattr(
+        config_flow.FroniusWebClient,
+        "restriction_allows",
+        lambda self, address: address == RESOLVED_IP,
+    )
+    monkeypatch.setattr(
+        hass.config_entries, "async_reload", AsyncMock(return_value=True)
+    )
+
+    result = await entry.start_reauth_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_username": "customer"}
+    )
+
+    assert result["reason"] == "reauth_successful"
+    assert [args[5] for args in written] == [RESOLVED_IP]
 
 
 @pytest.mark.parametrize(

@@ -721,6 +721,27 @@ def test_a_different_port_is_rewritten(client, inverter):
     assert client.ensure_modbus_enabled(502, 200, 1) is True
 
 
+@pytest.mark.parametrize(
+    ("restriction", "allows"),
+    [
+        ({"on": True, "ip": "192.0.2.5,192.0.2.99"}, True),
+        ({"on": True, "ip": "192.0.2.5"}, False),
+        ({"on": False, "ip": "192.0.2.99"}, False),
+    ],
+    ids=["on-and-listed", "on-not-listed", "off"],
+)
+def test_the_restriction_says_whether_it_already_allows_an_address(
+    client, inverter, restriction, allows
+):
+    """Only a restriction that is on and lists the address needs no write for it."""
+    inverter.bodies["/api/config/modbus"] = modbus_config(
+        ctr={"on": True, "restriction": restriction}
+    )
+
+    assert client.restriction_allows("192.0.2.99") is allows
+    assert [call for call in inverter.calls if call[0] == "post"] == []
+
+
 def test_the_restriction_carries_the_resolved_client_ip(client, inverter, monkeypatch):
     inverter.bodies["/api/config/modbus"] = modbus_config()
     monkeypatch.setattr(

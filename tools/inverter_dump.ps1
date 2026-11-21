@@ -121,6 +121,9 @@ $EndOfChain = 0xFFFF
 $MaxModels = 100
 $InverterUnit = 1
 $MeterCandidates = 10
+# A Datamanager answers for its Smart Meter on unit 240, not in the numbering
+# from 200 (issue 110).
+$DatamanagerMeterUnit = 240
 $LastModbusUnit = 247
 $MaxRegistersPerRead = 125
 # The common model carries the serial number in registers 48 to 63 of its body.
@@ -620,7 +623,7 @@ function Connect-Modbus {
     $script:ModbusStream.ReadTimeout = 3000
 }
 
-function Read-Modbus([bool]$Redact) {
+function Read-Modbus([bool]$Redact, [bool]$Datamanager) {
     $read = {
         param($Unit, $Address, $Count)
         try {
@@ -635,6 +638,7 @@ function Read-Modbus([bool]$Redact) {
     try {
         Connect-Modbus
         $units = @($InverterUnit) + @($FirstMeterUnit..($FirstMeterUnit + $MeterCandidates - 1))
+        if ($Datamanager -and $units -notcontains $DatamanagerMeterUnit) { $units += $DatamanagerMeterUnit }
         if ($AllUnits) { $units = @($InverterUnit..$LastModbusUnit) }
         return [ordered]@{ port = $ModbusPort; units = (Read-ModbusUnits $read $units $Redact) }
     } catch {
@@ -769,7 +773,7 @@ function Invoke-Dump {
         $bodies += , [string]$result.body
     }
     $modbus = $null
-    if ($readModbus) { $modbus = Read-Modbus $redact }
+    if ($readModbus) { $modbus = Read-Modbus $redact $datamanager }
 
     Write-Host 'Writing the file'
     $text = New-ExportText $loginRole $redact $modbus @($paths.Keys) $statuses $bodies

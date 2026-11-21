@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- `tools/inverter_dump.bat` also reads Modbus unit 240 on a Datamanager (SnapINverter), where its meter usually answers (issue 110).
+
 ## 1.4.1
 
 Released 2026-11-18. A small update on 1.4.0: the reason shown while the setup waits for the inverter is in your language, and the integration names its category for the Marketplace catalog.

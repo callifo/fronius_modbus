@@ -324,6 +324,19 @@ def async_migrate_callifo_lowercase_keys(
         registry.async_update_entity(entity_entry.entity_id, new_unique_id=target)
 
 
+def async_drop_stored_issues(hass: HomeAssistant) -> None:
+    """Delete the repair issues an earlier version stored; this one stores none.
+
+    A stored issue keeps its placeholders, the entry title with the host among
+    them, and Home Assistant puts every issue of the domain into each
+    diagnostics download, also one of an entry long removed.
+    """
+    registry = ir.async_get(hass)
+    for domain, issue_id in list(registry.issues):
+        if domain == DOMAIN and registry.issues[(domain, issue_id)].is_persistent:
+            ir.async_delete_issue(hass, DOMAIN, issue_id)
+
+
 def _migration_issue_id(entry: ConfigEntry) -> str:
     return f"{MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX}{entry.entry_id}"
 

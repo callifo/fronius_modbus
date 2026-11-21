@@ -44,7 +44,8 @@ GUARD_FILES = {
     "test_mutation_harness.py": "the mutation run fails loudly instead of reporting success",
     "test_mypy_scope.py": "every module is type-checked or says why it is not yet",
     "test_platform_entities.py": "every platform builds its entities through the shared helper",
-    "test_requirements.py": "the manifest and requirements.txt name the same dependencies",
+    "test_requirements.py": "every manifest requirement is also in requirements.txt",
+    "test_line_endings.py": "every text file ends its lines with LF alone",
     "test_secret_scan.py": "the gitleaks allowlist does not hide a token on the same line",
     "test_guards.py": "the guards stay package-wide and stay present",
 }

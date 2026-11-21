@@ -25,7 +25,7 @@ PACKAGE = (
 )
 
 # No module may pass this without an entry below. It sits in today's gap
-# between the ordinary modules (the largest is under 700 lines) and the
+# between the ordinary modules (the largest just under 900 lines) and the
 # entity table.
 LINE_LIMIT = 900
 
@@ -63,9 +63,10 @@ LINE_BUDGETS = {
 # re-read from the top to change safely.
 COMPLEXITY_LIMIT = 15
 
-# What is over the limit today, exactly. None of these was simplified on
-# adoption - the point of the guard is that nothing gets worse and every
-# improvement is written down.
+# What was over the limit when the guard came in. None of these was
+# simplified on adoption - the point of the guard is that nothing gets worse
+# and every improvement is written down, so an entry that got under the limit
+# stays as a ratchet at its new value.
 COMPLEXITY_BUDGETS = {
     "froniuswebclient.py::_parse_power_meter_info": 24,
     "migrations.py::async_migrate_v019_mppt_statistics": 14,

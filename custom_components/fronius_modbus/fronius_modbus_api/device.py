@@ -149,6 +149,9 @@ MARKER_WORDS = 2
 END_MODEL_ID = 0xFFFF
 # A map longer than this is a misread chain, not a device; bounds the walk.
 MAXIMUM_MODELS = 64
+# Holding registers are addressed with 16 bits; a model reaching past them is
+# a garbage length, and the backend refuses such a request with a ValueError.
+REGISTER_SPACE = 0x10000
 
 
 async def _scan(unit: ModbusUnit) -> tuple[SunSpecModels, bool]:
@@ -160,7 +163,7 @@ async def _scan(unit: ModbusUnit) -> tuple[SunSpecModels, bool]:
     complete = True
     try:
         chain = await scan(unit, SUNSPEC_BASE_ADDRESS)
-    except IllegalDataAddressError:
+    except IllegalDataAddressError, ValueError:
         # Some devices refuse a read past their map instead of answering the
         # end marker, which took the whole chain down and left setup reporting
         # "cannot connect" although Modbus was fine (redpomodoro issue 105).
@@ -170,7 +173,9 @@ async def _scan(unit: ModbusUnit) -> tuple[SunSpecModels, bool]:
         if chain.first(COMMON_MODEL_ID) is None:
             raise
         complete = False
-        _LOGGER.warning(
+        # Debug: the poll retries an incomplete chain every time, and the
+        # coordinator reports the sub-system once per change.
+        _LOGGER.debug(
             "The SunSpec chain ends in a refused read; continuing with the models "
             "found before it: %s",
             ", ".join(str(model_id) for model_id in sorted(chain)),
@@ -187,6 +192,8 @@ async def _scan_until_refused(unit: ModbusUnit) -> SunSpecModels:
     chain = SunSpecModels()
     address = SUNSPEC_BASE_ADDRESS + MARKER_WORDS
     for _ in range(MAXIMUM_MODELS):
+        if address + MARKER_WORDS > REGISTER_SPACE:
+            return chain
         try:
             model_id, length = await unit.read_holding_registers(address, MARKER_WORDS)
         except IllegalDataAddressError:
@@ -194,6 +201,8 @@ async def _scan_until_refused(unit: ModbusUnit) -> SunSpecModels:
         if model_id == END_MODEL_ID:
             return chain
         model = SunSpecModel(model_id=model_id, address=address, length=length)
+        if model.address + model.span > REGISTER_SPACE:
+            return chain
         chain.setdefault(model_id, []).append(model)
         address += model.span
     return chain
@@ -242,6 +251,7 @@ class FroniusInverter:
         # Meter units whose probe did not answer: neither present nor absent
         # yet, probed again on every poll.
         self._undecided_meters: dict[int, ModbusUnit] = {}
+        self._undecided_causes: dict[int, ModbusError] = {}
         # The inverter's models after its AC block, in chain order.
         self._polled_models: tuple[str, ...] = ()
 
@@ -381,8 +391,10 @@ class FroniusInverter:
                 "Meter on unit %s did not answer yet: %s", unit_id, error_text(err)
             )
             undecided[unit_id] = meter_unit
+            self._undecided_causes[unit_id] = err
             return
         undecided.pop(unit_id, None)
+        self._undecided_causes.pop(unit_id, None)
         if meter is not None:
             meters[unit_id] = meter
 
@@ -400,9 +412,9 @@ class FroniusInverter:
         except ABSENCE_ERRORS:
             _LOGGER.debug("No meter on unit %s", unit_id)
             return None
-        if not complete:
-            raise IncompleteChainError(f"meter {unit_id} answered an incomplete chain")
         model = chain.first(*METER_MODEL_IDS)
+        if model is None and not complete:
+            raise IncompleteChainError(f"meter {unit_id} answered an incomplete chain")
         if model is None:
             return None
         common = _common(meter_unit, chain)
@@ -524,8 +536,10 @@ class FroniusInverter:
                 self._meter_addresses,
             )
             if unit_id in self._undecided_meters:
-                report.failed[name] = ModbusTimeoutError(
-                    f"meter {unit_id} did not answer"
+                # The meter's own refusal, not a made-up timeout: a busy meter
+                # read as a silent one in the log and in the diagnostics.
+                report.failed[name] = self._undecided_causes.get(
+                    unit_id, ModbusTimeoutError(f"meter {unit_id} did not answer")
                 )
                 continue
             if unit_id in self.meters:

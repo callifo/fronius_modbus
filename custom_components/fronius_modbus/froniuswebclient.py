@@ -725,6 +725,14 @@ class FroniusWebClient:
             )
         return None
 
+    def restriction_allows(self, address: str) -> bool:
+        """Whether the Modbus restriction is on and already allows ``address``."""
+        config = _config_object(self.get_modbus_config(), MODBUS_PATH)
+        slave = _nested_object(config, "slave", MODBUS_PATH)
+        ctr = _nested_object(slave, "ctr", MODBUS_PATH)
+        restriction = _nested_object(ctr, "restriction", MODBUS_PATH)
+        return _restriction_with(restriction, address) == restriction
+
     def ensure_modbus_enabled(
         self,
         port: int,

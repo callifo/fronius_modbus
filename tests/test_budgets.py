@@ -61,7 +61,8 @@ LINE_BUDGETS = {
     # read, not an AttributeError or KeyError that escapes the client.
     # 922 + the address to allow is confirmed in the flow, not only resolved.
     # 923 + a challenge part without a value is refused like a missing one.
-    "froniuswebclient.py": 923,
+    # 931 + the restriction says whether it already allows an address.
+    "froniuswebclient.py": 931,
     # 916 + a reserve without the web login is refused instead of reaching
     # Modbus alone; the check sits in the write lock, next to the other one.
     # 932 + a cancelled write waits for its thread before it leaves the
@@ -73,7 +74,8 @@ LINE_BUDGETS = {
     # is written, in all four flows; splitting the flows is a follow-up.
     # 1070 + the address step refuses addresses no client has, keeps a
     # corrected one, and asks for one it could not resolve.
-    "config_flow.py": 1070,
+    # 1077 + the address is asked only when the allowed list would change.
+    "config_flow.py": 1077,
 }
 
 # SonarSource's own default. Above it, a function is one somebody has to

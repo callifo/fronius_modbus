@@ -3113,5 +3113,19 @@
     "old": "            ir.async_delete_issue(hass, DOMAIN, issue_id)\n",
     "new": "            pass\n",
     "tests": "earlier_version_stored"
+  },
+  {
+    "label": "config flow: an address the inverter already allows is not asked again",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "        allowed = bool(resolved) and await hass.async_add_executor_job(\n",
+    "new": "        allowed = False and await hass.async_add_executor_job(\n",
+    "tests": "already_allows_is_not_asked"
+  },
+  {
+    "label": "web client: the restriction says whether it already allows an address",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "        return _restriction_with(restriction, address) == restriction\n",
+    "new": "        return True\n",
+    "tests": "says_whether_it_already_allows"
   }
 ]

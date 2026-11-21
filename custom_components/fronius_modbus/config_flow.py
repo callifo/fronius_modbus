@@ -242,7 +242,14 @@ async def _async_prepare_web_api(
         except ClientIpResolutionError:
             # The owner can still type the address the inverter sees.
             resolved = ""
-        raise _AllowedHostNeeded(resolved)
+        # Asked only when the write would change the list: Configure and
+        # reauthentication apply the settings every time.
+        allowed = bool(resolved) and await hass.async_add_executor_job(
+            client.restriction_allows, resolved
+        )
+        if not allowed:
+            raise _AllowedHostNeeded(resolved)
+        allowed_host = resolved
     if claim_host is not None:
         await claim_host()
     try:

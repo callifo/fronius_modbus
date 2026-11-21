@@ -10,7 +10,7 @@
 ### Fixed
 - The diagnostics download no longer contains the inverter's address while the Solar API firmware warning is shown.
 - A web setting written by an automation that was stopped mid-write could overwrite a newer value of the same setting.
-- Updating straight from callifo 0.2.8 or older keeps the grid meter's sensors and the reserve and temperature sensors of that version, with their entity IDs and history.
+- Updating straight from callifo 0.2.9 or older keeps the entity IDs and history of the grid meter's sensors, the reserve and the temperature sensor, which came back under new entity IDs before.
 - Texts: AFCI is spelled as Fronius does, combined control modes have a space after the comma, the event severity states are translated, `Charge from grid` shows a grid import icon, and the setup dialogs name every entity that goes without the web API.
 
 ## 1.4.1

@@ -97,9 +97,10 @@ _V019_MPPT_UNIQUE_ID_MAPPINGS = (
     ("fm_mppt3_lfte", "storage_charge_lfte", "storage_charge_lfte", None),
     ("fm_mppt4_lfte", "storage_discharge_lfte", "storage_discharge_lfte", None),
 )
-# redpomodoro 0.1.9 wrote its unique ids as fm_<key>, callifo up to 0.2.8 as
-# fm_<name>__<key>. These keys changed since, and the one meter was m1; every
-# other key stayed.
+# redpomodoro 0.1.9 wrote its unique ids as fm_<key>, callifo's name-based ones
+# as fm_<name>__<key>. These keys changed since (the reserve after 0.2.8, the
+# temperature after 0.2.9), and up to 0.2.8 the one meter was m1; every other
+# key stayed.
 _V019_RENAMED_KEYS = {
     "minimum_reserve": "soc_minimum",
     "tempcab": "inverter_temperature",

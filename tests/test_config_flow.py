@@ -1149,7 +1149,6 @@ async def test_an_ipv6_only_announcement_is_not_offered(hass):
         ),
         (config_flow._MissingApiPassword, "base", "missing_api_password"),
         (config_flow._InvalidApiCredentials, "base", "invalid_api_credentials"),
-        (config_flow._CannotResolveLocalIp, "base", "cannot_resolve_local_ip"),
         (config_flow._UnsupportedHardware, "base", "unsupported_hardware"),
         (config_flow._AddressesNotUnique, "base", "modbus_address_conflict"),
         (config_flow._AlreadyConfigured, "base", "already_configured"),

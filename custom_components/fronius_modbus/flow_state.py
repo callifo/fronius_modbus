@@ -72,10 +72,6 @@ class _InvalidApiCredentials(exceptions.HomeAssistantError):
     """Error to indicate Fronius web API credentials are invalid."""
 
 
-class _CannotResolveLocalIp(exceptions.HomeAssistantError):
-    """Error to indicate the local IP for Modbus restriction cannot be resolved."""
-
-
 class _InvalidAllowedHost(exceptions.HomeAssistantError):
     """The address to allow is no IPv4 address."""
 

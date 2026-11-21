@@ -67,7 +67,6 @@ from .flow_state import (
     _AlreadyConfigured,
     _CannotConnect,
     _CannotConnectModbus,
-    _CannotResolveLocalIp,
     _InvalidAllowedHost,
     _InvalidApiCredentials,
     _InvalidHost,
@@ -117,7 +116,6 @@ _FORM_ERRORS: dict[type[Exception], tuple[str, str]] = {
     _MeterPowerIntervalTooLong: ("base", "meter_power_interval_too_long"),
     _MissingApiPassword: ("base", "missing_api_password"),
     _InvalidApiCredentials: ("base", "invalid_api_credentials"),
-    _CannotResolveLocalIp: ("base", "cannot_resolve_local_ip"),
     _InvalidAllowedHost: (CONF_ALLOWED_HOST, "invalid_allowed_host"),
     _UnsupportedHardware: ("base", "unsupported_hardware"),
     _AddressesNotUnique: ("base", "modbus_address_conflict"),
@@ -300,8 +298,6 @@ async def _validate_input(
             data[CONF_INVERTER_UNIT_ID],
         ) as unit:
             identity = await FroniusInverter.async_probe(unit)
-    except ClientIpResolutionError as err:
-        raise _CannotResolveLocalIp from err
     except (
         _InvalidApiCredentials,
         _AlreadyConfigured,

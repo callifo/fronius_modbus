@@ -109,7 +109,6 @@
       "modbus_address_conflict": "Modbus-IDs sind nicht eindeutig",
       "missing_api_password": "Für die ausgewählte Web-API-Rolle wird ein Passwort benötigt.",
       "invalid_api_credentials": "Anmeldung für die ausgewählte Web-API-Rolle fehlgeschlagen.",
-      "cannot_resolve_local_ip": "Die Home-Assistant-IP konnte nicht ermittelt werden.",
       "already_configured": "Ein anderer Eintrag verwendet diesen Host bereits.",
       "invalid_allowed_host": "Gib eine IPv4-Adresse ein, zum Beispiel 192.168.1.20."
     }
@@ -971,7 +970,6 @@
       "modbus_address_conflict": "Modbus-IDs sind nicht eindeutig",
       "missing_api_password": "Für die ausgewählte Web-API-Rolle wird ein Passwort benötigt.",
       "invalid_api_credentials": "Anmeldung für die ausgewählte Web-API-Rolle fehlgeschlagen.",
-      "cannot_resolve_local_ip": "Die Home-Assistant-IP konnte nicht ermittelt werden.",
       "already_configured": "Ein anderer Eintrag verwendet diesen Host bereits.",
       "invalid_allowed_host": "Gib eine IPv4-Adresse ein, zum Beispiel 192.168.1.20."
     }

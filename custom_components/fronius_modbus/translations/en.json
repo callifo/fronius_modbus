@@ -109,7 +109,6 @@
       "modbus_address_conflict": "Modbus IDs are not unique",
       "missing_api_password": "A password is required for the selected Web API role.",
       "invalid_api_credentials": "Login failed for the selected Web API role.",
-      "cannot_resolve_local_ip": "Could not determine the Home Assistant IP.",
       "already_configured": "Another entry already uses this host.",
       "invalid_allowed_host": "Enter an IPv4 address, for example 192.168.1.20."
     }
@@ -971,7 +970,6 @@
       "modbus_address_conflict": "Modbus IDs are not unique",
       "missing_api_password": "A password is required for the selected Web API role.",
       "invalid_api_credentials": "Login failed for the selected Web API role.",
-      "cannot_resolve_local_ip": "Could not determine the Home Assistant IP.",
       "already_configured": "Another entry already uses this host.",
       "invalid_allowed_host": "Enter an IPv4 address, for example 192.168.1.20."
     }

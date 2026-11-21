@@ -74,8 +74,9 @@ LINE_BUDGETS = {
     # is written, in all four flows; splitting the flows is a follow-up.
     # 1070 + the address step refuses addresses no client has, keeps a
     # corrected one, and asks for one it could not resolve.
-    # 1077 + the address is asked only when the allowed list would change.
-    "config_flow.py": 1077,
+    # 1073 + the address is asked only when the allowed list would change.
+    # (- the error for an address that cannot be resolved: the step asks.)
+    "config_flow.py": 1073,
 }
 
 # SonarSource's own default. Above it, a function is one somebody has to

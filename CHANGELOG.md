@@ -5,15 +5,15 @@
 ### Changed
 - `tools/inverter_dump.bat` also reads Modbus unit 240 on a Datamanager (SnapINverter), where its meter usually answers (issue 110).
 - If no meter answers on the usual Modbus units, `tools/inverter_dump.bat` looks at every unit by itself. This can take several minutes.
-- Without the web login, `Modbus storage reserve` is refused instead of being written to Modbus alone, because the battery's SoC window cannot be checked then. Log in again when Home Assistant asks for it. Entries set up without the web API are not affected.
+- Without the web login, or before the battery settings were read from the web interface once, `Modbus storage reserve` is refused instead of being written to Modbus alone, because the battery's SoC window cannot be checked then. Log in again when Home Assistant asks for it, or try again once the web interface answers. Entries set up without the web API are not affected.
 - On a Datamanager, `tools/inverter_dump.bat` reads only the export limit and battery settings. The other paths its interface names are listed in the file instead of being read.
 - `Storage Control Mode` is unavailable while the inverter's storage registers cannot be read, instead of showing *Auto* or the last mode.
-- With the Modbus IP restriction *allow this Home Assistant*, the setup now shows the address it will allow and lets you change it. Behind NAT, for example in a Docker container on a bridge network, the inverter sees another address, and allowing the wrong one blocked every Modbus control.
+- With the Modbus IP restriction *allow this Home Assistant*, the setup now shows the address it will allow and lets you change it, also when it cannot find one itself. Behind NAT, for example in a Docker container on a bridge network, the inverter sees another address, and allowing the wrong one blocked every Modbus control.
 
 ### Fixed
-- The diagnostics download no longer contains the inverter's address while the Solar API firmware warning is shown.
-- A web setting written by an automation that was stopped mid-write could overwrite a newer value of the same setting.
-- Updating straight from callifo 0.2.9 or older keeps the entity IDs and history of the grid meter's sensors, the reserve and the temperature sensor, which came back under new entity IDs before.
+- The diagnostics download no longer contains the inverter's address while the Solar API firmware warning is shown, also for a warning an earlier version stored.
+- A web setting written by an automation that was stopped mid-write could overwrite a newer value of the same setting, and a value waiting behind a stopped one could be dropped while reported as written.
+- Updating straight from callifo 0.2.8 or older keeps the entity IDs and history of the grid meter's sensors and the reserve, and from 0.2.9 or older the temperature sensor once the web login is in place. They came back under new entity IDs before.
 - A storage mode just set no longer falls back to another one when a few polls in a row could not read the storage.
 - An inverter whose SunSpec map ends in a refused read no longer writes a warning to the log on every poll.
 - A meter whose SunSpec map ends in a refused read is found, and a meter that refuses to answer is reported with its refusal instead of as silent.

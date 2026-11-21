@@ -10,8 +10,9 @@ usually somebody with no memory of why any of it is here.
 .github/scripts/check.sh
 ```
 
-Ruff, formatting, mypy, pip-audit, gitleaks, the dump tool's PowerShell tests, the check of the Modbus libraries
-core's `modbus` pins, the test suite with its coverage floor, the same for the minimum Home Assistant when
+Ruff, formatting, mypy, pip-audit, gitleaks, the dump tool's PowerShell tests, the check
+that the installed Modbus libraries are the ones core's `modbus` integration
+pins, the test suite with its coverage floor, the same for the minimum Home Assistant when
 `MIN_HA_PYTHON` is set, and the mutation run, in that order,
 stopping at the first failure. The Test workflow runs the same set; a guard in
 `tests/test_guards.py` fails if the two ever drift apart. The HACS and hassfest

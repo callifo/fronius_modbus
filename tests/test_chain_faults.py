@@ -22,6 +22,8 @@ INVERTER_UNIT_ID, METER_UNIT_ID = 1, 200
 INVERTER_CHAIN_END = 40369
 STORAGE_CONTROL_MODE = 40348
 METER_MODEL_HEADER = 40069
+# The length word of the meter unit's common model.
+METER_COMMON_LENGTH = 40003
 METER_CHAIN_END = METER_MODEL_HEADER + 105 + 2
 REGISTER_SPACE = 0x10000
 
@@ -119,6 +121,20 @@ async def test_a_model_length_past_the_register_space_fails_only_that_meter(
 ):
     """A garbage length raised a bare ValueError that took the whole poll down."""
     meter_unit.holding[METER_MODEL_HEADER + 1] = 0xFFFE
+
+    await coordinator.async_refresh()
+
+    assert coordinator.last_update_success
+    assert "inverter" in coordinator.data.report.updated
+    assert METER_UNIT_ID not in coordinator.device.meters
+
+
+async def test_a_common_model_length_past_the_register_space_fails_only_that_meter(
+    coordinator, meter_unit, register_space_bound
+):
+    """With the first model too long nothing was kept, and the bare ValueError
+    went on to take the whole poll down."""
+    meter_unit.holding[METER_COMMON_LENGTH] = 0xFFFE
 
     await coordinator.async_refresh()
 

@@ -267,6 +267,25 @@ def test_a_challenge_without_qop_is_a_refused_login(client, inverter):
         client.get_battery_config()
 
 
+@pytest.mark.parametrize(
+    "challenge",
+    [
+        f'Digest realm="{REALM}", nonce="nonce-1", qop',
+        f'Digest realm="{REALM}", nonce, qop="auth"',
+        'Digest realm, nonce="nonce-1", qop="auth"',
+    ],
+    ids=["qop-without-value", "nonce-without-value", "realm-without-value"],
+)
+def test_a_challenge_with_a_valueless_part_is_a_refused_login(
+    client, inverter, challenge
+):
+    """Only the keys were checked; a key without a value raised an AttributeError."""
+    inverter.challenge = challenge
+
+    with pytest.raises(FroniusWebAuthError):
+        client.get_battery_config()
+
+
 def test_the_nonce_count_rises_while_the_nonce_stays_the_same():
     auth = XHeaderDigestAuth("customer", password="secret")
     auth.mode = "sha256"

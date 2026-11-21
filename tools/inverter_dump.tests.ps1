@@ -237,7 +237,7 @@ $script:Connects = 0
     function Read-Registers { throw 'The operation has timed out.' }
     $null = Read-Modbus $false 6>$null
 }
-Assert-True ($script:Connects -eq 2 + $MeterCandidates) "a timeout reconnects before the next unit: $($script:Connects) connects"
+Assert-True ($script:Connects -eq 1 + $LastModbusUnit) "a timeout reconnects before the next unit: $($script:Connects) connects"
 
 $script:AskedUnits = New-Object System.Collections.Generic.List[int]
 & {
@@ -252,28 +252,44 @@ $script:AskedUnits = New-Object System.Collections.Generic.List[int]
 $expected = (1..247) -join ','
 Assert-True (($script:AskedUnits -join ',') -eq $expected) "a meter on an unexpected unit is found with -AllUnits: $($script:AskedUnits.Count) units asked"
 
-function Get-AskedUnits([bool]$Datamanager, [int]$FirstMeter = $FirstMeterUnit) {
+function Get-AskedUnits([bool]$Datamanager, [int[]]$Answering, [int]$FirstMeter = $FirstMeterUnit) {
+    # The units asked for their SunSpec marker, in order; the units named answer a whole chain.
     $script:AskedUnits = New-Object System.Collections.Generic.List[int]
+    $script:AnsweringUnits = $Answering
     & {
         $FirstMeterUnit = $FirstMeter
         function Connect-Modbus {}
-        function Read-Registers($Stream, $Unit) {
-            $script:AskedUnits.Add($Unit)
-            throw "$ModbusProtocolError 11"
+        function Read-Registers($Stream, $Unit, $Address, $Count) {
+            if ($Address -eq $SunSpecBase) { $script:AskedUnits.Add($Unit) }
+            if ($script:AnsweringUnits -notcontains $Unit) { throw "$ModbusProtocolError 11" }
+            $map = New-FakeUnit $common @(0xFFFF, 0)
+            return , [int[]]@($Address..($Address + $Count - 1) | ForEach-Object { $map[$_] })
         }
-        $null = Read-Modbus $false $Datamanager 6>$null
+        $script:ModbusRead = Read-Modbus $false $Datamanager 6>$null
     }
     return $script:AskedUnits -join ','
 }
-$asked = Get-AskedUnits $true
+function Get-SortedAskedUnits { return (@($script:AskedUnits) | Sort-Object) -join ',' }
+
+$asked = Get-AskedUnits $true @(1, 240)
 $expected = (@(1) + @(200..209) + @(240)) -join ','
 Assert-True ($asked -eq $expected) "a Datamanager's meter is looked for on unit 240 too: $asked"
-$asked = Get-AskedUnits $false
+$asked = Get-AskedUnits $false @(1, 200)
 $expected = (@(1) + @(200..209)) -join ','
 Assert-True ($asked -eq $expected) "an inverter with the GEN24 web interface is not asked unit 240: $asked"
-$asked = Get-AskedUnits $true 235
+$asked = Get-AskedUnits $true @(1, 240) 235
 $expected = (@(1) + @(235..244)) -join ','
 Assert-True ($asked -eq $expected) "a meter numbering that holds 240 asks it once: $asked"
+
+$everyUnit = (1..247) -join ','
+$asked = Get-AskedUnits $false @(1)
+$usual = (@(1) + @(200..209)) -join ','
+Assert-True ($asked.StartsWith("$usual,") -and (Get-SortedAskedUnits) -eq $everyUnit) "without a meter at the usual units every unit is asked, each once: $($script:AskedUnits.Count) units asked"
+Assert-True ($script:ModbusRead.units.Count -eq 247) "the search of every unit keeps each unit's answer: $($script:ModbusRead.units.Count)"
+$null = Get-AskedUnits $true @(1)
+Assert-True ((Get-SortedAskedUnits) -eq $everyUnit) "a Datamanager without a meter at 240 asks every unit once: $($script:AskedUnits.Count) units asked"
+$asked = Get-AskedUnits $false @(1, 57)
+Assert-True ($script:ModbusRead.units['57'].complete -eq $true) "a meter outside the usual units is found without -AllUnits: $($script:AskedUnits.Count) units asked"
 
 $script:Connects = 0
 & {

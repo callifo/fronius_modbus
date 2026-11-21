@@ -8,6 +8,7 @@
 - Without the web login, `Modbus storage reserve` is refused instead of being written to Modbus alone, because the battery's SoC window cannot be checked then. Log in again when Home Assistant asks for it. Entries set up without the web API are not affected.
 - On a Datamanager, `tools/inverter_dump.bat` reads only the export limit and battery settings. The other paths its interface names are listed in the file instead of being read.
 - `Storage Control Mode` is unavailable while the inverter's storage registers cannot be read, instead of showing *Auto* or the last mode.
+- With the Modbus IP restriction *allow this Home Assistant*, the setup now shows the address it will allow and lets you change it. Behind NAT, for example in a Docker container on a bridge network, the inverter sees another address, and allowing the wrong one blocked every Modbus control.
 
 ### Fixed
 - The diagnostics download no longer contains the inverter's address while the Solar API firmware warning is shown.

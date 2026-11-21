@@ -32,7 +32,10 @@ from custom_components.fronius_modbus.fronius_modbus_api.device import FroniusIn
 from custom_components.fronius_modbus.fronius_modbus_api.exceptions import (
     ControlUnavailable,
 )
-from custom_components.fronius_modbus.fronius_modbus_api.storage import ExtendedMode
+from custom_components.fronius_modbus.fronius_modbus_api.storage import (
+    ExtendedMode,
+    StorageControl,
+)
 from custom_components.fronius_modbus.froniuswebclient import (
     FroniusWebAuthError,
     FroniusWebResponseError,
@@ -200,6 +203,33 @@ async def test_an_entity_without_placeholders_does_not_crash_on_its_name(
 
     assert isinstance(entity.translation_placeholders, dict)
     assert entity.has_entity_name is True
+
+
+@pytest.mark.parametrize("known_before", [False, True])
+def test_the_storage_mode_select_is_unavailable_while_its_registers_are_unread(
+    known_before,
+):
+    """It showed Auto, or the last mode, as if the inverter had reported it."""
+    storage = SimpleNamespace(
+        stor_ctl_mod=None,
+        in_w_rte=None,
+        out_w_rte=None,
+        cha_gri_set=None,
+        min_rsv_pct=None,
+    )
+    control = StorageControl(
+        storage, max_charge_rate_w=10000, max_discharge_rate_w=10000
+    )
+    if known_before:
+        storage.stor_ctl_mod, storage.in_w_rte, storage.out_w_rte = 2, 100.0, 0.0
+        control.sync_from_device()
+        storage.stor_ctl_mod = None
+    control.sync_from_device()
+    select = next(
+        d for d in entities._SELECT_DESCRIPTIONS if d.key == "ext_control_mode"
+    )
+
+    assert select.available_fn(SimpleNamespace(storage_control=control)) is False
 
 
 async def test_an_invalid_soc_minimum_writes_nothing(hass, entry, connection):

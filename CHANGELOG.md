@@ -4,6 +4,7 @@
 
 ### Changed
 - `tools/inverter_dump.bat` also reads Modbus unit 240 on a Datamanager (SnapINverter), where its meter usually answers (issue 110).
+- If no meter answers on the usual Modbus units, `tools/inverter_dump.bat` looks at every unit by itself. This can take several minutes.
 
 ## 1.4.1
 

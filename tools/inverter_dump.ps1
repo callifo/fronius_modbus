@@ -23,8 +23,9 @@ param(
     [int]$ModbusPort = 502,
     # Fronius numbers the meters from a configurable offset, 200 by default.
     [int]$FirstMeterUnit = 200,
-    # A meter on Modbus TCP is not bound to that numbering; finding it takes a
-    # look at every unit, about twelve minutes if absent units stay silent.
+    # A meter on Modbus TCP is not bound to that numbering. Without an answer
+    # there every unit is asked anyway; this switch asks them all from the
+    # start, about twelve minutes if absent units stay silent.
     [switch]$AllUnits
 )
 
@@ -615,6 +616,14 @@ function Read-ModbusUnits([scriptblock]$Read, [int[]]$Units, [bool]$Redact) {
     return $results
 }
 
+function Test-MeterAnswered($Results) {
+    # A meter is any unit beside the inverter that answered with SunSpec models.
+    foreach ($key in $Results.Keys) {
+        if ([int]$key -ne $InverterUnit -and $Results[$key].models.Count -gt 0) { return $true }
+    }
+    return $false
+}
+
 function Connect-Modbus {
     if ($script:ModbusClient) { $script:ModbusClient.Dispose() }
     $script:ModbusClient = New-Object System.Net.Sockets.TcpClient
@@ -640,7 +649,14 @@ function Read-Modbus([bool]$Redact, [bool]$Datamanager) {
         $units = @($InverterUnit) + @($FirstMeterUnit..($FirstMeterUnit + $MeterCandidates - 1))
         if ($Datamanager -and $units -notcontains $DatamanagerMeterUnit) { $units += $DatamanagerMeterUnit }
         if ($AllUnits) { $units = @($InverterUnit..$LastModbusUnit) }
-        return [ordered]@{ port = $ModbusPort; units = (Read-ModbusUnits $read $units $Redact) }
+        $results = Read-ModbusUnits $read $units $Redact
+        if (-not $AllUnits -and -not (Test-MeterAnswered $results)) {
+            Write-Host 'No meter answered on the usual units. Looking at every unit, which can take several minutes.'
+            $rest = @($InverterUnit..$LastModbusUnit | Where-Object { $units -notcontains $_ })
+            $more = Read-ModbusUnits $read $rest $Redact
+            foreach ($key in $more.Keys) { $results[$key] = $more[$key] }
+        }
+        return [ordered]@{ port = $ModbusPort; units = $results }
     } catch {
         return [ordered]@{ port = $ModbusPort; error = $_.Exception.GetBaseException().Message }
     } finally {

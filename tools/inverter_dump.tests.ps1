@@ -252,6 +252,29 @@ $script:AskedUnits = New-Object System.Collections.Generic.List[int]
 $expected = (1..247) -join ','
 Assert-True (($script:AskedUnits -join ',') -eq $expected) "a meter on an unexpected unit is found with -AllUnits: $($script:AskedUnits.Count) units asked"
 
+function Get-AskedUnits([bool]$Datamanager, [int]$FirstMeter = $FirstMeterUnit) {
+    $script:AskedUnits = New-Object System.Collections.Generic.List[int]
+    & {
+        $FirstMeterUnit = $FirstMeter
+        function Connect-Modbus {}
+        function Read-Registers($Stream, $Unit) {
+            $script:AskedUnits.Add($Unit)
+            throw "$ModbusProtocolError 11"
+        }
+        $null = Read-Modbus $false $Datamanager 6>$null
+    }
+    return $script:AskedUnits -join ','
+}
+$asked = Get-AskedUnits $true
+$expected = (@(1) + @(200..209) + @(240)) -join ','
+Assert-True ($asked -eq $expected) "a Datamanager's meter is looked for on unit 240 too: $asked"
+$asked = Get-AskedUnits $false
+$expected = (@(1) + @(200..209)) -join ','
+Assert-True ($asked -eq $expected) "an inverter with the GEN24 web interface is not asked unit 240: $asked"
+$asked = Get-AskedUnits $true 235
+$expected = (@(1) + @(235..244)) -join ','
+Assert-True ($asked -eq $expected) "a meter numbering that holds 240 asks it once: $asked"
+
 $script:Connects = 0
 & {
     function Connect-Modbus { $script:Connects++ }
@@ -329,7 +352,10 @@ function Invoke-TestDump([int]$LoginStatus, [hashtable]$Answers, [int]$CommonSta
             }
             return @{ status = 200; body = '{}' }
         }
-        function Read-Modbus([bool]$Redact) { return 'synthetic registers' }
+        function Read-Modbus([bool]$Redact, [bool]$Datamanager) {
+            $script:ModbusDatamanager = $Datamanager
+            return 'synthetic registers'
+        }
         function New-ExportText([string]$Login, [bool]$Redact, $Modbus) {
             $script:Export = @{ Role = $Login; Redact = $Redact; Modbus = $Modbus }
             throw 'stopped before the file'
@@ -361,6 +387,7 @@ Assert-True ($script:Export.Role -eq 'customer') "Enter at the role question log
 Invoke-TestDump 200 @{}
 Assert-True ([string]::IsNullOrEmpty($script:Export.Role) -and (Get-PathsReadWithLogin).Count -eq 0) "Enter logs in nowhere: $($script:Export.Role)"
 Assert-True ($script:Export.Modbus -eq 'synthetic registers') "Enter reads the registers too: $($script:Export.Modbus)"
+Assert-True ($script:ModbusDatamanager -eq $false) "an inverter with the GEN24 web interface reads Modbus as one: $($script:ModbusDatamanager)"
 Assert-True ($script:Export.Redact -eq $true) "Enter keeps the replacement on: $($script:Export.Redact)"
 Invoke-TestDump 200 @{ 'Modbus TCP' = 'n'; 'Replace serial' = 'n' }
 Assert-True ($null -eq $script:Export.Modbus) "n reads no registers: $($script:Export.Modbus)"
@@ -532,6 +559,7 @@ $read = @($script:Reads | ForEach-Object { $_[0] })
 Assert-True ($read -contains '/config/exportlimit/') "a refused Datamanager login still reads its paths: $($read -join ', ')"
 Invoke-TestDump 200 @{} 404
 Assert-True ([string]::IsNullOrEmpty($script:Export.Role) -and (Get-PathsReadWithLogin).Count -eq 0) "Enter logs in nowhere on a Datamanager: $($script:Export.Role)"
+Assert-True ($script:ModbusDatamanager -eq $true) "a Datamanager reads Modbus as one: $($script:ModbusDatamanager)"
 
 # -- read only -------------------------------------------------------------
 

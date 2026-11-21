@@ -239,9 +239,10 @@ async def test_the_total_sensor_keeps_its_value_through_an_outage(hass, mock_mod
     assert state_of(hass, entry, "acenergy") == "33187794.59"
 
 
-async def test_a_number_write_reaches_the_register(hass, mock_modbus):
+async def test_a_number_write_reaches_the_register(hass, mock_modbus, monkeypatch):
     # Without the web API the reserve is Modbus alone; with a web role but no
     # login it is refused, as the SoC window cannot be checked.
+    serve_the_public_endpoints(mock_modbus, monkeypatch)
     entry = make_entry(hass, api_username="none")
     await setup_entry(hass, entry)
 

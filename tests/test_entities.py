@@ -223,6 +223,45 @@ async def test_an_invalid_soc_minimum_writes_nothing(hass, entry, connection):
     assert writes == []
 
 
+@pytest.mark.parametrize("web_control_kept", [True, False])
+async def test_a_soc_minimum_without_the_web_login_writes_nothing(
+    hass, entry, connection, web_control_kept
+):
+    """With the login lost, or never there, the reserve went to Modbus alone
+    and the inverter's own minimum stayed behind without a word.
+    """
+    runtime = await make_runtime(hass, entry, connection)
+    web_control = make_control(hass)
+    web_control._client = None
+    runtime = replace(runtime, web_control=web_control if web_control_kept else None)
+
+    writes = []
+    connection.for_unit(INVERTER_UNIT_ID).on_write(writes.append)
+    try:
+        with pytest.raises(ControlUnavailable) as raised:
+            await runtime.async_set_soc_minimum(30)
+    finally:
+        web_control.shutdown()
+
+    assert raised.value.key == "soc_minimum_login_lost"
+    assert writes == []
+
+
+async def test_a_soc_minimum_without_the_web_api_goes_to_modbus(hass, connection):
+    """An entry set up without the web API has only the Modbus reserve."""
+    entry = MockConfigEntry(
+        domain=DOMAIN, data={"host": "192.0.2.1", "api_username": "none"}
+    )
+    entry.add_to_hass(hass)
+    runtime = await make_runtime(hass, entry, connection)
+
+    writes = []
+    connection.for_unit(INVERTER_UNIT_ID).on_write(writes.append)
+    await runtime.async_set_soc_minimum(30)
+
+    assert writes
+
+
 async def test_a_concurrent_maximum_cannot_slip_between_check_and_write(
     hass, entry, connection
 ):

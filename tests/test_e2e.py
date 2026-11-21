@@ -29,6 +29,7 @@ from custom_components.fronius_modbus.const import (
     CONF_RECONFIGURE_REQUIRED,
     DOMAIN,
     MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX,
+    SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX,
     entity_prefix,
     instance_key,
 )
@@ -1387,6 +1388,39 @@ async def test_a_repairs_item_from_before_is_cleared(hass, mock_modbus, monkeypa
 
     assert _reconfigure_issue(hass, entry) is None
     assert _reauth_flows(hass, entry) == []
+
+
+async def test_a_warning_an_earlier_version_stored_leaves_with_the_next_start(
+    hass, mock_modbus, monkeypatch
+):
+    """A stored warning keeps its placeholders, the host in the entry title among
+    them, and Home Assistant puts it into every diagnostics download of the domain:
+    also while the web API does not answer, and for an entry long removed."""
+    serve_the_public_endpoints(mock_modbus, monkeypatch)
+    entry = make_entry(hass, minor_version=13, api_username="none")
+    stored = [
+        f"{SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX}{entry.entry_id}",
+        f"{SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX}removed-entry",
+    ]
+    for issue_id in stored:
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            issue_id,
+            is_fixable=True,
+            is_persistent=True,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="solar_api_low_firmware",
+            translation_placeholders={"entry_title": f"Fronius {HOST}"},
+        )
+
+    await setup_entry(hass, entry)
+
+    registry = ir.async_get(hass)
+    assert [registry.async_get_issue(DOMAIN, issue_id) for issue_id in stored] == [
+        None,
+        None,
+    ]
 
 
 async def test_an_entry_without_the_web_api_cleans_up_stale_entities(

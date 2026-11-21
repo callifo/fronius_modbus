@@ -1390,6 +1390,10 @@ _SELECT_DESCRIPTIONS: tuple[FroniusSelectDescription, ...] = (
         ),
         set_fn=lambda r, code: r.async_set_extended_mode(code),
         exists_fn=_storage_present,
+        # Unread registers showed Auto, or the last mode, as if reported.
+        available_fn=lambda r: (
+            assume_present(r.storage_control).control_mode is not None
+        ),
     ),
     _select(
         "api_soc_mode",

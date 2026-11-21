@@ -28,7 +28,12 @@ from custom_components.fronius_modbus.froniuswebclient import (
 )
 from custom_components.fronius_modbus.token_store import async_get_token_store
 from custom_components.fronius_modbus.web_control import FroniusWebControl
+from homeassistant.components.diagnostics import (
+    _DIAGNOSTICS_DATA,
+    DiagnosticsPlatformData,
+)
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.setup import async_setup_component
 
 # A rejected login asks Home Assistant for a new one; here it is only recorded.
 pytestmark = pytest.mark.usefixtures("reauth_requests")
@@ -728,6 +733,49 @@ async def test_a_firmware_update_clears_the_solar_api_warning_on_the_next_refres
         control.shutdown()
 
     assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_the_diagnostics_download_names_no_host_through_the_solar_api_warning(
+    hass, hass_client, enable_custom_integrations
+):
+    """Home Assistant adds the domain's issues to the download, and the warning names the entry."""
+    host = "192.0.2.10"
+
+    class SolarApiOnClient(FakeWebClient):
+        def get_solar_api_config(self):
+            return {"SolarAPIv1Enabled": True}
+
+    entry = MockConfigEntry(domain=DOMAIN, data={"host": host}, title=f"Fronius {host}")
+    entry.add_to_hass(hass)
+    control = FroniusWebControl(
+        hass,
+        entry,
+        host=host,
+        client=SolarApiOnClient(),
+        api_username="customer",
+        storage_present=False,
+        inverter_firmware=lambda: "1.38.6-1",
+        on_battery_write=lambda: None,
+    )
+    try:
+        await control.async_refresh()
+    finally:
+        control.shutdown()
+    issue_id = f"{SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX}{entry.entry_id}"
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None
+
+    assert await async_setup_component(hass, "diagnostics", {})
+
+    async def _without_host(hass, entry):
+        return {}
+
+    hass.data[_DIAGNOSTICS_DATA].platforms[DOMAIN] = DiagnosticsPlatformData(
+        _without_host, None
+    )
+    client = await hass_client()
+    response = await client.get(f"/api/diagnostics/config_entry/{entry.entry_id}")
+    assert response.status == 200
+    assert host not in await response.text()
 
 
 async def test_concurrent_soc_writes_are_applied_one_after_the_other(hass):

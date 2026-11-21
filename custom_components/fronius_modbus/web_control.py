@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-import contextlib
 from dataclasses import dataclass, replace
 import functools
 import logging
@@ -27,7 +26,11 @@ from .const import (
 )
 from .energy_outputs import ENERGY_OUTPUTS_PATH, EnergyOutput, parse_energy_outputs
 from .export_limit import power_control_off, soft_limit_ceiling, soft_limit_value
-from .fronius_modbus_api.exceptions import ControlRefused, ControlUnavailable
+from .fronius_modbus_api.exceptions import (
+    ControlRefused,
+    ControlUnavailable,
+    error_text,
+)
 from .froniuswebclient import (
     ENDPOINT_MISSING,
     FroniusWebAuthError,
@@ -81,10 +84,11 @@ def _last_writer_wins(method):
     """Serialise like _serialised, but a burst reaches the device as its first and last value.
 
     Every call takes a ticket; whoever holds the lock while a newer ticket
-    exists returns without writing, because that newer call carries the value
-    now. Each write the inverter takes costs it seconds of Modbus, so ten steps
-    of one control must not become ten writes. The last caller still gets the
-    last write's error.
+    still waits returns without writing, because that newer call carries the
+    value now. Each write the inverter takes costs it seconds of Modbus, so ten
+    steps of one control must not become ten writes. The last caller still
+    gets the last write's error. A caller cancelled while it waits drops its
+    ticket: its value never comes, and an older caller writes instead.
     """
 
     @functools.wraps(method)
@@ -92,10 +96,15 @@ def _last_writer_wins(method):
         ticket = self._tickets[method.__name__] = (
             self._tickets.get(method.__name__, 0) + 1
         )
-        async with self._write_lock:
-            if self._tickets[method.__name__] != ticket:
-                return None
-            return await method(self, *args, **kwargs)
+        waiting = self._waiting_tickets.setdefault(method.__name__, set())
+        waiting.add(ticket)
+        try:
+            async with self._write_lock:
+                if ticket != max(waiting):
+                    return None
+                return await method(self, *args, **kwargs)
+        finally:
+            waiting.discard(ticket)
 
     return wrapper
 
@@ -292,6 +301,9 @@ class FroniusWebControl:
         # SoC tuple or the charge-source pair lost one of the two changes.
         self._write_lock = asyncio.Lock()
         self._tickets: dict[str, int] = {}
+        self._waiting_tickets: dict[str, set[int]] = {}
+        # The SoC mode is unknown until the battery config was read once.
+        self._battery_config_read = False
         self.data = WebData()
         self._coordinator: Any = None
         self._delayed_refresh_task: asyncio.Task | None = None
@@ -431,16 +443,25 @@ class FroniusWebControl:
         """Run func in the executor and wait for its end, even when cancelled.
 
         A thread cannot be stopped: a cancelled caller left the write lock while
-        its thread still posted the old value over a newer write.
+        its thread still posted the old value over a newer write. The outcome of
+        a cancelled caller's thread is taken here: left to the loop, its error
+        went to the log with the URL in its cause.
         """
         job = self._hass.async_add_executor_job(func, *args)
-        try:
-            return await asyncio.shield(job)
-        except asyncio.CancelledError:
-            while not job.done():
-                with contextlib.suppress(asyncio.CancelledError):
-                    await asyncio.wait({job})
-            raise
+        cancelled: asyncio.CancelledError | None = None
+        while not job.done():
+            try:
+                await asyncio.wait({job})
+            except asyncio.CancelledError as err:
+                cancelled = err
+        if cancelled is None:
+            return job.result()
+        if (error := job.exception()) is not None:
+            _LOGGER.debug(
+                "A web write failed after its caller was cancelled: %s",
+                error_text(error),
+            )
+        raise cancelled
 
     async def _async_client_job(self, method_name: str, *args, public: bool = False):
         """Run one refresh step, re-reading the client: an auth failure clears it mid-refresh."""
@@ -475,6 +496,7 @@ class FroniusWebControl:
     # -- refresh -----------------------------------------------------------------
 
     def _apply_web_battery_config(self, battery_config: dict[str, Any]) -> None:
+        self._battery_config_read = True
         raw_mode = _as_int(battery_config.get("HYB_EM_MODE"))
         raw_power = _as_int(battery_config.get("HYB_EM_POWER"))
 
@@ -753,6 +775,12 @@ class FroniusWebControl:
             # SoC mode is unknown, and in Manual Modbus alone would leave the
             # inverter's own minimum behind.
             raise soc_minimum_login_lost()
+        if not self._battery_config_read:
+            raise ControlUnavailable(
+                "soc_minimum_mode_unknown",
+                "The Modbus storage reserve was not changed: the SoC mode has not "
+                "been read from the web interface yet",
+            )
         if not self.soc_mode_is_manual:
             await write_modbus()
             return

@@ -1062,6 +1062,9 @@
     "grid_charge_sources_login_lost": {
       "message": "Der Speichermodus steht auf „Aus dem Netz laden“, aber ohne Web-Anmeldung ließ sich das Netzladen nicht freigeben. Bitte erneut anmelden, wenn Home Assistant bei der Integration danach fragt."
     },
+    "soc_minimum_mode_unknown": {
+      "message": "Der SoC-Modus der Batterie wurde noch nicht aus der Weboberfläche des Wechselrichters gelesen, deshalb wurde die Modbus-Speicherreserve nicht geändert. Bitte erneut versuchen, sobald die Weboberfläche antwortet."
+    },
     "soc_minimum_login_lost": {
       "message": "Ohne Web-Anmeldung lässt sich das SoC-Fenster nicht prüfen, deshalb wurde die Modbus-Speicherreserve nicht geändert. Bitte erneut anmelden, wenn Home Assistant bei der Integration danach fragt."
     },

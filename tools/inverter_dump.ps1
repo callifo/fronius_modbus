@@ -319,7 +319,7 @@ function Find-DatamanagerPaths {
 
 function ConvertFrom-JsonString([string]$Token) {
     $inner = $Token.Substring(1, $Token.Length - 2)
-    if (-not $inner.Contains('')) { return $inner }
+    if (-not $inner.Contains('\')) { return $inner }
     return [regex]::Replace($inner, '\\(u[0-9a-fA-F]{4}|.)', {
         param($match)
         $escape = $match.Groups[1].Value

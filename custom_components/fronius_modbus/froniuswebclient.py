@@ -413,7 +413,8 @@ class XHeaderDigestAuth(AuthBase):
             response.headers.get("X-WWW-Authenticate")
             or response.headers.get("www-authenticate", "")
         )
-        if not {"realm", "nonce", "qop"} <= challenge.keys():
+        # A key without a value parses to None: unusable like a missing one.
+        if not all(challenge.get(key) for key in ("realm", "nonce", "qop")):
             return response
 
         response.content

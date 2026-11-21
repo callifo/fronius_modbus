@@ -96,8 +96,8 @@ class DeviceIdentity(NamedTuple):
     serial: str
     version: str
     options: str
-    # `da` is a plain uint16 register; the reader hands every numeric field
-    # back as a float, so the type follows the reader rather than the spec.
+    # The library types numeric points as float, although an unscaled uint16
+    # such as `da` comes back as an int.
     address: float | None
 
 

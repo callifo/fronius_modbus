@@ -59,7 +59,9 @@ LINE_BUDGETS = {
     "froniuswebclient.py": 914,
     # 916 + a reserve without the web login is refused instead of reaching
     # Modbus alone; the check sits in the write lock, next to the other one.
-    "web_control.py": 916,
+    # 932 + a cancelled write waits for its thread before it leaves the
+    # write lock; every web write goes through the one job runner.
+    "web_control.py": 932,
 }
 
 # SonarSource's own default. Above it, a function is one somebody has to

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
+import contextlib
 from dataclasses import dataclass, replace
 import functools
 import logging
@@ -416,7 +417,7 @@ class FroniusWebControl:
             return None
 
         try:
-            return await self._hass.async_add_executor_job(func, *args)
+            return await self._async_until_done(func, *args)
         except FroniusWebAuthError as err:
             await self._async_handle_web_api_auth_failure(err)
             if raise_on_auth_failure:
@@ -425,6 +426,21 @@ class FroniusWebControl:
                     "Fronius Web API authentication failed. Log in again when asked.",
                 ) from err
             return None
+
+    async def _async_until_done(self, func, *args):
+        """Run func in the executor and wait for its end, even when cancelled.
+
+        A thread cannot be stopped: a cancelled caller left the write lock while
+        its thread still posted the old value over a newer write.
+        """
+        job = self._hass.async_add_executor_job(func, *args)
+        try:
+            return await asyncio.shield(job)
+        except asyncio.CancelledError:
+            while not job.done():
+                with contextlib.suppress(asyncio.CancelledError):
+                    await asyncio.wait({job})
+            raise
 
     async def _async_client_job(self, method_name: str, *args, public: bool = False):
         """Run one refresh step, re-reading the client: an auth failure clears it mid-refresh."""

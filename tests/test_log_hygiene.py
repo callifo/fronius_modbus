@@ -95,6 +95,28 @@ def test_the_scan_catches_the_shape_it_was_written_for(tmp_path):
     assert _offending_lines(written_by_hand)
 
 
+@pytest.mark.parametrize(
+    "line",
+    [
+        '_LOGGER.info("set up %s", entry.title)',
+        '_LOGGER.info("set up %s", entry.data[CONF_HOST])',
+        '_LOGGER.info("set up %s", entry.data["host"])',
+        '_LOGGER.info("found %s", identity.serial_number)',
+        '_LOGGER.info("entry %s", entry.unique_id)',
+        '_LOGGER.debug("login %s", self._password)',
+        '_LOGGER.warning("failed", extra={"host": host})',
+        'self._logger.info("cannot reach %s", host)',
+        'LOG.info("cannot reach %s", host)',
+    ],
+)
+def test_the_scan_catches_the_other_usual_ways_to_name_the_device(tmp_path, line):
+    """Only a name or attribute spelled exactly like one of six words was caught."""
+    written_by_hand = tmp_path / "sample.py"
+    written_by_hand.write_text(f"{line}\n", encoding="utf-8")
+
+    assert _offending_lines(written_by_hand)
+
+
 async def test_an_unreachable_device_is_not_logged_as_an_error(
     coordinator, inverter_unit, caplog
 ):

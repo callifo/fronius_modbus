@@ -23,7 +23,12 @@ from modbus_connection.model.sunspec import (
     scan,
 )
 
-from .exceptions import IncompleteChainError, NotAFroniusInverter, error_text
+from .exceptions import (
+    IncompleteChainError,
+    InconsistentModelError,
+    NotAFroniusInverter,
+    error_text,
+)
 from .sunspec_models import (
     COMMON_MODEL_ID,
     COMMON_SERIAL_WORDS,
@@ -163,13 +168,19 @@ async def _scan(unit: ModbusUnit) -> tuple[SunSpecModels, bool]:
     complete = True
     try:
         chain = await scan(unit, SUNSPEC_BASE_ADDRESS)
-    except IllegalDataAddressError, ValueError:
+    except (IllegalDataAddressError, ValueError) as err:
         # Some devices refuse a read past their map instead of answering the
         # end marker, which took the whole chain down and left setup reporting
         # "cannot connect" although Modbus was fine (redpomodoro issue 105).
         # Keep what the device did serve; if that is not even a Fronius,
         # report the refusal itself, which is what an absent unit answers.
         chain = await _scan_until_refused(unit)
+        if chain.first(COMMON_MODEL_ID) is None and isinstance(err, ValueError):
+            # Even model 1 runs past the register space: a misread map, which
+            # fails this unit, not the whole poll.
+            raise InconsistentModelError(
+                "The SunSpec chain runs past the register space"
+            ) from err
         if chain.first(COMMON_MODEL_ID) is None:
             raise
         complete = False

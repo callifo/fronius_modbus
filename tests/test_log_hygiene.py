@@ -51,6 +51,11 @@ DEVICE_IDENTIFIERS = frozenset(
         "unique_id",
     }
 )
+# A part of a longer name counts too: allowed_host, local_ip and entry_title
+# carry the same value under another name.
+NAME_PARTS = frozenset(
+    {"host", "hostname", "serial", "token", "password", "ip", "url", "title"}
+)
 LOG_METHODS = frozenset(
     {"debug", "info", "warning", "error", "exception", "critical", "log"}
 )
@@ -100,7 +105,11 @@ def _offending_lines(source: pathlib.Path) -> list[str]:
     for call in _logging_calls(tree):
         arguments = [*call.args[1:], *(keyword.value for keyword in call.keywords)]
         for argument in arguments:
-            named = _identifiers_in(argument) & DEVICE_IDENTIFIERS
+            named = {
+                name
+                for name in _identifiers_in(argument)
+                if name in DEVICE_IDENTIFIERS or NAME_PARTS & set(name.split("_"))
+            }
             if named:
                 offences.append(f"{source.name}:{call.lineno} passes {sorted(named)}")
     return offences

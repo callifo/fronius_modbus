@@ -401,7 +401,7 @@
   {
     "label": "web_control: a superseded write is skipped",
     "path": "custom_components/fronius_modbus/web_control.py",
-    "old": "            if self._tickets[method.__name__] != ticket:\n                return None\n",
+    "old": "                if ticket != max(waiting):\n                    return None\n",
     "new": "",
     "tests": "a_burst_of_values_reaches_the_device_as_first_and_last"
   },
@@ -2970,8 +2970,8 @@
   {
     "label": "web control: a reserve without the web login is refused",
     "path": "custom_components/fronius_modbus/web_control.py",
-    "old": "            raise soc_minimum_login_lost()\n        if not self.soc_mode_is_manual:\n",
-    "new": "            await write_modbus()\n            return\n        if not self.soc_mode_is_manual:\n",
+    "old": "            raise soc_minimum_login_lost()\n        if not self._battery_config_read:\n",
+    "new": "            await write_modbus()\n            return\n        if not self._battery_config_read:\n",
     "tests": "soc_minimum_without_the_web_login"
   },
   {
@@ -2984,8 +2984,8 @@
   {
     "label": "web control: a cancelled write waits for its thread",
     "path": "custom_components/fronius_modbus/web_control.py",
-    "old": "            while not job.done():\n                with contextlib.suppress(asyncio.CancelledError):\n                    await asyncio.wait({job})\n            raise\n",
-    "new": "            raise\n",
+    "old": "            except asyncio.CancelledError as err:\n                cancelled = err\n",
+    "new": "            except asyncio.CancelledError:\n                raise\n",
     "tests": "cancelled_write_cannot_overwrite"
   },
   {
@@ -3040,8 +3040,8 @@
   {
     "label": "web client: a challenge without qop is a refused login",
     "path": "custom_components/fronius_modbus/froniuswebclient.py",
-    "old": "        if not {\"realm\", \"nonce\", \"qop\"} <= challenge.keys():\n",
-    "new": "        if not {\"realm\", \"nonce\"} <= challenge.keys():\n",
+    "old": "        if not all(challenge.get(key) for key in (\"realm\", \"nonce\", \"qop\")):\n",
+    "new": "        if not all(key in challenge for key in (\"realm\", \"nonce\")):\n",
     "tests": "challenge_without_qop"
   },
   {
@@ -3061,8 +3061,57 @@
   {
     "label": "config flow: an address to allow that is no address is refused",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "        return str(ipaddress.IPv4Address(str(value).strip()))\n",
-    "new": "        return str(value).strip()\n",
+    "old": "        address = ipaddress.IPv4Address(str(value).strip())\n    except ValueError as err:\n        raise _InvalidAllowedHost from err\n",
+    "new": "        return str(value).strip()\n    except ValueError as err:\n        raise _InvalidAllowedHost from err\n",
     "tests": "no_address_is_refused"
+  },
+  {
+    "label": "config flow: an address no client can have is refused",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "    if address.is_loopback or address.is_unspecified:\n        raise _InvalidAllowedHost\n",
+    "new": "",
+    "tests": "no_client_can_have"
+  },
+  {
+    "label": "config flow: a corrected address stays when the step comes back",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "            data_schema=allowed_host_schema(state.allowed_host or state.resolved_host),\n",
+    "new": "            data_schema=allowed_host_schema(state.resolved_host),\n",
+    "tests": "stays_when_the_step"
+  },
+  {
+    "label": "config flow: an address that cannot be resolved is asked for",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "            resolved = \"\"\n",
+    "new": "            raise\n",
+    "tests": "cannot_be_resolved_is_asked"
+  },
+  {
+    "label": "web control: a caller cancelled while it waits drops its ticket",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        finally:\n            waiting.discard(ticket)\n",
+    "new": "        finally:\n            pass\n",
+    "tests": "newer_one_is_cancelled"
+  },
+  {
+    "label": "web control: a reserve waits for the battery config to be read",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        if not self._battery_config_read:\n            raise ControlUnavailable(\n",
+    "new": "        if False:\n            raise ControlUnavailable(\n",
+    "tests": "battery_config_was_read"
+  },
+  {
+    "label": "device: a first model past the register space fails only its unit",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        if chain.first(COMMON_MODEL_ID) is None and isinstance(err, ValueError):\n",
+    "new": "        if False:\n",
+    "tests": "common_model_length_past"
+  },
+  {
+    "label": "migrations: repair issues an earlier version stored are deleted",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "            ir.async_delete_issue(hass, DOMAIN, issue_id)\n",
+    "new": "            pass\n",
+    "tests": "earlier_version_stored"
   }
 ]

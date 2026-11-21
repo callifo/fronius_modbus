@@ -60,15 +60,20 @@ LINE_BUDGETS = {
     # 918 + a status page or a soft limit config of another shape is a failed
     # read, not an AttributeError or KeyError that escapes the client.
     # 922 + the address to allow is confirmed in the flow, not only resolved.
-    "froniuswebclient.py": 922,
+    # 923 + a challenge part without a value is refused like a missing one.
+    "froniuswebclient.py": 923,
     # 916 + a reserve without the web login is refused instead of reaching
     # Modbus alone; the check sits in the write lock, next to the other one.
     # 932 + a cancelled write waits for its thread before it leaves the
     # write lock; every web write goes through the one job runner.
-    "web_control.py": 932,
+    # 960 + a reserve waits for the SoC mode, a cancelled caller drops its
+    # ticket, and its thread's outcome is taken instead of left to the loop.
+    "web_control.py": 960,
     # 1060 + the step that shows the address to allow before the restriction
     # is written, in all four flows; splitting the flows is a follow-up.
-    "config_flow.py": 1060,
+    # 1070 + the address step refuses addresses no client has, keeps a
+    # corrected one, and asks for one it could not resolve.
+    "config_flow.py": 1070,
 }
 
 # SonarSource's own default. Above it, a function is one somebody has to

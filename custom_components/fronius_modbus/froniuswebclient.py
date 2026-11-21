@@ -365,7 +365,8 @@ def _hash_mode(base_url: str, user: str, timeout: float) -> str:
             .get("digest", {})
             .get(f"{user}HashingVersion")
         )
-    except FroniusWebUnreachable, requests.HTTPError, ValueError:
+    except FroniusWebUnreachable, requests.HTTPError, ValueError, AttributeError:
+        # A body of another shape is no answer either, and is not remembered.
         return "sha256"
     mode = "md5" if version == 1 else "sha256"
     _HASH_MODES[(base_url, user)] = mode
@@ -412,7 +413,7 @@ class XHeaderDigestAuth(AuthBase):
             response.headers.get("X-WWW-Authenticate")
             or response.headers.get("www-authenticate", "")
         )
-        if "realm" not in challenge or "nonce" not in challenge:
+        if not {"realm", "nonce", "qop"} <= challenge.keys():
             return response
 
         response.content
@@ -897,14 +898,21 @@ class FroniusWebClient:
 
         Writes back the config just read, with only the switch and the watts patched.
         """
-        config = self._get_json("/api/config/limit_settings/powerLimits")
-        active_power = config["exportLimits"]["activePower"]
+        path = "/api/config/limit_settings/powerLimits"
+        config = self._get_json(path)
+        try:
+            active_power = config["exportLimits"]["activePower"]
+            soft = active_power["softLimit"]
+            enabled = soft.get("enabled")
+        except (KeyError, TypeError, AttributeError) as err:
+            raise FroniusWebResponseError(
+                f"HTTP 200 on {path} answered no export soft limit", HTTPStatus.OK
+            ) from err
         require_power_control(active_power)
-        soft = active_power["softLimit"]
         holder, key = soft_limit_location(active_power)
-        if is_enabled(soft.get("enabled")) and _same(holder.get(key), int(power_w)):
+        if is_enabled(enabled) and _same(holder.get(key), int(power_w)):
             return False
         soft["enabled"] = True
         holder[key] = int(power_w)
-        self._post("/api/config/limit_settings/powerLimits", config)
+        self._post(path, config)
         return True

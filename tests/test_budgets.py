@@ -56,7 +56,9 @@ LINE_BUDGETS = {
     # _clean_text and _as_int with the other payloads, so it stays here.
     # 907 + an error status keeps the fields the inverter names as refused,
     # read by the same helper as the refusals in a 200 answer.
-    "froniuswebclient.py": 914,
+    # 918 + a status page or a soft limit config of another shape is a failed
+    # read, not an AttributeError or KeyError that escapes the client.
+    "froniuswebclient.py": 918,
     # 916 + a reserve without the web login is refused instead of reaching
     # Modbus alone; the check sits in the write lock, next to the other one.
     # 932 + a cancelled write waits for its thread before it leaves the

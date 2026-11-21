@@ -90,11 +90,11 @@ class FakeWebClient:
             }
         }
 
-    def get_optional_json(self, _path):
+    def get_optional_json(self, path):
         return None
 
-    def set_battery_config(self, mode, power=None):
-        self.calls.append(("battery", mode, power))
+    def set_battery_config(self, mode):
+        self.calls.append(("battery", mode))
         self.battery.update(HYB_EM_MODE=mode)
         return True
 
@@ -171,8 +171,8 @@ def control(hass):
 class FakeClientAlreadyThere(FakeWebClient):
     """Every battery setting the control asks for is already on the inverter."""
 
-    def set_battery_config(self, mode, power=None):
-        super().set_battery_config(mode, power)
+    def set_battery_config(self, mode):
+        super().set_battery_config(mode)
         return False
 
     def set_soc_mode(self, mode):
@@ -183,8 +183,8 @@ class FakeClientAlreadyThere(FakeWebClient):
         super().set_backup_reserve(percent)
         return False
 
-    def set_battery_charge_sources(self, grid, ac):
-        super().set_battery_charge_sources(grid, ac)
+    def set_battery_charge_sources(self, charge_from_grid=None, charge_from_ac=None):
+        super().set_battery_charge_sources(charge_from_grid, charge_from_ac)
         return False
 
 
@@ -589,7 +589,7 @@ async def test_switching_to_manual_keeps_the_target_on_the_inverter(control):
     """The cached target went along and undid one set since the poll."""
     await control.async_refresh()
     await control.set_battery_mode(1)
-    assert control._client.calls[-1] == ("battery", 1, None)
+    assert control._client.calls[-1] == ("battery", 1)
     assert control.battery_mode_is_manual
     assert control.events == ["write"]
 
@@ -879,8 +879,8 @@ async def test_switching_the_energy_management_leaves_the_soc_window_alone(contr
     await control.set_battery_mode(0)
     assert (control.data.soc_min, control.data.soc_mode_raw) == (20, "manual")
     assert [c for c in control._client.calls if c[0] == "battery"] == [
-        ("battery", 1, None),
-        ("battery", 0, None),
+        ("battery", 1),
+        ("battery", 0),
     ]
 
 
@@ -1306,7 +1306,7 @@ class RecordingPublicClient(FakeWebClient):
             super().__getattribute__("calls").append(name)
         return attribute
 
-    def get_power_meter_info(self, *_args):
+    def get_power_meter_info(self, meter_address_offset=200):
         return None
 
     def get_optional_json(self, path):

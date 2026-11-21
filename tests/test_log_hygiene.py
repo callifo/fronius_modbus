@@ -142,6 +142,10 @@ def test_the_scan_catches_the_shape_it_was_written_for(tmp_path):
         '_LOGGER.warning("failed", extra={"host": host})',
         'self._logger.info("cannot reach %s", host)',
         'LOG.info("cannot reach %s", host)',
+        '_LOGGER.info("allowing %s", allowed_host)',
+        '_LOGGER.info("allowing %s", self.data.modbus_restriction_ip)',
+        '_LOGGER.info("found %s", local_ip)',
+        '_LOGGER.info("set up %s", entry_title(entry.data))',
     ],
 )
 def test_the_scan_catches_the_other_usual_ways_to_name_the_device(tmp_path, line):

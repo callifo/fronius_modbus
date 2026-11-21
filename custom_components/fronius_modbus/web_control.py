@@ -56,6 +56,15 @@ TECHNICIAN_NOT_CONFIGURED = (
 )
 
 
+def soc_minimum_login_lost() -> ControlUnavailable:
+    """The refusal of a reserve that the SoC window cannot be checked for."""
+    return ControlUnavailable(
+        "soc_minimum_login_lost",
+        "The Modbus storage reserve was not changed: without the web login the "
+        "SoC window cannot be checked",
+    )
+
+
 def _serialised(method):
     """Run one web write at a time: every setter reads state, composes a payload and writes it back."""
 
@@ -723,7 +732,12 @@ class FroniusWebControl:
         only at the web write, Modbus already held a refused minimum.
         """
         client = self._client
-        if client is None or not self.soc_mode_is_manual:
+        if client is None:
+            # Only an entry with a web role gets here: without the login its
+            # SoC mode is unknown, and in Manual Modbus alone would leave the
+            # inverter's own minimum behind.
+            raise soc_minimum_login_lost()
+        if not self.soc_mode_is_manual:
             await write_modbus()
             return
         self._check_soc_range(soc_min=soc_min)

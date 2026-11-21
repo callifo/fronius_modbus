@@ -57,6 +57,9 @@ LINE_BUDGETS = {
     # 907 + an error status keeps the fields the inverter names as refused,
     # read by the same helper as the refusals in a 200 answer.
     "froniuswebclient.py": 914,
+    # 916 + a reserve without the web login is refused instead of reaching
+    # Modbus alone; the check sits in the write lock, next to the other one.
+    "web_control.py": 916,
 }
 
 # SonarSource's own default. Above it, a function is one somebody has to

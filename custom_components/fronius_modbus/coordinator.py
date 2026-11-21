@@ -36,6 +36,7 @@ from .fronius_modbus_api.exceptions import ControlUnavailable, error_text
 from .fronius_modbus_api.storage import ExtendedMode, StorageControl
 from .fronius_modbus_api.sunspec_models import AcMeter
 from .froniuswebclient import FroniusWebUnreachable
+from .web_control import soc_minimum_login_lost
 
 if TYPE_CHECKING:
     from .web_control import FroniusWebControl, WebData
@@ -188,10 +189,13 @@ class FroniusRuntimeData:
         """
         percent = int(round(value))
         storage = assume_present(self.storage_control)
-        web_control = self.web_control
-        if web_control is None:
+        entry = assume_present(self.modbus.config_entry)
+        if web_api_disabled({**entry.data, **entry.options}):
             await storage.set_minimum_reserve(percent)
             return
+        web_control = self.web_control
+        if web_control is None:
+            raise soc_minimum_login_lost()
         await web_control.apply_soc_minimum(
             percent, lambda: storage.set_minimum_reserve(percent)
         )

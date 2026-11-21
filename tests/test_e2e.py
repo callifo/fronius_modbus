@@ -240,7 +240,9 @@ async def test_the_total_sensor_keeps_its_value_through_an_outage(hass, mock_mod
 
 
 async def test_a_number_write_reaches_the_register(hass, mock_modbus):
-    entry = make_entry(hass)
+    # Without the web API the reserve is Modbus alone; with a web role but no
+    # login it is refused, as the SoC window cannot be checked.
+    entry = make_entry(hass, api_username="none")
     await setup_entry(hass, entry)
 
     await hass.services.async_call(

@@ -53,8 +53,13 @@ class FakeInverter:
         self.no_challenge = False
         self.bodies: dict[str, object] = {}
         self.statuses: dict[str, int] = {}
+        # Another shape of /api/status/common, or another challenge, when set.
+        self.common: object = None
+        self.challenge: str | None = None
 
     def handle(self, method: str, path: str, payload: dict | None, headers) -> tuple:
+        if path == "/api/status/common" and self.common is not None:
+            return 200, self.common, {}
         if path == "/api/status/common":
             return (
                 200,
@@ -76,7 +81,7 @@ class FakeInverter:
         if not public and (authorization is None or self.always_401):
             if self.no_challenge:
                 return 401, {}, {}
-            challenge = (
+            challenge = self.challenge or (
                 f'Digest realm="{REALM}", nonce="{self.nonce}", qop="auth", '
                 f'opaque="{self.opaque}"'
             )
@@ -237,6 +242,29 @@ def test_a_timed_out_status_page_is_not_remembered_as_the_hash_mode(
 
     assert froniuswebclient._hash_mode(f"http://{HOST}", "customer", 4.0) == "sha256"
     assert froniuswebclient._hash_mode(f"http://{HOST}", "customer", 4.0) == "md5"
+
+
+@pytest.mark.parametrize(
+    "common",
+    [{"authenticationOptions": None}, {"authenticationOptions": {"digest": None}}, []],
+    ids=["options-null", "digest-null", "list"],
+)
+def test_a_status_page_of_another_shape_falls_back_to_sha256(inverter, common):
+    """Its AttributeError broke every request, the public reads of a no-login entry too."""
+    inverter.common = common
+    client = FroniusWebClient(host=HOST, password="secret")
+
+    client.get_battery_config()
+
+    assert inverter.calls[-1][1] == "/api/config/batteries"
+
+
+def test_a_challenge_without_qop_is_a_refused_login(client, inverter):
+    """Its KeyError escaped the response hook instead of reading as an auth failure."""
+    inverter.challenge = f'Digest realm="{REALM}", nonce="{inverter.nonce}"'
+
+    with pytest.raises(FroniusWebAuthError):
+        client.get_battery_config()
 
 
 def test_the_nonce_count_rises_while_the_nonce_stays_the_same():
@@ -1194,6 +1222,26 @@ def test_a_write_rejected_with_an_error_status_names_what_the_inverter_refused(
         client.set_export_soft_limit(6000)
 
     assert err.value.status_code == 400
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {},
+        {"exportLimits": {}},
+        {"exportLimits": {"activePower": {"activated": True}}},
+        {"exportLimits": {"activePower": {"softLimit": None}}},
+    ],
+    ids=["empty", "no-active-power", "no-soft-limit", "soft-limit-null"],
+)
+def test_a_soft_limit_write_on_another_shape_is_a_failed_read(client, inverter, body):
+    """A raw KeyError reached the user instead of the translated write error."""
+    inverter.bodies["/api/config/limit_settings/powerLimits"] = body
+
+    with pytest.raises(FroniusWebResponseError, match="no export soft limit"):
+        client.set_export_soft_limit(5000)
+
+    assert posts(inverter) == []
 
 
 def test_a_solar_api_already_in_that_state_is_not_written(client, inverter):

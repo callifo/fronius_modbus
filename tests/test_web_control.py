@@ -1,6 +1,8 @@
 """Web control: battery mode rules and the write side effects, with the HTTP client stubbed."""
 
 import asyncio
+import contextlib
+import threading
 import time
 
 import pytest
@@ -974,6 +976,48 @@ async def test_unloading_cancels_a_pending_confirmation_refresh(control):
     await asyncio.sleep(0)
 
     assert pending.cancelled()
+
+
+async def test_a_cancelled_write_cannot_overwrite_a_newer_one(hass, control):
+    """The lock went with the cancelled caller while its thread still held the old value.
+
+    A script stopped mid-write released the lock; the next write finished first,
+    then the old thread posted the cancelled value over it.
+    """
+    await control.async_refresh()
+    entered = threading.Event()
+    gate = threading.Event()
+    overtaken = threading.Event()
+    first_done = threading.Event()
+    real_set = control._client.set_backup_reserve
+
+    def first_one_waits(percent):
+        if not entered.is_set():
+            entered.set()
+            gate.wait(5)
+            try:
+                return real_set(percent)
+            finally:
+                first_done.set()
+        overtaken.set()
+        return real_set(percent)
+
+    control._client.set_backup_reserve = first_one_waits
+    cancelled = asyncio.ensure_future(control.set_backup_reserve(20))
+    assert await hass.async_add_executor_job(entered.wait, 5)
+    cancelled.cancel()
+    await asyncio.sleep(0)
+    newer = asyncio.ensure_future(control.set_backup_reserve(80))
+    # Long enough for the newer write to reach the device if nothing holds it.
+    await hass.async_add_executor_job(overtaken.wait, 1)
+    gate.set()
+    await newer
+    with contextlib.suppress(asyncio.CancelledError):
+        await cancelled
+    assert await hass.async_add_executor_job(first_done.wait, 5)
+
+    reserves = [c[1] for c in control._client.calls if c[0] == "reserve"]
+    assert reserves[-1] == 80, reserves
 
 
 async def test_a_burst_of_values_reaches_the_device_as_first_and_last(control):

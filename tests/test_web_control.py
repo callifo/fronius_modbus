@@ -1022,6 +1022,108 @@ async def test_a_cancelled_write_cannot_overwrite_a_newer_one(hass, control):
     assert reserves[-1] == 80, reserves
 
 
+async def test_a_reserve_before_the_battery_config_was_read_writes_nothing(hass):
+    """The SoC mode starts unknown; a first refresh that failed left Modbus alone
+    as if the inverter were in Auto, skipping the window check and the mirror."""
+
+    class UnreadBattery(FakeWebClient):
+        def get_battery_config(self):
+            raise FroniusWebUnreachable("ConnectTimeout")
+
+    control = make_control(hass, client=UnreadBattery())
+    written = []
+
+    async def write_modbus():
+        written.append("modbus")
+
+    try:
+        with contextlib.suppress(FroniusWebUnreachable):
+            await control.async_refresh()
+        with pytest.raises(ControlUnavailable) as raised:
+            await control.apply_soc_minimum(30, write_modbus)
+    finally:
+        control.shutdown()
+
+    assert raised.value.key == "soc_minimum_mode_unknown"
+    assert written == []
+
+
+async def test_a_reserve_with_the_battery_config_read_in_auto_goes_to_modbus(control):
+    """The counter-check: a read Auto keeps the reserve on Modbus alone."""
+    await control.async_refresh()
+    written = []
+
+    async def write_modbus():
+        written.append("modbus")
+
+    await control.apply_soc_minimum(30, write_modbus)
+
+    assert written == ["modbus"]
+
+
+async def test_a_write_that_fails_after_its_caller_was_cancelled_is_not_logged_raw(
+    hass, control
+):
+    """The loop reported the thread's exception, whose cause names the URL."""
+    await control.async_refresh()
+    entered = threading.Event()
+    gate = threading.Event()
+
+    def fails_late(percent):
+        entered.set()
+        gate.wait(5)
+        raise FroniusWebUnreachable("ConnectTimeout")
+
+    control._client.set_backup_reserve = fails_late
+    reported = []
+    previous = hass.loop.get_exception_handler()
+    hass.loop.set_exception_handler(lambda _loop, context: reported.append(context))
+    try:
+        caller = asyncio.ensure_future(control.set_backup_reserve(20))
+        assert await hass.async_add_executor_job(entered.wait, 5)
+        caller.cancel()
+        await asyncio.sleep(0)
+        gate.set()
+        with contextlib.suppress(asyncio.CancelledError):
+            await caller
+        await asyncio.sleep(0.1)
+    finally:
+        hass.loop.set_exception_handler(previous)
+
+    assert reported == []
+
+
+async def test_a_queued_write_still_writes_when_a_newer_one_is_cancelled(hass, control):
+    """The cancelled caller's newer ticket made the queued one return unwritten."""
+    await control.async_refresh()
+    entered = threading.Event()
+    gate = threading.Event()
+    real_set = control._client.set_backup_reserve
+
+    def first_one_waits(percent):
+        if not entered.is_set():
+            entered.set()
+            gate.wait(5)
+        return real_set(percent)
+
+    control._client.set_backup_reserve = first_one_waits
+    first = asyncio.ensure_future(control.set_backup_reserve(20))
+    assert await hass.async_add_executor_job(entered.wait, 5)
+    queued = asyncio.ensure_future(control.set_backup_reserve(40))
+    newer = asyncio.ensure_future(control.set_backup_reserve(60))
+    await asyncio.sleep(0)
+    newer.cancel()
+    await asyncio.sleep(0)
+    gate.set()
+    await first
+    await queued
+    with contextlib.suppress(asyncio.CancelledError):
+        await newer
+
+    reserves = [c[1] for c in control._client.calls if c[0] == "reserve"]
+    assert reserves[-1] == 40, reserves
+
+
 async def test_a_burst_of_values_reaches_the_device_as_first_and_last(control):
     """Ten input-box steps were ten web writes; the inverter stalls Modbus after each."""
     await control.async_refresh()

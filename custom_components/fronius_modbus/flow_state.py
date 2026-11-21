@@ -22,6 +22,10 @@ class _PendingFlowState:
     login_token: dict[str, str] | None = None
     token_minted: bool = False
     sunspec_mode: str | None = None
+    # The address the owner confirmed for the Modbus restriction, and the one
+    # Home Assistant resolved for the question.
+    allowed_host: str | None = None
+    resolved_host: str | None = None
 
 
 class _CannotConnect(exceptions.HomeAssistantError):
@@ -70,6 +74,19 @@ class _InvalidApiCredentials(exceptions.HomeAssistantError):
 
 class _CannotResolveLocalIp(exceptions.HomeAssistantError):
     """Error to indicate the local IP for Modbus restriction cannot be resolved."""
+
+
+class _InvalidAllowedHost(exceptions.HomeAssistantError):
+    """The address to allow is no IPv4 address."""
+
+
+class _AllowedHostNeeded(exceptions.HomeAssistantError):
+    """The address to allow has to be confirmed: behind NAT the inverter sees another."""
+
+    def __init__(self, resolved: str) -> None:
+        """Name the address Home Assistant resolved towards the inverter."""
+        super().__init__(resolved)
+        self.resolved = resolved
 
 
 class _SunSpecSwitchNeeded(exceptions.HomeAssistantError):

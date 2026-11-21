@@ -66,6 +66,27 @@
       "reauth_sunspec": {
         "title": "SunSpec-Modelltyp umstellen?",
         "description": "Der Modbus von {entry_title} ({host}) verwendet den SunSpec-Modelltyp **{mode}**. Diese Integration liest die Modelle int + SF und stellt den Wechselrichter darauf um. Falls ein externes Gerät den Wechselrichter mit den {mode}-Modellen liest, funktioniert es danach möglicherweise nicht mehr. Absenden stellt um; dieses Fenster zu schließen lässt den Wechselrichter, wie er ist."
+      },
+      "user_allowed_host": {
+        "title": "Welche Adresse sieht der Wechselrichter?",
+        "description": "Die Modbus-IP-Beschränkung von {entry_title} ({host}) erlaubt die Adresse unten: die, von der aus Home Assistant den Wechselrichter erreicht. Läuft Home Assistant hinter NAT, zum Beispiel in einem Docker-Container im Bridge-Netz oder in einer virtuellen Maschine mit NAT, sieht der Wechselrichter die Adresse des Rechners, auf dem es läuft: Trage dann diese ein. Eine falsche Adresse sperrt die Modbus-Steuerung durch Home Assistant und, wenn die Beschränkung vorher aus war, auch durch jedes andere Gerät.",
+        "data": {
+          "allowed_host": "Zu erlaubende Adresse"
+        }
+      },
+      "reconfigure_allowed_host": {
+        "title": "Welche Adresse sieht der Wechselrichter?",
+        "description": "Die Modbus-IP-Beschränkung von {entry_title} ({host}) erlaubt die Adresse unten: die, von der aus Home Assistant den Wechselrichter erreicht. Läuft Home Assistant hinter NAT, zum Beispiel in einem Docker-Container im Bridge-Netz oder in einer virtuellen Maschine mit NAT, sieht der Wechselrichter die Adresse des Rechners, auf dem es läuft: Trage dann diese ein. Eine falsche Adresse sperrt die Modbus-Steuerung durch Home Assistant und, wenn die Beschränkung vorher aus war, auch durch jedes andere Gerät.",
+        "data": {
+          "allowed_host": "Zu erlaubende Adresse"
+        }
+      },
+      "reauth_allowed_host": {
+        "title": "Welche Adresse sieht der Wechselrichter?",
+        "description": "Die Modbus-IP-Beschränkung von {entry_title} ({host}) erlaubt die Adresse unten: die, von der aus Home Assistant den Wechselrichter erreicht. Läuft Home Assistant hinter NAT, zum Beispiel in einem Docker-Container im Bridge-Netz oder in einer virtuellen Maschine mit NAT, sieht der Wechselrichter die Adresse des Rechners, auf dem es läuft: Trage dann diese ein. Eine falsche Adresse sperrt die Modbus-Steuerung durch Home Assistant und, wenn die Beschränkung vorher aus war, auch durch jedes andere Gerät.",
+        "data": {
+          "allowed_host": "Zu erlaubende Adresse"
+        }
       }
     },
     "abort": {
@@ -89,7 +110,8 @@
       "missing_api_password": "Für die ausgewählte Web-API-Rolle wird ein Passwort benötigt.",
       "invalid_api_credentials": "Anmeldung für die ausgewählte Web-API-Rolle fehlgeschlagen.",
       "cannot_resolve_local_ip": "Die Home-Assistant-IP konnte nicht ermittelt werden.",
-      "already_configured": "Ein anderer Eintrag verwendet diesen Host bereits."
+      "already_configured": "Ein anderer Eintrag verwendet diesen Host bereits.",
+      "invalid_allowed_host": "Gib eine IPv4-Adresse ein, zum Beispiel 192.168.1.20."
     }
   },
   "entity": {
@@ -928,6 +950,13 @@
       "sunspec": {
         "title": "SunSpec-Modelltyp umstellen?",
         "description": "Der Modbus von {entry_title} ({host}) verwendet den SunSpec-Modelltyp **{mode}**. Diese Integration liest die Modelle int + SF und stellt den Wechselrichter darauf um. Falls ein externes Gerät den Wechselrichter mit den {mode}-Modellen liest, funktioniert es danach möglicherweise nicht mehr. Absenden stellt um; dieses Fenster zu schließen lässt den Wechselrichter, wie er ist."
+      },
+      "allowed_host": {
+        "title": "Welche Adresse sieht der Wechselrichter?",
+        "description": "Die Modbus-IP-Beschränkung von {entry_title} ({host}) erlaubt die Adresse unten: die, von der aus Home Assistant den Wechselrichter erreicht. Läuft Home Assistant hinter NAT, zum Beispiel in einem Docker-Container im Bridge-Netz oder in einer virtuellen Maschine mit NAT, sieht der Wechselrichter die Adresse des Rechners, auf dem es läuft: Trage dann diese ein. Eine falsche Adresse sperrt die Modbus-Steuerung durch Home Assistant und, wenn die Beschränkung vorher aus war, auch durch jedes andere Gerät.",
+        "data": {
+          "allowed_host": "Zu erlaubende Adresse"
+        }
       }
     },
     "error": {
@@ -943,7 +972,8 @@
       "missing_api_password": "Für die ausgewählte Web-API-Rolle wird ein Passwort benötigt.",
       "invalid_api_credentials": "Anmeldung für die ausgewählte Web-API-Rolle fehlgeschlagen.",
       "cannot_resolve_local_ip": "Die Home-Assistant-IP konnte nicht ermittelt werden.",
-      "already_configured": "Ein anderer Eintrag verwendet diesen Host bereits."
+      "already_configured": "Ein anderer Eintrag verwendet diesen Host bereits.",
+      "invalid_allowed_host": "Gib eine IPv4-Adresse ein, zum Beispiel 192.168.1.20."
     }
   },
   "selector": {

@@ -631,7 +631,8 @@ class FroniusWebClient:
         self._post(path, changes)
         return True
 
-    def _resolve_client_ip(self) -> str:
+    def resolve_client_ip(self) -> str:
+        """Home Assistant's own address towards the inverter."""
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
                 sock.connect((self._host, 80))
@@ -730,6 +731,7 @@ class FroniusWebClient:
         inverter_unit_id: int,
         restriction: ModbusRestriction = ModbusRestriction.KEEP,
         switch_sunspec_mode: bool = False,
+        allowed_host: str | None = None,
     ) -> bool:
         config = _config_object(self.get_modbus_config(), MODBUS_PATH)
         # Checked like the slave: it is written back as read.
@@ -741,7 +743,9 @@ class FroniusWebClient:
         current_restriction = _nested_object(ctr, "restriction", MODBUS_PATH)
         wanted = current_restriction
         if restriction == ModbusRestriction.HOME_ASSISTANT:
-            wanted = _restriction_with(current_restriction, self._resolve_client_ip())
+            wanted = _restriction_with(
+                current_restriction, allowed_host or self.resolve_client_ip()
+            )
         if restriction == ModbusRestriction.OFF:
             wanted = {**current_restriction, "on": False}
         serves_tcp = slave.get("mode") in TCP_MODES

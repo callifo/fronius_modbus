@@ -814,8 +814,8 @@
   {
     "label": "config flow: a minted token is kept only after the check",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "                try:\n                    info = await _validate_input(\n                        self.hass,\n                        state.settings,\n",
-    "new": "                await _async_save_token(\n                    self.hass, state.settings[CONF_HOST], username, token\n                )\n                try:\n                    info = await _validate_input(\n                        self.hass,\n                        state.settings,\n",
+    "old": "                        self.hass, state.settings[CONF_HOST], password, username\n                    )\n                try:\n                    info = await _validate_input(\n                        self.hass,\n                        state.settings,\n",
+    "new": "                        self.hass, state.settings[CONF_HOST], password, username\n                    )\n                await _async_save_token(\n                    self.hass, state.settings[CONF_HOST], username, token\n                )\n                try:\n                    info = await _validate_input(\n                        self.hass,\n                        state.settings,\n",
     "tests": "a_token_whose_setup_fails_is_not_kept"
   },
   {
@@ -1752,8 +1752,8 @@
   {
     "label": "config flow: the settings step asks before switching",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "                        minted=False,\n                        step_id=sunspec_step_id,\n",
-    "new": "                        minted=False,\n                        step_id=\"user\",\n",
+    "old": "                        minted=False,\n                        step_ids=(sunspec_step_id, allowed_host_step_id),\n",
+    "new": "                        minted=False,\n                        step_ids=(\"user\", allowed_host_step_id),\n",
     "tests": "stored_token_asks_before_switching_too"
   },
   {
@@ -1766,8 +1766,8 @@
   {
     "label": "config flow: a token minted before the question is kept",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "                minted = state.login_token if state.token_minted else None\n",
-    "new": "                minted = None\n",
+    "old": "                    allowed_host=state.allowed_host,\n                )\n                minted = state.login_token if state.token_minted else None\n",
+    "new": "                    allowed_host=state.allowed_host,\n                )\n                minted = None\n",
     "tests": "switched_only_after_the_user_agrees"
   },
   {
@@ -1787,8 +1787,8 @@
   {
     "label": "config flow: the model type question keeps its state until the finish",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "                result = await self._async_finish_with_token(\n                    on_success, state, info, minted\n",
-    "new": "                self._pending_flow_state = None\n                result = await self._async_finish_with_token(\n                    on_success, state, info, minted\n",
+    "old": "                # this form again, which needs the state.\n                result = await self._async_finish_with_token(\n                    on_success, state, info, minted\n",
+    "new": "                # this form again, which needs the state.\n                self._pending_flow_state = None\n                result = await self._async_finish_with_token(\n                    on_success, state, info, minted\n",
     "tests": "host_taken_after_the_answer_shows_its_error"
   },
   {
@@ -3050,5 +3050,19 @@
     "old": "            assume_present(r.storage_control).control_mode is not None\n",
     "new": "            True\n",
     "tests": "registers_are_unread"
+  },
+  {
+    "label": "config flow: the address to allow is shown before the restriction is written",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "    if restricted and allowed_host is None:\n",
+    "new": "    if False:\n",
+    "tests": "address_to_allow_is_shown"
+  },
+  {
+    "label": "config flow: an address to allow that is no address is refused",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "        return str(ipaddress.IPv4Address(str(value).strip()))\n",
+    "new": "        return str(value).strip()\n",
+    "tests": "no_address_is_refused"
   }
 ]

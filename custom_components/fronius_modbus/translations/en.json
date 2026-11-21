@@ -66,6 +66,27 @@
       "reauth_sunspec": {
         "title": "Switch the SunSpec model type?",
         "description": "The Modbus of {entry_title} ({host}) uses the **{mode}** SunSpec model type. This integration reads the int + SF models and switches the inverter to them. If an external device reads the inverter with the {mode} models, it may no longer work after the switch. Submit to switch; close this dialog to leave the inverter as it is."
+      },
+      "user_allowed_host": {
+        "title": "Which address does the inverter see?",
+        "description": "The Modbus IP restriction of {entry_title} ({host}) will allow the address below: the one Home Assistant reaches the inverter from. If Home Assistant runs behind NAT, for example in a Docker container on a bridge network or in a virtual machine with NAT, the inverter sees the address of the computer it runs on: enter that one. A wrong address blocks Modbus control from Home Assistant and, if the restriction was off before, from every other device too.",
+        "data": {
+          "allowed_host": "Address to allow"
+        }
+      },
+      "reconfigure_allowed_host": {
+        "title": "Which address does the inverter see?",
+        "description": "The Modbus IP restriction of {entry_title} ({host}) will allow the address below: the one Home Assistant reaches the inverter from. If Home Assistant runs behind NAT, for example in a Docker container on a bridge network or in a virtual machine with NAT, the inverter sees the address of the computer it runs on: enter that one. A wrong address blocks Modbus control from Home Assistant and, if the restriction was off before, from every other device too.",
+        "data": {
+          "allowed_host": "Address to allow"
+        }
+      },
+      "reauth_allowed_host": {
+        "title": "Which address does the inverter see?",
+        "description": "The Modbus IP restriction of {entry_title} ({host}) will allow the address below: the one Home Assistant reaches the inverter from. If Home Assistant runs behind NAT, for example in a Docker container on a bridge network or in a virtual machine with NAT, the inverter sees the address of the computer it runs on: enter that one. A wrong address blocks Modbus control from Home Assistant and, if the restriction was off before, from every other device too.",
+        "data": {
+          "allowed_host": "Address to allow"
+        }
       }
     },
     "abort": {
@@ -89,7 +110,8 @@
       "missing_api_password": "A password is required for the selected Web API role.",
       "invalid_api_credentials": "Login failed for the selected Web API role.",
       "cannot_resolve_local_ip": "Could not determine the Home Assistant IP.",
-      "already_configured": "Another entry already uses this host."
+      "already_configured": "Another entry already uses this host.",
+      "invalid_allowed_host": "Enter an IPv4 address, for example 192.168.1.20."
     }
   },
   "entity": {
@@ -928,6 +950,13 @@
       "sunspec": {
         "title": "Switch the SunSpec model type?",
         "description": "The Modbus of {entry_title} ({host}) uses the **{mode}** SunSpec model type. This integration reads the int + SF models and switches the inverter to them. If an external device reads the inverter with the {mode} models, it may no longer work after the switch. Submit to switch; close this dialog to leave the inverter as it is."
+      },
+      "allowed_host": {
+        "title": "Which address does the inverter see?",
+        "description": "The Modbus IP restriction of {entry_title} ({host}) will allow the address below: the one Home Assistant reaches the inverter from. If Home Assistant runs behind NAT, for example in a Docker container on a bridge network or in a virtual machine with NAT, the inverter sees the address of the computer it runs on: enter that one. A wrong address blocks Modbus control from Home Assistant and, if the restriction was off before, from every other device too.",
+        "data": {
+          "allowed_host": "Address to allow"
+        }
       }
     },
     "error": {
@@ -943,7 +972,8 @@
       "missing_api_password": "A password is required for the selected Web API role.",
       "invalid_api_credentials": "Login failed for the selected Web API role.",
       "cannot_resolve_local_ip": "Could not determine the Home Assistant IP.",
-      "already_configured": "Another entry already uses this host."
+      "already_configured": "Another entry already uses this host.",
+      "invalid_allowed_host": "Enter an IPv4 address, for example 192.168.1.20."
     }
   },
   "selector": {

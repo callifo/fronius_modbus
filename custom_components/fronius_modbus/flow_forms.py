@@ -90,6 +90,15 @@ def settings_schema(defaults: dict[str, Any]) -> vol.Schema:
     )
 
 
+# The address the Modbus restriction allows for this Home Assistant.
+CONF_ALLOWED_HOST = "allowed_host"
+
+
+def allowed_host_schema(default: str) -> vol.Schema:
+    """The address to allow, filled in with the one Home Assistant resolved."""
+    return vol.Schema({vol.Required(CONF_ALLOWED_HOST, default=default): str})
+
+
 def password_schema(*, keep_stored: bool = False) -> vol.Schema:
     """The role's password; left empty it keeps a stored token when there is one."""
     password_field = (

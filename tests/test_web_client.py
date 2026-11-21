@@ -705,7 +705,7 @@ def test_a_different_port_is_rewritten(client, inverter):
 def test_the_restriction_carries_the_resolved_client_ip(client, inverter, monkeypatch):
     inverter.bodies["/api/config/modbus"] = modbus_config()
     monkeypatch.setattr(
-        FroniusWebClient, "_resolve_client_ip", lambda self: "192.0.2.99"
+        FroniusWebClient, "resolve_client_ip", lambda self: "192.0.2.99"
     )
 
     assert (
@@ -845,7 +845,7 @@ def test_home_assistant_joins_the_allowed_hosts(
         ctr={"on": True, "restriction": {"on": True, "ip": allowed}}
     )
     monkeypatch.setattr(
-        FroniusWebClient, "_resolve_client_ip", lambda self: "192.0.2.99"
+        FroniusWebClient, "resolve_client_ip", lambda self: "192.0.2.99"
     )
 
     assert client.ensure_modbus_enabled(
@@ -865,7 +865,7 @@ def test_a_network_that_covers_home_assistant_is_left_alone(
         ctr={"on": True, "restriction": {"on": True, "ip": "192.0.2.0/24"}}
     )
     monkeypatch.setattr(
-        FroniusWebClient, "_resolve_client_ip", lambda self: "192.0.2.99"
+        FroniusWebClient, "resolve_client_ip", lambda self: "192.0.2.99"
     )
 
     assert (
@@ -884,7 +884,7 @@ def test_an_inactive_list_is_not_switched_on_with_home_assistant(
         ctr={"on": True, "restriction": {"on": False, "ip": "192.0.2.50"}}
     )
     monkeypatch.setattr(
-        FroniusWebClient, "_resolve_client_ip", lambda self: "192.0.2.99"
+        FroniusWebClient, "resolve_client_ip", lambda self: "192.0.2.99"
     )
 
     client.ensure_modbus_enabled(
@@ -902,7 +902,7 @@ def test_a_matching_restriction_is_not_rewritten(client, inverter, monkeypatch):
         ctr={"on": True, "restriction": {"on": True, "ip": "192.0.2.99"}}
     )
     monkeypatch.setattr(
-        FroniusWebClient, "_resolve_client_ip", lambda self: "192.0.2.99"
+        FroniusWebClient, "resolve_client_ip", lambda self: "192.0.2.99"
     )
 
     assert (

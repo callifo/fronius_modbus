@@ -2959,5 +2959,33 @@
     "old": "        self.data.export_soft_limit_ceiling_w = soft_limit_ceiling(active_power)\n",
     "new": "",
     "tests": "bounded_by_the_inverters_limits_not_its_power"
+  },
+  {
+    "label": "web control: the Solar API warning stays out of the diagnostics",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "            is_persistent=False,\n",
+    "new": "            is_persistent=True,\n",
+    "tests": "diagnostics_download_names_no_host"
+  },
+  {
+    "label": "web control: a reserve without the web login is refused",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "            raise soc_minimum_login_lost()\n        if not self.soc_mode_is_manual:\n",
+    "new": "            await write_modbus()\n            return\n        if not self.soc_mode_is_manual:\n",
+    "tests": "soc_minimum_without_the_web_login"
+  },
+  {
+    "label": "coordinator: a reserve with a web role but no web control is refused",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "        if web_control is None:\n            raise soc_minimum_login_lost()\n",
+    "new": "        if web_control is None:\n            await storage.set_minimum_reserve(percent)\n            return\n",
+    "tests": "soc_minimum_without_the_web_login"
+  },
+  {
+    "label": "web control: a cancelled write waits for its thread",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "            while not job.done():\n                with contextlib.suppress(asyncio.CancelledError):\n                    await asyncio.wait({job})\n            raise\n",
+    "new": "            raise\n",
+    "tests": "cancelled_write_cannot_overwrite"
   }
 ]

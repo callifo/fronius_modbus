@@ -366,6 +366,8 @@ function Invoke-TestDump([int]$LoginStatus, [hashtable]$Answers, [int]$CommonSta
                 $script:Challenged = $true
                 return @{ status = $LoginStatus; body = '{}' }
             }
+            # A Datamanager's page names an action among its settings.
+            if ($Path -eq '/') { return @{ status = 200; body = '"/config/commands/reboot" "/config/meter"' } }
             return @{ status = 200; body = '{}' }
         }
         function Read-Modbus([bool]$Redact, [bool]$Datamanager) {
@@ -513,8 +515,8 @@ Assert-True ($script:LoginOutcome -eq 'accepted') "an accepted digest reads as a
     $script:Asked = @()
     $script:Found = Find-DatamanagerPaths
 }
-$expected = '/config/batteries,/config/exportlimit/,/config/meter,/config/powerunit/,/status/version'
-Assert-True (($script:Found -join ',') -eq $expected) "the interface names the paths, the actions left out: $($script:Found -join ', ')"
+$expected = '/config/commands/reboot,/config/meter,/config/powerunit/,/config/reset/all,/status/version'
+Assert-True (($script:Found -join ',') -eq $expected) "the paths the interface names are listed, the two asked for apart: $($script:Found -join ', ')"
 Assert-True (($script:Asked -join ',') -eq '/,/app.js') "only the device's own scripts are read: $($script:Asked -join ', ')"
 
 function Find-TestPaths([hashtable]$Pages) {
@@ -545,8 +547,8 @@ Assert-True ($found -contains '/config/meter' -and $found -contains '/config/pow
 
 $many = -join (1..85 | ForEach-Object { "'/config/a{0:d3}' " -f $_ })
 $found = Find-TestPaths @{ '/' = $many }
-Assert-True ($found -contains '/config/exportlimit/' -and $found -contains '/config/batteries') "the two asked for stay beyond the cap: $($found.Count) paths"
-Assert-True ($script:PathsLeftOut -eq 85 + 2 - $DatamanagerMaxPaths) "the paths left out are counted: $($script:PathsLeftOut)"
+Assert-True ($found.Count -eq $DatamanagerMaxPaths) "the list of named paths stops at the cap: $($found.Count) paths"
+Assert-True ($script:PathsLeftOut -eq 85 - $DatamanagerMaxPaths) "the paths left out are counted: $($script:PathsLeftOut)"
 
 # -- the export -----------------------------------------------------------
 
@@ -558,6 +560,10 @@ $export = New-ExportText 'service' $true $null @('/config/info') @(200) @('{"ser
 Assert-True (Test-ValidJson $export) "the export with a challenge is valid JSON: $export"
 Assert-True (-not $export.Contains('LAB0000012345') -and -not $export.Contains('192.0.2.1')) "the challenge is redacted like the answers: $export"
 Assert-True ($export.Contains('"paths_left_out": 3')) "the export names the paths left out: $export"
+$script:PathsNamed = @('/config/meter', '/config/commands/reboot')
+$export = New-ExportText 'service' $true $null @('/config/info') @(200) @('{}')
+Assert-True ((Test-ValidJson $export) -and $export.Contains('"paths_named": ["/config/meter", "/config/commands/reboot"]')) "the export lists the paths the interface names: $export"
+$script:PathsNamed = @()
 $export = New-ExportText 'service' $false $null @('/config/info') @(200) @('{"serial":"LAB0000012345"}')
 Assert-True ($export.Contains('Datamanager LAB0000012345')) "without redaction the challenge is kept: $export"
 $script:Challenge = $null
@@ -569,6 +575,9 @@ Assert-True ($script:Export.Role -eq 'service') "Enter at the Datamanager's role
 $withLogin = Get-PathsReadWithLogin
 Assert-True ($withLogin -contains '/config/exportlimit/' -and $withLogin -contains '/config/batteries') "a Datamanager's settings are read with its login: $($withLogin -join ', ')"
 Assert-True (-not ($withLogin | Where-Object { $_ -like '/api/config/*' })) "a Datamanager is not asked the GEN24 settings: $($withLogin -join ', ')"
+$settings = @($script:Reads | ForEach-Object { $_[0] } | Where-Object { $_ -match '^/(config|status)/' } | Sort-Object -Unique)
+Assert-True (($settings -join ',') -eq ((@($DatamanagerPaths) | Sort-Object) -join ',')) "a Datamanager is read only at the two settings asked for: $($settings -join ', ')"
+Assert-True ($script:PathsNamed -contains '/config/commands/reboot') "a path the interface names is listed, not read: $($script:PathsNamed -join ', ')"
 Invoke-TestDump 401 $withService 404
 Assert-True ([string]::IsNullOrEmpty($script:Export.Role)) "a refused Datamanager login is exported without a role: $($script:Export.Role)"
 $read = @($script:Reads | ForEach-Object { $_[0] })

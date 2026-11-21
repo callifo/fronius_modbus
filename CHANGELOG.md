@@ -5,6 +5,13 @@
 ### Changed
 - `tools/inverter_dump.bat` also reads Modbus unit 240 on a Datamanager (SnapINverter), where its meter usually answers (issue 110).
 - If no meter answers on the usual Modbus units, `tools/inverter_dump.bat` looks at every unit by itself. This can take several minutes.
+- Without the web login, `Modbus storage reserve` is refused instead of being written to Modbus alone, because the battery's SoC window cannot be checked then. Log in again when Home Assistant asks for it. Entries set up without the web API are not affected.
+
+### Fixed
+- The diagnostics download no longer contains the inverter's address while the Solar API firmware warning is shown.
+- A web setting written by an automation that was stopped mid-write could overwrite a newer value of the same setting.
+- Updating straight from callifo 0.2.8 or older keeps the grid meter's sensors and the reserve and temperature sensors of that version, with their entity IDs and history.
+- Texts: AFCI is spelled as Fronius does, combined control modes have a space after the comma, the event severity states are translated, `Charge from grid` shows a grid import icon, and the setup dialogs name every entity that goes without the web API.
 
 ## 1.4.1
 

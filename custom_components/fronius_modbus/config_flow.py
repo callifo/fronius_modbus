@@ -128,9 +128,15 @@ _FORM_ERRORS: dict[type[Exception], tuple[str, str]] = {
 def _checked_allowed_host(value: Any) -> str:
     """The address to allow, as the IPv4 address the inverter's list takes."""
     try:
-        return str(ipaddress.IPv4Address(str(value).strip()))
+        address = ipaddress.IPv4Address(str(value).strip())
     except ValueError as err:
         raise _InvalidAllowedHost from err
+    # No client sends from these; allowed alone they lock every device out.
+    if address.is_loopback or address.is_unspecified:
+        raise _InvalidAllowedHost
+    if address.is_multicast or address.is_reserved:
+        raise _InvalidAllowedHost
+    return str(address)
 
 
 def _set_form_error(errors: dict[str, str], err: Exception) -> None:
@@ -231,9 +237,12 @@ async def _async_prepare_web_api(
     if restricted and allowed_host is None:
         # Behind NAT the inverter sees another address than this one, and
         # allowing the wrong one locks every Modbus control out.
-        raise _AllowedHostNeeded(
-            await hass.async_add_executor_job(client.resolve_client_ip)
-        )
+        try:
+            resolved = await hass.async_add_executor_job(client.resolve_client_ip)
+        except ClientIpResolutionError:
+            # The owner can still type the address the inverter sees.
+            resolved = ""
+        raise _AllowedHostNeeded(resolved)
     if claim_host is not None:
         await claim_host()
     try:
@@ -472,7 +481,8 @@ class TokenFlowMixin:
         assert state is not None and state.resolved_host is not None
         return self.async_show_form(
             step_id=step_id,
-            data_schema=allowed_host_schema(state.resolved_host),
+            # A corrected address stays when an error shows the step again.
+            data_schema=allowed_host_schema(state.allowed_host or state.resolved_host),
             errors=errors or {},
             description_placeholders={
                 "entry_title": entry_title(state.settings),

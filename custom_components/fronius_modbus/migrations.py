@@ -97,8 +97,9 @@ _V019_MPPT_UNIQUE_ID_MAPPINGS = (
     ("fm_mppt3_lfte", "storage_charge_lfte", "storage_charge_lfte", None),
     ("fm_mppt4_lfte", "storage_discharge_lfte", "storage_discharge_lfte", None),
 )
-# redpomodoro 0.1.9 wrote its unique ids as fm_<key>. These keys changed since,
-# and its one meter was m1; every other key stayed.
+# redpomodoro 0.1.9 wrote its unique ids as fm_<key>, callifo up to 0.2.8 as
+# fm_<name>__<key>. These keys changed since, and the one meter was m1; every
+# other key stayed.
 _V019_RENAMED_KEYS = {
     "minimum_reserve": "soc_minimum",
     "tempcab": "inverter_temperature",
@@ -182,17 +183,24 @@ def _runtime_v019_meter_unit_id(entry: ConfigEntry) -> int | None:
     )
 
 
-def _v019_key(unique_id: str, meter_unit_id: int | None) -> str:
-    """The key a unique id of 0.1.9 continues under.
+def _continued_key(key: str, meter_unit_id: int | None) -> str:
+    """The key an old key continues under: the meter's m1 keys and the renamed ones.
 
-    Any later id reads as a key no entity has, so it is never expected; so does
-    a meter id while its meter is not on the bus.
+    A meter key reads as a key no entity has while its meter is not on the bus,
+    so it is never expected.
     """
-    key = unique_id.removeprefix(f"{ENTITY_PREFIX}_")
     if key.startswith(_V019_METER_KEY_PREFIX) and meter_unit_id is not None:
         meter_key = key.removeprefix(_V019_METER_KEY_PREFIX)
         return f"meter_{meter_unit_id}_{meter_key}"
     return _V019_RENAMED_KEYS.get(key, key)
+
+
+def _v019_key(unique_id: str, meter_unit_id: int | None) -> str:
+    """The key a unique id of 0.1.9 continues under.
+
+    Any later id reads as a key no entity has, so it is never expected.
+    """
+    return _continued_key(unique_id.removeprefix(f"{ENTITY_PREFIX}_"), meter_unit_id)
 
 
 def registered_keys(
@@ -221,7 +229,7 @@ def successor_key(entry: ConfigEntry, unique_id: str, v019_meter: int | None) ->
     if unique_id.startswith(prefix):
         return unique_id.removeprefix(prefix)
     if unique_id.startswith(legacy_prefix):
-        return unique_id.removeprefix(legacy_prefix)
+        return _continued_key(unique_id.removeprefix(legacy_prefix), v019_meter)
     if unique_id in _V019_MPPT_KEYS:
         return _V019_MPPT_KEYS[unique_id]
     return _v019_key(unique_id, v019_meter)
@@ -735,13 +743,14 @@ async def async_migrate_name_based_unique_ids(
     taken = {(candidate.domain, candidate.unique_id) for candidate in entity_entries}
     expected = expected_unique_ids(entry, entry.runtime_data)
     legacy_prefix = _legacy_entity_unique_id(entry, "")
+    meter_unit_id = _runtime_v019_meter_unit_id(entry)
     migrated = 0
 
     for entity_entry in entity_entries:
         old_unique_id = entity_entry.unique_id or ""
         if not old_unique_id.startswith(legacy_prefix):
             continue
-        key = old_unique_id.removeprefix(legacy_prefix)
+        key = _continued_key(old_unique_id.removeprefix(legacy_prefix), meter_unit_id)
         new_unique_id = f"{entity_prefix(entry.entry_id)}_{key}"
         migrated += _move_unique_id(
             registry, entity_entry, new_unique_id, expected, taken
@@ -828,12 +837,16 @@ async def async_remove_unexpected_entities(
     registry = er.async_get(hass)
     expected = expected_unique_ids(entry, entry.runtime_data)
     v019_meter_waits = _runtime_v019_meter_unit_id(entry) is None
+    waiting_prefixes = (
+        _V019_METER_UNIQUE_ID_PREFIX,
+        _legacy_entity_unique_id(entry, _V019_METER_KEY_PREFIX),
+    )
     removed = 0
     for entity_entry in _entity_entries_for_config_entry(registry, entry):
         unique_id = entity_entry.unique_id or ""
         if not unique_id or unique_id in expected:
             continue
-        if v019_meter_waits and unique_id.startswith(_V019_METER_UNIQUE_ID_PREFIX):
+        if v019_meter_waits and unique_id.startswith(waiting_prefixes):
             continue
         registry.async_remove(entity_entry.entity_id)
         removed += 1

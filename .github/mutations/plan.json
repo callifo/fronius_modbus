@@ -2088,7 +2088,7 @@
   {
     "label": "migrations: a name-based id counts as registered under its key",
     "path": "custom_components/fronius_modbus/migrations.py",
-    "old": "        return unique_id.removeprefix(legacy_prefix)\n",
+    "old": "        return _continued_key(unique_id.removeprefix(legacy_prefix), v019_meter)\n",
     "new": "        return unique_id\n",
     "tests": "upgrade_keeps_its_legacy_sensors"
   },
@@ -2711,7 +2711,7 @@
   {
     "label": "migrations: the cleanup spares the ids of a 0.1.9 meter that waits",
     "path": "custom_components/fronius_modbus/migrations.py",
-    "old": "        if v019_meter_waits and unique_id.startswith(_V019_METER_UNIQUE_ID_PREFIX):\n",
+    "old": "        if v019_meter_waits and unique_id.startswith(waiting_prefixes):\n",
     "new": "        if False:\n",
     "tests": "meter_that_is_gone_is_neither_moved_nor_removed"
   },
@@ -2987,5 +2987,19 @@
     "old": "            while not job.done():\n                with contextlib.suppress(asyncio.CancelledError):\n                    await asyncio.wait({job})\n            raise\n",
     "new": "            raise\n",
     "tests": "cancelled_write_cannot_overwrite"
+  },
+  {
+    "label": "migrations: a callifo 0.2.8 key continues under its new key",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "        key = _continued_key(old_unique_id.removeprefix(legacy_prefix), meter_unit_id)\n",
+    "new": "        key = old_unique_id.removeprefix(legacy_prefix)\n",
+    "tests": "callifo_0_2_8_entry_keeps"
+  },
+  {
+    "label": "migrations: a callifo 0.2.8 meter that waits is spared",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "        _legacy_entity_unique_id(entry, _V019_METER_KEY_PREFIX),\n",
+    "new": "",
+    "tests": "callifo_0_2_8_meter_that_is_gone"
   }
 ]

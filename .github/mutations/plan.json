@@ -3115,6 +3115,13 @@
     "tests": "refused_after_its_caller_was_cancelled"
   },
   {
+    "label": "web control: a refused login asks to log in again before its token is deleted",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        if self._entry is not None:\n            self._entry.async_start_reauth(self._hass)\n        await async_get_token_store(self._hass).async_delete_token(\n            self._host, self._api_username\n        )\n",
+    "new": "        await async_get_token_store(self._hass).async_delete_token(\n            self._host, self._api_username\n        )\n        if self._entry is not None:\n            self._entry.async_start_reauth(self._hass)\n",
+    "tests": "while_the_token_is_deleted"
+  },
+  {
     "label": "device: a first model past the register space fails only its unit",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
     "old": "        if chain.first(COMMON_MODEL_ID) is None and isinstance(err, ValueError):\n",

@@ -488,13 +488,13 @@ class FroniusWebControl:
         self.data = WebData(
             **{field: getattr(self.data, field) for field in _PUBLIC_FIELDS}
         )
+        self._async_sync_solar_api_warning()
+        # Before the await: a cancel there left the web API off with no prompt.
+        if self._entry is not None:
+            self._entry.async_start_reauth(self._hass)
         await async_get_token_store(self._hass).async_delete_token(
             self._host, self._api_username
         )
-        self._async_sync_solar_api_warning()
-
-        if self._entry is not None:
-            self._entry.async_start_reauth(self._hass)
 
     # -- refresh -----------------------------------------------------------------
 

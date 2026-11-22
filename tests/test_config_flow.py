@@ -1888,6 +1888,143 @@ async def test_an_address_the_inverter_already_allows_is_not_asked_again(
     assert [args[5] for args in written] == [RESOLVED_IP]
 
 
+def _restricted_entry_the_list_allows(hass, monkeypatch) -> tuple:
+    """An entry whose inverter already allows Home Assistant's own address.
+
+    Behind NAT that is the address an earlier version wrote without asking.
+    """
+    entry = make_entry(hass)
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, "modbus_restriction": "home_assistant"}
+    )
+    written: list[tuple] = []
+    monkeypatch.setattr(
+        config_flow.FroniusWebClient,
+        "ensure_modbus_enabled",
+        lambda self, *args: written.append(args),
+    )
+    monkeypatch.setattr(
+        config_flow.FroniusWebClient,
+        "restriction_allows",
+        lambda self, address: address == RESOLVED_IP,
+    )
+    monkeypatch.setattr(
+        hass.config_entries, "async_reload", AsyncMock(return_value=True)
+    )
+    return entry, written
+
+
+async def test_an_address_allowed_before_can_be_replaced_in_reconfigure(
+    hass, mock_modbus, monkeypatch
+):
+    """Behind NAT an earlier version allowed the wrong address, and since the
+    question is skipped for an allowed one, no flow could replace it."""
+    entry, written = _restricted_entry_the_list_allows(hass, monkeypatch)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+
+    result = await entry.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **USER_INPUT,
+            "modbus_restriction": "home_assistant",
+            "change_allowed_host": True,
+        },
+    )
+
+    assert result["step_id"] == "reconfigure_allowed_host"
+    assert result["data_schema"]({}) == {"allowed_host": RESOLVED_IP}
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"allowed_host": "192.0.2.77"}
+    )
+
+    assert result["reason"] == "reconfigure_successful"
+    assert [args[5] for args in written] == ["192.0.2.77"]
+    assert "change_allowed_host" not in {**entry.data, **entry.options}
+
+
+async def test_an_address_allowed_before_can_be_replaced_in_configure(
+    hass, mock_modbus, monkeypatch
+):
+    """Configure writes the Modbus settings only when they change: the request
+    alone has to bring the question."""
+    entry, written = _restricted_entry_the_list_allows(hass, monkeypatch)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            **USER_INPUT,
+            "modbus_restriction": "home_assistant",
+            "change_allowed_host": True,
+        },
+    )
+    assert result["step_id"] == "password"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"api_password": ""}
+    )
+
+    assert result["step_id"] == "allowed_host"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"allowed_host": "192.0.2.77"}
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert [args[5] for args in written] == ["192.0.2.77"]
+    assert "change_allowed_host" not in result["data"]
+
+
+async def test_an_allowed_address_is_not_asked_for_unless_requested(
+    hass, mock_modbus, monkeypatch
+):
+    """Existing installs keep finishing Reconfigure without the extra question."""
+    entry, written = _restricted_entry_the_list_allows(hass, monkeypatch)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+
+    result = await entry.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {**USER_INPUT, "modbus_restriction": "home_assistant"}
+    )
+
+    assert result["reason"] == "reconfigure_successful"
+    assert [args[5] for args in written] == [RESOLVED_IP]
+
+
+async def test_the_model_type_answer_writes_the_address_the_list_allowed(
+    hass, mock_modbus, monkeypatch
+):
+    """The skipped question kept no address, so the answer checked again; a
+    list changed meanwhile ended the flow in an unknown error that logged
+    Home Assistant's address."""
+    applied = _float_map(monkeypatch)
+    checks: list[str] = []
+
+    def allowed_once(self, address):
+        checks.append(address)
+        return len(checks) == 1
+
+    monkeypatch.setattr(config_flow.FroniusWebClient, "restriction_allows", allowed_once)
+    result = await _password_step(hass, restriction="home_assistant")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_password": "secret"}
+    )
+    assert result["step_id"] == "user_sunspec"
+
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert [(args[4], args[5]) for args in applied] == [(True, RESOLVED_IP)]
+
+
+def test_the_address_question_carries_no_address_in_its_message():
+    """An unexpected path logs the exception, and with it the message."""
+    needed = config_flow._AllowedHostNeeded(RESOLVED_IP)
+
+    assert RESOLVED_IP not in str(needed)
+    assert needed.resolved == RESOLVED_IP
+
+
 @pytest.mark.parametrize(
     "address", ["127.0.0.1", "0.0.0.0", "255.255.255.255", "224.0.0.1"]
 )

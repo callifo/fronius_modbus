@@ -1858,7 +1858,7 @@ async def test_an_address_to_allow_that_is_no_address_is_refused(
 async def test_an_address_the_inverter_already_allows_is_not_asked_again(
     hass, mock_modbus, monkeypatch
 ):
-    """Every Configure and reauthentication asked, although nothing was written."""
+    """Reconfigure and reauthentication asked every time, although the list would not change."""
     entry = make_entry(hass)
     hass.config_entries.async_update_entry(
         entry, data={**entry.data, "modbus_restriction": "home_assistant"}

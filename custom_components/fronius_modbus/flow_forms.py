@@ -34,7 +34,7 @@ from .const import (
 )
 
 
-def _role_field(defaults: dict[str, Any]) -> dict[vol.Required, SelectSelector]:
+def _role_field(defaults: dict[str, Any]) -> dict[vol.Marker, SelectSelector]:
     return {
         vol.Required(
             CONF_API_USERNAME,
@@ -54,40 +54,53 @@ def role_schema(defaults: dict[str, Any]) -> vol.Schema:
     return vol.Schema(_role_field(defaults))
 
 
+# Asks for the address to allow although the inverter allows Home Assistant's
+# own: behind NAT an earlier version wrote that one, and the inverter sees
+# another. Never stored: it is a request for this flow only.
+CONF_CHANGE_ALLOWED_HOST = "change_allowed_host"
+
+
 def settings_schema(defaults: dict[str, Any]) -> vol.Schema:
     """Host, intervals, role and Modbus restriction, filled in with ``defaults``."""
-    return vol.Schema(
-        {
-            vol.Required(CONF_HOST, default=defaults.get(CONF_HOST, "")): str,
-            vol.Required(
-                CONF_SCAN_INTERVAL,
-                default=defaults.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
-            ): vol.Coerce(int),
-            vol.Required(
-                CONF_WEB_SCAN_INTERVAL,
-                default=defaults.get(CONF_WEB_SCAN_INTERVAL, DEFAULT_WEB_SCAN_INTERVAL),
-            ): vol.All(vol.Coerce(int), vol.Range(min=MINIMUM_SCAN_INTERVAL, max=3600)),
-            vol.Required(
-                CONF_METER_POWER_INTERVAL,
-                default=defaults.get(
-                    CONF_METER_POWER_INTERVAL, DEFAULT_METER_POWER_INTERVAL
-                ),
-            ): vol.All(
-                vol.Coerce(int), vol.Range(min=0, max=MAXIMUM_METER_POWER_INTERVAL)
+    fields: dict[vol.Marker, Any] = {
+        vol.Required(CONF_HOST, default=defaults.get(CONF_HOST, "")): str,
+        vol.Required(
+            CONF_SCAN_INTERVAL,
+            default=defaults.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+        ): vol.Coerce(int),
+        vol.Required(
+            CONF_WEB_SCAN_INTERVAL,
+            default=defaults.get(CONF_WEB_SCAN_INTERVAL, DEFAULT_WEB_SCAN_INTERVAL),
+        ): vol.All(vol.Coerce(int), vol.Range(min=MINIMUM_SCAN_INTERVAL, max=3600)),
+        vol.Required(
+            CONF_METER_POWER_INTERVAL,
+            default=defaults.get(
+                CONF_METER_POWER_INTERVAL, DEFAULT_METER_POWER_INTERVAL
             ),
-            **_role_field(defaults),
-            vol.Required(
-                CONF_MODBUS_RESTRICTION,
-                default=defaults.get(CONF_MODBUS_RESTRICTION, ModbusRestriction.KEEP),
-            ): SelectSelector(
-                SelectSelectorConfig(
-                    options=list(ModbusRestriction),
-                    mode=SelectSelectorMode.LIST,
-                    translation_key=CONF_MODBUS_RESTRICTION,
-                )
-            ),
-        }
-    )
+        ): vol.All(vol.Coerce(int), vol.Range(min=0, max=MAXIMUM_METER_POWER_INTERVAL)),
+        **_role_field(defaults),
+        vol.Required(
+            CONF_MODBUS_RESTRICTION,
+            default=defaults.get(CONF_MODBUS_RESTRICTION, ModbusRestriction.KEEP),
+        ): SelectSelector(
+            SelectSelectorConfig(
+                options=list(ModbusRestriction),
+                mode=SelectSelectorMode.LIST,
+                translation_key=CONF_MODBUS_RESTRICTION,
+            )
+        ),
+        vol.Optional(CONF_CHANGE_ALLOWED_HOST, default=False): bool,
+    }
+    return vol.Schema(fields)
+
+
+# The address the Modbus restriction allows for this Home Assistant.
+CONF_ALLOWED_HOST = "allowed_host"
+
+
+def allowed_host_schema(default: str) -> vol.Schema:
+    """The address to allow, filled in with ``default``: empty when none is known."""
+    return vol.Schema({vol.Required(CONF_ALLOWED_HOST, default=default): str})
 
 
 def password_schema(*, keep_stored: bool = False) -> vol.Schema:

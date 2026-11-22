@@ -257,6 +257,24 @@ def test_the_secret_scan_in_ci_uses_the_repositorys_own_rules():
     assert any(".gitleaks.toml" in line for line in steps)
 
 
+def test_the_secret_scan_in_ci_uses_the_gitleaks_the_gate_requires():
+    """The action fell back to its own default, 8.24.3, which the gate refuses.
+
+    The allowlist is written for the match shape of the gate's minimum, so an
+    older scanner is a different gate, not a weaker one.
+    """
+    gate = (REPO / ".github" / "scripts" / "check.sh").read_text(encoding="utf-8")
+    minimum = re.search(r"^GITLEAKS_MIN=([\d.]+)$", gate, re.MULTILINE)
+    version_of = re.compile(r'GITLEAKS_VERSION: "([\d.]+)"')
+    scan = version_of.search(" ".join(_steps_of("gitleaks")))
+    installed = version_of.search(" ".join(_steps_of("pytest")))
+
+    assert minimum and scan and installed, "the gitleaks job names no version"
+    version = tuple(int(part) for part in scan.group(1).split("."))
+    assert version >= tuple(int(part) for part in minimum.group(1).split("."))
+    assert scan.group(1) == installed.group(1)
+
+
 def _pins_of(text: str) -> dict[str, str]:
     """Every `tool==version` in a text, whatever quotes it sits in."""
     return {

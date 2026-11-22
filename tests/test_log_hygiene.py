@@ -35,7 +35,37 @@ PACKAGE = pathlib.Path(__file__).resolve().parents[1] / "custom_components"
 
 # Names that identify the installation rather than the problem. `unit_id` and
 # the Modbus addresses stay allowed: they describe the protocol, not the owner.
-DEVICE_IDENTIFIERS = frozenset({"host", "hostname", "serial", "token", "ip", "url"})
+# The entry title holds the host by default, and so did unique ids of 0.3.x.
+DEVICE_IDENTIFIERS = frozenset(
+    {
+        "host",
+        "hostname",
+        "conf_host",
+        "serial",
+        "serial_number",
+        "token",
+        "password",
+        "ip",
+        "url",
+        "title",
+        "unique_id",
+    }
+)
+# A part of a longer name counts too: allowed_host, local_ip and entry_title
+# carry the same value under another name.
+NAME_PARTS = frozenset(
+    {"host", "hostname", "serial", "token", "password", "ip", "url", "title"}
+)
+# Objects that carry the host or serial among their fields. A field read from
+# one counts only for the dicts that hold the settings: entry.entry_id and
+# identity.firmware name no installation.
+WHOLE_OBJECTS = frozenset(
+    {"entry", "entries", "config_entry", "config_entries", "identity", "identities"}
+)
+SETTINGS_FIELDS = frozenset({"data", "options"})
+LOG_METHODS = frozenset(
+    {"debug", "info", "warning", "error", "exception", "critical", "log"}
+)
 
 
 def _identifiers_in(node: ast.AST) -> set[str]:
@@ -45,7 +75,23 @@ def _identifiers_in(node: ast.AST) -> set[str]:
             names.add(child.id.lower())
         elif isinstance(child, ast.Attribute):
             names.add(child.attr.lower().lstrip("_"))
+        elif isinstance(child, ast.Constant) and isinstance(child.value, str):
+            # entry.data["host"] and {"host": ...} name it as a string.
+            names.add(child.value.lower())
     return names
+
+
+def _is_logger(receiver: ast.AST) -> bool:
+    """_LOGGER, LOG, self._logger: the usual names of a logger object."""
+    name = None
+    if isinstance(receiver, ast.Name):
+        name = receiver.id
+    elif isinstance(receiver, ast.Attribute):
+        name = receiver.attr
+    if name is None:
+        return False
+    name = name.lower().lstrip("_")
+    return name == "log" or name.endswith("logger")
 
 
 def _logging_calls(tree: ast.AST):
@@ -53,19 +99,56 @@ def _logging_calls(tree: ast.AST):
         is_logger_call = (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Attribute)
-            and isinstance(node.func.value, ast.Name)
-            and node.func.value.id.lower().endswith("logger")
+            and node.func.attr in LOG_METHODS
+            and _is_logger(node.func.value)
         )
         if is_logger_call:
             yield node
+
+
+def _names_the_installation(name: str) -> bool:
+    # hosts and allowed_ips carry the same values as host and ip.
+    parts = {part.removesuffix("s") for part in name.split("_")}
+    return name in DEVICE_IDENTIFIERS or bool(NAME_PARTS & parts)
+
+
+def _object_name(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Name):
+        return node.id.lower().lstrip("_")
+    if isinstance(node, ast.Attribute):
+        return node.attr.lower().lstrip("_")
+    return None
+
+
+def _whole_objects(argument: ast.AST) -> set[str]:
+    """Entry and identity objects in the argument, unless only a field is read."""
+    field_read = {
+        id(node.value): node.attr
+        for node in ast.walk(argument)
+        if isinstance(node, ast.Attribute)
+    }
+    named = set()
+    for node in ast.walk(argument):
+        name = _object_name(node)
+        if name not in WHOLE_OBJECTS:
+            continue
+        field = field_read.get(id(node))
+        if field is None or field in SETTINGS_FIELDS:
+            named.add(name)
+    return named
 
 
 def _offending_lines(source: pathlib.Path) -> list[str]:
     tree = ast.parse(source.read_text(encoding="utf-8"))
     offences = []
     for call in _logging_calls(tree):
-        for argument in call.args[1:]:
-            named = _identifiers_in(argument) & DEVICE_IDENTIFIERS
+        arguments = [*call.args[1:], *(keyword.value for keyword in call.keywords)]
+        for argument in arguments:
+            named = {
+                name
+                for name in _identifiers_in(argument)
+                if _names_the_installation(name)
+            } | _whole_objects(argument)
             if named:
                 offences.append(f"{source.name}:{call.lineno} passes {sorted(named)}")
     return offences
@@ -93,6 +176,59 @@ def test_the_scan_catches_the_shape_it_was_written_for(tmp_path):
     )
 
     assert _offending_lines(written_by_hand)
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        '_LOGGER.info("set up %s", entry.title)',
+        '_LOGGER.info("set up %s", entry.data[CONF_HOST])',
+        '_LOGGER.info("set up %s", entry.data["host"])',
+        '_LOGGER.info("found %s", identity.serial_number)',
+        '_LOGGER.info("entry %s", entry.unique_id)',
+        '_LOGGER.debug("login %s", self._password)',
+        '_LOGGER.warning("failed", extra={"host": host})',
+        'self._logger.info("cannot reach %s", host)',
+        'LOG.info("cannot reach %s", host)',
+        '_LOGGER.info("allowing %s", allowed_host)',
+        '_LOGGER.info("allowing %s", self.data.modbus_restriction_ip)',
+        '_LOGGER.info("found %s", local_ip)',
+        '_LOGGER.info("set up %s", entry_title(entry.data))',
+        '_LOGGER.info("allowed %s", hosts)',
+        '_LOGGER.info("found %s", allowed_ips)',
+        '_LOGGER.info("set up %s", entry)',
+        '_LOGGER.info("found %s", self._entry)',
+        '_LOGGER.info("found %s", identity)',
+        '_LOGGER.info("set up %s", str(entry))',
+        '_LOGGER.info("set up %s", [entry])',
+        '_LOGGER.info("set up %s", entries)',
+        '_LOGGER.info("set up %s", entry.data)',
+        '_LOGGER.info("set up %s", self.config_entry.data)',
+        '_LOGGER.info("found %s", identities)',
+    ],
+)
+def test_the_scan_catches_the_other_usual_ways_to_name_the_device(tmp_path, line):
+    """Only a name or attribute spelled exactly like one of six words was caught."""
+    written_by_hand = tmp_path / "sample.py"
+    written_by_hand.write_text(f"{line}\n", encoding="utf-8")
+
+    assert _offending_lines(written_by_hand)
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        '_LOGGER.info("set up %s", entry.entry_id)',
+        '_LOGGER.info("set up %s", self._entry.state)',
+        '_LOGGER.info("found %d", len(identity.firmware))',
+    ],
+)
+def test_the_scan_lets_a_field_that_names_no_installation_through(tmp_path, line):
+    """The counter-check: an entry id or state identifies no installation."""
+    written_by_hand = tmp_path / "sample.py"
+    written_by_hand.write_text(f"{line}\n", encoding="utf-8")
+
+    assert not _offending_lines(written_by_hand)
 
 
 async def test_an_unreachable_device_is_not_logged_as_an_error(

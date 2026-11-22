@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import logging
 from typing import Any, Awaitable, Callable
 
@@ -29,6 +30,7 @@ from .const import (
     SUPPORTED_MANUFACTURERS,
     SUPPORTED_MODELS,
     WEB_API_DISABLED,
+    ModbusRestriction,
     entry_title,
     entry_title_after,
     entry_unique_id,
@@ -45,7 +47,14 @@ from .flow_entry import (
     async_update_entry_from_input,
     host_without_unique_id,
 )
-from .flow_forms import password_schema, role_schema, settings_schema
+from .flow_forms import (
+    CONF_ALLOWED_HOST,
+    CONF_CHANGE_ALLOWED_HOST,
+    allowed_host_schema,
+    password_schema,
+    role_schema,
+    settings_schema,
+)
 from .flow_settings import (
     _default_payload,
     _entry_payload,
@@ -55,10 +64,11 @@ from .flow_settings import (
 )
 from .flow_state import (
     _AddressesNotUnique,
+    _AllowedHostNeeded,
     _AlreadyConfigured,
     _CannotConnect,
     _CannotConnectModbus,
-    _CannotResolveLocalIp,
+    _InvalidAllowedHost,
     _InvalidApiCredentials,
     _InvalidHost,
     _InvalidPort,
@@ -107,11 +117,32 @@ _FORM_ERRORS: dict[type[Exception], tuple[str, str]] = {
     _MeterPowerIntervalTooLong: ("base", "meter_power_interval_too_long"),
     _MissingApiPassword: ("base", "missing_api_password"),
     _InvalidApiCredentials: ("base", "invalid_api_credentials"),
-    _CannotResolveLocalIp: ("base", "cannot_resolve_local_ip"),
+    _InvalidAllowedHost: (CONF_ALLOWED_HOST, "invalid_allowed_host"),
     _UnsupportedHardware: ("base", "unsupported_hardware"),
     _AddressesNotUnique: ("base", "modbus_address_conflict"),
     _AlreadyConfigured: ("base", "already_configured"),
 }
+
+
+def _checked_allowed_host(value: Any) -> str:
+    """The address to allow, as the IPv4 address the inverter's list takes."""
+    try:
+        address = ipaddress.IPv4Address(str(value).strip())
+    except ValueError as err:
+        raise _InvalidAllowedHost from err
+    # No client sends from these; allowed alone they lock every device out.
+    if address.is_loopback or address.is_unspecified:
+        raise _InvalidAllowedHost
+    if address.is_multicast or address.is_reserved:
+        raise _InvalidAllowedHost
+    return str(address)
+
+
+def _asks_for_the_address(user_input: dict[str, Any], settings: dict[str, Any]) -> bool:
+    """The owner asked to see the address, and the restriction is to allow one."""
+    requested = bool(user_input.get(CONF_CHANGE_ALLOWED_HOST, False))
+    restricted = settings[CONF_MODBUS_RESTRICTION] == ModbusRestriction.HOME_ASSISTANT
+    return requested and restricted
 
 
 def _set_form_error(errors: dict[str, str], err: Exception) -> None:
@@ -182,6 +213,29 @@ async def _async_mint_token(
     return token
 
 
+async def _async_address_to_allow(
+    hass: HomeAssistant, client: FroniusWebClient, *, ask: bool
+) -> str:
+    """Home Assistant's own address, when the list allows it and the owner did not ask.
+
+    Raises ``_AllowedHostNeeded`` otherwise: behind NAT the inverter sees
+    another address than this one, and allowing the wrong one locks every
+    Modbus control out.
+    """
+    try:
+        resolved_ip = await hass.async_add_executor_job(client.resolve_client_ip)
+    except ClientIpResolutionError:
+        # The owner can still type the address the inverter sees.
+        resolved_ip = ""
+    if ask or not resolved_ip:
+        raise _AllowedHostNeeded(resolved_ip)
+    # Asked only when the write would change the list: Reconfigure and
+    # reauthentication apply the settings every time.
+    if not await hass.async_add_executor_job(client.restriction_allows, resolved_ip):
+        raise _AllowedHostNeeded(resolved_ip)
+    return resolved_ip
+
+
 async def _async_prepare_web_api(
     hass: HomeAssistant,
     data: dict[str, Any],
@@ -189,6 +243,9 @@ async def _async_prepare_web_api(
     apply_modbus_config: bool,
     claim_host: Callable[[], Awaitable[None]] | None,
     switch_sunspec_mode: bool,
+    allowed_host: str | None,
+    *,
+    ask_allowed_host: bool,
 ) -> None:
     """Log in, and switch Modbus on where the flow asks for it.
 
@@ -207,6 +264,9 @@ async def _async_prepare_web_api(
     enable_modbus = data.get(CONF_AUTO_ENABLE_MODBUS, DEFAULT_AUTO_ENABLE_MODBUS)
     if not (apply_modbus_config and enable_modbus):
         return
+    restricted = data[CONF_MODBUS_RESTRICTION] == ModbusRestriction.HOME_ASSISTANT
+    if restricted and allowed_host is None:
+        allowed_host = await _async_address_to_allow(hass, client, ask=ask_allowed_host)
     if claim_host is not None:
         await claim_host()
     try:
@@ -217,9 +277,10 @@ async def _async_prepare_web_api(
             data[CONF_INVERTER_UNIT_ID],
             data[CONF_MODBUS_RESTRICTION],
             switch_sunspec_mode,
+            allowed_host,
         )
     except SunSpecModeChangeNeeded as err:
-        raise _SunSpecSwitchNeeded(err.current_mode) from err
+        raise _SunSpecSwitchNeeded(err.current_mode, allowed_host) from err
     # The inverter restarts its Modbus server after the settings write.
     await asyncio.sleep(1.0)
 
@@ -232,6 +293,8 @@ async def _validate_input(
     apply_modbus_config: bool = False,
     claim_host: Callable[[], Awaitable[None]] | None = None,
     switch_sunspec_mode: bool = False,
+    allowed_host: str | None = None,
+    ask_allowed_host: bool = False,
 ) -> dict[str, Any]:
     """Validate the user input allows us to connect."""
     _validate_static_input(data)
@@ -247,6 +310,8 @@ async def _validate_input(
                 apply_modbus_config,
                 claim_host,
                 switch_sunspec_mode,
+                allowed_host,
+                ask_allowed_host=ask_allowed_host,
             )
         async with async_get_temporary_unit(
             hass,
@@ -254,12 +319,11 @@ async def _validate_input(
             data[CONF_INVERTER_UNIT_ID],
         ) as unit:
             identity = await FroniusInverter.async_probe(unit)
-    except ClientIpResolutionError as err:
-        raise _CannotResolveLocalIp from err
     except (
         _InvalidApiCredentials,
         _AlreadyConfigured,
         _SunSpecSwitchNeeded,
+        _AllowedHostNeeded,
         data_entry_flow.AbortFlow,
     ):
         raise
@@ -347,6 +411,7 @@ class TokenFlowMixin:
         state.login_token = token
         state.token_minted = minted
         state.sunspec_mode = needed.mode
+        state.allowed_host = needed.allowed_host
         self._pending_flow_state = state
         return await self._async_show_sunspec_step(step_id=step_id)
 
@@ -379,6 +444,7 @@ class TokenFlowMixin:
                     apply_modbus_config=state.apply_modbus_config,
                     claim_host=lambda: claim_host(state.settings),
                     switch_sunspec_mode=True,
+                    allowed_host=state.allowed_host,
                 )
                 minted = state.login_token if state.token_minted else None
                 # Cleared once the finish went through: a late error shows on
@@ -395,6 +461,112 @@ class TokenFlowMixin:
 
         return await self._async_show_sunspec_step(step_id=step_id, errors=errors)
 
+    async def _async_ask_before_writing(
+        self,
+        needed: _SunSpecSwitchNeeded | _AllowedHostNeeded,
+        state: _PendingFlowState,
+        token: dict[str, str] | None,
+        *,
+        minted: bool,
+        step_ids: tuple[str, str],
+    ):
+        """Hold the flow for the question the Modbus settings raised before a write."""
+        sunspec_step_id, allowed_host_step_id = step_ids
+        if isinstance(needed, _AllowedHostNeeded):
+            return await self._async_ask_allowed_host(
+                needed, state, token, minted=minted, step_id=allowed_host_step_id
+            )
+        return await self._async_ask_sunspec_switch(
+            needed, state, token, minted=minted, step_id=sunspec_step_id
+        )
+
+    async def _async_ask_allowed_host(
+        self,
+        needed: _AllowedHostNeeded,
+        state: _PendingFlowState,
+        token: dict[str, str] | None,
+        *,
+        minted: bool,
+        step_id: str,
+    ):
+        """Hold the flow where it stopped and show the address before it is allowed."""
+        state.login_token = token
+        state.token_minted = minted
+        state.resolved_host = needed.resolved_ip
+        self._pending_flow_state = state
+        return await self._async_show_allowed_host_step(step_id=step_id)
+
+    async def _async_show_allowed_host_step(
+        self,
+        *,
+        step_id: str,
+        errors: dict[str, str] | None = None,
+    ):
+        state = self._pending_flow_state
+        assert state is not None and state.resolved_host is not None
+        return self.async_show_form(
+            step_id=step_id,
+            # A corrected address stays when an error shows the step again.
+            data_schema=allowed_host_schema(state.allowed_host or state.resolved_host),
+            errors=errors or {},
+            description_placeholders={
+                "entry_title": entry_title(state.settings),
+                "host": str(state.settings.get(CONF_HOST, "")),
+            },
+        )
+
+    async def _async_handle_allowed_host_step(
+        self,
+        *,
+        user_input: dict[str, Any] | None,
+        step_id: str,
+        sunspec_step_id: str,
+        restart_step: _FlowRestartCallback,
+        claim_host: _HostClaim,
+        on_success: _FlowFinishCallback,
+    ):
+        """Write the restriction with the confirmed address, then finish as asked."""
+        errors: dict[str, str] = {}
+        state = self._pending_flow_state
+        if state is None or state.resolved_host is None:
+            return await restart_step()
+
+        if user_input is not None:
+            try:
+                state.allowed_host = _checked_allowed_host(
+                    user_input.get(CONF_ALLOWED_HOST, "")
+                )
+                await claim_host(state.settings)
+                try:
+                    info = await _validate_input(
+                        self.hass,
+                        state.settings,
+                        api_token=state.login_token,
+                        apply_modbus_config=state.apply_modbus_config,
+                        claim_host=lambda: claim_host(state.settings),
+                        allowed_host=state.allowed_host,
+                    )
+                except _SunSpecSwitchNeeded as needed:
+                    return await self._async_ask_sunspec_switch(
+                        needed,
+                        state,
+                        state.login_token,
+                        minted=state.token_minted,
+                        step_id=sunspec_step_id,
+                    )
+                minted = state.login_token if state.token_minted else None
+                result = await self._async_finish_with_token(
+                    on_success, state, info, minted
+                )
+                self._pending_flow_state = None
+                return result
+            except data_entry_flow.AbortFlow:
+                raise
+            except Exception as err:  # pylint: disable=broad-except
+                _set_form_error(errors, err)
+
+        return await self._async_show_allowed_host_step(step_id=step_id, errors=errors)
+
     async def _async_handle_settings_step(
         self,
         *,
@@ -402,6 +574,7 @@ class TokenFlowMixin:
         step_id: str,
         password_step_id: str,
         sunspec_step_id: str,
+        allowed_host_step_id: str,
         defaults: dict[str, Any],
         previous_host: str | None,
         previous_settings: dict[str, Any] | None,
@@ -420,8 +593,12 @@ class TokenFlowMixin:
                 # Before the login: validation may already write the Modbus
                 # settings of a host another entry owns.
                 await claim_host(settings)
+                ask_allowed_host = _asks_for_the_address(user_input, settings)
+                # The question comes only with a write: Configure writes
+                # unchanged settings only when asked to.
                 apply_modbus_config = (
                     force_apply_modbus_config
+                    or ask_allowed_host
                     or _should_apply_modbus_config(
                         settings,
                         previous_settings,
@@ -440,6 +617,7 @@ class TokenFlowMixin:
                         previous_host,
                         apply_modbus_config,
                         existing_token=token,
+                        ask_allowed_host=ask_allowed_host,
                     )
                     return await self._async_show_password_step(
                         step_id=password_step_id
@@ -452,14 +630,20 @@ class TokenFlowMixin:
                         api_token=token,
                         apply_modbus_config=apply_modbus_config,
                         claim_host=lambda: claim_host(settings),
+                        ask_allowed_host=ask_allowed_host,
                     )
-                except _SunSpecSwitchNeeded as needed:
-                    return await self._async_ask_sunspec_switch(
+                except (_SunSpecSwitchNeeded, _AllowedHostNeeded) as needed:
+                    return await self._async_ask_before_writing(
                         needed,
-                        _PendingFlowState(settings, previous_host, apply_modbus_config),
+                        _PendingFlowState(
+                            settings,
+                            previous_host,
+                            apply_modbus_config,
+                            ask_allowed_host=ask_allowed_host,
+                        ),
                         token,
                         minted=False,
-                        step_id=sunspec_step_id,
+                        step_ids=(sunspec_step_id, allowed_host_step_id),
                     )
                 self._pending_flow_state = None
                 return await on_success(settings, info, previous_host)
@@ -470,6 +654,7 @@ class TokenFlowMixin:
                     settings,
                     previous_host,
                     apply_modbus_config,
+                    ask_allowed_host=ask_allowed_host,
                 )
                 return await self._async_show_password_step(step_id=password_step_id)
             except Exception as err:  # pylint: disable=broad-except
@@ -487,6 +672,7 @@ class TokenFlowMixin:
         user_input: dict[str, Any] | None,
         step_id: str,
         sunspec_step_id: str,
+        allowed_host_step_id: str,
         restart_step: _FlowRestartCallback,
         claim_host: _HostClaim,
         on_success: _FlowFinishCallback,
@@ -516,10 +702,15 @@ class TokenFlowMixin:
                         api_token=token,
                         apply_modbus_config=state.apply_modbus_config,
                         claim_host=lambda: claim_host(state.settings),
+                        ask_allowed_host=state.ask_allowed_host,
                     )
-                except _SunSpecSwitchNeeded as needed:
-                    return await self._async_ask_sunspec_switch(
-                        needed, state, token, minted=minted, step_id=sunspec_step_id
+                except (_SunSpecSwitchNeeded, _AllowedHostNeeded) as needed:
+                    return await self._async_ask_before_writing(
+                        needed,
+                        state,
+                        token,
+                        minted=minted,
+                        step_ids=(sunspec_step_id, allowed_host_step_id),
                     )
                 result = await self._async_finish_with_token(
                     on_success, state, info, token if minted else None
@@ -676,6 +867,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             password_step_id="user_password",
             sunspec_step_id="user_sunspec",
+            allowed_host_step_id="user_allowed_host",
             defaults={**_default_payload(), CONF_HOST: self._discovered_host},
             previous_host=None,
             previous_settings=None,
@@ -688,6 +880,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
             user_input=user_input,
             step_id="user_password",
             sunspec_step_id="user_sunspec",
+            allowed_host_step_id="user_allowed_host",
             restart_step=self.async_step_user,
             claim_host=self._async_claim_new_host,
             on_success=self._async_finish_user,
@@ -702,6 +895,16 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
             on_success=self._async_finish_user,
         )
 
+    async def async_step_user_allowed_host(self, user_input=None):
+        return await self._async_handle_allowed_host_step(
+            user_input=user_input,
+            step_id="user_allowed_host",
+            sunspec_step_id="user_sunspec",
+            restart_step=self.async_step_user,
+            claim_host=self._async_claim_new_host,
+            on_success=self._async_finish_user,
+        )
+
     async def async_step_reconfigure(self, user_input=None):
         entry = self._get_reconfigure_entry()
         defaults = entry_defaults(entry)
@@ -710,6 +913,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
             step_id="reconfigure",
             password_step_id="reconfigure_password",
             sunspec_step_id="reconfigure_sunspec",
+            allowed_host_step_id="reconfigure_allowed_host",
             defaults=defaults,
             previous_host=defaults[CONF_HOST],
             previous_settings=defaults,
@@ -723,6 +927,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
             user_input=user_input,
             step_id="reconfigure_password",
             sunspec_step_id="reconfigure_sunspec",
+            allowed_host_step_id="reconfigure_allowed_host",
             restart_step=self.async_step_reconfigure,
             claim_host=self._async_claim_reconfigured_host,
             on_success=self._async_finish_reconfigure,
@@ -732,6 +937,16 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
         return await self._async_handle_sunspec_step(
             user_input=user_input,
             step_id="reconfigure_sunspec",
+            restart_step=self.async_step_reconfigure,
+            claim_host=self._async_claim_reconfigured_host,
+            on_success=self._async_finish_reconfigure,
+        )
+
+    async def async_step_reconfigure_allowed_host(self, user_input=None):
+        return await self._async_handle_allowed_host_step(
+            user_input=user_input,
+            step_id="reconfigure_allowed_host",
+            sunspec_step_id="reconfigure_sunspec",
             restart_step=self.async_step_reconfigure,
             claim_host=self._async_claim_reconfigured_host,
             on_success=self._async_finish_reconfigure,
@@ -770,6 +985,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
             step_id="reauth_confirm",
             password_step_id="reauth_password",
             sunspec_step_id="reauth_sunspec",
+            allowed_host_step_id="reauth_allowed_host",
             defaults=defaults,
             previous_host=defaults[CONF_HOST],
             previous_settings=defaults,
@@ -784,6 +1000,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
             user_input=user_input,
             step_id="reauth_password",
             sunspec_step_id="reauth_sunspec",
+            allowed_host_step_id="reauth_allowed_host",
             restart_step=self.async_step_reauth_confirm,
             claim_host=self._async_claim_reauth_host,
             on_success=self._async_finish_reauth,
@@ -793,6 +1010,16 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
         return await self._async_handle_sunspec_step(
             user_input=user_input,
             step_id="reauth_sunspec",
+            restart_step=self.async_step_reauth_confirm,
+            claim_host=self._async_claim_reauth_host,
+            on_success=self._async_finish_reauth,
+        )
+
+    async def async_step_reauth_allowed_host(self, user_input=None):
+        return await self._async_handle_allowed_host_step(
+            user_input=user_input,
+            step_id="reauth_allowed_host",
+            sunspec_step_id="reauth_sunspec",
             restart_step=self.async_step_reauth_confirm,
             claim_host=self._async_claim_reauth_host,
             on_success=self._async_finish_reauth,
@@ -839,6 +1066,7 @@ class FroniusModbusOptionsFlow(TokenFlowMixin, config_entries.OptionsFlow):
             step_id="init",
             password_step_id="password",
             sunspec_step_id="sunspec",
+            allowed_host_step_id="allowed_host",
             defaults=defaults,
             previous_host=defaults[CONF_HOST],
             previous_settings=defaults,
@@ -854,6 +1082,7 @@ class FroniusModbusOptionsFlow(TokenFlowMixin, config_entries.OptionsFlow):
             user_input=user_input,
             step_id="password",
             sunspec_step_id="sunspec",
+            allowed_host_step_id="allowed_host",
             restart_step=self.async_step_init,
             claim_host=self._async_claim_host,
             on_success=self._async_finish_options,
@@ -863,6 +1092,16 @@ class FroniusModbusOptionsFlow(TokenFlowMixin, config_entries.OptionsFlow):
         return await self._async_handle_sunspec_step(
             user_input=user_input,
             step_id="sunspec",
+            restart_step=self.async_step_init,
+            claim_host=self._async_claim_host,
+            on_success=self._async_finish_options,
+        )
+
+    async def async_step_allowed_host(self, user_input=None):
+        return await self._async_handle_allowed_host_step(
+            user_input=user_input,
+            step_id="allowed_host",
+            sunspec_step_id="sunspec",
             restart_step=self.async_step_init,
             claim_host=self._async_claim_host,
             on_success=self._async_finish_options,

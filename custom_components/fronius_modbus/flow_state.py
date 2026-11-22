@@ -22,6 +22,13 @@ class _PendingFlowState:
     login_token: dict[str, str] | None = None
     token_minted: bool = False
     sunspec_mode: str | None = None
+    # The address the Modbus restriction allows: confirmed by the owner, or
+    # one the list already allowed. The resolved one fills in the question,
+    # empty when none was found.
+    allowed_host: str | None = None
+    resolved_host: str | None = None
+    # The owner asked to see the address although the list allows it.
+    ask_allowed_host: bool = False
 
 
 class _CannotConnect(exceptions.HomeAssistantError):
@@ -68,14 +75,26 @@ class _InvalidApiCredentials(exceptions.HomeAssistantError):
     """Error to indicate Fronius web API credentials are invalid."""
 
 
-class _CannotResolveLocalIp(exceptions.HomeAssistantError):
-    """Error to indicate the local IP for Modbus restriction cannot be resolved."""
+class _InvalidAllowedHost(exceptions.HomeAssistantError):
+    """The address to allow is no IPv4 address a device on the network can have."""
+
+
+class _AllowedHostNeeded(exceptions.HomeAssistantError):
+    """The address to allow has to be confirmed: behind NAT the inverter sees another."""
+
+    def __init__(self, resolved_ip: str) -> None:
+        """Name the address Home Assistant resolved towards the inverter."""
+        # Not in the message: an unexpected path logs it with the exception.
+        super().__init__()
+        self.resolved_ip = resolved_ip
 
 
 class _SunSpecSwitchNeeded(exceptions.HomeAssistantError):
     """The inverter serves another SunSpec model type; switching it needs consent."""
 
-    def __init__(self, mode: str) -> None:
-        """Name the model type the inverter serves now."""
+    def __init__(self, mode: str, allowed_host: str | None) -> None:
+        """Name the model type the inverter serves now and the address settled on."""
         super().__init__(mode)
         self.mode = mode
+        # The answer writes this address without checking the list again.
+        self.allowed_host = allowed_host

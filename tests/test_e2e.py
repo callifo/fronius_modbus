@@ -29,6 +29,7 @@ from custom_components.fronius_modbus.const import (
     CONF_RECONFIGURE_REQUIRED,
     DOMAIN,
     MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX,
+    SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX,
     entity_prefix,
     instance_key,
 )
@@ -39,6 +40,7 @@ from custom_components.fronius_modbus.froniuswebclient import (
     ENDPOINT_MISSING,
     FroniusWebAuthError,
     FroniusWebClient,
+    FroniusWebUnreachable,
 )
 from custom_components.fronius_modbus.token_store import async_get_token_store
 from custom_components.fronius_modbus.web_control import WebData
@@ -239,8 +241,11 @@ async def test_the_total_sensor_keeps_its_value_through_an_outage(hass, mock_mod
     assert state_of(hass, entry, "acenergy") == "33187794.59"
 
 
-async def test_a_number_write_reaches_the_register(hass, mock_modbus):
-    entry = make_entry(hass)
+async def test_a_number_write_reaches_the_register(hass, mock_modbus, monkeypatch):
+    # Without the web API the reserve is Modbus alone; with a web role but no
+    # login it is refused, as the SoC window cannot be checked.
+    serve_the_public_endpoints(mock_modbus, monkeypatch)
+    entry = make_entry(hass, api_username="none")
     await setup_entry(hass, entry)
 
     await hass.services.async_call(
@@ -1386,6 +1391,52 @@ async def test_a_repairs_item_from_before_is_cleared(hass, mock_modbus, monkeypa
     assert _reauth_flows(hass, entry) == []
 
 
+class _WebClientNotAnswering(_FakeWebClientWithTopology):
+    """The topology fake, with a web API that does not answer the first refresh."""
+
+    def get_inverter_info(self, *_args, **_kwargs):
+        raise FroniusWebUnreachable("ConnectTimeout")
+
+
+async def test_a_warning_an_earlier_version_stored_leaves_the_diagnostics(
+    hass, mock_modbus, monkeypatch
+):
+    """A stored warning keeps its placeholders, the host in the entry title among
+    them, and Home Assistant puts it into every diagnostics download of the domain:
+    also while the web API does not answer, and for an entry long removed. The
+    entry's own warning stays, ignored if the owner ignored it: deleted, it came
+    back on the next refresh as a new one."""
+    mock_modbus.add_unit(201, like=METER_UNIT_ID)
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientNotAnswering)
+    entry = make_entry(hass, minor_version=13, api_username="none")
+    own, removed = (
+        f"{SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX}{entry.entry_id}",
+        f"{SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX}removed-entry",
+    )
+    registry = ir.async_get(hass)
+    for issue_id in (own, removed):
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            issue_id,
+            is_fixable=True,
+            is_persistent=True,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="solar_api_low_firmware",
+            translation_placeholders={"entry_title": f"Fronius {HOST}"},
+        )
+    registry.async_ignore(DOMAIN, own, True)
+
+    await setup_entry(hass, entry)
+
+    kept = registry.async_get_issue(DOMAIN, own)
+    assert registry.async_get_issue(DOMAIN, removed) is None
+    assert kept is not None
+    assert not kept.is_persistent
+    assert kept.dismissed_version is not None
+    assert HOST not in json.dumps(kept.to_json())
+
+
 async def test_an_entry_without_the_web_api_cleans_up_stale_entities(
     hass, mock_modbus, monkeypatch
 ):
@@ -2273,6 +2324,62 @@ async def test_a_0_1_9_meter_that_is_gone_is_neither_moved_nor_removed(
     assert registry.async_get(entity_id).unique_id == "fm_m1_power"
     device = dr.async_get(hass).async_get(devices["Fronius_meter1"])
     assert device.identifiers == {(DOMAIN, "Fronius_meter1")}
+
+
+# What callifo 0.2.0 to 0.2.8 registered: name-based ids, its meter as m1,
+# and the two keys renamed since, as 0.1.9 had them.
+CALLIFO_028_ROWS = [
+    ("sensor", "m1_power", f"meter_{METER_UNIT_ID}_power"),
+    ("sensor", "m1_imported", f"meter_{METER_UNIT_ID}_imported"),
+    ("sensor", "m1_exported", f"meter_{METER_UNIT_ID}_exported"),
+    ("sensor", "minimum_reserve", "soc_minimum"),
+    ("sensor", "tempcab", "inverter_temperature"),
+]
+
+
+def _callifo_028_entry(hass, meter_unit_id: int):
+    """An entry callifo 0.2.8 left, with its name-based entities."""
+    entry = make_entry(hass, minor_version=1, **{CONF_METER_UNIT_ID: meter_unit_id})
+    hass.config_entries.async_update_entry(entry, title="Fronius", unique_id=None)
+    registry = er.async_get(hass)
+    originals = {
+        (domain, new): registry.async_get_or_create(
+            domain,
+            DOMAIN,
+            f"fm_fronius__{old}",
+            config_entry=entry,
+            suggested_object_id=f"callifo_{old}",
+        ).entity_id
+        for domain, old, new in CALLIFO_028_ROWS
+    }
+    return entry, originals
+
+
+async def test_a_callifo_0_2_8_entry_keeps_its_meter_and_renamed_entities(
+    hass, mock_modbus, monkeypatch
+):
+    """The meter's m1 ids and two renamed keys were deleted and came back under new ids."""
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    entry, originals = _callifo_028_entry(hass, METER_UNIT_ID)
+
+    await setup_entry(hass, entry)
+
+    for (domain, key), entity_id in originals.items():
+        assert entity_id_for(hass, entry, domain, key) == entity_id
+
+
+async def test_a_callifo_0_2_8_meter_that_is_gone_is_kept(
+    hass, mock_modbus, monkeypatch
+):
+    """While its meter is not on the bus, the m1 ids wait like 0.1.9's."""
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    entry, originals = _callifo_028_entry(hass, 202)
+
+    await setup_entry(hass, entry)
+
+    registry = er.async_get(hass)
+    entity_id = originals[("sensor", f"meter_{METER_UNIT_ID}_power")]
+    assert registry.async_get(entity_id).unique_id == "fm_fronius__m1_power"
 
 
 async def test_a_0_1_9_meter_that_was_missing_moves_once_it_is_back(

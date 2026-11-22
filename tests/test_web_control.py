@@ -1,6 +1,9 @@
 """Web control: battery mode rules and the write side effects, with the HTTP client stubbed."""
 
 import asyncio
+import contextlib
+import inspect
+import threading
 import time
 
 import pytest
@@ -23,12 +26,18 @@ from custom_components.fronius_modbus.fronius_modbus_api.exceptions import (
 from custom_components.fronius_modbus.froniuswebclient import (
     ENDPOINT_MISSING,
     FroniusWebAuthError,
+    FroniusWebClient,
     FroniusWebResponseError,
     FroniusWebUnreachable,
 )
 from custom_components.fronius_modbus.token_store import async_get_token_store
 from custom_components.fronius_modbus.web_control import FroniusWebControl
+from homeassistant.components.diagnostics import (
+    _DIAGNOSTICS_DATA,
+    DiagnosticsPlatformData,
+)
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.setup import async_setup_component
 
 # A rejected login asks Home Assistant for a new one; here it is only recorded.
 pytestmark = pytest.mark.usefixtures("reauth_requests")
@@ -81,11 +90,11 @@ class FakeWebClient:
             }
         }
 
-    def get_optional_json(self, _path):
+    def get_optional_json(self, path):
         return None
 
-    def set_battery_config(self, mode, power=None):
-        self.calls.append(("battery", mode, power))
+    def set_battery_config(self, mode):
+        self.calls.append(("battery", mode))
         self.battery.update(HYB_EM_MODE=mode)
         return True
 
@@ -162,8 +171,8 @@ def control(hass):
 class FakeClientAlreadyThere(FakeWebClient):
     """Every battery setting the control asks for is already on the inverter."""
 
-    def set_battery_config(self, mode, power=None):
-        super().set_battery_config(mode, power)
+    def set_battery_config(self, mode):
+        super().set_battery_config(mode)
         return False
 
     def set_soc_mode(self, mode):
@@ -174,8 +183,8 @@ class FakeClientAlreadyThere(FakeWebClient):
         super().set_backup_reserve(percent)
         return False
 
-    def set_battery_charge_sources(self, grid, ac):
-        super().set_battery_charge_sources(grid, ac)
+    def set_battery_charge_sources(self, charge_from_grid=None, charge_from_ac=None):
+        super().set_battery_charge_sources(charge_from_grid, charge_from_ac)
         return False
 
 
@@ -580,7 +589,7 @@ async def test_switching_to_manual_keeps_the_target_on_the_inverter(control):
     """The cached target went along and undid one set since the poll."""
     await control.async_refresh()
     await control.set_battery_mode(1)
-    assert control._client.calls[-1] == ("battery", 1, None)
+    assert control._client.calls[-1] == ("battery", 1)
     assert control.battery_mode_is_manual
     assert control.events == ["write"]
 
@@ -730,6 +739,49 @@ async def test_a_firmware_update_clears_the_solar_api_warning_on_the_next_refres
     assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
 
 
+async def test_the_diagnostics_download_names_no_host_through_the_solar_api_warning(
+    hass, hass_client, enable_custom_integrations
+):
+    """Home Assistant adds the domain's issues to the download, and the warning names the entry."""
+    host = "192.0.2.10"
+
+    class SolarApiOnClient(FakeWebClient):
+        def get_solar_api_config(self):
+            return {"SolarAPIv1Enabled": True}
+
+    entry = MockConfigEntry(domain=DOMAIN, data={"host": host}, title=f"Fronius {host}")
+    entry.add_to_hass(hass)
+    control = FroniusWebControl(
+        hass,
+        entry,
+        host=host,
+        client=SolarApiOnClient(),
+        api_username="customer",
+        storage_present=False,
+        inverter_firmware=lambda: "1.38.6-1",
+        on_battery_write=lambda: None,
+    )
+    try:
+        await control.async_refresh()
+    finally:
+        control.shutdown()
+    issue_id = f"{SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX}{entry.entry_id}"
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None
+
+    assert await async_setup_component(hass, "diagnostics", {})
+
+    async def _without_host(hass, entry):
+        return {}
+
+    hass.data[_DIAGNOSTICS_DATA].platforms[DOMAIN] = DiagnosticsPlatformData(
+        _without_host, None
+    )
+    client = await hass_client()
+    response = await client.get(f"/api/diagnostics/config_entry/{entry.entry_id}")
+    assert response.status == 200
+    assert host not in await response.text()
+
+
 async def test_concurrent_soc_writes_are_applied_one_after_the_other(hass):
     """Two read-modify-write SoC updates composed from the same old tuple lost one change."""
     control = make_control(hass)
@@ -827,8 +879,8 @@ async def test_switching_the_energy_management_leaves_the_soc_window_alone(contr
     await control.set_battery_mode(0)
     assert (control.data.soc_min, control.data.soc_mode_raw) == (20, "manual")
     assert [c for c in control._client.calls if c[0] == "battery"] == [
-        ("battery", 1, None),
-        ("battery", 0, None),
+        ("battery", 1),
+        ("battery", 0),
     ]
 
 
@@ -926,6 +978,239 @@ async def test_unloading_cancels_a_pending_confirmation_refresh(control):
     await asyncio.sleep(0)
 
     assert pending.cancelled()
+
+
+async def test_a_cancelled_write_cannot_overwrite_a_newer_one(hass, control):
+    """The lock went with the cancelled caller while its thread still held the old value.
+
+    A script stopped mid-write released the lock; the next write finished first,
+    then the old thread posted the cancelled value over it.
+    """
+    await control.async_refresh()
+    entered = threading.Event()
+    gate = threading.Event()
+    overtaken = threading.Event()
+    first_done = threading.Event()
+    real_set = control._client.set_backup_reserve
+
+    def first_one_waits(percent):
+        if not entered.is_set():
+            entered.set()
+            gate.wait(5)
+            try:
+                return real_set(percent)
+            finally:
+                first_done.set()
+        overtaken.set()
+        return real_set(percent)
+
+    control._client.set_backup_reserve = first_one_waits
+    cancelled = asyncio.ensure_future(control.set_backup_reserve(20))
+    assert await hass.async_add_executor_job(entered.wait, 5)
+    cancelled.cancel()
+    await asyncio.sleep(0)
+    newer = asyncio.ensure_future(control.set_backup_reserve(80))
+    # Long enough for the newer write to reach the device if nothing holds it.
+    await hass.async_add_executor_job(overtaken.wait, 1)
+    gate.set()
+    await newer
+    with contextlib.suppress(asyncio.CancelledError):
+        await cancelled
+    assert await hass.async_add_executor_job(first_done.wait, 5)
+
+    reserves = [c[1] for c in control._client.calls if c[0] == "reserve"]
+    assert reserves[-1] == 80, reserves
+
+
+async def test_a_reserve_before_the_battery_config_was_read_writes_nothing(hass):
+    """The SoC mode starts unknown; a first refresh that failed left Modbus alone
+    as if the inverter were in Auto, skipping the window check and the mirror."""
+
+    class UnreadBattery(FakeWebClient):
+        def get_battery_config(self):
+            raise FroniusWebUnreachable("ConnectTimeout")
+
+    control = make_control(hass, client=UnreadBattery())
+    written = []
+
+    async def write_modbus():
+        written.append("modbus")
+
+    try:
+        with contextlib.suppress(FroniusWebUnreachable):
+            await control.async_refresh()
+        with pytest.raises(ControlUnavailable) as raised:
+            await control.apply_soc_minimum(30, write_modbus)
+    finally:
+        control.shutdown()
+
+    assert raised.value.key == "soc_minimum_mode_unknown"
+    assert written == []
+
+
+@pytest.mark.parametrize("soc_mode", [None, 1, "dynamic"])
+async def test_a_reserve_with_an_unusable_soc_mode_writes_nothing(control, soc_mode):
+    """A battery config read without a usable SoC mode counted as Auto, and the
+    reserve went to Modbus alone; a later such read also dropped a known Manual."""
+    control._client.battery.pop("BAT_M0_SOC_MODE", None)
+    if soc_mode is not None:
+        control._client.battery["BAT_M0_SOC_MODE"] = soc_mode
+    await control.async_refresh()
+    written = []
+
+    async def write_modbus():
+        written.append("modbus")
+
+    with pytest.raises(ControlUnavailable) as raised:
+        await control.apply_soc_minimum(30, write_modbus)
+
+    assert raised.value.key == "soc_minimum_mode_unknown"
+    assert written == []
+
+
+async def test_a_reserve_with_the_battery_config_read_in_auto_goes_to_modbus(control):
+    """The counter-check: a read Auto keeps the reserve on Modbus alone."""
+    await control.async_refresh()
+    written = []
+
+    async def write_modbus():
+        written.append("modbus")
+
+    await control.apply_soc_minimum(30, write_modbus)
+
+    assert written == ["modbus"]
+
+
+async def test_a_write_that_fails_after_its_caller_was_cancelled_is_not_logged_raw(
+    hass, control
+):
+    """The loop reported the thread's exception, whose cause names the URL."""
+    await control.async_refresh()
+    entered = threading.Event()
+    gate = threading.Event()
+
+    def fails_late(percent):
+        entered.set()
+        gate.wait(5)
+        raise FroniusWebUnreachable("ConnectTimeout")
+
+    control._client.set_backup_reserve = fails_late
+    reported = []
+    previous = hass.loop.get_exception_handler()
+    hass.loop.set_exception_handler(lambda _loop, context: reported.append(context))
+    try:
+        caller = asyncio.ensure_future(control.set_backup_reserve(20))
+        assert await hass.async_add_executor_job(entered.wait, 5)
+        caller.cancel()
+        await asyncio.sleep(0)
+        gate.set()
+        with contextlib.suppress(asyncio.CancelledError):
+            await caller
+        await asyncio.sleep(0.1)
+    finally:
+        hass.loop.set_exception_handler(previous)
+
+    assert reported == []
+
+
+async def test_a_login_refused_after_its_caller_was_cancelled_asks_to_log_in_again(
+    hass, control, reauth_requests
+):
+    """The refusal was only logged, and the web API stayed on until the next poll."""
+    await control.async_refresh()
+    entered = threading.Event()
+    gate = threading.Event()
+
+    def refused_late(percent):
+        entered.set()
+        gate.wait(5)
+        raise FroniusWebAuthError("token rejected")
+
+    control._client.set_backup_reserve = refused_late
+    caller = asyncio.ensure_future(control.set_backup_reserve(20))
+    assert await hass.async_add_executor_job(entered.wait, 5)
+    caller.cancel()
+    await asyncio.sleep(0)
+    gate.set()
+    with pytest.raises(asyncio.CancelledError):
+        await caller
+
+    assert control.configured is False
+    assert reauth_requests == [control._entry.entry_id]
+
+
+@pytest.mark.parametrize("late", [True, False], ids=["refused_late", "refused_in_time"])
+async def test_a_cancel_while_the_token_is_deleted_still_asks_to_log_in_again(
+    hass, control, reauth_requests, monkeypatch, late
+):
+    """The handler dropped the client before its one await and asked for the
+    login after it: a cancel in between left the web API off with no prompt."""
+    await control.async_refresh()
+    store = async_get_token_store(hass)
+    deleting = asyncio.Event()
+    delete = type(store).async_delete_token
+
+    async def slow_delete(self, *args, **kwargs):
+        deleting.set()
+        # Stands in for the store's write, which runs in the executor.
+        await asyncio.sleep(0.05)
+        return await delete(self, *args, **kwargs)
+
+    monkeypatch.setattr(type(store), "async_delete_token", slow_delete)
+    entered = threading.Event()
+    gate = threading.Event()
+
+    def refused(percent):
+        entered.set()
+        if late:
+            gate.wait(5)
+        raise FroniusWebAuthError("token rejected")
+
+    control._client.set_backup_reserve = refused
+    caller = asyncio.ensure_future(control.set_backup_reserve(20))
+    assert await hass.async_add_executor_job(entered.wait, 5)
+    if late:
+        caller.cancel()
+        await asyncio.sleep(0)
+        gate.set()
+    await asyncio.wait_for(deleting.wait(), 5)
+    caller.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await caller
+
+    assert control.configured is False
+    assert reauth_requests == [control._entry.entry_id]
+
+
+async def test_a_queued_write_still_writes_when_a_newer_one_is_cancelled(hass, control):
+    """The cancelled caller's newer ticket made the queued one return unwritten."""
+    await control.async_refresh()
+    entered = threading.Event()
+    gate = threading.Event()
+    real_set = control._client.set_backup_reserve
+
+    def first_one_waits(percent):
+        if not entered.is_set():
+            entered.set()
+            gate.wait(5)
+        return real_set(percent)
+
+    control._client.set_backup_reserve = first_one_waits
+    first = asyncio.ensure_future(control.set_backup_reserve(20))
+    assert await hass.async_add_executor_job(entered.wait, 5)
+    queued = asyncio.ensure_future(control.set_backup_reserve(40))
+    newer = asyncio.ensure_future(control.set_backup_reserve(60))
+    await asyncio.sleep(0)
+    newer.cancel()
+    await asyncio.sleep(0)
+    gate.set()
+    await first
+    await queued
+    with contextlib.suppress(asyncio.CancelledError):
+        await newer
+
+    reserves = [c[1] for c in control._client.calls if c[0] == "reserve"]
+    assert reserves[-1] == 40, reserves
 
 
 async def test_a_burst_of_values_reaches_the_device_as_first_and_last(control):
@@ -1212,7 +1497,7 @@ class RecordingPublicClient(FakeWebClient):
             super().__getattribute__("calls").append(name)
         return attribute
 
-    def get_power_meter_info(self, *_args):
+    def get_power_meter_info(self, meter_address_offset=200):
         return None
 
     def get_optional_json(self, path):
@@ -1376,3 +1661,25 @@ async def test_an_export_limit_that_is_no_number_shows_no_limit(hass, limit):
         control.shutdown()
 
     assert data.export_soft_limit_w is None
+
+
+def _fakes():
+    fakes, pending = [], [FakeWebClient]
+    while pending:
+        fake = pending.pop()
+        fakes.append(fake)
+        pending.extend(fake.__subclasses__())
+    return fakes
+
+
+@pytest.mark.parametrize("fake", _fakes(), ids=lambda fake: fake.__name__)
+def test_a_fake_client_takes_the_arguments_the_real_one_takes(fake):
+    """A fake with other parameters passes a call the real client rejects."""
+    for name, method in vars(fake).items():
+        if name.startswith("_") or not callable(method):
+            continue
+        real = getattr(FroniusWebClient, name, None)
+        assert real is not None, f"{fake.__name__}.{name} is no client method"
+        assert list(inspect.signature(method).parameters) == list(
+            inspect.signature(real).parameters
+        ), f"{fake.__name__}.{name}"

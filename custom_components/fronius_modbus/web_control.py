@@ -26,7 +26,11 @@ from .const import (
 )
 from .energy_outputs import ENERGY_OUTPUTS_PATH, EnergyOutput, parse_energy_outputs
 from .export_limit import power_control_off, soft_limit_ceiling, soft_limit_value
-from .fronius_modbus_api.exceptions import ControlRefused, ControlUnavailable
+from .fronius_modbus_api.exceptions import (
+    ControlRefused,
+    ControlUnavailable,
+    error_text,
+)
 from .froniuswebclient import (
     ENDPOINT_MISSING,
     FroniusWebAuthError,
@@ -56,6 +60,15 @@ TECHNICIAN_NOT_CONFIGURED = (
 )
 
 
+def soc_minimum_login_lost() -> ControlUnavailable:
+    """The refusal of a reserve that the SoC window cannot be checked for."""
+    return ControlUnavailable(
+        "soc_minimum_login_lost",
+        "The Modbus storage reserve was not changed: without the web login the "
+        "SoC window cannot be checked",
+    )
+
+
 def _serialised(method):
     """Run one web write at a time: every setter reads state, composes a payload and writes it back."""
 
@@ -71,10 +84,11 @@ def _last_writer_wins(method):
     """Serialise like _serialised, but a burst reaches the device as its first and last value.
 
     Every call takes a ticket; whoever holds the lock while a newer ticket
-    exists returns without writing, because that newer call carries the value
-    now. Each write the inverter takes costs it seconds of Modbus, so ten steps
-    of one control must not become ten writes. The last caller still gets the
-    last write's error.
+    still waits returns without writing, because that newer call carries the
+    value now. Each write the inverter takes costs it seconds of Modbus, so ten
+    steps of one control must not become ten writes. The last caller still
+    gets the last write's error. A caller cancelled while it waits drops its
+    ticket: an older one still waiting writes, one that gave way does not.
     """
 
     @functools.wraps(method)
@@ -82,10 +96,15 @@ def _last_writer_wins(method):
         ticket = self._tickets[method.__name__] = (
             self._tickets.get(method.__name__, 0) + 1
         )
-        async with self._write_lock:
-            if self._tickets[method.__name__] != ticket:
-                return None
-            return await method(self, *args, **kwargs)
+        waiting = self._waiting_tickets.setdefault(method.__name__, set())
+        waiting.add(ticket)
+        try:
+            async with self._write_lock:
+                if ticket != max(waiting):
+                    return None
+                return await method(self, *args, **kwargs)
+        finally:
+            waiting.discard(ticket)
 
     return wrapper
 
@@ -282,6 +301,7 @@ class FroniusWebControl:
         # SoC tuple or the charge-source pair lost one of the two changes.
         self._write_lock = asyncio.Lock()
         self._tickets: dict[str, int] = {}
+        self._waiting_tickets: dict[str, set[int]] = {}
         self.data = WebData()
         self._coordinator: Any = None
         self._delayed_refresh_task: asyncio.Task | None = None
@@ -376,7 +396,10 @@ class FroniusWebControl:
             DOMAIN,
             issue_id,
             is_fixable=True,
-            is_persistent=True,
+            # A persistent issue goes into the diagnostics download with its
+            # placeholders, and the entry title usually holds the host. The
+            # warning is raised again on every web refresh anyway.
+            is_persistent=False,
             severity=ir.IssueSeverity.WARNING,
             translation_key=SOLAR_API_WARNING_TRANSLATION_KEY,
             translation_placeholders={
@@ -404,7 +427,7 @@ class FroniusWebControl:
             return None
 
         try:
-            return await self._hass.async_add_executor_job(func, *args)
+            return await self._async_until_done(func, *args)
         except FroniusWebAuthError as err:
             await self._async_handle_web_api_auth_failure(err)
             if raise_on_auth_failure:
@@ -413,6 +436,35 @@ class FroniusWebControl:
                     "Fronius Web API authentication failed. Log in again when asked.",
                 ) from err
             return None
+
+    async def _async_until_done(self, func, *args):
+        """Run func in the executor and wait for its end, even when cancelled.
+
+        A thread cannot be stopped: a cancelled caller left the write lock while
+        its thread still posted the old value over a newer write. The outcome of
+        a cancelled caller's thread is taken here: left to the loop, its error
+        went to the log with the URL in its cause.
+        """
+        job = self._hass.async_add_executor_job(func, *args)
+        cancelled: asyncio.CancelledError | None = None
+        while not job.done():
+            try:
+                await asyncio.wait({job})
+            except asyncio.CancelledError as err:
+                cancelled = err
+        if cancelled is None:
+            return job.result()
+        error = job.exception()
+        if isinstance(error, FroniusWebAuthError):
+            # The caller no longer reaches the handling in _async_web_job, and
+            # the next poll would find the refused login only one interval later.
+            await self._async_handle_web_api_auth_failure(error)
+        elif error is not None:
+            _LOGGER.debug(
+                "A web write failed after its caller was cancelled: %s",
+                error_text(error),
+            )
+        raise cancelled
 
     async def _async_client_job(self, method_name: str, *args, public: bool = False):
         """Run one refresh step, re-reading the client: an auth failure clears it mid-refresh."""
@@ -436,13 +488,13 @@ class FroniusWebControl:
         self.data = WebData(
             **{field: getattr(self.data, field) for field in _PUBLIC_FIELDS}
         )
+        self._async_sync_solar_api_warning()
+        # Before the await: a cancel there left the web API off with no prompt.
+        if self._entry is not None:
+            self._entry.async_start_reauth(self._hass)
         await async_get_token_store(self._hass).async_delete_token(
             self._host, self._api_username
         )
-        self._async_sync_solar_api_warning()
-
-        if self._entry is not None:
-            self._entry.async_start_reauth(self._hass)
 
     # -- refresh -----------------------------------------------------------------
 
@@ -720,7 +772,20 @@ class FroniusWebControl:
         only at the web write, Modbus already held a refused minimum.
         """
         client = self._client
-        if client is None or not self.soc_mode_is_manual:
+        if client is None:
+            # Only an entry with a web role gets here: without the login its
+            # SoC mode is unknown, and in Manual Modbus alone would leave the
+            # inverter's own minimum behind.
+            raise soc_minimum_login_lost()
+        # Unread, missing or of another shape: only a read Auto may leave the
+        # web API out, since in Manual it holds its own minimum.
+        if self.data.soc_mode_raw not in (SOC_MODE_AUTO, SOC_MODE_MANUAL):
+            raise ControlUnavailable(
+                "soc_minimum_mode_unknown",
+                "The Modbus storage reserve was not changed: the SoC mode could "
+                "not be read from the web interface",
+            )
+        if not self.soc_mode_is_manual:
             await write_modbus()
             return
         self._check_soc_range(soc_min=soc_min)

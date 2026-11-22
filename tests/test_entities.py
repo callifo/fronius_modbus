@@ -32,7 +32,10 @@ from custom_components.fronius_modbus.fronius_modbus_api.device import FroniusIn
 from custom_components.fronius_modbus.fronius_modbus_api.exceptions import (
     ControlUnavailable,
 )
-from custom_components.fronius_modbus.fronius_modbus_api.storage import ExtendedMode
+from custom_components.fronius_modbus.fronius_modbus_api.storage import (
+    ExtendedMode,
+    StorageControl,
+)
 from custom_components.fronius_modbus.froniuswebclient import (
     FroniusWebAuthError,
     FroniusWebResponseError,
@@ -202,6 +205,33 @@ async def test_an_entity_without_placeholders_does_not_crash_on_its_name(
     assert entity.has_entity_name is True
 
 
+@pytest.mark.parametrize("known_before", [False, True])
+def test_the_storage_mode_select_is_unavailable_while_its_registers_are_unread(
+    known_before,
+):
+    """It showed Auto, or the last mode, as if the inverter had reported it."""
+    storage = SimpleNamespace(
+        stor_ctl_mod=None,
+        in_w_rte=None,
+        out_w_rte=None,
+        cha_gri_set=None,
+        min_rsv_pct=None,
+    )
+    control = StorageControl(
+        storage, max_charge_rate_w=10000, max_discharge_rate_w=10000
+    )
+    if known_before:
+        storage.stor_ctl_mod, storage.in_w_rte, storage.out_w_rte = 2, 100.0, 0.0
+        control.sync_from_device()
+        storage.stor_ctl_mod = None
+    control.sync_from_device()
+    select = next(
+        d for d in entities._SELECT_DESCRIPTIONS if d.key == "ext_control_mode"
+    )
+
+    assert select.available_fn(SimpleNamespace(storage_control=control)) is False
+
+
 async def test_an_invalid_soc_minimum_writes_nothing(hass, entry, connection):
     """Modbus and the web API must not end up disagreeing about the reserve."""
     runtime = await make_runtime(hass, entry, connection)
@@ -221,6 +251,45 @@ async def test_an_invalid_soc_minimum_writes_nothing(hass, entry, connection):
         web_control.shutdown()
 
     assert writes == []
+
+
+@pytest.mark.parametrize("web_control_kept", [True, False])
+async def test_a_soc_minimum_without_the_web_login_writes_nothing(
+    hass, entry, connection, web_control_kept
+):
+    """With the login lost, or never there, the reserve went to Modbus alone
+    and the inverter's own minimum stayed behind without a word.
+    """
+    runtime = await make_runtime(hass, entry, connection)
+    web_control = make_control(hass)
+    web_control._client = None
+    runtime = replace(runtime, web_control=web_control if web_control_kept else None)
+
+    writes = []
+    connection.for_unit(INVERTER_UNIT_ID).on_write(writes.append)
+    try:
+        with pytest.raises(ControlUnavailable) as raised:
+            await runtime.async_set_soc_minimum(30)
+    finally:
+        web_control.shutdown()
+
+    assert raised.value.key == "soc_minimum_login_lost"
+    assert writes == []
+
+
+async def test_a_soc_minimum_without_the_web_api_goes_to_modbus(hass, connection):
+    """An entry set up without the web API has only the Modbus reserve."""
+    entry = MockConfigEntry(
+        domain=DOMAIN, data={"host": "192.0.2.1", "api_username": "none"}
+    )
+    entry.add_to_hass(hass)
+    runtime = await make_runtime(hass, entry, connection)
+
+    writes = []
+    connection.for_unit(INVERTER_UNIT_ID).on_write(writes.append)
+    await runtime.async_set_soc_minimum(30)
+
+    assert writes
 
 
 async def test_a_concurrent_maximum_cannot_slip_between_check_and_write(

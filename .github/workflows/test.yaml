@@ -79,6 +79,9 @@ jobs:
       - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Without it the action scans with its own default, 8.24.3, which
+          # check.sh refuses: the allowlist is written for 8.30's match shape.
+          GITLEAKS_VERSION: "8.30.1"
           # Named explicitly: the action picks up .gitleaksignore from the
           # checkout but not the config, so without this it scans with the
           # default rules and reports every `translation_key="..."` in the

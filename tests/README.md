@@ -10,7 +10,10 @@ usually somebody with no memory of why any of it is here.
 .github/scripts/check.sh
 ```
 
-Ruff, formatting, mypy, pip-audit, gitleaks, the test suite with its coverage floor and the mutation run, in that order,
+Ruff, formatting, mypy, pip-audit, gitleaks, the dump tool's PowerShell tests, the check
+that the installed Modbus libraries are the ones core's `modbus` integration
+pins, the test suite with its coverage floor, the same for the minimum Home Assistant when
+`MIN_HA_PYTHON` is set, and the mutation run, in that order,
 stopping at the first failure. The Test workflow runs the same set; a guard in
 `tests/test_guards.py` fails if the two ever drift apart. The HACS and hassfest
 validations are CI-only workflows and are not part of this script. Anything
@@ -75,7 +78,8 @@ because the thing it prevents happened, here or in a sibling project.
 | `test_mutation_harness.py` | The mutation run fails loudly rather than printing "all caught" without having checked |
 | `test_mypy_scope.py` | Every module is in the mypy scope or carries a written reason why not yet |
 | `test_platform_entities.py` | Every platform builds its entities through the one shared helper |
-| `test_requirements.py` | `manifest.json` and `requirements.txt` name the same dependencies |
+| `test_requirements.py` | Every requirement in `manifest.json` is also in `requirements.txt` |
+| `test_line_endings.py` | Every text file ends its lines with LF alone |
 | `test_exception_translations.py` | Every translated error key raised in the package has a message, with the same placeholders, in every language, and no message is orphaned |
 | `test_icon_translations.py` | No entity sets its icon in code; every `icons.json` entry names a translation key an entity carries and has an `mdi:` default |
 | `test_parallel_updates.py` | Every platform declares `PARALLEL_UPDATES`: 0 for the readers and the numbers (their write paths serialise themselves, and a burst must reach them together), 1 for the other writers |
@@ -85,7 +89,9 @@ because the thing it prevents happened, here or in a sibling project.
 ### test_log_hygiene.py
 
 Three things at once. An AST scan over the package refuses any logger call that
-passes a host, serial, token or URL, and a second scan allows exactly one
+passes a host, serial, token or URL, also under a longer or plural name such as
+`allowed_hosts`, or a config entry or device identity (whole, wrapped, or its
+`data` and `options`; a field such as `entry.entry_id` passes), and a second scan allows exactly one
 function to call into `requests`, because its error text carries the URL: Home Assistant logs travel to GitHub with
 bug reports, and diagnostics already carry those values redacted. Drop the
 value from the message rather than adding an exception here.
@@ -157,8 +163,9 @@ against the library's in-memory mock unit, `test_coordinator.py` and
 `test_entity_table.py` and `test_entity_writes.py` the entity layer,
 `test_web_control.py` the web side, and `test_config_flow.py` and
 `test_e2e.py` the parts that only exist once Home Assistant is driving the
-integration (`test_e2e.py` is marked `e2e`, as is `test_meter_power.py`, the
-grid meter's power on its own interval).
+integration. The slow files carry the `e2e` mark: `test_e2e.py`,
+`test_meter_power.py` (the grid meter's power on its own interval),
+`test_adoption.py` and `test_repairs.py`.
 The `mock_modbus` fixture in `conftest.py` stands in for the connection Home
 Assistant's `modbus` integration shares - a fresh in-memory connection per
 (re)load, seeded from the captured Symo GEN24 in `tests/fixtures/`.

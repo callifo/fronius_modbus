@@ -254,8 +254,8 @@
   {
     "label": "web client: a failed hash lookup is not remembered",
     "path": "custom_components/fronius_modbus/froniuswebclient.py",
-    "old": "    except FroniusWebUnreachable, requests.HTTPError, ValueError:\n        return \"sha256\"",
-    "new": "    except FroniusWebUnreachable, requests.HTTPError, ValueError:\n        _HASH_MODES[(base_url, user)] = \"sha256\"\n        return \"sha256\"",
+    "old": "    except FroniusWebUnreachable, requests.HTTPError, ValueError, AttributeError:\n        # A body of another shape is no answer either, and is not remembered.\n        return \"sha256\"",
+    "new": "    except FroniusWebUnreachable, requests.HTTPError, ValueError, AttributeError:\n        _HASH_MODES[(base_url, user)] = \"sha256\"\n        return \"sha256\"",
     "tests": "timed_out_status_page_is_not_remembered_as_the_hash_mode"
   },
   {
@@ -401,7 +401,7 @@
   {
     "label": "web_control: a superseded write is skipped",
     "path": "custom_components/fronius_modbus/web_control.py",
-    "old": "            if self._tickets[method.__name__] != ticket:\n                return None\n",
+    "old": "                if ticket != max(waiting):\n                    return None\n",
     "new": "",
     "tests": "a_burst_of_values_reaches_the_device_as_first_and_last"
   },
@@ -814,8 +814,8 @@
   {
     "label": "config flow: a minted token is kept only after the check",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "                try:\n                    info = await _validate_input(\n                        self.hass,\n                        state.settings,\n",
-    "new": "                await _async_save_token(\n                    self.hass, state.settings[CONF_HOST], username, token\n                )\n                try:\n                    info = await _validate_input(\n                        self.hass,\n                        state.settings,\n",
+    "old": "                        self.hass, state.settings[CONF_HOST], password, username\n                    )\n                try:\n                    info = await _validate_input(\n                        self.hass,\n                        state.settings,\n",
+    "new": "                        self.hass, state.settings[CONF_HOST], password, username\n                    )\n                await _async_save_token(\n                    self.hass, state.settings[CONF_HOST], username, token\n                )\n                try:\n                    info = await _validate_input(\n                        self.hass,\n                        state.settings,\n",
     "tests": "a_token_whose_setup_fails_is_not_kept"
   },
   {
@@ -1752,8 +1752,8 @@
   {
     "label": "config flow: the settings step asks before switching",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "                        minted=False,\n                        step_id=sunspec_step_id,\n",
-    "new": "                        minted=False,\n                        step_id=\"user\",\n",
+    "old": "                        minted=False,\n                        step_ids=(sunspec_step_id, allowed_host_step_id),\n",
+    "new": "                        minted=False,\n                        step_ids=(\"user\", allowed_host_step_id),\n",
     "tests": "stored_token_asks_before_switching_too"
   },
   {
@@ -1766,8 +1766,8 @@
   {
     "label": "config flow: a token minted before the question is kept",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "                minted = state.login_token if state.token_minted else None\n",
-    "new": "                minted = None\n",
+    "old": "                    allowed_host=state.allowed_host,\n                )\n                minted = state.login_token if state.token_minted else None\n",
+    "new": "                    allowed_host=state.allowed_host,\n                )\n                minted = None\n",
     "tests": "switched_only_after_the_user_agrees"
   },
   {
@@ -1787,8 +1787,8 @@
   {
     "label": "config flow: the model type question keeps its state until the finish",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "                result = await self._async_finish_with_token(\n                    on_success, state, info, minted\n",
-    "new": "                self._pending_flow_state = None\n                result = await self._async_finish_with_token(\n                    on_success, state, info, minted\n",
+    "old": "                # this form again, which needs the state.\n                result = await self._async_finish_with_token(\n                    on_success, state, info, minted\n",
+    "new": "                # this form again, which needs the state.\n                self._pending_flow_state = None\n                result = await self._async_finish_with_token(\n                    on_success, state, info, minted\n",
     "tests": "host_taken_after_the_answer_shows_its_error"
   },
   {
@@ -2088,7 +2088,7 @@
   {
     "label": "migrations: a name-based id counts as registered under its key",
     "path": "custom_components/fronius_modbus/migrations.py",
-    "old": "        return unique_id.removeprefix(legacy_prefix)\n",
+    "old": "        return _continued_key(unique_id.removeprefix(legacy_prefix), v019_meter)\n",
     "new": "        return unique_id\n",
     "tests": "upgrade_keeps_its_legacy_sensors"
   },
@@ -2711,7 +2711,7 @@
   {
     "label": "migrations: the cleanup spares the ids of a 0.1.9 meter that waits",
     "path": "custom_components/fronius_modbus/migrations.py",
-    "old": "        if v019_meter_waits and unique_id.startswith(_V019_METER_UNIQUE_ID_PREFIX):\n",
+    "old": "        if v019_meter_waits and unique_id.startswith(waiting_prefixes):\n",
     "new": "        if False:\n",
     "tests": "meter_that_is_gone_is_neither_moved_nor_removed"
   },
@@ -2959,5 +2959,236 @@
     "old": "        self.data.export_soft_limit_ceiling_w = soft_limit_ceiling(active_power)\n",
     "new": "",
     "tests": "bounded_by_the_inverters_limits_not_its_power"
+  },
+  {
+    "label": "web control: the Solar API warning stays out of the diagnostics",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "            is_persistent=False,\n",
+    "new": "            is_persistent=True,\n",
+    "tests": "diagnostics_download_names_no_host"
+  },
+  {
+    "label": "web control: a reserve without the web login is refused",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "            raise soc_minimum_login_lost()\n",
+    "new": "            await write_modbus()\n            return\n",
+    "tests": "soc_minimum_without_the_web_login"
+  },
+  {
+    "label": "coordinator: a reserve with a web role but no web control is refused",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "        if web_control is None:\n            raise soc_minimum_login_lost()\n",
+    "new": "        if web_control is None:\n            await storage.set_minimum_reserve(percent)\n            return\n",
+    "tests": "soc_minimum_without_the_web_login"
+  },
+  {
+    "label": "web control: a cancelled write waits for its thread",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "            except asyncio.CancelledError as err:\n                cancelled = err\n",
+    "new": "            except asyncio.CancelledError:\n                raise\n",
+    "tests": "cancelled_write_cannot_overwrite"
+  },
+  {
+    "label": "migrations: a callifo 0.2.8 key continues under its new key",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "        key = _continued_key(old_unique_id.removeprefix(legacy_prefix), meter_unit_id)\n",
+    "new": "        key = old_unique_id.removeprefix(legacy_prefix)\n",
+    "tests": "callifo_0_2_8_entry_keeps"
+  },
+  {
+    "label": "migrations: a callifo 0.2.8 meter that waits is spared",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "        _legacy_entity_unique_id(entry, _V019_METER_KEY_PREFIX),\n",
+    "new": "",
+    "tests": "callifo_0_2_8_meter_that_is_gone"
+  },
+  {
+    "label": "coordinator: the storage mode is judged only on a poll that read it",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "        if REPORT_STORAGE in report.updated:\n            self.storage_control.sync_from_device()\n",
+    "new": "        self.storage_control.sync_from_device()\n",
+    "tests": "mode_write_survives_polls_that_could_not_read"
+  },
+  {
+    "label": "device: a meter model in an incomplete chain is placed",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        if model is None and not complete:\n",
+    "new": "        if not complete:\n",
+    "tests": "meter_model_in_an_incomplete_chain_is_placed"
+  },
+  {
+    "label": "device: a model past the register space ends the chain",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        if model.address + model.span > REGISTER_SPACE:\n            return chain\n",
+    "new": "",
+    "tests": "length_past_the_register_space"
+  },
+  {
+    "label": "device: an undecided meter is reported with its own refusal",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "            self._undecided_causes[unit_id] = err\n",
+    "new": "",
+    "tests": "refuses_its_probe_is_filed_with_its_refusal"
+  },
+  {
+    "label": "web client: a status page of another shape falls back to sha256",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "    except FroniusWebUnreachable, requests.HTTPError, ValueError, AttributeError:\n",
+    "new": "    except FroniusWebUnreachable, requests.HTTPError, ValueError:\n",
+    "tests": "status_page_of_another_shape"
+  },
+  {
+    "label": "web client: a challenge without qop is a refused login",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "        if not all(challenge.get(key) for key in (\"realm\", \"nonce\", \"qop\")):\n",
+    "new": "        if not all(key in challenge for key in (\"realm\", \"nonce\")):\n",
+    "tests": "challenge_without_qop"
+  },
+  {
+    "label": "entities: the storage mode select waits for readable registers",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "            assume_present(r.storage_control).control_mode is not None\n",
+    "new": "            True\n",
+    "tests": "registers_are_unread"
+  },
+  {
+    "label": "config flow: the address to allow is shown before the restriction is written",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "    if restricted and allowed_host is None:\n",
+    "new": "    if False:\n",
+    "tests": "address_to_allow_is_shown"
+  },
+  {
+    "label": "config flow: an address to allow that is no address is refused",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "        address = ipaddress.IPv4Address(str(value).strip())\n    except ValueError as err:\n        raise _InvalidAllowedHost from err\n",
+    "new": "        return str(value).strip()\n    except ValueError as err:\n        raise _InvalidAllowedHost from err\n",
+    "tests": "no_address_is_refused"
+  },
+  {
+    "label": "config flow: an address no client can have is refused",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "    if address.is_loopback or address.is_unspecified:\n        raise _InvalidAllowedHost\n",
+    "new": "",
+    "tests": "no_client_can_have"
+  },
+  {
+    "label": "config flow: a corrected address stays when the step comes back",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "            data_schema=allowed_host_schema(state.allowed_host or state.resolved_host),\n",
+    "new": "            data_schema=allowed_host_schema(state.resolved_host),\n",
+    "tests": "stays_when_the_step"
+  },
+  {
+    "label": "config flow: an address that cannot be resolved is asked for",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "        resolved_ip = \"\"\n",
+    "new": "        raise\n",
+    "tests": "cannot_be_resolved_is_asked"
+  },
+  {
+    "label": "web control: a caller cancelled while it waits drops its ticket",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        finally:\n            waiting.discard(ticket)\n",
+    "new": "        finally:\n            pass\n",
+    "tests": "newer_one_is_cancelled"
+  },
+  {
+    "label": "web control: a reserve waits for the battery config to be read",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        if self.data.soc_mode_raw not in (SOC_MODE_AUTO, SOC_MODE_MANUAL):\n",
+    "new": "        if False:\n",
+    "tests": "battery_config_was_read"
+  },
+  {
+    "label": "web control: a reserve with an SoC mode of another shape is refused",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        if self.data.soc_mode_raw not in (SOC_MODE_AUTO, SOC_MODE_MANUAL):\n",
+    "new": "        if self.data.soc_mode_raw is None:\n",
+    "tests": "unusable_soc_mode"
+  },
+  {
+    "label": "web control: a login refused after a cancel asks to log in again",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        if isinstance(error, FroniusWebAuthError):\n",
+    "new": "        if False:\n",
+    "tests": "refused_after_its_caller_was_cancelled"
+  },
+  {
+    "label": "web control: a refused login asks to log in again before its token is deleted",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        if self._entry is not None:\n            self._entry.async_start_reauth(self._hass)\n        await async_get_token_store(self._hass).async_delete_token(\n            self._host, self._api_username\n        )\n",
+    "new": "        await async_get_token_store(self._hass).async_delete_token(\n            self._host, self._api_username\n        )\n        if self._entry is not None:\n            self._entry.async_start_reauth(self._hass)\n",
+    "tests": "while_the_token_is_deleted"
+  },
+  {
+    "label": "device: a first model past the register space fails only its unit",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        if chain.first(COMMON_MODEL_ID) is None and isinstance(err, ValueError):\n",
+    "new": "        if False:\n",
+    "tests": "common_model_length_past"
+  },
+  {
+    "label": "migrations: stored repair issues of a removed entry are deleted",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "            ir.async_delete_issue(hass, DOMAIN, issue_id)\n            continue\n",
+    "new": "            pass\n",
+    "tests": "earlier_version_stored"
+  },
+  {
+    "label": "migrations: an entry's own stored issue keeps the owner's ignore",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "        if not any(issue_id.endswith(entry_id) for entry_id in entry_ids):\n",
+    "new": "        if True:\n",
+    "tests": "earlier_version_stored"
+  },
+  {
+    "label": "migrations: an entry's own stored issue is no longer stored",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "            is_persistent=False,\n",
+    "new": "            is_persistent=True,\n",
+    "tests": "earlier_version_stored"
+  },
+  {
+    "label": "config flow: an address the inverter already allows is not asked again",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "    if not await hass.async_add_executor_job(client.restriction_allows, resolved_ip):\n",
+    "new": "    if True:\n",
+    "tests": "already_allows_is_not_asked"
+  },
+  {
+    "label": "config flow: the owner can ask for an address the list allows",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "    if ask or not resolved_ip:\n",
+    "new": "    if not resolved_ip:\n",
+    "tests": "allowed_before_can_be_replaced"
+  },
+  {
+    "label": "config flow: the request alone makes Configure write",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "                    or ask_allowed_host\n",
+    "new": "",
+    "tests": "replaced_in_configure"
+  },
+  {
+    "label": "config flow: the request asks only with the restriction to this Home Assistant",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "    return requested and restricted\n",
+    "new": "    return requested\n",
+    "tests": "request_without_the_restriction"
+  },
+  {
+    "label": "config flow: the model type answer keeps the address settled before it",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "        state.allowed_host = needed.allowed_host\n",
+    "new": "",
+    "tests": "answer_writes_the_address_the_list_allowed"
+  },
+  {
+    "label": "web client: the restriction says whether it already allows an address",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "        return _restriction_with(restriction, address) == restriction\n",
+    "new": "        return True\n",
+    "tests": "says_whether_it_already_allows"
   }
 ]

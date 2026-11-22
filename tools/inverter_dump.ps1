@@ -9,8 +9,9 @@ the configuration endpoints of the customer or technician login and the raw
 SunSpec registers over Modbus TCP. Only reads: no command endpoint is called
 except the login, and Modbus is only asked to read holding registers. A device
 without the GEN24 web interface, such as a Datamanager, still gets its Solar
-API and Modbus read, and on request the settings its own interface reads with
-the admin or service login.
+API and Modbus read, and on request its export limit and battery settings with
+the admin or service login; the other paths its interface names are listed,
+not read.
 
 The file is meant for debugging and for adding support for a new device; by
 default serial numbers, addresses and names are replaced with <redacted>.
@@ -74,11 +75,12 @@ $LoginPaths = @(
 )
 
 # A Datamanager (the SnapINverter family) has an interface of its own: other
-# users, its settings under /config/ and a plain HTTP digest (issue 110). Its
-# interface's code names the paths; these two are read in any case.
+# users, its settings under /config/ and a plain HTTP digest (issue 110). Only
+# these two are read. The other paths its interface's code names are listed in
+# the file, not read: nobody has seen which of them act on a GET.
 $DatamanagerPaths = @('/config/exportlimit/', '/config/batteries')
 $DatamanagerPathPattern = '["''](/(?:config|status)/[A-Za-z0-9_./-]*)["'']'
-# Only reads: a path named like an action is left out.
+# Words of an action; none of the paths read may carry one.
 $DatamanagerSkip = '(?i)command|reset|reboot|restart|update|upgrade|factory|delete|remove|upload|login|logout'
 $DatamanagerScriptPattern = '(?i)src="([^"]+\.js(?:\?[^"]*)?)"'
 $DatamanagerMaxPaths = 80
@@ -283,8 +285,8 @@ function Invoke-DatamanagerLogin([string[]]$Candidates) {
 
 function Find-DatamanagerPaths {
     # The /config/ and /status/ paths the interface's page and scripts name,
-    # with the two asked for in any case; the count of those left out by the
-    # cap goes to $script:PathsLeftOut.
+    # apart from the two read; the count of those left out by the cap goes to
+    # $script:PathsLeftOut.
     $named = New-Object 'System.Collections.Generic.SortedSet[string]'
     $page = Read-Endpoint '/' $false
     $pagePath = '/'
@@ -300,15 +302,12 @@ function Find-DatamanagerPaths {
     foreach ($text in $texts) {
         foreach ($match in [regex]::Matches($text, $DatamanagerPathPattern)) {
             $path = $match.Groups[1].Value
-            if ($path -notmatch $DatamanagerSkip -and $path -notin $DatamanagerPaths) { [void]$named.Add($path) }
+            if ($path -notin $DatamanagerPaths) { [void]$named.Add($path) }
         }
     }
-    $room = $DatamanagerMaxPaths - $DatamanagerPaths.Count
-    $script:PathsLeftOut = [Math]::Max(0, $named.Count - $room)
+    $script:PathsLeftOut = [Math]::Max(0, $named.Count - $DatamanagerMaxPaths)
     if ($script:PathsLeftOut) { Write-Host "$($script:PathsLeftOut) of the paths the interface names are left out." }
-    $kept = New-Object 'System.Collections.Generic.SortedSet[string]'
-    foreach ($path in @($DatamanagerPaths) + @($named | Select-Object -First $room)) { [void]$kept.Add($path) }
-    return @($kept)
+    return @($named | Select-Object -First $DatamanagerMaxPaths)
 }
 
 # -- JSON and redaction ------------------------------------------------------------
@@ -319,7 +318,7 @@ function Find-DatamanagerPaths {
 
 function ConvertFrom-JsonString([string]$Token) {
     $inner = $Token.Substring(1, $Token.Length - 2)
-    if (-not $inner.Contains('')) { return $inner }
+    if (-not $inner.Contains('\')) { return $inner }
     return [regex]::Replace($inner, '\\(u[0-9a-fA-F]{4}|.)', {
         param($match)
         $escape = $match.Groups[1].Value
@@ -698,7 +697,7 @@ function New-ExportText([string]$Login, [bool]$Redact, $Modbus, [string[]]$Paths
         })
         $digestJson = "{`"scheme`": $(ConvertTo-JsonString ([string]$script:DigestScheme)), `"challenge`": {$($fields -join ', ')}}"
     }
-    $text = "{`n  `"tool`": `"inverter_dump`",`n  `"created`": `"$((Get-Date).ToString('s'))`",`n  `"login`": $loginJson,`n  `"digest`": $digestJson,`n  `"paths_left_out`": $([int]$script:PathsLeftOut),`n  `"redacted`": $($Redact.ToString().ToLower()),`n  `"modbus`": $modbusJson,`n  `"endpoints`": {`n$($entries -join ",`n")`n  }`n}`n"
+    $text = "{`n  `"tool`": `"inverter_dump`",`n  `"created`": `"$((Get-Date).ToString('s'))`",`n  `"login`": $loginJson,`n  `"digest`": $digestJson,`n  `"paths_left_out`": $([int]$script:PathsLeftOut),`n  `"paths_named`": [$((@($script:PathsNamed) | Where-Object { $_ } | ForEach-Object { ConvertTo-JsonString $_ }) -join ', ')],`n  `"redacted`": $($Redact.ToString().ToLower()),`n  `"modbus`": $modbusJson,`n  `"endpoints`": {`n$($entries -join ",`n")`n  }`n}`n"
     if (-not (Test-JsonText $text)) { throw 'The export came out as invalid JSON; nothing was saved.' }
     return $text
 }
@@ -720,11 +719,11 @@ function Read-DatamanagerSettings($Paths) {
     $secure = Read-Host "Password of $($script:Role)" -AsSecureString
     $script:Password = [Runtime.InteropServices.Marshal]::PtrToStringBSTR(
         [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
-    $found = Find-DatamanagerPaths
-    $scheme = Invoke-DatamanagerLogin $found
+    $script:PathsNamed = Find-DatamanagerPaths
+    $scheme = Invoke-DatamanagerLogin $DatamanagerPaths
     $accepted = $null -ne $scheme
     if (-not $accepted) { Write-Host (Get-LoginOutcomeText $script:LoginOutcome) }
-    foreach ($path in $found) { $Paths[$path] = $accepted }
+    foreach ($path in $DatamanagerPaths) { $Paths[$path] = $accepted }
     if ($accepted) { return $script:Role }
     return $null
 }
@@ -747,6 +746,7 @@ function Invoke-Dump {
     $script:Challenge = $null
     $script:DigestScheme = $null
     $script:PathsLeftOut = 0
+    $script:PathsNamed = @()
     $answer = 'n'
     $datamanager = $webAnswers -and -not $webInterface
     if ($webInterface) { $answer = Read-Host 'Also read the settings that need a login? [y/N]' }
@@ -755,7 +755,8 @@ function Invoke-Dump {
         if ($answer -match '^[yYjJ]') {
             $loginRole = Read-DatamanagerSettings $paths
         } else {
-            foreach ($path in (Find-DatamanagerPaths)) { $paths[$path] = $false }
+            $script:PathsNamed = Find-DatamanagerPaths
+            foreach ($path in $DatamanagerPaths) { $paths[$path] = $false }
         }
         $answer = 'n'
     }

@@ -254,7 +254,7 @@
         "default": "mdi:power-plug-battery"
       },
       "api_charge_from_grid": {
-        "default": "mdi:transmission-tower-export"
+        "default": "mdi:transmission-tower-import"
       },
       "api_solar_api_enabled": {
         "default": "mdi:api"

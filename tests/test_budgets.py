@@ -25,7 +25,7 @@ PACKAGE = (
 )
 
 # No module may pass this without an entry below. It sits in today's gap
-# between the ordinary modules (the largest is under 700 lines) and the
+# between the ordinary modules (the largest just under 900 lines) and the
 # entity table.
 LINE_LIMIT = 900
 
@@ -50,22 +50,46 @@ LINE_BUDGETS = {
     # 1625 - the description types, now descriptions.py; + the service event entities
     # 1560 - the MPPT module sensors, now mppt_entities.py
     # 1562 + the energy output sensors, whose rows are energy_output_entities.py
-    "entities.py": 1566,
+    # 1570 + the storage mode select waits for readable registers
+    "entities.py": 1570,
     # 898 + a meter the answer names without a usable address marks the
     # answer incomplete; the parser shares _body_data,
     # _clean_text and _as_int with the other payloads, so it stays here.
     # 907 + an error status keeps the fields the inverter names as refused,
     # read by the same helper as the refusals in a 200 answer.
-    "froniuswebclient.py": 914,
+    # 918 + a status page or a soft limit config of another shape is a failed
+    # read, not an AttributeError or KeyError that escapes the client.
+    # 922 + the address to allow is confirmed in the flow, not only resolved.
+    # 923 + a challenge part without a value is refused like a missing one.
+    # 931 + the restriction says whether it already allows an address.
+    "froniuswebclient.py": 931,
+    # 916 + a reserve without the web login is refused instead of reaching
+    # Modbus alone; the check sits in the write lock, next to the other one.
+    # 932 + a cancelled write waits for its thread before it leaves the
+    # write lock; every web write goes through the one job runner.
+    # 960 + a reserve waits for the SoC mode, a cancelled caller drops its
+    # ticket, and its thread's outcome is taken instead of left to the loop.
+    # 964 + a login refused after the caller was cancelled asks to log in.
+    "web_control.py": 964,
+    # 1060 + the step that shows the address to allow before the restriction
+    # is written, in all four flows; splitting the flows is a follow-up.
+    # 1070 + the address step refuses addresses no client has, keeps a
+    # corrected one, and asks for one it could not resolve.
+    # 1073 + the address is asked only when the allowed list would change.
+    # (- the error for an address that cannot be resolved: the step asks.)
+    # 1108: the owner can ask for the address an allowed list skips, and the
+    # model type answer keeps the address settled before it.
+    "config_flow.py": 1108,
 }
 
 # SonarSource's own default. Above it, a function is one somebody has to
 # re-read from the top to change safely.
 COMPLEXITY_LIMIT = 15
 
-# What is over the limit today, exactly. None of these was simplified on
-# adoption - the point of the guard is that nothing gets worse and every
-# improvement is written down.
+# What was over the limit when the guard came in. None of these was
+# simplified on adoption - the point of the guard is that nothing gets worse
+# and every improvement is written down, so an entry that got under the limit
+# stays as a ratchet at its new value.
 COMPLEXITY_BUDGETS = {
     "froniuswebclient.py::_parse_power_meter_info": 24,
     "migrations.py::async_migrate_v019_mppt_statistics": 14,

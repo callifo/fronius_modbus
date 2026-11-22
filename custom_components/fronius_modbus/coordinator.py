@@ -27,6 +27,7 @@ from .derived import grid_status, household_load, throttle_reason
 from .fronius_modbus_api.controls import InverterControls
 from .fronius_modbus_api.device import (
     REPORT_INVERTER,
+    REPORT_STORAGE,
     FroniusInverter,
     MeterInfo,
     UpdateReport,
@@ -36,6 +37,7 @@ from .fronius_modbus_api.exceptions import ControlUnavailable, error_text
 from .fronius_modbus_api.storage import ExtendedMode, StorageControl
 from .fronius_modbus_api.sunspec_models import AcMeter
 from .froniuswebclient import FroniusWebUnreachable
+from .web_control import soc_minimum_login_lost
 
 if TYPE_CHECKING:
     from .web_control import FroniusWebControl, WebData
@@ -188,10 +190,13 @@ class FroniusRuntimeData:
         """
         percent = int(round(value))
         storage = assume_present(self.storage_control)
-        web_control = self.web_control
-        if web_control is None:
+        entry = assume_present(self.modbus.config_entry)
+        if web_api_disabled({**entry.data, **entry.options}):
             await storage.set_minimum_reserve(percent)
             return
+        web_control = self.web_control
+        if web_control is None:
+            raise soc_minimum_login_lost()
         await web_control.apply_soc_minimum(
             percent, lambda: storage.set_minimum_reserve(percent)
         )
@@ -304,7 +309,7 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
         self._log_sub_system_changes(report)
         self._reload_for_new_sub_systems(report)
         await self._reload_for_a_new_identity()
-        self._build_controls()
+        self._build_controls(report)
         return ModbusPoll(
             report=report,
             load_w=self._load_w(report),
@@ -389,15 +394,15 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
             assume_present(self.config_entry).entry_id
         )
 
-    def _build_controls(self) -> None:
+    def _build_controls(self, report: UpdateReport) -> None:
         device = self.device
-        self._refresh_storage_control()
+        self._refresh_storage_control(report)
         if self.inverter_controls is None and device.controls is not None:
             self.inverter_controls = InverterControls(device.controls, max_power_w=None)
         if self.inverter_controls is not None and device.settings is not None:
             self.inverter_controls.max_power_w = device.settings.w_max
 
-    def _refresh_storage_control(self) -> None:
+    def _refresh_storage_control(self, report: UpdateReport) -> None:
         """Build the storage control once, then keep its rate maxima current.
 
         Fronius defines InWRte/OutWRte as percentages of WChaMax (model 124);
@@ -430,7 +435,10 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
         else:
             self.storage_control.max_charge_rate_w = max_charge
             self.storage_control.max_discharge_rate_w = max_discharge
-        self.storage_control.sync_from_device()
+        # A poll that did not read the storage holds the image from before a
+        # write; judging it counted against the write and undid the new mode.
+        if REPORT_STORAGE in report.updated:
+            self.storage_control.sync_from_device()
 
     def _primary_meter(self) -> AcMeter | None:
         info = self.device.meters.get(self._primary_meter_unit_id)

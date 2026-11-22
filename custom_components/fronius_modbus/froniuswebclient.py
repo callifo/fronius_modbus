@@ -365,7 +365,8 @@ def _hash_mode(base_url: str, user: str, timeout: float) -> str:
             .get("digest", {})
             .get(f"{user}HashingVersion")
         )
-    except FroniusWebUnreachable, requests.HTTPError, ValueError:
+    except FroniusWebUnreachable, requests.HTTPError, ValueError, AttributeError:
+        # A body of another shape is no answer either, and is not remembered.
         return "sha256"
     mode = "md5" if version == 1 else "sha256"
     _HASH_MODES[(base_url, user)] = mode
@@ -412,7 +413,8 @@ class XHeaderDigestAuth(AuthBase):
             response.headers.get("X-WWW-Authenticate")
             or response.headers.get("www-authenticate", "")
         )
-        if "realm" not in challenge or "nonce" not in challenge:
+        # A key without a value parses to None: unusable like a missing one.
+        if not all(challenge.get(key) for key in ("realm", "nonce", "qop")):
             return response
 
         response.content
@@ -630,7 +632,8 @@ class FroniusWebClient:
         self._post(path, changes)
         return True
 
-    def _resolve_client_ip(self) -> str:
+    def resolve_client_ip(self) -> str:
+        """Home Assistant's own address towards the inverter."""
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
                 sock.connect((self._host, 80))
@@ -722,6 +725,14 @@ class FroniusWebClient:
             )
         return None
 
+    def restriction_allows(self, address: str) -> bool:
+        """Whether the Modbus restriction is on and already allows ``address``."""
+        config = _config_object(self.get_modbus_config(), MODBUS_PATH)
+        slave = _nested_object(config, "slave", MODBUS_PATH)
+        ctr = _nested_object(slave, "ctr", MODBUS_PATH)
+        restriction = _nested_object(ctr, "restriction", MODBUS_PATH)
+        return _restriction_with(restriction, address) == restriction
+
     def ensure_modbus_enabled(
         self,
         port: int,
@@ -729,6 +740,7 @@ class FroniusWebClient:
         inverter_unit_id: int,
         restriction: ModbusRestriction = ModbusRestriction.KEEP,
         switch_sunspec_mode: bool = False,
+        allowed_host: str | None = None,
     ) -> bool:
         config = _config_object(self.get_modbus_config(), MODBUS_PATH)
         # Checked like the slave: it is written back as read.
@@ -740,7 +752,9 @@ class FroniusWebClient:
         current_restriction = _nested_object(ctr, "restriction", MODBUS_PATH)
         wanted = current_restriction
         if restriction == ModbusRestriction.HOME_ASSISTANT:
-            wanted = _restriction_with(current_restriction, self._resolve_client_ip())
+            wanted = _restriction_with(
+                current_restriction, allowed_host or self.resolve_client_ip()
+            )
         if restriction == ModbusRestriction.OFF:
             wanted = {**current_restriction, "on": False}
         serves_tcp = slave.get("mode") in TCP_MODES
@@ -897,14 +911,21 @@ class FroniusWebClient:
 
         Writes back the config just read, with only the switch and the watts patched.
         """
-        config = self._get_json("/api/config/limit_settings/powerLimits")
-        active_power = config["exportLimits"]["activePower"]
+        path = "/api/config/limit_settings/powerLimits"
+        config = self._get_json(path)
+        try:
+            active_power = config["exportLimits"]["activePower"]
+            soft = active_power["softLimit"]
+            enabled = soft.get("enabled")
+        except (KeyError, TypeError, AttributeError) as err:
+            raise FroniusWebResponseError(
+                f"HTTP 200 on {path} answered no export soft limit", HTTPStatus.OK
+            ) from err
         require_power_control(active_power)
-        soft = active_power["softLimit"]
         holder, key = soft_limit_location(active_power)
-        if is_enabled(soft.get("enabled")) and _same(holder.get(key), int(power_w)):
+        if is_enabled(enabled) and _same(holder.get(key), int(power_w)):
             return False
         soft["enabled"] = True
         holder[key] = int(power_w)
-        self._post("/api/config/limit_settings/powerLimits", config)
+        self._post(path, config)
         return True

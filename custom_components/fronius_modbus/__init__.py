@@ -121,6 +121,7 @@ def _async_reload_when_a_string_lights_up(
 
 async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> bool:
     """Set up Fronius Modbus from a config entry."""
+    migrations.async_drop_stored_issues(hass)
     host = str(_entry_value(entry, CONF_HOST))
     port = int(_entry_value(entry, CONF_PORT, DEFAULT_PORT))
     inverter_unit_id = int(

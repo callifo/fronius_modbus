@@ -5,14 +5,15 @@
     "step": {
       "user": {
         "title": "Set up Fronius System",
-        "description": "Enter the host, choose the local Web API access role, and set the update intervals and Modbus IP restriction. Minimum Modbus and Web API interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand, with the SunSpec model type int + SF. Switching an existing entry to it removes those entities; their history stays.",
+        "description": "Enter the host, choose the local Web API access role, and set the update intervals and Modbus IP restriction. Minimum Modbus and Web API interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC minimum and maximum, backup reserve, self-consumption optimisation, target feed-in, charging from AC and from the grid, Solar API, export limit, the Modbus status of the web interface and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand, with the SunSpec model type int + SF. Switching an existing entry to it removes those entities; their history stays.",
         "data": {
           "host": "Host",
           "scan_interval": "Update interval (seconds)",
           "web_scan_interval": "Web API update interval (seconds)",
           "meter_power_interval": "Grid meter power update interval (seconds, 0 = with the update interval)",
           "modbus_restriction": "Modbus IP restriction",
-          "api_username": "Web API access role"
+          "api_username": "Web API access role",
+          "change_allowed_host": "Change the allowed address (with the restriction to this Home Assistant)"
         }
       },
       "user_password": {
@@ -28,14 +29,15 @@
       },
       "reconfigure": {
         "title": "Review Fronius System",
-        "description": "Review the host, the local Web API access role, the update intervals and the Modbus IP restriction. Minimum Modbus and Web API interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand, with the SunSpec model type int + SF. Switching an existing entry to it removes those entities; their history stays.",
+        "description": "Review the host, the local Web API access role, the update intervals and the Modbus IP restriction. Minimum Modbus and Web API interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC minimum and maximum, backup reserve, self-consumption optimisation, target feed-in, charging from AC and from the grid, Solar API, export limit, the Modbus status of the web interface and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand, with the SunSpec model type int + SF. Switching an existing entry to it removes those entities; their history stays.",
         "data": {
           "host": "Host",
           "scan_interval": "Update interval (seconds)",
           "web_scan_interval": "Web API update interval (seconds)",
           "meter_power_interval": "Grid meter power update interval (seconds, 0 = with the update interval)",
           "modbus_restriction": "Modbus IP restriction",
-          "api_username": "Web API access role"
+          "api_username": "Web API access role",
+          "change_allowed_host": "Change the allowed address (with the restriction to this Home Assistant)"
         }
       },
       "reconfigure_password": {
@@ -51,7 +53,7 @@
       },
       "reauth_confirm": {
         "title": "Log in to the Fronius Web API again",
-        "description": "The stored login of this entry is missing or was rejected, for example after the password was changed on the inverter. Choose the access role; the next step asks for its password. If you do not want to use the web API, choose Without the web API. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand, with the SunSpec model type int + SF. Switching an existing entry to it removes those entities; their history stays.",
+        "description": "The stored login of this entry is missing or was rejected, for example after the password was changed on the inverter. Choose the access role; the next step asks for its password. If you do not want to use the web API, choose Without the web API. Without the web API, the SoC mode, SoC minimum and maximum, backup reserve, self-consumption optimisation, target feed-in, charging from AC and from the grid, Solar API, export limit, the Modbus status of the web interface and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand, with the SunSpec model type int + SF. Switching an existing entry to it removes those entities; their history stays.",
         "data": {
           "api_username": "Web API access role"
         }
@@ -66,6 +68,27 @@
       "reauth_sunspec": {
         "title": "Switch the SunSpec model type?",
         "description": "The Modbus of {entry_title} ({host}) uses the **{mode}** SunSpec model type. This integration reads the int + SF models and switches the inverter to them. If an external device reads the inverter with the {mode} models, it may no longer work after the switch. Submit to switch; close this dialog to leave the inverter as it is."
+      },
+      "user_allowed_host": {
+        "title": "Which address does the inverter see?",
+        "description": "The Modbus IP restriction of {entry_title} ({host}) will allow the address below: the one Home Assistant reaches the inverter from. If Home Assistant runs behind NAT, for example in a Docker container on a bridge network or in a virtual machine with NAT, the inverter sees the address of the computer it runs on: enter that one. A wrong address blocks Modbus control from Home Assistant and, if the restriction was off before, from every other device too.",
+        "data": {
+          "allowed_host": "Address to allow"
+        }
+      },
+      "reconfigure_allowed_host": {
+        "title": "Which address does the inverter see?",
+        "description": "The Modbus IP restriction of {entry_title} ({host}) will allow the address below: the one Home Assistant reaches the inverter from. If Home Assistant runs behind NAT, for example in a Docker container on a bridge network or in a virtual machine with NAT, the inverter sees the address of the computer it runs on: enter that one. A wrong address blocks Modbus control from Home Assistant and, if the restriction was off before, from every other device too.",
+        "data": {
+          "allowed_host": "Address to allow"
+        }
+      },
+      "reauth_allowed_host": {
+        "title": "Which address does the inverter see?",
+        "description": "The Modbus IP restriction of {entry_title} ({host}) will allow the address below: the one Home Assistant reaches the inverter from. If Home Assistant runs behind NAT, for example in a Docker container on a bridge network or in a virtual machine with NAT, the inverter sees the address of the computer it runs on: enter that one. A wrong address blocks Modbus control from Home Assistant and, if the restriction was off before, from every other device too.",
+        "data": {
+          "allowed_host": "Address to allow"
+        }
       }
     },
     "abort": {
@@ -88,8 +111,8 @@
       "modbus_address_conflict": "Modbus IDs are not unique",
       "missing_api_password": "A password is required for the selected Web API role.",
       "invalid_api_credentials": "Login failed for the selected Web API role.",
-      "cannot_resolve_local_ip": "Could not determine the Home Assistant IP.",
-      "already_configured": "Another entry already uses this host."
+      "already_configured": "Another entry already uses this host.",
+      "invalid_allowed_host": "Enter the IPv4 address of a device on your network, for example 192.168.1.20."
     }
   },
   "entity": {
@@ -257,11 +280,11 @@
           "shutdown": "Shutdown",
           "fault": "Fault",
           "standby": "Standby",
-          "no_solarnet": "No solarnet",
+          "no_solarnet": "No SolarNet",
           "no_inverter_communication": "No inverter communication",
-          "overcurrent_solarnet": "Overcurrent solarnet",
+          "overcurrent_solarnet": "Overcurrent SolarNet",
           "firmware_updating": "Firmware updating",
-          "acfi_event": "ACFI event"
+          "acfi_event": "AFCI event"
         }
       },
       "line_frequency": {
@@ -274,10 +297,10 @@
           "power_reduction": "Power reduction",
           "constant_reactive_power": "Constant reactive power",
           "constant_power_factor": "Constant power factor",
-          "power_reduction_constant_reactive_power": "Power reduction,Constant reactive power",
-          "power_reduction_constant_power_factor": "Power reduction,Constant power factor",
-          "constant_reactive_power_constant_power_factor": "Constant reactive power,Constant power factor",
-          "power_reduction_constant_reactive_power_constant_power_factor": "Power reduction,Constant reactive power,Constant power factor"
+          "power_reduction_constant_reactive_power": "Power reduction, constant reactive power",
+          "power_reduction_constant_power_factor": "Power reduction, constant power factor",
+          "constant_reactive_power_constant_power_factor": "Constant reactive power, constant power factor",
+          "power_reduction_constant_reactive_power_constant_power_factor": "Power reduction, constant reactive power, constant power factor"
         }
       },
       "vref": {
@@ -290,7 +313,17 @@
         "name": "Maximum power"
       },
       "events2": {
-        "name": "Event severity"
+        "name": "Event severity",
+        "state": {
+          "none": "None",
+          "error": "Error",
+          "warning": "Warning",
+          "info": "Information",
+          "error_warning": "Error, warning",
+          "error_info": "Error, information",
+          "warning_info": "Warning, information",
+          "error_warning_info": "Error, warning, information"
+        }
       },
       "grid_status": {
         "name": "Grid status",
@@ -804,12 +837,6 @@
       }
     },
     "switch": {
-      "charge_from_ac": {
-        "name": "Charge from AC"
-      },
-      "charge_from_grid": {
-        "name": "Charge from grid"
-      },
       "api_charge_from_ac": {
         "name": "Charge from AC"
       },
@@ -904,14 +931,15 @@
     "step": {
       "init": {
         "title": "Set up Fronius System",
-        "description": "Review the host, the local Web API access role, the update intervals and the Modbus IP restriction. Minimum Modbus and Web API interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC maximum, backup reserve, grid charging permission, Solar API, export limit and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand, with the SunSpec model type int + SF. Switching an existing entry to it removes those entities; their history stays.",
+        "description": "Review the host, the local Web API access role, the update intervals and the Modbus IP restriction. Minimum Modbus and Web API interval: 5 seconds. The technician role additionally enables the export limit control. Without the web API, the SoC mode, SoC minimum and maximum, backup reserve, self-consumption optimisation, target feed-in, charging from AC and from the grid, Solar API, export limit, the Modbus status of the web interface and Modbus reset are not available, and Modbus TCP has to be switched on in the inverter beforehand, with the SunSpec model type int + SF. Switching an existing entry to it removes those entities; their history stays.",
         "data": {
           "host": "Host",
           "scan_interval": "Update interval (seconds)",
           "web_scan_interval": "Web API update interval (seconds)",
           "meter_power_interval": "Grid meter power update interval (seconds, 0 = with the update interval)",
           "modbus_restriction": "Modbus IP restriction",
-          "api_username": "Web API access role"
+          "api_username": "Web API access role",
+          "change_allowed_host": "Change the allowed address (with the restriction to this Home Assistant)"
         }
       },
       "password": {
@@ -924,6 +952,13 @@
       "sunspec": {
         "title": "Switch the SunSpec model type?",
         "description": "The Modbus of {entry_title} ({host}) uses the **{mode}** SunSpec model type. This integration reads the int + SF models and switches the inverter to them. If an external device reads the inverter with the {mode} models, it may no longer work after the switch. Submit to switch; close this dialog to leave the inverter as it is."
+      },
+      "allowed_host": {
+        "title": "Which address does the inverter see?",
+        "description": "The Modbus IP restriction of {entry_title} ({host}) will allow the address below: the one Home Assistant reaches the inverter from. If Home Assistant runs behind NAT, for example in a Docker container on a bridge network or in a virtual machine with NAT, the inverter sees the address of the computer it runs on: enter that one. A wrong address blocks Modbus control from Home Assistant and, if the restriction was off before, from every other device too.",
+        "data": {
+          "allowed_host": "Address to allow"
+        }
       }
     },
     "error": {
@@ -938,8 +973,8 @@
       "modbus_address_conflict": "Modbus IDs are not unique",
       "missing_api_password": "A password is required for the selected Web API role.",
       "invalid_api_credentials": "Login failed for the selected Web API role.",
-      "cannot_resolve_local_ip": "Could not determine the Home Assistant IP.",
-      "already_configured": "Another entry already uses this host."
+      "already_configured": "Another entry already uses this host.",
+      "invalid_allowed_host": "Enter the IPv4 address of a device on your network, for example 192.168.1.20."
     }
   },
   "selector": {
@@ -1027,6 +1062,12 @@
     },
     "grid_charge_sources_login_lost": {
       "message": "The storage mode is set to Charge from Grid, but without the web login charging from the grid could not be allowed. Log in again when Home Assistant asks for it on the integration."
+    },
+    "soc_minimum_mode_unknown": {
+      "message": "The SoC mode of the battery could not be read from the inverter's web interface, so the Modbus storage reserve was not changed. Try again once the web interface answers."
+    },
+    "soc_minimum_login_lost": {
+      "message": "Without the web login the SoC window cannot be checked, so the Modbus storage reserve was not changed. Log in again when Home Assistant asks for it on the integration."
     },
     "soc_minimum_web_failed": {
       "message": "The Modbus storage reserve is set, but the inverter's web interface did not take it as SoC minimum; the two minimums now differ: {error}"

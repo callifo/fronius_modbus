@@ -89,6 +89,44 @@ def test_every_translation_key_has_a_name_in_every_language():
                 ), (language, platform, description.translation_key)
 
 
+_PLATFORM_FACTORIES = (
+    ("sensor", entities.sensor_descriptions),
+    ("number", entities.number_descriptions),
+    ("select", entities.select_descriptions),
+    ("switch", entities.switch_descriptions),
+    ("button", entities.button_descriptions),
+    ("event", entities.event_descriptions),
+)
+
+
+def test_every_entity_text_belongs_to_an_entity():
+    """A text no description names is dead: it reads as a feature the integration lacks."""
+    runtime = _everything_present()
+    used = {
+        platform: {d.translation_key for d in factory(runtime)}
+        for platform, factory in _PLATFORM_FACTORIES
+    }
+    for language in ("en", "de"):
+        translations = json.loads(
+            (PACKAGE / "translations" / f"{language}.json").read_text(encoding="utf-8")
+        )["entity"]
+        for platform, keys in used.items():
+            orphaned = set(translations.get(platform, {})) - keys
+            assert not orphaned, (language, platform, sorted(orphaned))
+
+
+def test_every_event_severity_has_a_text_in_every_language():
+    states = {
+        entities.bitmask_to_string(mask, entities.INVERTER_EVENTS, "none", bits=32)
+        for mask in range(1 << len(entities.INVERTER_EVENTS))
+    }
+    for language in ("en", "de"):
+        translations = json.loads(
+            (PACKAGE / "translations" / f"{language}.json").read_text(encoding="utf-8")
+        )["entity"]["sensor"]["events2"]
+        assert set(translations.get("state", {})) == states, language
+
+
 def test_every_sensor_that_carried_statistics_still_has_a_state_class():
     """Dropping a state class hands every user a statistics repair.
 

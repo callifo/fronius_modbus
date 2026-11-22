@@ -72,7 +72,10 @@ def _flow_messages() -> set[str]:
             messages.add(node.args[0])
         if isinstance(node, ast.Tuple) and len(node.elts) == 2:
             field, message = node.elts
-            if isinstance(field, ast.Constant) and field.value in ("base", "host"):
+            named_field = isinstance(field, ast.Name) and field.id.startswith("CONF_")
+            if named_field or (
+                isinstance(field, ast.Constant) and field.value in ("base", "host")
+            ):
                 messages.add(message)
     return implied | {
         node.value

@@ -2970,8 +2970,8 @@
   {
     "label": "web control: a reserve without the web login is refused",
     "path": "custom_components/fronius_modbus/web_control.py",
-    "old": "            raise soc_minimum_login_lost()\n        if not self._battery_config_read:\n",
-    "new": "            await write_modbus()\n            return\n        if not self._battery_config_read:\n",
+    "old": "            raise soc_minimum_login_lost()\n",
+    "new": "            await write_modbus()\n            return\n",
     "tests": "soc_minimum_without_the_web_login"
   },
   {
@@ -3096,9 +3096,16 @@
   {
     "label": "web control: a reserve waits for the battery config to be read",
     "path": "custom_components/fronius_modbus/web_control.py",
-    "old": "        if not self._battery_config_read:\n            raise ControlUnavailable(\n",
-    "new": "        if False:\n            raise ControlUnavailable(\n",
+    "old": "        if self.data.soc_mode_raw not in (SOC_MODE_AUTO, SOC_MODE_MANUAL):\n",
+    "new": "        if False:\n",
     "tests": "battery_config_was_read"
+  },
+  {
+    "label": "web control: a reserve with an SoC mode of another shape is refused",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        if self.data.soc_mode_raw not in (SOC_MODE_AUTO, SOC_MODE_MANUAL):\n",
+    "new": "        if self.data.soc_mode_raw is None:\n",
+    "tests": "unusable_soc_mode"
   },
   {
     "label": "device: a first model past the register space fails only its unit",

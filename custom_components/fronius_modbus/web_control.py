@@ -302,8 +302,6 @@ class FroniusWebControl:
         self._write_lock = asyncio.Lock()
         self._tickets: dict[str, int] = {}
         self._waiting_tickets: dict[str, set[int]] = {}
-        # The SoC mode is unknown until the battery config was read once.
-        self._battery_config_read = False
         self.data = WebData()
         self._coordinator: Any = None
         self._delayed_refresh_task: asyncio.Task | None = None
@@ -496,7 +494,6 @@ class FroniusWebControl:
     # -- refresh -----------------------------------------------------------------
 
     def _apply_web_battery_config(self, battery_config: dict[str, Any]) -> None:
-        self._battery_config_read = True
         raw_mode = _as_int(battery_config.get("HYB_EM_MODE"))
         raw_power = _as_int(battery_config.get("HYB_EM_POWER"))
 
@@ -775,11 +772,13 @@ class FroniusWebControl:
             # SoC mode is unknown, and in Manual Modbus alone would leave the
             # inverter's own minimum behind.
             raise soc_minimum_login_lost()
-        if not self._battery_config_read:
+        # Unread, missing or of another shape: only a read Auto may leave the
+        # web API out, since in Manual it holds its own minimum.
+        if self.data.soc_mode_raw not in (SOC_MODE_AUTO, SOC_MODE_MANUAL):
             raise ControlUnavailable(
                 "soc_minimum_mode_unknown",
-                "The Modbus storage reserve was not changed: the SoC mode has not "
-                "been read from the web interface yet",
+                "The Modbus storage reserve was not changed: the SoC mode could "
+                "not be read from the web interface",
             )
         if not self.soc_mode_is_manual:
             await write_modbus()

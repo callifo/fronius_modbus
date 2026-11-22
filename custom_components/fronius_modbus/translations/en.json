@@ -1064,7 +1064,7 @@
       "message": "The storage mode is set to Charge from Grid, but without the web login charging from the grid could not be allowed. Log in again when Home Assistant asks for it on the integration."
     },
     "soc_minimum_mode_unknown": {
-      "message": "The SoC mode of the battery has not been read from the inverter's web interface yet, so the Modbus storage reserve was not changed. Try again once the web interface answers."
+      "message": "The SoC mode of the battery could not be read from the inverter's web interface, so the Modbus storage reserve was not changed. Try again once the web interface answers."
     },
     "soc_minimum_login_lost": {
       "message": "Without the web login the SoC window cannot be checked, so the Modbus storage reserve was not changed. Log in again when Home Assistant asks for it on the integration."

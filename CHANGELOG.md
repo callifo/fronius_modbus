@@ -13,7 +13,8 @@
 
 ### Fixed
 - The diagnostics download no longer contains the inverter's address while the Solar API firmware warning is shown, also for a warning an earlier version stored.
-- A web setting written by an automation that was stopped mid-write could overwrite a newer value of the same setting, and a value waiting behind a stopped one could be dropped while reported as written.
+- A web setting written by an automation that was stopped mid-write could overwrite a newer value of the same setting.
+- A web setting waiting behind a newer value of the same setting was dropped when the newer one was stopped before its turn. It is now written.
 - Updating straight from callifo 0.2.8 or older keeps the entity IDs and history of the grid meter's sensors and the reserve, and from 0.2.9 or older the temperature sensor once the web login is in place. They came back under new entity IDs before.
 - A storage mode just set no longer falls back to another one when a few polls in a row could not read the storage.
 - An inverter whose SunSpec map ends in a refused read no longer writes a warning to the log on every poll.

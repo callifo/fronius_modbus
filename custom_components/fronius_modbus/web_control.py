@@ -88,7 +88,7 @@ def _last_writer_wins(method):
     value now. Each write the inverter takes costs it seconds of Modbus, so ten
     steps of one control must not become ten writes. The last caller still
     gets the last write's error. A caller cancelled while it waits drops its
-    ticket: its value never comes, and an older caller writes instead.
+    ticket: an older one still waiting writes, one that gave way does not.
     """
 
     @functools.wraps(method)

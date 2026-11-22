@@ -1139,6 +1139,49 @@ async def test_a_login_refused_after_its_caller_was_cancelled_asks_to_log_in_aga
     assert reauth_requests == [control._entry.entry_id]
 
 
+@pytest.mark.parametrize("late", [True, False], ids=["refused_late", "refused_in_time"])
+async def test_a_cancel_while_the_token_is_deleted_still_asks_to_log_in_again(
+    hass, control, reauth_requests, monkeypatch, late
+):
+    """The handler dropped the client before its one await and asked for the
+    login after it: a cancel in between left the web API off with no prompt."""
+    await control.async_refresh()
+    store = async_get_token_store(hass)
+    deleting = asyncio.Event()
+    delete = type(store).async_delete_token
+
+    async def slow_delete(self, *args, **kwargs):
+        deleting.set()
+        # Stands in for the store's write, which runs in the executor.
+        await asyncio.sleep(0.05)
+        return await delete(self, *args, **kwargs)
+
+    monkeypatch.setattr(type(store), "async_delete_token", slow_delete)
+    entered = threading.Event()
+    gate = threading.Event()
+
+    def refused(percent):
+        entered.set()
+        if late:
+            gate.wait(5)
+        raise FroniusWebAuthError("token rejected")
+
+    control._client.set_backup_reserve = refused
+    caller = asyncio.ensure_future(control.set_backup_reserve(20))
+    assert await hass.async_add_executor_job(entered.wait, 5)
+    if late:
+        caller.cancel()
+        await asyncio.sleep(0)
+        gate.set()
+    await asyncio.wait_for(deleting.wait(), 5)
+    caller.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await caller
+
+    assert control.configured is False
+    assert reauth_requests == [control._entry.entry_id]
+
+
 async def test_a_queued_write_still_writes_when_a_newer_one_is_cancelled(hass, control):
     """The cancelled caller's newer ticket made the queued one return unwritten."""
     await control.async_refresh()

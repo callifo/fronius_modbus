@@ -69,7 +69,8 @@ LINE_BUDGETS = {
     # write lock; every web write goes through the one job runner.
     # 960 + a reserve waits for the SoC mode, a cancelled caller drops its
     # ticket, and its thread's outcome is taken instead of left to the loop.
-    "web_control.py": 960,
+    # 964 + a login refused after the caller was cancelled asks to log in.
+    "web_control.py": 964,
     # 1060 + the step that shows the address to allow before the restriction
     # is written, in all four flows; splitting the flows is a follow-up.
     # 1070 + the address step refuses addresses no client has, keeps a

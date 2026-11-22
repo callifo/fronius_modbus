@@ -454,7 +454,12 @@ class FroniusWebControl:
                 cancelled = err
         if cancelled is None:
             return job.result()
-        if (error := job.exception()) is not None:
+        error = job.exception()
+        if isinstance(error, FroniusWebAuthError):
+            # The caller no longer reaches the handling in _async_web_job, and
+            # the next poll would find the refused login only one interval later.
+            await self._async_handle_web_api_auth_failure(error)
+        elif error is not None:
             _LOGGER.debug(
                 "A web write failed after its caller was cancelled: %s",
                 error_text(error),

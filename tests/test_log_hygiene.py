@@ -155,6 +155,11 @@ def test_the_scan_catches_the_shape_it_was_written_for(tmp_path):
         '_LOGGER.info("allowing %s", self.data.modbus_restriction_ip)',
         '_LOGGER.info("found %s", local_ip)',
         '_LOGGER.info("set up %s", entry_title(entry.data))',
+        '_LOGGER.info("allowed %s", hosts)',
+        '_LOGGER.info("found %s", allowed_ips)',
+        '_LOGGER.info("set up %s", entry)',
+        '_LOGGER.info("found %s", self._entry)',
+        '_LOGGER.info("found %s", identity)',
     ],
 )
 def test_the_scan_catches_the_other_usual_ways_to_name_the_device(tmp_path, line):

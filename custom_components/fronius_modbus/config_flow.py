@@ -223,17 +223,17 @@ async def _async_address_to_allow(
     Modbus control out.
     """
     try:
-        resolved = await hass.async_add_executor_job(client.resolve_client_ip)
+        resolved_ip = await hass.async_add_executor_job(client.resolve_client_ip)
     except ClientIpResolutionError:
         # The owner can still type the address the inverter sees.
-        resolved = ""
-    if ask or not resolved:
-        raise _AllowedHostNeeded(resolved)
-    # Asked only when the write would change the list: Configure and
+        resolved_ip = ""
+    if ask or not resolved_ip:
+        raise _AllowedHostNeeded(resolved_ip)
+    # Asked only when the write would change the list: Reconfigure and
     # reauthentication apply the settings every time.
-    if not await hass.async_add_executor_job(client.restriction_allows, resolved):
-        raise _AllowedHostNeeded(resolved)
-    return resolved
+    if not await hass.async_add_executor_job(client.restriction_allows, resolved_ip):
+        raise _AllowedHostNeeded(resolved_ip)
+    return resolved_ip
 
 
 async def _async_prepare_web_api(
@@ -492,7 +492,7 @@ class TokenFlowMixin:
         """Hold the flow where it stopped and show the address before it is allowed."""
         state.login_token = token
         state.token_minted = minted
-        state.resolved_host = needed.resolved
+        state.resolved_host = needed.resolved_ip
         self._pending_flow_state = state
         return await self._async_show_allowed_host_step(step_id=step_id)
 

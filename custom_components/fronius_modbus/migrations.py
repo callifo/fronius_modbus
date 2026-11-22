@@ -794,7 +794,7 @@ async def async_migrate_name_based_unique_ids(
         _LOGGER.info(
             "Migrated %s entities from name-based unique ids to per-entry ids for %s",
             migrated,
-            _entry_instance_key(entry),
+            instance_key(entry.entry_id),
         )
 
 

@@ -56,9 +56,13 @@ DEVICE_IDENTIFIERS = frozenset(
 NAME_PARTS = frozenset(
     {"host", "hostname", "serial", "token", "password", "ip", "url", "title"}
 )
-# Objects that carry the host or serial among their fields, passed whole. Only
-# the argument itself counts: entry.entry_id names no installation.
-WHOLE_OBJECTS = frozenset({"entry", "config_entry", "identity"})
+# Objects that carry the host or serial among their fields. A field read from
+# one counts only for the dicts that hold the settings: entry.entry_id and
+# identity.firmware name no installation.
+WHOLE_OBJECTS = frozenset(
+    {"entry", "entries", "config_entry", "config_entries", "identity", "identities"}
+)
+SETTINGS_FIELDS = frozenset({"data", "options"})
 LOG_METHODS = frozenset(
     {"debug", "info", "warning", "error", "exception", "critical", "log"}
 )
@@ -108,15 +112,30 @@ def _names_the_installation(name: str) -> bool:
     return name in DEVICE_IDENTIFIERS or bool(NAME_PARTS & parts)
 
 
-def _whole_object(argument: ast.AST) -> set[str]:
-    name = None
-    if isinstance(argument, ast.Name):
-        name = argument.id
-    elif isinstance(argument, ast.Attribute):
-        name = argument.attr
-    if name is None:
-        return set()
-    return {name.lower().lstrip("_")} & WHOLE_OBJECTS
+def _object_name(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Name):
+        return node.id.lower().lstrip("_")
+    if isinstance(node, ast.Attribute):
+        return node.attr.lower().lstrip("_")
+    return None
+
+
+def _whole_objects(argument: ast.AST) -> set[str]:
+    """Entry and identity objects in the argument, unless only a field is read."""
+    field_read = {
+        id(node.value): node.attr
+        for node in ast.walk(argument)
+        if isinstance(node, ast.Attribute)
+    }
+    named = set()
+    for node in ast.walk(argument):
+        name = _object_name(node)
+        if name not in WHOLE_OBJECTS:
+            continue
+        field = field_read.get(id(node))
+        if field is None or field in SETTINGS_FIELDS:
+            named.add(name)
+    return named
 
 
 def _offending_lines(source: pathlib.Path) -> list[str]:
@@ -129,7 +148,7 @@ def _offending_lines(source: pathlib.Path) -> list[str]:
                 name
                 for name in _identifiers_in(argument)
                 if _names_the_installation(name)
-            } | _whole_object(argument)
+            } | _whole_objects(argument)
             if named:
                 offences.append(f"{source.name}:{call.lineno} passes {sorted(named)}")
     return offences

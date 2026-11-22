@@ -3082,7 +3082,7 @@
   {
     "label": "config flow: an address that cannot be resolved is asked for",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "        resolved = \"\"\n",
+    "old": "        resolved_ip = \"\"\n",
     "new": "        raise\n",
     "tests": "cannot_be_resolved_is_asked"
   },
@@ -3152,15 +3152,15 @@
   {
     "label": "config flow: an address the inverter already allows is not asked again",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "    if not await hass.async_add_executor_job(client.restriction_allows, resolved):\n",
+    "old": "    if not await hass.async_add_executor_job(client.restriction_allows, resolved_ip):\n",
     "new": "    if True:\n",
     "tests": "already_allows_is_not_asked"
   },
   {
     "label": "config flow: the owner can ask for an address the list allows",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "    if ask or not resolved:\n",
-    "new": "    if not resolved:\n",
+    "old": "    if ask or not resolved_ip:\n",
+    "new": "    if not resolved_ip:\n",
     "tests": "allowed_before_can_be_replaced"
   },
   {

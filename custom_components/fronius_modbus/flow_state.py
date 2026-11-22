@@ -82,11 +82,11 @@ class _InvalidAllowedHost(exceptions.HomeAssistantError):
 class _AllowedHostNeeded(exceptions.HomeAssistantError):
     """The address to allow has to be confirmed: behind NAT the inverter sees another."""
 
-    def __init__(self, resolved: str) -> None:
+    def __init__(self, resolved_ip: str) -> None:
         """Name the address Home Assistant resolved towards the inverter."""
         # Not in the message: an unexpected path logs it with the exception.
         super().__init__()
-        self.resolved = resolved
+        self.resolved_ip = resolved_ip
 
 
 class _SunSpecSwitchNeeded(exceptions.HomeAssistantError):

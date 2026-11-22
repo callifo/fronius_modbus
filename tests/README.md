@@ -90,7 +90,8 @@ because the thing it prevents happened, here or in a sibling project.
 
 Three things at once. An AST scan over the package refuses any logger call that
 passes a host, serial, token or URL, also under a longer or plural name such as
-`allowed_hosts`, or a whole config entry or device identity, and a second scan allows exactly one
+`allowed_hosts`, or a config entry or device identity (whole, wrapped, or its
+`data` and `options`; a field such as `entry.entry_id` passes), and a second scan allows exactly one
 function to call into `requests`, because its error text carries the URL: Home Assistant logs travel to GitHub with
 bug reports, and diagnostics already carry those values redacted. Drop the
 value from the message rather than adding an exception here.

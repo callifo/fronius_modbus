@@ -2048,7 +2048,7 @@ def test_the_address_question_carries_no_address_in_its_message():
     needed = config_flow._AllowedHostNeeded(RESOLVED_IP)
 
     assert RESOLVED_IP not in str(needed)
-    assert needed.resolved == RESOLVED_IP
+    assert needed.resolved_ip == RESOLVED_IP
 
 
 @pytest.mark.parametrize(

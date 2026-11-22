@@ -40,6 +40,7 @@ from custom_components.fronius_modbus.froniuswebclient import (
     ENDPOINT_MISSING,
     FroniusWebAuthError,
     FroniusWebClient,
+    FroniusWebUnreachable,
 )
 from custom_components.fronius_modbus.token_store import async_get_token_store
 from custom_components.fronius_modbus.web_control import WebData
@@ -1390,19 +1391,30 @@ async def test_a_repairs_item_from_before_is_cleared(hass, mock_modbus, monkeypa
     assert _reauth_flows(hass, entry) == []
 
 
-async def test_a_warning_an_earlier_version_stored_leaves_with_the_next_start(
+class _WebClientNotAnswering(_FakeWebClientWithTopology):
+    """The topology fake, with a web API that does not answer the first refresh."""
+
+    def get_inverter_info(self, *_args, **_kwargs):
+        raise FroniusWebUnreachable("ConnectTimeout")
+
+
+async def test_a_warning_an_earlier_version_stored_leaves_the_diagnostics(
     hass, mock_modbus, monkeypatch
 ):
     """A stored warning keeps its placeholders, the host in the entry title among
     them, and Home Assistant puts it into every diagnostics download of the domain:
-    also while the web API does not answer, and for an entry long removed."""
-    serve_the_public_endpoints(mock_modbus, monkeypatch)
+    also while the web API does not answer, and for an entry long removed. The
+    entry's own warning stays, ignored if the owner ignored it: deleted, it came
+    back on the next refresh as a new one."""
+    mock_modbus.add_unit(201, like=METER_UNIT_ID)
+    monkeypatch.setattr(fronius_modbus, "FroniusWebClient", _WebClientNotAnswering)
     entry = make_entry(hass, minor_version=13, api_username="none")
-    stored = [
+    own, removed = (
         f"{SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX}{entry.entry_id}",
         f"{SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX}removed-entry",
-    ]
-    for issue_id in stored:
+    )
+    registry = ir.async_get(hass)
+    for issue_id in (own, removed):
         ir.async_create_issue(
             hass,
             DOMAIN,
@@ -1413,14 +1425,16 @@ async def test_a_warning_an_earlier_version_stored_leaves_with_the_next_start(
             translation_key="solar_api_low_firmware",
             translation_placeholders={"entry_title": f"Fronius {HOST}"},
         )
+    registry.async_ignore(DOMAIN, own, True)
 
     await setup_entry(hass, entry)
 
-    registry = ir.async_get(hass)
-    assert [registry.async_get_issue(DOMAIN, issue_id) for issue_id in stored] == [
-        None,
-        None,
-    ]
+    kept = registry.async_get_issue(DOMAIN, own)
+    assert registry.async_get_issue(DOMAIN, removed) is None
+    assert kept is not None
+    assert not kept.is_persistent
+    assert kept.dismissed_version is not None
+    assert HOST not in json.dumps(kept.to_json())
 
 
 async def test_an_entry_without_the_web_api_cleans_up_stale_entities(

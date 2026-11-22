@@ -325,16 +325,36 @@ def async_migrate_callifo_lowercase_keys(
 
 
 def async_drop_stored_issues(hass: HomeAssistant) -> None:
-    """Delete the repair issues an earlier version stored; this one stores none.
+    """Stop storing the repair issues an earlier version stored; this one stores none.
 
     A stored issue keeps its placeholders, the entry title with the host among
     them, and Home Assistant puts every issue of the domain into each
-    diagnostics download, also one of an entry long removed.
+    diagnostics download, also one of an entry long removed. An entry's own
+    issue is kept unstored instead of deleted: created anew, it lost the
+    owner's choice to ignore it.
     """
     registry = ir.async_get(hass)
-    for domain, issue_id in list(registry.issues):
-        if domain == DOMAIN and registry.issues[(domain, issue_id)].is_persistent:
+    entry_ids = [entry.entry_id for entry in hass.config_entries.async_entries(DOMAIN)]
+    for (domain, issue_id), issue in list(registry.issues.items()):
+        if domain != DOMAIN or not issue.is_persistent:
+            continue
+        if not any(issue_id.endswith(entry_id) for entry_id in entry_ids):
             ir.async_delete_issue(hass, DOMAIN, issue_id)
+            continue
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            issue_id,
+            breaks_in_ha_version=issue.breaks_in_ha_version,
+            data=issue.data,
+            is_fixable=issue.is_fixable,
+            is_persistent=False,
+            issue_domain=issue.issue_domain,
+            learn_more_url=issue.learn_more_url,
+            severity=issue.severity,
+            translation_key=issue.translation_key,
+            translation_placeholders=issue.translation_placeholders,
+        )
 
 
 def _migration_issue_id(entry: ConfigEntry) -> str:

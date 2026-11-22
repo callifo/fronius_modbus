@@ -3122,10 +3122,24 @@
     "tests": "common_model_length_past"
   },
   {
-    "label": "migrations: repair issues an earlier version stored are deleted",
+    "label": "migrations: stored repair issues of a removed entry are deleted",
     "path": "custom_components/fronius_modbus/migrations.py",
-    "old": "            ir.async_delete_issue(hass, DOMAIN, issue_id)\n",
+    "old": "            ir.async_delete_issue(hass, DOMAIN, issue_id)\n            continue\n",
     "new": "            pass\n",
+    "tests": "earlier_version_stored"
+  },
+  {
+    "label": "migrations: an entry's own stored issue keeps the owner's ignore",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "        if not any(issue_id.endswith(entry_id) for entry_id in entry_ids):\n",
+    "new": "        if True:\n",
+    "tests": "earlier_version_stored"
+  },
+  {
+    "label": "migrations: an entry's own stored issue is no longer stored",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "            is_persistent=False,\n",
+    "new": "            is_persistent=True,\n",
     "tests": "earlier_version_stored"
   },
   {

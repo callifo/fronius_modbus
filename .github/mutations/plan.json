@@ -3082,8 +3082,8 @@
   {
     "label": "config flow: an address that cannot be resolved is asked for",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "            resolved = \"\"\n",
-    "new": "            raise\n",
+    "old": "        resolved = \"\"\n",
+    "new": "        raise\n",
     "tests": "cannot_be_resolved_is_asked"
   },
   {
@@ -3117,9 +3117,37 @@
   {
     "label": "config flow: an address the inverter already allows is not asked again",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "        allowed = bool(resolved) and await hass.async_add_executor_job(\n",
-    "new": "        allowed = False and await hass.async_add_executor_job(\n",
+    "old": "    if not await hass.async_add_executor_job(client.restriction_allows, resolved):\n",
+    "new": "    if True:\n",
     "tests": "already_allows_is_not_asked"
+  },
+  {
+    "label": "config flow: the owner can ask for an address the list allows",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "    if ask or not resolved:\n",
+    "new": "    if not resolved:\n",
+    "tests": "allowed_before_can_be_replaced"
+  },
+  {
+    "label": "config flow: the request alone makes Configure write",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "                    or ask_allowed_host\n",
+    "new": "",
+    "tests": "replaced_in_configure"
+  },
+  {
+    "label": "config flow: the request asks only with the restriction to this Home Assistant",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "    return requested and restricted\n",
+    "new": "    return requested\n",
+    "tests": "request_without_the_restriction"
+  },
+  {
+    "label": "config flow: the model type answer keeps the address settled before it",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "        state.allowed_host = needed.allowed_host\n",
+    "new": "",
+    "tests": "answer_writes_the_address_the_list_allowed"
   },
   {
     "label": "web client: the restriction says whether it already allows an address",

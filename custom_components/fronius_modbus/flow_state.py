@@ -22,10 +22,13 @@ class _PendingFlowState:
     login_token: dict[str, str] | None = None
     token_minted: bool = False
     sunspec_mode: str | None = None
-    # The address the owner confirmed for the Modbus restriction, and the one
-    # Home Assistant resolved for the question.
+    # The address the Modbus restriction allows: confirmed by the owner, or
+    # one the list already allowed. The resolved one fills in the question,
+    # empty when none was found.
     allowed_host: str | None = None
     resolved_host: str | None = None
+    # The owner asked to see the address although the list allows it.
+    ask_allowed_host: bool = False
 
 
 class _CannotConnect(exceptions.HomeAssistantError):
@@ -73,7 +76,7 @@ class _InvalidApiCredentials(exceptions.HomeAssistantError):
 
 
 class _InvalidAllowedHost(exceptions.HomeAssistantError):
-    """The address to allow is no IPv4 address."""
+    """The address to allow is no IPv4 address a device on the network can have."""
 
 
 class _AllowedHostNeeded(exceptions.HomeAssistantError):
@@ -81,14 +84,17 @@ class _AllowedHostNeeded(exceptions.HomeAssistantError):
 
     def __init__(self, resolved: str) -> None:
         """Name the address Home Assistant resolved towards the inverter."""
-        super().__init__(resolved)
+        # Not in the message: an unexpected path logs it with the exception.
+        super().__init__()
         self.resolved = resolved
 
 
 class _SunSpecSwitchNeeded(exceptions.HomeAssistantError):
     """The inverter serves another SunSpec model type; switching it needs consent."""
 
-    def __init__(self, mode: str) -> None:
-        """Name the model type the inverter serves now."""
+    def __init__(self, mode: str, allowed_host: str | None) -> None:
+        """Name the model type the inverter serves now and the address settled on."""
         super().__init__(mode)
         self.mode = mode
+        # The answer writes this address without checking the list again.
+        self.allowed_host = allowed_host

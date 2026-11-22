@@ -1991,6 +1991,30 @@ async def test_an_allowed_address_is_not_asked_for_unless_requested(
     assert [args[5] for args in written] == [RESOLVED_IP]
 
 
+async def test_an_address_request_without_the_restriction_asks_nothing(
+    hass, mock_modbus, monkeypatch
+):
+    """Kept or lifted, the restriction allows no address of Home Assistant's,
+    and Configure leaves unchanged Modbus settings alone."""
+    entry, written = _restricted_entry_the_list_allows(hass, monkeypatch)
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, "modbus_restriction": "keep"}
+    )
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {**USER_INPUT, "modbus_restriction": "keep", "change_allowed_host": True},
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"api_password": ""}
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert written == []
+
+
 async def test_the_model_type_answer_writes_the_address_the_list_allowed(
     hass, mock_modbus, monkeypatch
 ):
@@ -2004,7 +2028,9 @@ async def test_the_model_type_answer_writes_the_address_the_list_allowed(
         checks.append(address)
         return len(checks) == 1
 
-    monkeypatch.setattr(config_flow.FroniusWebClient, "restriction_allows", allowed_once)
+    monkeypatch.setattr(
+        config_flow.FroniusWebClient, "restriction_allows", allowed_once
+    )
     result = await _password_step(hass, restriction="home_assistant")
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {"api_password": "secret"}

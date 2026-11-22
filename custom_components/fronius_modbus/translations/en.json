@@ -12,7 +12,8 @@
           "web_scan_interval": "Web API update interval (seconds)",
           "meter_power_interval": "Grid meter power update interval (seconds, 0 = with the update interval)",
           "modbus_restriction": "Modbus IP restriction",
-          "api_username": "Web API access role"
+          "api_username": "Web API access role",
+          "change_allowed_host": "Change the allowed address (with the restriction to this Home Assistant)"
         }
       },
       "user_password": {
@@ -35,7 +36,8 @@
           "web_scan_interval": "Web API update interval (seconds)",
           "meter_power_interval": "Grid meter power update interval (seconds, 0 = with the update interval)",
           "modbus_restriction": "Modbus IP restriction",
-          "api_username": "Web API access role"
+          "api_username": "Web API access role",
+          "change_allowed_host": "Change the allowed address (with the restriction to this Home Assistant)"
         }
       },
       "reconfigure_password": {
@@ -936,7 +938,8 @@
           "web_scan_interval": "Web API update interval (seconds)",
           "meter_power_interval": "Grid meter power update interval (seconds, 0 = with the update interval)",
           "modbus_restriction": "Modbus IP restriction",
-          "api_username": "Web API access role"
+          "api_username": "Web API access role",
+          "change_allowed_host": "Change the allowed address (with the restriction to this Home Assistant)"
         }
       },
       "password": {

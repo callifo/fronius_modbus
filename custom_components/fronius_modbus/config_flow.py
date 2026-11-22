@@ -49,6 +49,7 @@ from .flow_entry import (
 )
 from .flow_forms import (
     CONF_ALLOWED_HOST,
+    CONF_CHANGE_ALLOWED_HOST,
     allowed_host_schema,
     password_schema,
     role_schema,
@@ -137,6 +138,13 @@ def _checked_allowed_host(value: Any) -> str:
     return str(address)
 
 
+def _asks_for_the_address(user_input: dict[str, Any], settings: dict[str, Any]) -> bool:
+    """The owner asked to see the address, and the restriction is to allow one."""
+    requested = bool(user_input.get(CONF_CHANGE_ALLOWED_HOST, False))
+    restricted = settings[CONF_MODBUS_RESTRICTION] == ModbusRestriction.HOME_ASSISTANT
+    return requested and restricted
+
+
 def _set_form_error(errors: dict[str, str], err: Exception) -> None:
     field, message = _FORM_ERRORS.get(type(err), ("base", "unknown"))
     if message == "unknown":
@@ -205,6 +213,29 @@ async def _async_mint_token(
     return token
 
 
+async def _async_address_to_allow(
+    hass: HomeAssistant, client: FroniusWebClient, *, ask: bool
+) -> str:
+    """Home Assistant's own address, when the list allows it and the owner did not ask.
+
+    Raises ``_AllowedHostNeeded`` otherwise: behind NAT the inverter sees
+    another address than this one, and allowing the wrong one locks every
+    Modbus control out.
+    """
+    try:
+        resolved = await hass.async_add_executor_job(client.resolve_client_ip)
+    except ClientIpResolutionError:
+        # The owner can still type the address the inverter sees.
+        resolved = ""
+    if ask or not resolved:
+        raise _AllowedHostNeeded(resolved)
+    # Asked only when the write would change the list: Configure and
+    # reauthentication apply the settings every time.
+    if not await hass.async_add_executor_job(client.restriction_allows, resolved):
+        raise _AllowedHostNeeded(resolved)
+    return resolved
+
+
 async def _async_prepare_web_api(
     hass: HomeAssistant,
     data: dict[str, Any],
@@ -213,6 +244,8 @@ async def _async_prepare_web_api(
     claim_host: Callable[[], Awaitable[None]] | None,
     switch_sunspec_mode: bool,
     allowed_host: str | None,
+    *,
+    ask_allowed_host: bool,
 ) -> None:
     """Log in, and switch Modbus on where the flow asks for it.
 
@@ -233,21 +266,7 @@ async def _async_prepare_web_api(
         return
     restricted = data[CONF_MODBUS_RESTRICTION] == ModbusRestriction.HOME_ASSISTANT
     if restricted and allowed_host is None:
-        # Behind NAT the inverter sees another address than this one, and
-        # allowing the wrong one locks every Modbus control out.
-        try:
-            resolved = await hass.async_add_executor_job(client.resolve_client_ip)
-        except ClientIpResolutionError:
-            # The owner can still type the address the inverter sees.
-            resolved = ""
-        # Asked only when the write would change the list: Configure and
-        # reauthentication apply the settings every time.
-        allowed = bool(resolved) and await hass.async_add_executor_job(
-            client.restriction_allows, resolved
-        )
-        if not allowed:
-            raise _AllowedHostNeeded(resolved)
-        allowed_host = resolved
+        allowed_host = await _async_address_to_allow(hass, client, ask=ask_allowed_host)
     if claim_host is not None:
         await claim_host()
     try:
@@ -261,7 +280,7 @@ async def _async_prepare_web_api(
             allowed_host,
         )
     except SunSpecModeChangeNeeded as err:
-        raise _SunSpecSwitchNeeded(err.current_mode) from err
+        raise _SunSpecSwitchNeeded(err.current_mode, allowed_host) from err
     # The inverter restarts its Modbus server after the settings write.
     await asyncio.sleep(1.0)
 
@@ -275,6 +294,7 @@ async def _validate_input(
     claim_host: Callable[[], Awaitable[None]] | None = None,
     switch_sunspec_mode: bool = False,
     allowed_host: str | None = None,
+    ask_allowed_host: bool = False,
 ) -> dict[str, Any]:
     """Validate the user input allows us to connect."""
     _validate_static_input(data)
@@ -291,6 +311,7 @@ async def _validate_input(
                 claim_host,
                 switch_sunspec_mode,
                 allowed_host,
+                ask_allowed_host=ask_allowed_host,
             )
         async with async_get_temporary_unit(
             hass,
@@ -390,6 +411,7 @@ class TokenFlowMixin:
         state.login_token = token
         state.token_minted = minted
         state.sunspec_mode = needed.mode
+        state.allowed_host = needed.allowed_host
         self._pending_flow_state = state
         return await self._async_show_sunspec_step(step_id=step_id)
 
@@ -571,8 +593,12 @@ class TokenFlowMixin:
                 # Before the login: validation may already write the Modbus
                 # settings of a host another entry owns.
                 await claim_host(settings)
+                ask_allowed_host = _asks_for_the_address(user_input, settings)
+                # The question comes only with a write: Configure writes
+                # unchanged settings only when asked to.
                 apply_modbus_config = (
                     force_apply_modbus_config
+                    or ask_allowed_host
                     or _should_apply_modbus_config(
                         settings,
                         previous_settings,
@@ -591,6 +617,7 @@ class TokenFlowMixin:
                         previous_host,
                         apply_modbus_config,
                         existing_token=token,
+                        ask_allowed_host=ask_allowed_host,
                     )
                     return await self._async_show_password_step(
                         step_id=password_step_id
@@ -603,11 +630,17 @@ class TokenFlowMixin:
                         api_token=token,
                         apply_modbus_config=apply_modbus_config,
                         claim_host=lambda: claim_host(settings),
+                        ask_allowed_host=ask_allowed_host,
                     )
                 except (_SunSpecSwitchNeeded, _AllowedHostNeeded) as needed:
                     return await self._async_ask_before_writing(
                         needed,
-                        _PendingFlowState(settings, previous_host, apply_modbus_config),
+                        _PendingFlowState(
+                            settings,
+                            previous_host,
+                            apply_modbus_config,
+                            ask_allowed_host=ask_allowed_host,
+                        ),
                         token,
                         minted=False,
                         step_ids=(sunspec_step_id, allowed_host_step_id),
@@ -621,6 +654,7 @@ class TokenFlowMixin:
                     settings,
                     previous_host,
                     apply_modbus_config,
+                    ask_allowed_host=ask_allowed_host,
                 )
                 return await self._async_show_password_step(step_id=password_step_id)
             except Exception as err:  # pylint: disable=broad-except
@@ -668,6 +702,7 @@ class TokenFlowMixin:
                         api_token=token,
                         apply_modbus_config=state.apply_modbus_config,
                         claim_host=lambda: claim_host(state.settings),
+                        ask_allowed_host=state.ask_allowed_host,
                     )
                 except (_SunSpecSwitchNeeded, _AllowedHostNeeded) as needed:
                     return await self._async_ask_before_writing(

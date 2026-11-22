@@ -12,7 +12,8 @@
           "web_scan_interval": "Web-API-Aktualisierungsintervall (Sekunden)",
           "meter_power_interval": "Aktualisierungsintervall Netzzähler-Leistung (Sekunden, 0 = mit dem Aktualisierungsintervall)",
           "modbus_restriction": "Modbus-IP-Beschränkung",
-          "api_username": "Web-API-Zugriffsrolle"
+          "api_username": "Web-API-Zugriffsrolle",
+          "change_allowed_host": "Freigegebene Adresse ändern (bei Beschränkung auf dieses Home Assistant)"
         }
       },
       "user_password": {
@@ -35,7 +36,8 @@
           "web_scan_interval": "Web-API-Aktualisierungsintervall (Sekunden)",
           "meter_power_interval": "Aktualisierungsintervall Netzzähler-Leistung (Sekunden, 0 = mit dem Aktualisierungsintervall)",
           "modbus_restriction": "Modbus-IP-Beschränkung",
-          "api_username": "Web-API-Zugriffsrolle"
+          "api_username": "Web-API-Zugriffsrolle",
+          "change_allowed_host": "Freigegebene Adresse ändern (bei Beschränkung auf dieses Home Assistant)"
         }
       },
       "reconfigure_password": {
@@ -936,7 +938,8 @@
           "web_scan_interval": "Web-API-Aktualisierungsintervall (Sekunden)",
           "meter_power_interval": "Aktualisierungsintervall Netzzähler-Leistung (Sekunden, 0 = mit dem Aktualisierungsintervall)",
           "modbus_restriction": "Modbus-IP-Beschränkung",
-          "api_username": "Web-API-Zugriffsrolle"
+          "api_username": "Web-API-Zugriffsrolle",
+          "change_allowed_host": "Freigegebene Adresse ändern (bei Beschränkung auf dieses Home Assistant)"
         }
       },
       "password": {

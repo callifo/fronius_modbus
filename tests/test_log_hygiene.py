@@ -56,6 +56,9 @@ DEVICE_IDENTIFIERS = frozenset(
 NAME_PARTS = frozenset(
     {"host", "hostname", "serial", "token", "password", "ip", "url", "title"}
 )
+# Objects that carry the host or serial among their fields, passed whole. Only
+# the argument itself counts: entry.entry_id names no installation.
+WHOLE_OBJECTS = frozenset({"entry", "config_entry", "identity"})
 LOG_METHODS = frozenset(
     {"debug", "info", "warning", "error", "exception", "critical", "log"}
 )
@@ -99,6 +102,23 @@ def _logging_calls(tree: ast.AST):
             yield node
 
 
+def _names_the_installation(name: str) -> bool:
+    # hosts and allowed_ips carry the same values as host and ip.
+    parts = {part.removesuffix("s") for part in name.split("_")}
+    return name in DEVICE_IDENTIFIERS or bool(NAME_PARTS & parts)
+
+
+def _whole_object(argument: ast.AST) -> set[str]:
+    name = None
+    if isinstance(argument, ast.Name):
+        name = argument.id
+    elif isinstance(argument, ast.Attribute):
+        name = argument.attr
+    if name is None:
+        return set()
+    return {name.lower().lstrip("_")} & WHOLE_OBJECTS
+
+
 def _offending_lines(source: pathlib.Path) -> list[str]:
     tree = ast.parse(source.read_text(encoding="utf-8"))
     offences = []
@@ -108,8 +128,8 @@ def _offending_lines(source: pathlib.Path) -> list[str]:
             named = {
                 name
                 for name in _identifiers_in(argument)
-                if name in DEVICE_IDENTIFIERS or NAME_PARTS & set(name.split("_"))
-            }
+                if _names_the_installation(name)
+            } | _whole_object(argument)
             if named:
                 offences.append(f"{source.name}:{call.lineno} passes {sorted(named)}")
     return offences

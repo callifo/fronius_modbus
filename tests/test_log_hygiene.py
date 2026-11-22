@@ -180,6 +180,12 @@ def test_the_scan_catches_the_shape_it_was_written_for(tmp_path):
         '_LOGGER.info("set up %s", entry)',
         '_LOGGER.info("found %s", self._entry)',
         '_LOGGER.info("found %s", identity)',
+        '_LOGGER.info("set up %s", str(entry))',
+        '_LOGGER.info("set up %s", [entry])',
+        '_LOGGER.info("set up %s", entries)',
+        '_LOGGER.info("set up %s", entry.data)',
+        '_LOGGER.info("set up %s", self.config_entry.data)',
+        '_LOGGER.info("found %s", identities)',
     ],
 )
 def test_the_scan_catches_the_other_usual_ways_to_name_the_device(tmp_path, line):
@@ -188,6 +194,22 @@ def test_the_scan_catches_the_other_usual_ways_to_name_the_device(tmp_path, line
     written_by_hand.write_text(f"{line}\n", encoding="utf-8")
 
     assert _offending_lines(written_by_hand)
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        '_LOGGER.info("set up %s", entry.entry_id)',
+        '_LOGGER.info("set up %s", self._entry.state)',
+        '_LOGGER.info("found %d", len(identity.firmware))',
+    ],
+)
+def test_the_scan_lets_a_field_that_names_no_installation_through(tmp_path, line):
+    """The counter-check: an entry id or state identifies no installation."""
+    written_by_hand = tmp_path / "sample.py"
+    written_by_hand.write_text(f"{line}\n", encoding="utf-8")
+
+    assert not _offending_lines(written_by_hand)
 
 
 async def test_an_unreachable_device_is_not_logged_as_an_error(

@@ -1113,6 +1113,32 @@ async def test_a_write_that_fails_after_its_caller_was_cancelled_is_not_logged_r
     assert reported == []
 
 
+async def test_a_login_refused_after_its_caller_was_cancelled_asks_to_log_in_again(
+    hass, control, reauth_requests
+):
+    """The refusal was only logged, and the web API stayed on until the next poll."""
+    await control.async_refresh()
+    entered = threading.Event()
+    gate = threading.Event()
+
+    def refused_late(percent):
+        entered.set()
+        gate.wait(5)
+        raise FroniusWebAuthError("token rejected")
+
+    control._client.set_backup_reserve = refused_late
+    caller = asyncio.ensure_future(control.set_backup_reserve(20))
+    assert await hass.async_add_executor_job(entered.wait, 5)
+    caller.cancel()
+    await asyncio.sleep(0)
+    gate.set()
+    with pytest.raises(asyncio.CancelledError):
+        await caller
+
+    assert control.configured is False
+    assert reauth_requests == [control._entry.entry_id]
+
+
 async def test_a_queued_write_still_writes_when_a_newer_one_is_cancelled(hass, control):
     """The cancelled caller's newer ticket made the queued one return unwritten."""
     await control.async_refresh()

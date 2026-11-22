@@ -3108,6 +3108,13 @@
     "tests": "unusable_soc_mode"
   },
   {
+    "label": "web control: a login refused after a cancel asks to log in again",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "        if isinstance(error, FroniusWebAuthError):\n",
+    "new": "        if False:\n",
+    "tests": "refused_after_its_caller_was_cancelled"
+  },
+  {
     "label": "device: a first model past the register space fails only its unit",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
     "old": "        if chain.first(COMMON_MODEL_ID) is None and isinstance(err, ValueError):\n",

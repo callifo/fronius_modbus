@@ -1048,6 +1048,26 @@ async def test_a_reserve_before_the_battery_config_was_read_writes_nothing(hass)
     assert written == []
 
 
+@pytest.mark.parametrize("soc_mode", [None, 1, "dynamic"])
+async def test_a_reserve_with_an_unusable_soc_mode_writes_nothing(control, soc_mode):
+    """A battery config read without a usable SoC mode counted as Auto, and the
+    reserve went to Modbus alone; a later such read also dropped a known Manual."""
+    control._client.battery.pop("BAT_M0_SOC_MODE", None)
+    if soc_mode is not None:
+        control._client.battery["BAT_M0_SOC_MODE"] = soc_mode
+    await control.async_refresh()
+    written = []
+
+    async def write_modbus():
+        written.append("modbus")
+
+    with pytest.raises(ControlUnavailable) as raised:
+        await control.apply_soc_minimum(30, write_modbus)
+
+    assert raised.value.key == "soc_minimum_mode_unknown"
+    assert written == []
+
+
 async def test_a_reserve_with_the_battery_config_read_in_auto_goes_to_modbus(control):
     """The counter-check: a read Auto keeps the reserve on Modbus alone."""
     await control.async_refresh()

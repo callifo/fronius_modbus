@@ -112,7 +112,7 @@
       "missing_api_password": "A password is required for the selected Web API role.",
       "invalid_api_credentials": "Login failed for the selected Web API role.",
       "already_configured": "Another entry already uses this host.",
-      "invalid_allowed_host": "Enter an IPv4 address, for example 192.168.1.20."
+      "invalid_allowed_host": "Enter the IPv4 address of a device on your network, for example 192.168.1.20."
     }
   },
   "entity": {
@@ -974,7 +974,7 @@
       "missing_api_password": "A password is required for the selected Web API role.",
       "invalid_api_credentials": "Login failed for the selected Web API role.",
       "already_configured": "Another entry already uses this host.",
-      "invalid_allowed_host": "Enter an IPv4 address, for example 192.168.1.20."
+      "invalid_allowed_host": "Enter the IPv4 address of a device on your network, for example 192.168.1.20."
     }
   },
   "selector": {

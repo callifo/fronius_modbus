@@ -15,11 +15,6 @@ from modbus_connection import (
     ServerDeviceFailureError,
 )
 import pytest
-from pytest_homeassistant_custom_component.common import (
-    MockConfigEntry,
-    async_capture_events,
-    async_fire_time_changed,
-)
 
 from custom_components import fronius_modbus
 from custom_components.fronius_modbus import config_flow, migrations, web_control
@@ -57,6 +52,11 @@ from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
 
 from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID, NO_INVERTER_CAP_W
+from .ha_test_plugin import (
+    MockConfigEntry,
+    async_capture_events,
+    async_fire_time_changed,
+)
 
 pytestmark = [pytest.mark.e2e, pytest.mark.timeout(120)]
 

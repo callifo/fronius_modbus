@@ -9,7 +9,6 @@ import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.fronius_modbus import config_flow, migrations, token_store
 from custom_components.fronius_modbus.const import DOMAIN
@@ -17,6 +16,8 @@ from custom_components.fronius_modbus.token_store import (
     FroniusTokenStore,
     async_get_token_store,
 )
+
+from .ha_test_plugin import MockConfigEntry
 
 HOST = "inverter.example"
 SETTINGS = {"scan_interval": 10, "web_scan_interval": 60}

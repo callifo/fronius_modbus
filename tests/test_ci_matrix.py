@@ -1,102 +1,27 @@
 """The CI workflow must test the Home Assistant release it claims to test.
 
-A job that installs pytest-homeassistant-custom-component unpinned reads like
-"newest Home Assistant" but is not: the plugin ships a normal, non-prerelease
-version for every Home Assistant BETA too, so pip resolves to one pinning a
-beta. Nothing then covers the release people actually run, and the job stays
-green while saying "current HA".
+The job named "current HA" installs Home Assistant's own test plugin, whose
+version is the Home Assistant version. Its predecessor ended with 2026.10,
+and a job still installing it reads "current" while testing 2026.10.
 
-The "minimum" job is the other end: it pins the plugin release that ships
+The "minimum" job is the other end: it pins the old plugin release that ships
 exactly the Home Assistant version hacs.json declares, so an API that does
 not exist yet on that release is caught before a user meets it.
 
-Only the selection logic is exercised - no PyPI access, so this stays a fast
-unit test rather than a network-dependent one.
+Only the workflow text is read - no PyPI access, so this stays a fast unit
+test rather than a network-dependent one.
 """
 
-import importlib.util
 import json
 from pathlib import Path
 import re
 import tomllib
 
-import pytest
-
 REPO = Path(__file__).resolve().parents[1]
-SCRIPT = REPO / ".github" / "scripts" / "resolve_phcc.py"
 WORKFLOW = REPO / ".github" / "workflows" / "test.yaml"
 TEST_REQUIREMENTS = REPO / "requirements_test.txt"
 # The gates that must judge a change the same way on a laptop and in CI.
 GATE_TOOLS = ("ruff", "mypy", "pip-audit")
-
-
-def _load():
-    spec = importlib.util.spec_from_file_location("resolve_phcc", SCRIPT)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-resolve_phcc = _load()
-
-
-@pytest.mark.parametrize(
-    ("pin", "expected"),
-    [
-        ("homeassistant==2026.7.4", False),
-        ("homeassistant==2026.8.0b3", True),
-        ("homeassistant==2026.8.0rc1", True),
-        ("homeassistant==2026.8.0a1", True),
-        ("homeassistant==2026.8.0.dev0", True),
-        # A range is not a pin: pip would pick, and it picks betas.
-        ("homeassistant>=2026.8.0", True),
-        ("not a requirement at all", True),
-        # No pin at all: we cannot tell what would be installed, and the whole
-        # point of the script is not having to guess.
-        (None, True),
-    ],
-)
-def test_a_prerelease_pin_is_recognised(pin, expected):
-    assert resolve_phcc.is_prerelease(pin) is expected
-
-
-def test_the_newest_final_release_wins_over_newer_betas():
-    pins = {
-        "0.13.351": "homeassistant==2026.8.0b3",
-        "0.13.350": "homeassistant==2026.8.0b2",
-        "0.13.348": "homeassistant==2026.7.4",
-        "0.13.347": "homeassistant==2026.7.3",
-    }
-
-    assert resolve_phcc.newest_stable(pins) == "0.13.348"
-
-
-def test_versions_are_compared_numerically_not_as_text():
-    """ "0.13.9" must not outrank "0.13.348" - which it does as a string."""
-    pins = {
-        "0.13.9": "homeassistant==2026.1.0",
-        "0.13.348": "homeassistant==2026.7.4",
-    }
-
-    assert resolve_phcc.newest_stable(pins) == "0.13.348"
-
-
-def test_nothing_usable_fails_loudly():
-    """Falling back to "install whatever" would put the beta straight back."""
-    with pytest.raises(SystemExit):
-        resolve_phcc.newest_stable({"0.13.351": "homeassistant==2026.8.0b3"})
-
-
-def test_an_explicit_requirement_is_passed_through(capsys):
-    """A pinned entry must reach pip unchanged - and must not trigger a PyPI
-    lookup."""
-    resolve_phcc.main(
-        ["resolve_phcc.py", "pytest-homeassistant-custom-component==0.13.190"]
-    )
-
-    assert capsys.readouterr().out.strip() == (
-        "PHCC_SPEC=pytest-homeassistant-custom-component==0.13.190"
-    )
 
 
 def _steps_of(job: str) -> list:
@@ -194,18 +119,13 @@ def test_a_patch_release_still_counts_as_the_declared_minimum():
     assert feature_release("2026.10.0") != feature_release("2026.9.0")
 
 
-def test_the_test_job_resolves_a_final_home_assistant():
+def test_the_test_job_installs_its_plugin_from_the_matrix():
     steps = _steps_of("pytest")
 
-    assert any("resolve_phcc.py" in line for line in steps), (
-        "the test job installs the plugin some other way than through the "
-        "resolver, so it can land on a Home Assistant beta"
-    )
-    assert any('phcc: "latest-stable-ha"' in line for line in steps), (
-        "no matrix entry asks the resolver for the newest final release"
-    )
+    assert any('pip install "${{ matrix.plugin }}"' in line for line in steps)
     assert not [line for line in steps if "requirements_test.txt" in line], (
-        "the unpinned requirements file is back in the test job"
+        "the local requirements are back in the test job, and with them the "
+        "new plugin beside the old one in the minimum job"
     )
 
 
@@ -278,16 +198,15 @@ def test_the_test_job_runs_the_whole_suite_and_the_mutations():
 
 def test_the_type_check_runs_the_same_home_assistant_as_the_test_job():
     """A checker that vouches for another release vouches for nothing."""
-    steps = _steps_of("mypy")
+    mypy_installs = [line for line in _steps_of("mypy") if "pip install" in line]
+    current_plugin = f'plugin: "{CURRENT_PLUGIN}"'
 
-    assert any("resolve_phcc.py latest-stable-ha" in line for line in steps), (
-        "the type check resolves its Home Assistant some other way than the "
+    assert current_plugin in "\n".join(_steps_of("pytest"))
+    assert [line for line in mypy_installs if f'"{CURRENT_PLUGIN}"' in line], (
+        "the type check installs its Home Assistant some other way than the "
         "job whose type surface it is supposed to be checking"
     )
-    assert not [line for line in steps if "requirements_test.txt" in line], (
-        "the unpinned requirements file is back, so this job can install a "
-        "Home Assistant beta the tests never run against"
-    )
+    assert not [line for line in mypy_installs if "requirements_test.txt" in line]
 
 
 def test_the_workflow_still_runs_ruff_pinned():

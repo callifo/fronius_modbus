@@ -13,7 +13,6 @@ from modbus_connection import (
     ServerDeviceFailureError,
 )
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.fronius_modbus import entities, entity as entity_module
 from custom_components.fronius_modbus.const import (
@@ -47,6 +46,7 @@ from custom_components.fronius_modbus.web_control import WebData
 from homeassistant.exceptions import HomeAssistantError
 
 from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID, NO_INVERTER_CAP_W
+from .ha_test_plugin import MockConfigEntry
 from .test_web_control import make_control
 
 # MinRsvPct in the captured fixture; the model-124 scale factor is -2.

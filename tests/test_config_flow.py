@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock
 
 from modbus_connection import ModbusConnectionError
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components import fronius_modbus
 from custom_components.fronius_modbus import config_flow, discovery, froniuswebclient
@@ -35,6 +34,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
 from .conftest import INVERTER_UNIT_ID
+from .ha_test_plugin import MockConfigEntry
 
 HOST = "192.0.2.10"
 USER_INPUT = {"host": HOST, "scan_interval": 10}

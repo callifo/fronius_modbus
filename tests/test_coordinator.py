@@ -17,7 +17,6 @@ from modbus_connection import (
 )
 from modbus_connection.model.sunspec import SunSpecMapShiftError
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.fronius_modbus import coordinator as coordinator_module
 from custom_components.fronius_modbus.const import DOMAIN
@@ -34,6 +33,7 @@ from custom_components.fronius_modbus.web_errors import FroniusWebUnreachable
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID, SteppingClock
+from .ha_test_plugin import MockConfigEntry
 
 
 @pytest.fixture
@@ -93,9 +93,10 @@ async def test_failures_are_tolerated_inside_the_write_window(
 
 async def test_a_tolerated_outage_is_no_warning(coordinator, inverter_unit, caplog):
     """The inverter restarts its Modbus server after a web write; that is expected."""
-    # A loaded machine, made certain: under phcc's asyncio debug mode every step
-    # then logs a slow-callback warning that names this test's coroutine, and
-    # with it the word "tolerated" (seen once in a full run, 2026-10-11).
+    # A loaded machine, made certain: under the test plugin's asyncio debug
+    # mode every step then logs a slow-callback warning that names this test's
+    # coroutine, and with it the word "tolerated" (seen once in a full run,
+    # 2026-10-11).
     asyncio.get_running_loop().slow_callback_duration = 0
     coordinator.data = await coordinator._async_update_data()
     coordinator.tolerate_failures_until(10**9)

@@ -15,7 +15,6 @@ from modbus_connection import (
     ServerDeviceFailureError,
 )
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.fronius_modbus.const import DOMAIN
 from custom_components.fronius_modbus.coordinator import (
@@ -29,6 +28,7 @@ from custom_components.fronius_modbus.froniuswebclient import (
 )
 
 from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID
+from .ha_test_plugin import MockConfigEntry
 from .test_web_control import make_control
 
 PACKAGE = pathlib.Path(__file__).resolve().parents[1] / "custom_components"

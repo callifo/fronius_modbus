@@ -18,6 +18,9 @@ pytest-homeassistant
 # and the e2e tests rely on `pytest.mark.timeout`. The day that transitive
 # dependency changes, a marker nothing registers becomes a silent no-op.
 pytest-timeout
+# check.sh runs the suite with --cov. The old test plugin brought it along,
+# the new one does not.
+pytest-cov
 # The gates check.sh runs, at the versions CI pins - a formatter that
 # reflows differently from CI's is a red build nobody changed.
 ruff==0.17.3

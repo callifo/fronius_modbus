@@ -95,6 +95,16 @@ def load_fixture(name: str) -> dict[int, dict[str, dict[int, int]]]:
 
 
 @pytest.fixture
+def hass_config_dir(hass_tmp_config_dir: str) -> str:
+    """A configuration folder of the test's own.
+
+    pytest-homeassistant defaults to tests/testing_config, inside the
+    repository, and Home Assistant writes into it.
+    """
+    return hass_tmp_config_dir
+
+
+@pytest.fixture
 def symo_gen24() -> dict:
     return load_fixture("symo_gen24_fw1386.json")
 

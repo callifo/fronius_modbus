@@ -129,6 +129,24 @@ def test_the_test_job_installs_its_plugin_from_the_matrix():
     )
 
 
+def test_the_coverage_plugin_is_installed_by_name():
+    """The old test plugin brought pytest-cov along, the new one does not.
+
+    CI and check.sh run the suite with --cov, and pytest stops at the
+    command line without the plugin.
+    """
+    plugin_installs = [
+        line
+        for line in _steps_of("pytest")
+        if 'pip install "${{ matrix.plugin }}"' in line
+    ]
+    requirements = TEST_REQUIREMENTS.read_text(encoding="utf-8").splitlines()
+
+    assert plugin_installs
+    assert all("pytest-cov" in line for line in plugin_installs)
+    assert "pytest-cov" in [line.strip() for line in requirements]
+
+
 CURRENT_PLUGIN = "pytest-homeassistant"
 LEGACY_PLUGIN = "pytest-homeassistant-custom-component"
 

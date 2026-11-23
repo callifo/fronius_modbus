@@ -6,7 +6,7 @@ import pathlib
 from modbus_connection.mock import MockModbusConnection
 import pytest
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntries, ConfigEntry, ConfigEntryState
 
 from .durations import SLOW_TEST_SECONDS, over_budget
 
@@ -208,6 +208,32 @@ def reauth_requests(monkeypatch) -> list[str]:
         lambda entry, hass, **_kwargs: requests.append(entry.entry_id),
     )
     return requests
+
+
+@pytest.fixture(autouse=True)
+def _no_reload_of_an_entry_never_set_up(monkeypatch):
+    """Fail a test that schedules the reload of an entry nobody set up.
+
+    The reload runs the real setup in a task that outlives the test. In CI it
+    reached the Modbus guard during teardown and left a storage timer behind,
+    and the same test passed in the runs before.
+    """
+    stray: list[str] = []
+    schedule = ConfigEntries.async_schedule_reload
+
+    def _schedule(self, entry_id: str) -> None:
+        entry = self.async_get_entry(entry_id)
+        if entry is not None and entry.state is ConfigEntryState.NOT_LOADED:
+            stray.append(entry_id)
+            return
+        schedule(self, entry_id)
+
+    monkeypatch.setattr(ConfigEntries, "async_schedule_reload", _schedule)
+    yield
+    assert not stray, (
+        "a reload was scheduled for an entry that was never set up - request "
+        "the reload_requests fixture to record it instead"
+    )
 
 
 @pytest.fixture(autouse=True)

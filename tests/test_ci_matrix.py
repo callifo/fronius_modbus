@@ -8,8 +8,8 @@ The "minimum" job is the other end: it pins the old plugin release that ships
 exactly the Home Assistant version hacs.json declares, so an API that does
 not exist yet on that release is caught before a user meets it.
 
-Only the workflow text is read - no PyPI access, so this stays a fast unit
-test rather than a network-dependent one.
+Only files in the repository are read - no PyPI access, so this stays a fast
+unit test rather than a network-dependent one.
 """
 
 import json
@@ -179,7 +179,12 @@ def test_only_the_minimum_job_installs_the_old_plugin():
         if LEGACY_PLUGIN in line and not line.strip().startswith("#")
     ]
 
-    assert uses == [f'plugin: "{LEGACY_PLUGIN}==0.13.363"']
+    # Any exact pin: which release is the minimum is held by the job name test
+    # and check_min_ha.py.
+    assert len(uses) == 1, uses
+    assert re.fullmatch(
+        rf'plugin: "{re.escape(LEGACY_PLUGIN)}==\d+\.\d+\.\d+"', uses[0]
+    )
 
 
 def test_the_local_test_requirements_name_the_new_plugin():

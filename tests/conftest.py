@@ -236,6 +236,22 @@ def _no_reload_of_an_entry_never_set_up(monkeypatch):
     )
 
 
+@pytest.fixture
+def reload_requests(monkeypatch, _no_reload_of_an_entry_never_set_up) -> list[str]:
+    """The entries a test asked to reload, instead of a real reload.
+
+    It asks for the guard, so its patch lands after the guard's whatever order
+    pytest would pick otherwise.
+    """
+    requests: list[str] = []
+    monkeypatch.setattr(
+        ConfigEntries,
+        "async_schedule_reload",
+        lambda _entries, entry_id: requests.append(entry_id),
+    )
+    return requests
+
+
 @pytest.fixture(autouse=True)
 def _no_deprecated_home_assistant_calls(caplog):
     """Fail a test in which Home Assistant reports a deprecated call by this integration.

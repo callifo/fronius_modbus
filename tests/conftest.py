@@ -9,10 +9,6 @@ import pytest
 from homeassistant.config_entries import ConfigEntry
 
 from .durations import SLOW_TEST_SECONDS, over_budget
-from .ha_test_plugin import LEGACY_PLUGIN, LEGACY_PLUGIN_INSTALLED
-
-# The new plugin registers itself when installed; the old one has to be named.
-pytest_plugins = (LEGACY_PLUGIN,) if LEGACY_PLUGIN_INSTALLED else ()
 
 # Summed per test across setup, call and teardown, and read at the end of the
 # session. A dict at module level because that is what a pytest hook has: the

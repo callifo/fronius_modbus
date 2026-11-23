@@ -10,8 +10,6 @@ from homeassistant.config_entries import ConfigEntry
 
 from .durations import SLOW_TEST_SECONDS, over_budget
 
-pytest_plugins = ("pytest_homeassistant_custom_component",)
-
 # Summed per test across setup, call and teardown, and read at the end of the
 # session. A dict at module level because that is what a pytest hook has: the
 # hooks are functions, not a fixture with somewhere to keep state.
@@ -90,6 +88,16 @@ def load_fixture(name: str) -> dict[int, dict[str, dict[int, int]]]:
         }
         for unit_id, spaces in raw.items()
     }
+
+
+@pytest.fixture
+def hass_config_dir(hass_tmp_config_dir: str) -> str:
+    """A configuration folder of the test's own.
+
+    pytest-homeassistant defaults to tests/testing_config, inside the
+    repository, and Home Assistant writes into it.
+    """
+    return hass_tmp_config_dir
 
 
 @pytest.fixture

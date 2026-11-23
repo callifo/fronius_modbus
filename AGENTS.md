@@ -30,6 +30,11 @@ unpinned, and `modbus-connection` then resolves newer than the exact pin of
 Home Assistant's own `modbus` integration. Without it
 `core_modbus_pins.py --check` fails and so does `check.sh`.
 
+A virtualenv set up before the switch to `pytest-homeassistant` still has
+`pytest-homeassistant-custom-component`. Uninstall it before the install
+above: with both installed, pytest stops at startup with
+`httpx was already imported`.
+
 ## Verify your work
 
 | Purpose | Command | Time |

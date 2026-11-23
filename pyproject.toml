@@ -12,7 +12,9 @@ asyncio_default_fixture_loop_scope = "function"
 # The e2e tests boot a real Home Assistant instance per test, so they are
 # deselected for the everyday run. CI and check.sh pass `-m ""`, which cancels
 # this deselection - without that the marker would be a silent coverage gap.
-addopts = "-m 'not e2e'"
+# Without respx's own pytest plugin: it imports httpx before Home Assistant can
+# alias it, and pytest-homeassistant then stops before the first test.
+addopts = "-m 'not e2e' -p no:respx"
 markers = [
   "e2e: full end-to-end test against a real Home Assistant setup (slow)",
 ]

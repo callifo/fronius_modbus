@@ -113,17 +113,12 @@ jobs:
         with:
           python-version: "3.14"
       # Home Assistant has to be importable for the checked modules' own
-      # imports - and it has to be the SAME release the test job runs, or this
-      # job vouches for a type surface nothing else touches. Both go through
-      # the same resolver. Mypy is pinned for the reason Ruff is.
-      - name: Resolve the plugin version to install
-        run: |
-          pip install packaging
-          python .github/scripts/resolve_phcc.py latest-stable-ha \
-            | tee -a "$GITHUB_ENV"
+      # imports - and it has to be the SAME release the current test job runs,
+      # or this job vouches for a type surface nothing else touches. Both
+      # install the same plugin. Mypy is pinned for the reason Ruff is.
       - name: Install dependencies
         run: |
-          pip install "$PHCC_SPEC" -r requirements.txt
+          pip install "pytest-homeassistant" -r requirements.txt
           pip install "mypy==2.4.1"
       - name: Type check
         run: mypy
@@ -133,10 +128,13 @@ jobs:
     #
     # "minimum" catches using an API that does not exist yet on the version
     # hacs.json declares. "current" catches the opposite: an API that has since
-    # been REMOVED. Its plugin version is resolved at run time to the newest
-    # release that pins a FINAL Home Assistant - see
-    # .github/scripts/resolve_phcc.py for why an unpinned install silently
-    # tests a beta instead.
+    # been REMOVED.
+    #
+    # Two plugins, because neither covers both ends. Home Assistant's own
+    # pytest-homeassistant starts at 2026.11; pytest-homeassistant-custom-
+    # component ended with 2026.10. The new one carries the Home Assistant
+    # version as its own and publishes betas as pre-releases, so pip installs
+    # the newest final release without help.
     name: pytest (${{ matrix.name }})
     runs-on: "ubuntu-latest"
     timeout-minutes: 45
@@ -153,11 +151,10 @@ jobs:
             # Pinned to the plugin release that ships the Home Assistant
             # feature release hacs.json declares as the minimum. Raise both
             # together, never one alone.
-            phcc: "pytest-homeassistant-custom-component==0.13.363"
+            plugin: "pytest-homeassistant-custom-component==0.13.363"
           - name: "current HA"
             python-version: "3.14"
-            # Resolved by the step below, not a literal requirement.
-            phcc: "latest-stable-ha"
+            plugin: "pytest-homeassistant"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -166,20 +163,15 @@ jobs:
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Resolve the plugin version to install
-        # tee, not a plain redirect: the chosen version has to be visible in
-        # the log too, or a job that disagrees with a local run is guesswork.
-        run: |
-          pip install packaging
-          python .github/scripts/resolve_phcc.py "${{ matrix.phcc }}" | tee -a "$GITHUB_ENV"
       - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
-          # pytest-timeout by name: these jobs deliberately do not install
-          # requirements_test.txt, so nothing else here would bring it - and
-          # the timeout that stops a hung run is exactly what must not depend
-          # on some other package still happening to pull it in.
-          pip install "$PHCC_SPEC" pytest-timeout -r requirements.txt
+          # pytest-timeout and pytest-cov by name: these jobs deliberately do
+          # not install requirements_test.txt, so nothing else here would
+          # bring them - and the timeout that stops a hung run is exactly what
+          # must not depend on some other package still happening to pull it
+          # in. The old test plugin brought pytest-cov, the new one does not.
+          pip install "${{ matrix.plugin }}" pytest-timeout pytest-cov -r requirements.txt
           # The Modbus libraries core pins, not the newest: an installation
           # shares core's connection and runs these.
           pip install $(python .github/scripts/core_modbus_pins.py)

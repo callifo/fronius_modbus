@@ -1,7 +1,6 @@
 """The two repair flows, driven through Home Assistant's own repairs API."""
 
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components import fronius_modbus
 from custom_components.fronius_modbus import config_flow, repairs
@@ -16,6 +15,7 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.setup import async_setup_component
 
 from .conftest import INVERTER_UNIT_ID
+from .ha_test_plugin import MockConfigEntry
 from .test_web_control import FakeWebClient
 
 pytestmark = [pytest.mark.e2e, pytest.mark.timeout(120)]

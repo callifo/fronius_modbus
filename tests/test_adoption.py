@@ -6,7 +6,6 @@ deleted rows are taken over.
 
 from modbus_connection import ModbusConnectionError, ModbusTimeoutError
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.fronius_modbus import migrations
 from custom_components.fronius_modbus.const import DOMAIN, entity_prefix, instance_key
@@ -20,6 +19,7 @@ from homeassistant.helpers import (
 from homeassistant.util import slugify
 
 from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID
+from .ha_test_plugin import MockConfigEntry
 from .test_e2e import (
     HOST,
     REDPOMODORO_NEEDS_THE_LOGIN,

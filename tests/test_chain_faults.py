@@ -10,12 +10,13 @@ from modbus_connection import (
 )
 from modbus_connection.mock import MockModbusUnit
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.fronius_modbus.const import DOMAIN
 from custom_components.fronius_modbus.coordinator import FroniusModbusCoordinator
 from custom_components.fronius_modbus.fronius_modbus_api.device import FroniusInverter
 from custom_components.fronius_modbus.fronius_modbus_api.storage import ExtendedMode
+
+from .ha_test_plugin import MockConfigEntry
 
 INVERTER_UNIT_ID, METER_UNIT_ID = 1, 200
 # Addresses in the captured Symo GEN24 of tests/fixtures.

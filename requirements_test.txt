@@ -1,28 +1,31 @@
 # Test dependencies for LOCAL use.
 #
-# pytest-homeassistant-custom-component pulls in a matching Home Assistant
-# release plus the pytest plugin/fixtures for custom integrations.
+# pytest-homeassistant is Home Assistant's own test plugin and pulls in the
+# Home Assistant release of the same version. It replaces
+# pytest-homeassistant-custom-component, which ended with Home Assistant
+# 2026.10; the two must not be installed together.
 #
 # Deliberately UNPINNED here: locally you want whatever is current, and only a
 # current Home Assistant surfaces deprecations and API removals - an old pin
 # makes the integration look healthy while it is already broken (the previous
-# pin, 0.13.254, held Home Assistant 2025.6 while users ran 2026.8).
+# pin, 0.13.254, held Home Assistant 2025.6 while users ran 2026.8). Its betas
+# are pre-releases, so pip leaves them out.
 #
-# The CI test job does NOT install this file. It installs the plugin directly,
-# because unpinned is not good enough there: the plugin publishes a normal
-# release for every Home Assistant BETA too, so "newest" quietly becomes a beta
-# and nothing tests the release people run. See .github/workflows/test.yaml and
-# .github/scripts/resolve_phcc.py.
-pytest-homeassistant-custom-component
-# Declared rather than inherited: it arrives through the plugin above today,
-# and the e2e tests rely on `pytest.mark.timeout`. The day that transitive
-# dependency changes, a marker nothing registers becomes a silent no-op.
+# The CI test job does NOT install this file: its minimum job needs the old
+# plugin, pinned to the minimum Home Assistant. See .github/workflows/test.yaml.
+pytest-homeassistant
+# Declared because nothing else brings it: the old test plugin did, the new
+# one does not, and the e2e tests rely on `pytest.mark.timeout`. Without it
+# that marker is registered by nothing and becomes a silent no-op.
 pytest-timeout
+# check.sh runs the suite with --cov. The old test plugin brought it along,
+# the new one does not.
+pytest-cov
 # The gates check.sh runs, at the versions CI pins - a formatter that
 # reflows differently from CI's is a red build nobody changed.
 ruff==0.17.3
 mypy==2.4.1
 pip-audit==2.10.1
-# resolve_phcc.py parses versions with it.
+# core_modbus_pins.py parses requirements with it.
 packaging
 -r requirements.txt

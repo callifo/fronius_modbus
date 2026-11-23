@@ -7,7 +7,6 @@ import threading
 import time
 
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.fronius_modbus import web_control
 from custom_components.fronius_modbus.const import (
@@ -38,6 +37,8 @@ from homeassistant.components.diagnostics import (
 )
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.setup import async_setup_component
+
+from .ha_test_plugin import MockConfigEntry
 
 # A rejected login asks Home Assistant for a new one; here it is only recorded.
 pytestmark = pytest.mark.usefixtures("reauth_requests")

@@ -211,8 +211,10 @@ def reauth_requests(monkeypatch) -> list[str]:
 
 
 @pytest.fixture(autouse=True)
-def _no_reload_of_an_entry_never_set_up(monkeypatch):
-    """Fail a test that schedules the reload of an entry nobody set up.
+def _no_reload_of_an_entry_not_loaded(monkeypatch):
+    """Fail a test that schedules the reload of an entry that is not loaded.
+
+    Never set up or already unloaded: Home Assistant calls both not loaded.
 
     The reload runs the real setup in a task that outlives the test. In CI it
     reached the Modbus guard during teardown and left a storage timer behind,
@@ -231,13 +233,13 @@ def _no_reload_of_an_entry_never_set_up(monkeypatch):
     monkeypatch.setattr(ConfigEntries, "async_schedule_reload", _schedule)
     yield
     assert not stray, (
-        "a reload was scheduled for an entry that was never set up - request "
+        "a reload was scheduled for an entry that is not loaded - request "
         "the reload_requests fixture to record it instead"
     )
 
 
 @pytest.fixture
-def reload_requests(monkeypatch, _no_reload_of_an_entry_never_set_up) -> list[str]:
+def reload_requests(monkeypatch, _no_reload_of_an_entry_not_loaded) -> list[str]:
     """The entries a test asked to reload, instead of a real reload.
 
     It asks for the guard, so its patch lands after the guard's whatever order

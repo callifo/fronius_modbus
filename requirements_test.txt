@@ -14,9 +14,9 @@
 # The CI test job does NOT install this file: its minimum job needs the old
 # plugin, pinned to the minimum Home Assistant. See .github/workflows/test.yaml.
 pytest-homeassistant
-# Declared rather than inherited: it arrives through the plugin above today,
-# and the e2e tests rely on `pytest.mark.timeout`. The day that transitive
-# dependency changes, a marker nothing registers becomes a silent no-op.
+# Declared because nothing else brings it: the old test plugin did, the new
+# one does not, and the e2e tests rely on `pytest.mark.timeout`. Without it
+# that marker is registered by nothing and becomes a silent no-op.
 pytest-timeout
 # check.sh runs the suite with --cov. The old test plugin brought it along,
 # the new one does not.

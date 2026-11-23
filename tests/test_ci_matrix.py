@@ -18,6 +18,7 @@ import importlib.util
 import json
 from pathlib import Path
 import re
+import tomllib
 
 import pytest
 
@@ -206,6 +207,62 @@ def test_the_test_job_resolves_a_final_home_assistant():
     assert not [line for line in steps if "requirements_test.txt" in line], (
         "the unpinned requirements file is back in the test job"
     )
+
+
+CURRENT_PLUGIN = "pytest-homeassistant"
+LEGACY_PLUGIN = "pytest-homeassistant-custom-component"
+
+
+def test_the_current_jobs_install_home_assistants_own_test_plugin():
+    """The old plugin's last release ships Home Assistant 2026.10.4.
+
+    The job named "current HA" and the type check kept installing it, so both
+    tested 2026.10 while users ran 2026.11. Home Assistant publishes its own
+    plugin since 2026.11; its version is the Home Assistant version, and its
+    betas are pre-releases pip leaves out.
+    """
+    pytest_steps = "\n".join(_steps_of("pytest"))
+    mypy_steps = "\n".join(_steps_of("mypy"))
+
+    assert f'plugin: "{CURRENT_PLUGIN}"' in pytest_steps
+    assert f'pip install "{CURRENT_PLUGIN}" ' in mypy_steps
+    assert not re.search(r"--pre\b", pytest_steps + mypy_steps), (
+        "pip would install a Home Assistant beta"
+    )
+
+
+def test_only_the_minimum_job_installs_the_old_plugin():
+    """The new plugin starts at 2026.11, so the minimum job still needs the
+    old one. Anywhere else it means Home Assistant 2026.10."""
+    workflow = WORKFLOW.read_text(encoding="utf-8").splitlines()
+    uses = [
+        line.strip()
+        for line in workflow
+        if LEGACY_PLUGIN in line and not line.strip().startswith("#")
+    ]
+
+    assert uses == [f'plugin: "{LEGACY_PLUGIN}==0.13.363"']
+
+
+def test_the_local_test_requirements_name_the_new_plugin():
+    requirements = [
+        line.strip()
+        for line in TEST_REQUIREMENTS.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+
+    assert CURRENT_PLUGIN in requirements
+    assert LEGACY_PLUGIN not in requirements, "the two must not be installed together"
+
+
+def test_the_suite_starts_without_the_respx_plugin():
+    """With the new plugin, respx's pytest plugin imports httpx before Home
+    Assistant can alias it, and pytest stops before the first test. The
+    option has to be in the configuration: the suite starts pytest itself."""
+    options = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
+    addopts = options["tool"]["pytest"]["ini_options"]["addopts"]
+
+    assert "-p no:respx" in addopts
 
 
 def test_the_test_job_runs_the_whole_suite_and_the_mutations():

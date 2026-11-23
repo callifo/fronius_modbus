@@ -175,9 +175,6 @@ jobs:
           # The Modbus libraries core pins, not the newest: an installation
           # shares core's connection and runs these.
           pip install $(python .github/scripts/core_modbus_pins.py)
-          # In the log: when a job disagrees with a local run, the first
-          # question is which Home Assistant it tested.
-          python -c "from homeassistant.const import __version__; print('Home Assistant', __version__)"
       - name: Install gitleaks for the allowlist tests
         # The gitleaks job scans with the change's own rules, so a widened
         # allowlist passes it; tests/test_secret_scan.py holds the rules to a

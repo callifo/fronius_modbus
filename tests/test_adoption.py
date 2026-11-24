@@ -30,6 +30,7 @@ from .test_e2e import (
     REDPOMODORO_NEEDS_THE_LOGIN,
     REDPOMODORO_NO_SUCCESSOR,
     REDPOMODORO_REGISTRY,
+    _callifo_028_entry,
     _FakeWebClientWithTopology,
     _redpomodoro_entry,
     _redpomodoro_key,
@@ -491,6 +492,112 @@ async def test_a_0_1_9_entry_back_after_a_failed_delete_knows_its_meter(
     moved = er.async_get(hass).async_get(f"sensor.{power['object_id']}")
     assert moved is not None
     assert moved.unique_id == f"{entity_prefix(entry.entry_id)}_meter_201_power"
+
+
+async def _first_start_plain(hass, entry, mock_modbus, monkeypatch):
+    await setup_entry(hass, entry)
+
+
+async def _first_start_before_the_login(hass, entry, mock_modbus, monkeypatch):
+    await setup_entry(hass, entry)
+    await _log_in_with_one_meter(hass, mock_modbus, monkeypatch)
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+
+async def _first_start_with_the_meter_silent(hass, entry, mock_modbus, monkeypatch):
+    await _log_in_with_one_meter(hass, mock_modbus, monkeypatch)
+    mock_modbus.fail_requests(METER_UNIT_ID, ModbusTimeoutError())
+    await setup_entry(hass, entry)
+    mock_modbus.fail_requests(METER_UNIT_ID, None)
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+
+async def _first_start_with_its_second_meter_silent(
+    hass, entry, mock_modbus, monkeypatch
+):
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, CONF_METER_UNIT_ID: 201}
+    )
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+    mock_modbus.fail_requests(201, ModbusTimeoutError())
+    await setup_entry(hass, entry)
+    mock_modbus.fail_requests(201, None)
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+
+async def _first_start_beside_another_entry(hass, entry, mock_modbus, monkeypatch):
+    MockConfigEntry(domain=DOMAIN, entry_id=OTHER_ENTRY_ID).add_to_hass(hass)
+    await setup_entry(hass, entry)
+
+
+@pytest.mark.parametrize("deleted", [False, True], ids=["never deleted", "back"])
+@pytest.mark.parametrize(
+    "old_entry",
+    [_redpomodoro_entry, lambda hass: _callifo_028_entry(hass, METER_UNIT_ID)],
+    ids=["0.1.9", "callifo 0.2.8"],
+)
+@pytest.mark.parametrize(
+    "first_start",
+    [
+        _first_start_plain,
+        _first_start_before_the_login,
+        _first_start_with_the_meter_silent,
+        _first_start_with_its_second_meter_silent,
+        _first_start_beside_another_entry,
+    ],
+)
+async def test_an_old_entry_back_after_a_failed_delete_ends_like_one_never_deleted(
+    hass, mock_modbus, monkeypatch, first_start, old_entry, deleted
+):
+    """Its rows are certain: what the first start did not expect yet stayed lost."""
+    entry, _ = old_entry(hass)
+    registry = er.async_get(hass)
+    rows = {
+        row.id: row.unique_id
+        for row in er.async_entries_for_config_entry(registry, entry.entry_id)
+    }
+    if deleted:
+        for row in er.async_entries_for_config_entry(registry, entry.entry_id):
+            registry.async_remove(row.entity_id)
+
+    await first_start(hass, entry, mock_modbus, monkeypatch)
+
+    kept = {
+        row.id for row in er.async_entries_for_config_entry(registry, entry.entry_id)
+    }
+    lost = {unique_id for row_id, unique_id in rows.items() if row_id not in kept}
+    assert lost <= REDPOMODORO_NO_SUCCESSOR
+
+
+async def test_a_row_the_owner_deleted_stays_deleted_beside_the_others(
+    hass, mock_modbus
+):
+    """Only an entry without any entity left came back; this one was just tidied up."""
+    entry, _ = _redpomodoro_entry(hass)
+    registry = er.async_get(hass)
+    registry.async_remove(
+        registry.async_get_entity_id("sensor", DOMAIN, "fm_storage_power")
+    )
+
+    await setup_entry(hass, entry)
+
+    assert _untouched(hass, ("sensor", DOMAIN, "fm_storage_power"))
+
+
+async def test_a_row_in_todays_format_is_left_to_home_assistant(hass, mock_modbus):
+    """It is restored with its entity; one without an entity must not come back."""
+    entry = make_entry(hass)
+    registry = er.async_get(hass)
+    unique_id = f"{entity_prefix(entry.entry_id)}_retired_long_ago"
+    row = registry.async_get_or_create("sensor", DOMAIN, unique_id, config_entry=entry)
+    registry.async_remove(row.entity_id)
+
+    await setup_entry(hass, entry)
+
+    assert _untouched(hass, ("sensor", DOMAIN, unique_id))
 
 
 async def test_a_0_1_9_entry_back_after_a_failed_delete_takes_only_its_own_rows(

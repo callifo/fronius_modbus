@@ -2802,8 +2802,8 @@
   {
     "label": "adoption: only this integration's deleted rows are an origin",
     "path": "custom_components/fronius_modbus/adoption.py",
-    "old": "        if row.platform == DOMAIN and _left_behind(hass, row):\n",
-    "new": "        if _left_behind(hass, row):\n",
+    "old": "        if row.platform == DOMAIN and _left_behind(hass, entry, row):\n",
+    "new": "        if _left_behind(hass, entry, row):\n",
     "tests": "rows_of_another_integration_count_for_nothing"
   },
   {
@@ -2812,6 +2812,27 @@
     "old": "        or hass.config_entries.async_get_entry(row.config_entry_id) is None\n",
     "new": "        or False\n",
     "tests": "takes_over_a_deleted_0_1_9_entry"
+  },
+  {
+    "label": "adoption: a row under this entry's own id counts as left behind",
+    "path": "custom_components/fronius_modbus/adoption.py",
+    "old": "        row.config_entry_id in (None, entry.entry_id)\n",
+    "new": "        row.config_entry_id is None\n",
+    "tests": "back_after_a_failed_delete_takes_its_rows_over"
+  },
+  {
+    "label": "adoption: rows under this entry's own id are certain beside another removal",
+    "path": "custom_components/fronius_modbus/adoption.py",
+    "old": "    if entry.entry_id in removals:\n        removals = {entry.entry_id: removals[entry.entry_id]}\n",
+    "new": "",
+    "tests": "back_after_a_failed_delete_takes_only_its_own_rows"
+  },
+  {
+    "label": "adoption: an entry back after a failed delete keeps the meter it read",
+    "path": "custom_components/fronius_modbus/adoption.py",
+    "old": "    if rows[0].config_entry_id != entry.entry_id:\n",
+    "new": "    if rows:\n",
+    "tests": "back_after_a_failed_delete_knows_its_meter"
   },
   {
     "label": "adoption: nothing is taken over from two deleted entries",
@@ -2858,8 +2879,8 @@
   {
     "label": "adoption: a deleted 0.1.9 meter's address counts as unknown",
     "path": "custom_components/fronius_modbus/adoption.py",
-    "old": "    meter = resolve_v019_meter(\n        V019_METER_UNKNOWN,\n",
-    "new": "    meter = resolve_v019_meter(\n        None,\n",
+    "old": "        data[V019_METER_UNIT_ID] = V019_METER_UNKNOWN\n",
+    "new": "        data[V019_METER_UNIT_ID] = None\n",
     "tests": "deleted_0_1_9_meter_is_not_guessed_among_two"
   },
   {
@@ -2886,8 +2907,8 @@
   {
     "label": "adoption: the takeover is noted for the devices",
     "path": "custom_components/fronius_modbus/adoption.py",
-    "old": "        data={**entry.data, ADOPTED_V019: True, V019_METER_UNIT_ID: V019_METER_UNKNOWN},\n",
-    "new": "        data={**entry.data, V019_METER_UNIT_ID: V019_METER_UNKNOWN},\n",
+    "old": "    data = {**entry.data, ADOPTED_V019: True}\n",
+    "new": "    data = {**entry.data}\n",
     "tests": "owners_changes_of_a_deleted_0_1_9_entry_are_kept or first_setup_is_retried"
   },
   {

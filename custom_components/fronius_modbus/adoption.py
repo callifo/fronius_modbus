@@ -4,7 +4,8 @@ Switching from redpomodoro to this repository through the Marketplace deletes
 the 0.1.9 entry before the new one is set up. Home Assistant keeps the deleted
 entities for 30 days and restores a row, with its entity id, name and area,
 when an entity with the same unique id is created again; the new entry builds
-other ids, so the migrations of 0.1.9 found nothing to move.
+other ids, so the migrations of 0.1.9 found nothing to move. The same holds for
+the 0.1.9 entry itself when deleting it failed and only its entities are gone.
 """
 
 from __future__ import annotations
@@ -43,15 +44,18 @@ ADOPTED_V019 = "_adopted_v019"
 ADOPTED_DEVICES = "_adopted_devices"
 
 
-def _left_behind(hass: HomeAssistant, row: er.DeletedRegistryEntry) -> bool:
-    """A row whose entry is gone.
+def _left_behind(
+    hass: HomeAssistant, entry: ConfigEntry, row: er.DeletedRegistryEntry
+) -> bool:
+    """A row whose entry is gone, or this entry's own.
 
     Home Assistant clears the entry id once the removal is through; a removal
     that stopped after the devices, as with 0.1.9 on 2026.7 and later, which
-    cannot load, left the id of an entry that no longer exists.
+    cannot load, left the id of an entry that no longer exists. While nothing
+    saved that removal, a restart brings the entry back without its rows.
     """
     return (
-        row.config_entry_id is None
+        row.config_entry_id in (None, entry.entry_id)
         or hass.config_entries.async_get_entry(row.config_entry_id) is None
     )
 
@@ -75,19 +79,22 @@ def _is_the_first_setup_of_the_only_entry(
 
 
 def _deleted_v019_rows(
-    hass: HomeAssistant, registry: er.EntityRegistry
+    hass: HomeAssistant, entry: ConfigEntry, registry: er.EntityRegistry
 ) -> list[er.DeletedRegistryEntry]:
     """The rows of the one deleted entry, if it was a 0.1.9 entry.
 
     Home Assistant orphans all deleted rows of an entry at once, with one time;
     a removal that stopped half way left them under the id of its entry. Of
     two deleted entries either may be this inverter's, so neither is taken.
+    Rows under this entry's own id are certain, whatever else was deleted.
     """
     removals: dict[object, list[er.DeletedRegistryEntry]] = {}
     for row in list(registry.deleted_entities.values()):
-        if row.platform == DOMAIN and _left_behind(hass, row):
+        if row.platform == DOMAIN and _left_behind(hass, entry, row):
             removal = row.config_entry_id or row.orphaned_timestamp
             removals.setdefault(removal, []).append(row)
+    if entry.entry_id in removals:
+        removals = {entry.entry_id: removals[entry.entry_id]}
     if len(removals) != 1:
         if removals:
             _LOGGER.info(
@@ -112,13 +119,16 @@ def async_adopt_deleted_entities(hass: HomeAssistant, entry: ConfigEntry) -> Non
     registry = er.async_get(hass)
     if not _is_the_first_setup_of_the_only_entry(hass, entry, registry):
         return
-    rows = _deleted_v019_rows(hass, registry)
+    rows = _deleted_v019_rows(hass, entry, registry)
     if not rows:
         return
     runtime = entry.runtime_data
-    # The address 0.1.9 read went with its entry.
+    # The address 0.1.9 read went with its entry, unless that is this one.
+    data = {**entry.data, ADOPTED_V019: True}
+    if rows[0].config_entry_id != entry.entry_id:
+        data[V019_METER_UNIT_ID] = V019_METER_UNKNOWN
     meter = resolve_v019_meter(
-        V019_METER_UNKNOWN,
+        data.get(V019_METER_UNIT_ID),
         runtime.device.meters,
         runtime.primary_meter_unit_id,
         runtime.reported_meter_unit_ids,
@@ -144,10 +154,7 @@ def async_adopt_deleted_entities(hass: HomeAssistant, entry: ConfigEntry) -> Non
         registered_keys=runtime.registered_keys
         | {keys[row.unique_id] for row in chosen},
     )
-    hass.config_entries.async_update_entry(
-        entry,
-        data={**entry.data, ADOPTED_V019: True, V019_METER_UNIT_ID: V019_METER_UNKNOWN},
-    )
+    hass.config_entries.async_update_entry(entry, data=data)
     _LOGGER.info("Took over %s entities of a deleted 0.1.9 entry", len(chosen))
 
 

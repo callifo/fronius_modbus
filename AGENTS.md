@@ -42,14 +42,14 @@ above: with both installed, pytest stops at startup with
 | Lint | `$PY -m ruff check .` | < 1 s |
 | Format check (apply: `ruff format .`) | `$PY -m ruff format --check .` | < 1 s |
 | Types | `$PY -m mypy` | ~5 s |
-| Fast tests, no e2e | `$PY -m pytest tests/ -q` | ~30 s |
-| All tests, as CI runs them | `$PY -m pytest tests/ -q -m ""` | ~50 s |
+| Fast tests, no e2e | `$PY -m pytest tests/ -q` | ~45 s |
+| All tests, as CI runs them | `$PY -m pytest tests/ -q -m ""` | ~75 s |
 | One file / one test | `$PY -m pytest tests/test_storage.py -q` / `... -k name_part` | seconds |
 | Mutation plan still matches the code | `$PY -m pytest tests/test_mutation_harness.py -q` | seconds |
 | Mutation run | `$PY .github/scripts/mutate.py .github/mutations/plan.json` | ~5 min |
 | Everything, same set as CI | `PYTHON=$PY .github/scripts/check.sh` | ~7 min |
 
-- Plain `pytest` **deselects the `e2e` marker** (about 170 tests that boot a
+- Plain `pytest` **deselects the `e2e` marker** (about 200 tests that boot a
   real Home Assistant). Before calling work done, run with `-m ""`.
 - `check.sh` stops at the first failure and **fails closed** when `gitleaks`
   (>= 8.30) or `pwsh` is missing. If you cannot install them, run its steps by

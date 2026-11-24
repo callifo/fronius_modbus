@@ -169,3 +169,7 @@ integration. The slow files carry the `e2e` mark: `test_e2e.py`,
 The `mock_modbus` fixture in `conftest.py` stands in for the connection Home
 Assistant's `modbus` integration shares - a fresh in-memory connection per
 (re)load, seeded from the captured Symo GEN24 in `tests/fixtures/`.
+A test that schedules the reload of an entry that is not loaded (never set up,
+or unloaded) fails, because that reload would run the real setup after the
+test. The `reload_requests`
+fixture records the reload instead, as `reauth_requests` does for a new login.

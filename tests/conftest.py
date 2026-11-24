@@ -6,7 +6,7 @@ import pathlib
 from modbus_connection.mock import MockModbusConnection
 import pytest
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntries, ConfigEntry, ConfigEntryState
 
 from .durations import SLOW_TEST_SECONDS, over_budget
 
@@ -206,6 +206,50 @@ def reauth_requests(monkeypatch) -> list[str]:
         ConfigEntry,
         "async_start_reauth",
         lambda entry, hass, **_kwargs: requests.append(entry.entry_id),
+    )
+    return requests
+
+
+@pytest.fixture(autouse=True)
+def _no_reload_of_an_entry_not_loaded(monkeypatch):
+    """Fail a test that schedules the reload of an entry that is not loaded.
+
+    Never set up or already unloaded: Home Assistant calls both not loaded.
+
+    The reload runs the real setup in a task that outlives the test. In CI it
+    reached the Modbus guard during teardown and left a storage timer behind,
+    and the same test passed in the runs before.
+    """
+    stray: list[str] = []
+    schedule = ConfigEntries.async_schedule_reload
+
+    def _schedule(self, entry_id: str) -> None:
+        entry = self.async_get_entry(entry_id)
+        if entry is not None and entry.state is ConfigEntryState.NOT_LOADED:
+            stray.append(entry_id)
+            return
+        schedule(self, entry_id)
+
+    monkeypatch.setattr(ConfigEntries, "async_schedule_reload", _schedule)
+    yield
+    assert not stray, (
+        "a reload was scheduled for an entry that is not loaded - request "
+        "the reload_requests fixture to record it instead"
+    )
+
+
+@pytest.fixture
+def reload_requests(monkeypatch, _no_reload_of_an_entry_not_loaded) -> list[str]:
+    """The entries a test asked to reload, instead of a real reload.
+
+    It asks for the guard, so its patch lands after the guard's whatever order
+    pytest would pick otherwise.
+    """
+    requests: list[str] = []
+    monkeypatch.setattr(
+        ConfigEntries,
+        "async_schedule_reload",
+        lambda _entries, entry_id: requests.append(entry_id),
     )
     return requests
 

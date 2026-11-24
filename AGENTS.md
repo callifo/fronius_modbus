@@ -220,6 +220,8 @@ plan.
 
 - Never a real network. An autouse fixture fails any test that reaches the real
   Modbus connection.
+- A unit test whose entry is not loaded must not reload it for real: request
+  `reload_requests` (or `reauth_requests` for a new login) to record it.
 - Fixtures (`tests/conftest.py`): `connection`, `inverter_unit` and
   `meter_unit` for library tests, an in-memory device seeded from a captured
   GEN24; `mock_modbus` for Home Assistant level tests.

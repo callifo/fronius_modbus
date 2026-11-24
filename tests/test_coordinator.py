@@ -285,7 +285,7 @@ NAMEPLATE_MAX_DIS_CHA_RTE_ADDRESS = 40146
 
 
 async def test_the_nameplate_rates_replace_the_fallback_once_read(
-    coordinator, inverter_unit, monkeypatch
+    coordinator, entry, inverter_unit, monkeypatch, reload_requests
 ):
     """A first poll without model 120 fixed the storage control on 11000 W."""
     inverter_unit.load_raw({"holding": {STORAGE_WCHAMAX_ADDRESS: 0}})
@@ -305,6 +305,8 @@ async def test_the_nameplate_rates_replace_the_fallback_once_read(
     await coordinator.async_refresh()
     assert coordinator.storage_control.max_charge_rate_w == 10240
     assert coordinator.storage_control.max_discharge_rate_w == 10240
+    # The nameplate answering for the first time adds its entities.
+    assert reload_requests == [entry.entry_id]
 
 
 async def test_the_rate_percentages_are_relative_to_wchamax(coordinator, inverter_unit):

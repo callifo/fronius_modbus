@@ -8,7 +8,12 @@ from modbus_connection import ModbusConnectionError, ModbusTimeoutError
 import pytest
 
 from custom_components.fronius_modbus import migrations
-from custom_components.fronius_modbus.const import DOMAIN, entity_prefix, instance_key
+from custom_components.fronius_modbus.const import (
+    CONF_METER_UNIT_ID,
+    DOMAIN,
+    entity_prefix,
+    instance_key,
+)
 from custom_components.fronius_modbus.token_store import async_get_token_store
 from homeassistant.config_entries import SOURCE_IGNORE, ConfigEntryState
 from homeassistant.helpers import (
@@ -24,6 +29,7 @@ from .test_e2e import (
     HOST,
     REDPOMODORO_NEEDS_THE_LOGIN,
     REDPOMODORO_NO_SUCCESSOR,
+    REDPOMODORO_REGISTRY,
     _FakeWebClientWithTopology,
     _redpomodoro_entry,
     _redpomodoro_key,
@@ -86,6 +92,31 @@ async def _deleted_0_1_9_entry(hass, monkeypatch=None, *, stopped_half_way=False
         assert await hass.config_entries.async_remove(old.entry_id)
         await hass.async_block_till_done()
     return devices, renamed, area.id, rows
+
+
+async def _returned_0_1_9_entry(hass):
+    """A 0.1.9 entry back after a restart, its devices and rows cleaned up.
+
+    Deleting it failed, 0.1.9 cannot be loaded on 2026.7 and later, and nothing
+    saved the removal. Uninstalling the repository then made Home Assistant
+    clean up the devices of the entry it no longer knew, and their rows.
+    """
+    entry, devices = _redpomodoro_entry(hass)
+    registry = er.async_get(hass)
+    renamed = registry.async_get_entity_id("sensor", DOMAIN, "fm_acpower")
+    registry.async_update_entity(renamed, name="My own name")
+    row_ids = {
+        row.entity_id: row.id
+        for row in er.async_entries_for_config_entry(registry, entry.entry_id)
+    }
+    for device_id in devices.values():
+        dr.async_get(hass).async_remove_device(device_id)
+    await hass.async_block_till_done()
+    assert not er.async_entries_for_config_entry(registry, entry.entry_id)
+    assert {row.config_entry_id for row in registry.deleted_entities.values()} == {
+        entry.entry_id
+    }
+    return entry, renamed, row_ids
 
 
 def _deleted_rows(hass, entry_id, *unique_ids, platform=DOMAIN):
@@ -415,6 +446,67 @@ async def test_nothing_is_taken_over_from_two_deleted_entries(hass, mock_modbus)
     await setup_entry(hass, new)
 
     assert _untouched(hass, first_key) and _untouched(hass, second_key)
+
+
+async def test_a_0_1_9_entry_back_after_a_failed_delete_takes_its_rows_over(
+    hass, mock_modbus
+):
+    """Its rows were deleted but it was not: every sensor came back without its history."""
+    entry, renamed, row_ids = await _returned_0_1_9_entry(hass)
+
+    await setup_entry(hass, entry)
+
+    registry = er.async_get(hass)
+    prefix = entity_prefix(entry.entry_id)
+    rows = _rows_that_move(REDPOMODORO_NO_SUCCESSOR, REDPOMODORO_NEEDS_THE_LOGIN)
+    expected = {
+        f"{row['domain']}.{row['object_id']}": f"{prefix}_{_redpomodoro_key(row['unique_id'])}"
+        for row in rows
+    }
+    found = {
+        entity_id: getattr(registry.async_get(entity_id), "unique_id", None)
+        for entity_id in expected
+    }
+    assert found == expected
+    assert registry.async_get(renamed).id == row_ids[renamed]
+    assert registry.async_get(renamed).name == "My own name"
+
+
+async def test_a_0_1_9_entry_back_after_a_failed_delete_knows_its_meter(
+    hass, mock_modbus, monkeypatch
+):
+    """Of two meters, the one 0.1.9 read: its address is still in the entry."""
+    entry, _, _ = await _returned_0_1_9_entry(hass)
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, CONF_METER_UNIT_ID: 201}
+    )
+    await log_in_to_the_web_api(hass, mock_modbus, monkeypatch)
+
+    await setup_entry(hass, entry)
+
+    assert entry.runtime_data.primary_meter_unit_id == METER_UNIT_ID
+    power = next(
+        row for row in REDPOMODORO_REGISTRY if row["unique_id"] == "fm_m1_power"
+    )
+    moved = er.async_get(hass).async_get(f"sensor.{power['object_id']}")
+    assert moved is not None
+    assert moved.unique_id == f"{entity_prefix(entry.entry_id)}_meter_201_power"
+
+
+async def test_a_0_1_9_entry_back_after_a_failed_delete_takes_only_its_own_rows(
+    hass, mock_modbus
+):
+    """Rows of another deleted entry say nothing about the ones under its own id."""
+    entry, renamed, row_ids = await _returned_0_1_9_entry(hass)
+    other, (other_key,) = _deleted_rows(hass, OTHER_ENTRY_ID, "fm_other")
+    await _remove(hass, other)
+
+    await setup_entry(hass, entry)
+
+    moved = er.async_get(hass).async_get(renamed)
+    assert moved is not None
+    assert moved.id == row_ids[renamed]
+    assert _untouched(hass, other_key)
 
 
 @pytest.mark.parametrize(

@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 1.4.2
+
+Released 2026-11-25. It brings back the entities of an old entry after a failed delete, shows the address the Modbus IP restriction allows, and fixes errors in reading and writing. Coming from redpomodoro/fronius_modbus, read the README's *Coming from redpomodoro/fronius_modbus* first.
 
 ### Changed
 - `tools/inverter_dump.bat` also reads Modbus unit 240 on a Datamanager (SnapINverter), where its meter usually answers (issue 110).
@@ -14,6 +16,7 @@
 ### Fixed
 - The diagnostics download no longer contains the inverter's address while the Solar API firmware warning is shown, also for a warning an earlier version stored.
 - A web setting written by an automation that was stopped mid-write could overwrite a newer value of the same setting.
+- When the inverter refused the login just as an automation stopped the write, the web interface stayed off until a restart. Home Assistant now asks for a new login.
 - A web setting waiting behind a newer value of the same setting was dropped when the newer one was stopped before its turn. It is now written.
 - Updating straight from callifo 0.2.8 or older keeps the entity IDs and history of the grid meter's sensors and the reserve, and from 0.2.9 or older the temperature sensor once the web login is in place. They came back under new entity IDs before.
 - An entry of redpomodoro 0.1.9, callifo 0.2 or 0.3 that is back without its entities after deleting it failed now gets them back with their history. An entry already set up with an earlier 1.x version stays as it is.

@@ -1,4 +1,4 @@
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
+[![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration)
 
 # fronius_modbus
 
@@ -60,19 +60,18 @@ Some entities show a new name; their entity IDs stay ([New names](https://github
 
 Coming straight from 0.2.7 or older, the MPPT and storage module sensors (`mppt1_power`, `mppt1_lfte` and the like) come back under new entity IDs, as they did with 0.2.8. Entries from redpomodoro 0.1.9 are migrated as well ([Migration](https://github.com/callifo/fronius_modbus/wiki/Migration#coming-from-redpomodorofronius_modbus)).
 
+## Coming from redpomodoro/fronius_modbus
+
+The HACS catalog lists this integration in the place of redpomodoro/fronius_modbus. Home Assistant 2026.11 and later asks users of the old repository to uninstall it. **Do not uninstall it, and do not delete the integration under Devices & services:** deleting it can lose entities and history. Follow [Switch to this repository](https://github.com/callifo/fronius_modbus/wiki/Migration#switch-to-this-repository) instead. It keeps the entry, its entities and their history.
+
 ## Installation
 
-### HACS
+### Marketplace or HACS
 
-1. Go to HACS.
-2. Click on the three dots in the top right corner.
-3. Select "Custom repositories".
-4. Add the [URL](https://github.com/callifo/fronius_modbus) of this repository.
-5. Select the "Integration" type.
-6. Click "ADD".
-7. Open the repository in HACS and download it.
-8. Restart Home Assistant.
-9. Add **Fronius Modbus** under Settings -> Devices & services, or accept the card under **Discovered**.
+1. Open the Marketplace (Home Assistant 2026.11 and later) or HACS.
+2. Search for **Fronius Modbus** (callifo/fronius_modbus) and download it.
+3. Restart Home Assistant.
+4. Add **Fronius Modbus** under Settings -> Devices & services, or accept the card under **Discovered**.
 
 ### Manual
 
@@ -98,7 +97,7 @@ Every parameter, discovery, the Modbus IP restriction and reconfiguring are in [
 2. Settings -> Devices & services -> Fronius Modbus -> the entry's menu -> Delete.
 3. The stored Web API token for the entry's host and role is deleted with it, unless another entry still uses them.
 4. The Modbus settings the integration wrote on the inverter (Modbus TCP, SunSpec mode, *Allow Control*, *Restrict Control*, port and addresses) stay as they are; change them in the inverter's web UI if you no longer need them.
-5. For a HACS installation, remove the integration in HACS as well.
+5. If you installed it from the Marketplace or HACS, uninstall it there as well.
 
 ## References
 

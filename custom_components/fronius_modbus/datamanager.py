@@ -17,7 +17,13 @@ from homeassistant.components.modbus import async_get_unit
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_DATAMANAGER, CONF_DATAMANAGER_INVERTERS, web_api_disabled
+from .const import (
+    CONF_DATAMANAGER,
+    CONF_DATAMANAGER_INVERTERS,
+    DOMAIN,
+    entry_unique_id,
+    web_api_disabled,
+)
 from .derived import METER_LOCATION_FEED_IN
 from .fronius_modbus_api.device import FroniusInverter
 from .froniuswebclient import _base_url, _http
@@ -134,7 +140,25 @@ async def async_on_datamanager(
         hass.config_entries.async_update_entry(
             entry, data={**entry.data, CONF_DATAMANAGER: found}
         )
+    _follow_with_the_unique_id(hass, entry, found)
     return found
+
+
+def _follow_with_the_unique_id(
+    hass: HomeAssistant, entry: ConfigEntry, found: bool
+) -> None:
+    """Add an inverter's number to its unique id, or take it off again.
+
+    Only where the entry has the one of the other device: an entry without a
+    unique id keeps none, and a taken one is left to its entry.
+    """
+    settings = {**entry.data, **entry.options}
+    before = entry_unique_id({**settings, CONF_DATAMANAGER: not found})
+    after = entry_unique_id({**settings, CONF_DATAMANAGER: found})
+    if entry.unique_id != before or before == after:
+        return
+    if not hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, after):
+        hass.config_entries.async_update_entry(entry, unique_id=after)
 
 
 def _data(payload: Any) -> Any:

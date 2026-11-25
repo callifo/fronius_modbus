@@ -29,6 +29,7 @@ from .exceptions import (
     NotAFroniusInverter,
     error_text,
 )
+from .fronius_registers import SiteTotals, StateCode
 from .sunspec_models import (
     COMMON_MODEL_ID,
     COMMON_SERIAL_WORDS,
@@ -70,6 +71,8 @@ REPORT_STATUS = "status"
 REPORT_CONTROLS = "controls"
 REPORT_MPPT = "mppt"
 REPORT_STORAGE = "storage"
+REPORT_STATE_CODE = "state_code"
+REPORT_SITE = "site"
 OHM_PER_MEGAOHM = 1_000_000
 PV_LABEL = "MPPT"
 CHARGE_LABEL = "STCHA"
@@ -228,9 +231,11 @@ class FroniusInverter:
         unit_id: int,
         meter_units: Mapping[int, ModbusUnit],
         *,
+        datamanager: bool = False,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         """Bind to the inverter's unit and the units to probe for meters."""
+        self._datamanager = datamanager
         self._unit = unit
         self._unit_id = unit_id
         self._monotonic = monotonic
@@ -249,6 +254,9 @@ class FroniusInverter:
         self.controls: Controls | None = None
         self.mppt: Mppt | None = None
         self.storage: Storage | None = None
+        # On a Datamanager only, outside the SunSpec chain.
+        self.state_code: StateCode | None = None
+        self.site: SiteTotals | None = None
         # False while the chain ended in a refused header: the models behind it
         # are undecided, not absent, so discovery is retried.
         self.discovery_complete = False

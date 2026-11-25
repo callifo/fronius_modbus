@@ -294,6 +294,7 @@ files = [
   "custom_components/fronius_modbus/fronius_modbus_api/writes.py",
   "custom_components/fronius_modbus/fronius_modbus_api/device.py",
   "custom_components/fronius_modbus/fronius_modbus_api/exceptions.py",
+  "custom_components/fronius_modbus/fronius_modbus_api/fronius_registers.py",
   "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
   "custom_components/fronius_modbus/fronius_modbus_api/sunspec_models.py",
   "custom_components/fronius_modbus/const.py",

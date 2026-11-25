@@ -96,6 +96,27 @@
         "data": {
           "inverter_modbus_unit_id": "Nummer des Wechselrichters"
         }
+      },
+      "user_password_service": {
+        "title": "Passwort des Datamanagers",
+        "description": "Gib das Passwort der Anmeldung **service** des Datamanagers für {entry_title} ({host}) ein. Sie öffnet die Einspeisebegrenzung. Das Passwort wird nicht im Konfigurationseintrag gespeichert, nur ein daraus erzeugter Token.",
+        "data": {
+          "api_password": "Passwort"
+        }
+      },
+      "reconfigure_password_service": {
+        "title": "Passwort des Datamanagers",
+        "description": "Gib das Passwort der Anmeldung **service** des Datamanagers für {entry_title} ({host}) ein. Sie öffnet die Einspeisebegrenzung. Das Passwort wird nicht im Konfigurationseintrag gespeichert, nur ein daraus erzeugter Token.",
+        "data": {
+          "api_password": "Passwort"
+        }
+      },
+      "reauth_password_service": {
+        "title": "Passwort des Datamanagers",
+        "description": "Gib das Passwort der Anmeldung **service** des Datamanagers für {entry_title} ({host}) ein. Sie öffnet die Einspeisebegrenzung. Das Passwort wird nicht im Konfigurationseintrag gespeichert, nur ein daraus erzeugter Token.",
+        "data": {
+          "api_password": "Passwort"
+        }
       }
     },
     "abort": {
@@ -1013,6 +1034,13 @@
         "description": "Die Modbus-IP-Beschränkung von {entry_title} ({host}) erlaubt die Adresse unten: die, von der aus Home Assistant den Wechselrichter erreicht. Läuft Home Assistant hinter NAT, zum Beispiel in einem Docker-Container im Bridge-Netz oder in einer virtuellen Maschine mit NAT, sieht der Wechselrichter die Adresse des Rechners, auf dem es läuft: Trage dann diese ein. Eine falsche Adresse sperrt die Modbus-Steuerung durch Home Assistant und, wenn die Beschränkung vorher aus war, auch durch jedes andere Gerät.",
         "data": {
           "allowed_host": "Zu erlaubende Adresse"
+        }
+      },
+      "password_service": {
+        "title": "Passwort des Datamanagers",
+        "description": "Gib das Passwort der Anmeldung **service** des Datamanagers für {entry_title} ({host}) ein. Sie öffnet die Einspeisebegrenzung. Das Passwort wird nicht im Konfigurationseintrag gespeichert, nur ein daraus erzeugter Token. Leer lassen behält den gespeicherten Token.",
+        "data": {
+          "api_password": "Passwort"
         }
       }
     },

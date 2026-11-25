@@ -96,6 +96,27 @@
         "data": {
           "inverter_modbus_unit_id": "Inverter number"
         }
+      },
+      "user_password_service": {
+        "title": "Datamanager password",
+        "description": "Enter the password of the Datamanager's **service** login for {entry_title} ({host}). It opens the export limit. The password is not stored in the config entry, only a token made from it.",
+        "data": {
+          "api_password": "Password"
+        }
+      },
+      "reconfigure_password_service": {
+        "title": "Datamanager password",
+        "description": "Enter the password of the Datamanager's **service** login for {entry_title} ({host}). It opens the export limit. The password is not stored in the config entry, only a token made from it.",
+        "data": {
+          "api_password": "Password"
+        }
+      },
+      "reauth_password_service": {
+        "title": "Datamanager password",
+        "description": "Enter the password of the Datamanager's **service** login for {entry_title} ({host}). It opens the export limit. The password is not stored in the config entry, only a token made from it.",
+        "data": {
+          "api_password": "Password"
+        }
       }
     },
     "abort": {
@@ -1013,6 +1034,13 @@
         "description": "The Modbus IP restriction of {entry_title} ({host}) will allow the address below: the one Home Assistant reaches the inverter from. If Home Assistant runs behind NAT, for example in a Docker container on a bridge network or in a virtual machine with NAT, the inverter sees the address of the computer it runs on: enter that one. A wrong address blocks Modbus control from Home Assistant and, if the restriction was off before, from every other device too.",
         "data": {
           "allowed_host": "Address to allow"
+        }
+      },
+      "password_service": {
+        "title": "Datamanager password",
+        "description": "Enter the password of the Datamanager's **service** login for {entry_title} ({host}). It opens the export limit. The password is not stored in the config entry, only a token made from it. Leave it empty to keep the stored token.",
+        "data": {
+          "api_password": "Password"
         }
       }
     },

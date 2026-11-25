@@ -90,6 +90,14 @@ class RoleFlow:
         return result
 
 
+PASSWORD_STEPS = {
+    "user": "user_password_service",
+    "reconfigure": "reconfigure_password_service",
+    "options": "password_service",
+    "reauth": "reauth_password_service",
+}
+
+
 async def stored(hass, role: str = "technician") -> dict[str, str] | None:
     return await async_get_token_store(hass).async_load_token(HOST, role)
 
@@ -99,7 +107,7 @@ async def test_the_technician_logs_in_to_a_datamanager(hass, device, kind):
     flow = RoleFlow(hass, kind)
 
     form = await flow.submit("technician")
-    assert form["step_id"].endswith("password")
+    assert form["step_id"] == PASSWORD_STEPS[kind]
     assert device.calls == []
     result = await flow.enter(form, PASSWORD)
 
@@ -111,14 +119,6 @@ async def test_the_technician_logs_in_to_a_datamanager(hass, device, kind):
     assert CONF_DATAMANAGER not in flow.entry.options
     # Its page alone is read; no Modbus setting of a GEN24 is asked or written.
     assert set(device.calls) == {("GET", EXPORT_LIMIT_PATH)}
-
-
-PASSWORD_STEPS = {
-    "user": "user_password_service",
-    "reconfigure": "reconfigure_password_service",
-    "options": "password_service",
-    "reauth": "reauth_password_service",
-}
 
 
 @pytest.mark.parametrize("kind", KINDS)
@@ -285,7 +285,7 @@ async def test_a_stored_login_the_device_refuses_asks_for_the_password(hass, dev
 
     form = await flow.submit("technician")
 
-    assert form["step_id"] == "reconfigure_password"
+    assert form["step_id"] == "reconfigure_password_service"
 
 
 # -- with several inverters -----------------------------------------------------------
@@ -305,7 +305,7 @@ async def test_the_inverter_is_asked_before_the_password(hass, two_inverters):
     form = await flow.submit("technician")
     assert form["step_id"] == "inverter"
     form = await choose(hass, form, "2")
-    assert form["step_id"] == "user_password"
+    assert form["step_id"] == "user_password_service"
     assert two_inverters.calls == []
     result = await flow.enter(form, PASSWORD)
 

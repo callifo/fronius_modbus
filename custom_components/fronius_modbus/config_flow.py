@@ -320,6 +320,9 @@ class TokenFlowMixin:
     ):
         state = self._pending_flow_state
         placeholders = None
+        # A step of its own: the role is called technician, its login service.
+        if state is not None and state.settings.get(CONF_DATAMANAGER):
+            step_id = f"{step_id}{SERVICE_LOGIN_STEP}"
         if state is not None:
             placeholders = {
                 "entry_title": entry_title(state.settings),
@@ -765,6 +768,10 @@ class TokenFlowMixin:
         await store.async_save_token(host, user=username, **previous)
 
 
+# The password step for a Datamanager's login, after the step it stands for.
+SERVICE_LOGIN_STEP = "_service"
+
+
 class ConfigFlow(NewInverterMixin, TokenFlowMixin, domain=DOMAIN):
     """Handle a config flow."""
 
@@ -855,6 +862,8 @@ class ConfigFlow(NewInverterMixin, TokenFlowMixin, domain=DOMAIN):
             on_success=self._async_finish_user,
         )
 
+    async_step_user_password_service = async_step_user_password
+
     async def async_step_user_sunspec(self, user_input=None):
         return await self._async_handle_sunspec_step(
             user_input=user_input,
@@ -901,6 +910,8 @@ class ConfigFlow(NewInverterMixin, TokenFlowMixin, domain=DOMAIN):
             claim_host=self._async_claim_reconfigured_host,
             on_success=self._async_finish_reconfigure,
         )
+
+    async_step_reconfigure_password_service = async_step_reconfigure_password
 
     async def async_step_reconfigure_sunspec(self, user_input=None):
         return await self._async_handle_sunspec_step(
@@ -976,6 +987,8 @@ class ConfigFlow(NewInverterMixin, TokenFlowMixin, domain=DOMAIN):
             claim_host=self._async_claim_reauth_host,
             on_success=self._async_finish_reauth,
         )
+
+    async_step_reauth_password_service = async_step_reauth_password
 
     async def async_step_reauth_sunspec(self, user_input=None):
         return await self._async_handle_sunspec_step(
@@ -1062,6 +1075,8 @@ class FroniusModbusOptionsFlow(TokenFlowMixin, config_entries.OptionsFlow):
             claim_host=self._async_claim_host,
             on_success=self._async_finish_options,
         )
+
+    async_step_password_service = async_step_password
 
     async def async_step_sunspec(self, user_input=None):
         return await self._async_handle_sunspec_step(

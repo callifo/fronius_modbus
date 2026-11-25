@@ -4324,5 +4324,19 @@
     "old": "    has_token = on_datamanager and api_token is not None\n",
     "new": "    has_token = False\n",
     "tests": "export_limit_is_shown or one_inverter_of"
+  },
+  {
+    "label": "password step: a Datamanager's login has its own text",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "        if state is not None and state.settings.get(CONF_DATAMANAGER):\n",
+    "new": "        if False:\n",
+    "tests": "names_the_service_login"
+  },
+  {
+    "label": "password step: a GEN24 keeps its text",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "        if state is not None and state.settings.get(CONF_DATAMANAGER):\n",
+    "new": "        if state is not None:\n",
+    "tests": "the_config_flow_creates_an_entry"
   }
 ]

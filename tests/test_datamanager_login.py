@@ -113,6 +113,26 @@ async def test_the_technician_logs_in_to_a_datamanager(hass, device, kind):
     assert set(device.calls) == {("GET", EXPORT_LIMIT_PATH)}
 
 
+PASSWORD_STEPS = {
+    "user": "user_password_service",
+    "reconfigure": "reconfigure_password_service",
+    "options": "password_service",
+    "reauth": "reauth_password_service",
+}
+
+
+@pytest.mark.parametrize("kind", KINDS)
+async def test_the_password_step_names_the_service_login(hass, device, kind):
+    """The role is called technician; the Datamanager's login is called service."""
+    flow = RoleFlow(hass, kind)
+
+    form = await flow.submit("technician")
+
+    assert form["step_id"] == PASSWORD_STEPS[kind]
+    result = await flow.enter(form, "wrong")
+    assert result["step_id"] == PASSWORD_STEPS[kind]
+
+
 @pytest.mark.parametrize("kind", KINDS)
 async def test_a_refused_password_stays_on_its_step(hass, device, kind):
     flow = RoleFlow(hass, kind)

@@ -40,15 +40,21 @@ def asked() -> list[tuple[str, str, dict[str, Any]]]:
     return []
 
 
-def answer(monkeypatch, asked: list, text: str, status: int = 200) -> None:
-    """Let every request come back with this status and body."""
+def answer(
+    monkeypatch, asked: list, text: str, status: int = 200, gen24: str | None = None
+) -> None:
+    """Let GetLoggerInfo come back with this; the GEN24 path with ``gen24`` or 404."""
 
     def _answer(method: str, url: str, **options: Any) -> requests.Response:
         asked.append((method, url, options))
         response = requests.Response()
         response.status_code = status
         response.encoding = "utf-8"
-        response._content = text.encode("utf-8")
+        body = text
+        if url.endswith("/api/status/common"):
+            response.status_code = 404 if gen24 is None else 200
+            body = HTML if gen24 is None else gen24
+        response._content = body.encode("utf-8")
         return response
 
     monkeypatch.setattr(datamanager, "_http", _answer)
@@ -79,6 +85,23 @@ def test_the_family_an_answer_shows(monkeypatch, asked, text, status, family):
     answer(monkeypatch, asked, text, status)
 
     assert identify(HOST) is family
+
+
+@pytest.mark.parametrize(("text", "status"), [(HTML, 404), (HTML, 200), ("{}", 200)])
+def test_a_gen24_without_the_solar_api_is_another_device(
+    monkeypatch, asked, text, status
+):
+    """Its place may have been a Datamanager's, which would be remembered for good."""
+    answer(monkeypatch, asked, text, status, gen24='{"authenticationOptions": {}}')
+
+    assert identify(HOST) is DeviceFamily.OTHER
+
+
+@pytest.mark.parametrize("gen24", [HTML, "[]", ""])
+def test_the_gen24_path_counts_only_with_its_own_answer(monkeypatch, asked, gen24):
+    answer(monkeypatch, asked, HTML, 404, gen24=gen24)
+
+    assert identify(HOST) is DeviceFamily.UNKNOWN
 
 
 def test_a_device_that_does_not_answer_stays_unknown(monkeypatch):

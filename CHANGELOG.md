@@ -3,10 +3,10 @@
 ## Unreleased
 
 ### Added
-- The smart meters of a Datamanager (SnapINverter) are read, on Modbus units 240 to 244. This follows Fronius' manual and is not confirmed on a device yet (issue 110). `Load` is unknown while several inverters share the Datamanager, as only one of them is read.
+- The smart meters of a Datamanager (SnapINverter, Symo Hybrid) are read, on Modbus units 240 to 244. This follows Fronius' manual and is not confirmed on a device yet (issue 110). `Load` is unknown while several inverters share the Datamanager, as only one of them is read.
 
 ### Changed
-- With a role chosen for a Datamanager (SnapINverter), the setup recognizes it and asks to choose *Without the web API*. Until now it reported a failed login, whatever the password (issue 110).
+- With a role chosen for a Datamanager (SnapINverter, Symo Hybrid), the setup recognizes it and asks to choose *Without the web API*. Until now it reported a failed login, whatever the password (issue 110).
 - An entry without the web API on a Datamanager no longer requests pages the Datamanager does not have, and no longer creates event entities that stay empty. Event entities such an entry already has stay without a value, and you can delete them.
 - `tools/inverter_dump.bat` also replaces the city of the time zone.
 

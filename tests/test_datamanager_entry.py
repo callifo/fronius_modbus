@@ -1,7 +1,5 @@
 """An entry on a Datamanager, end to end, with the registers of issue 110."""
 
-from typing import Any
-
 from modbus_connection import (
     GatewayTargetError,
     IllegalDataAddressError,
@@ -9,9 +7,8 @@ from modbus_connection import (
     ModbusTimeoutError,
 )
 import pytest
-import requests
 
-from custom_components.fronius_modbus import datamanager, froniuswebclient
+from custom_components.fronius_modbus import datamanager
 from custom_components.fronius_modbus.const import (
     CONF_DATAMANAGER,
     CONF_METER_UNIT_ID,
@@ -59,24 +56,6 @@ pytestmark = [pytest.mark.e2e, pytest.mark.timeout(120)]
 def _custom_integration(enable_custom_integrations):
     """Let Home Assistant load custom_components/fronius_modbus in every test here."""
     return enable_custom_integrations
-
-
-@pytest.fixture
-def web_requests(monkeypatch) -> list[str]:
-    """Every path asked over HTTP; a Datamanager answers the GEN24 ones with 404."""
-    paths: list[str] = []
-
-    def _not_found(method: str, url: str, **options: Any) -> requests.Response:
-        del method, options
-        paths.append(url.removeprefix(f"http://{HOST}"))
-        response = requests.Response()
-        response.status_code = 404
-        response.url = url
-        response._content = b"<html><title>404 Not Found</title></html>"
-        return response
-
-    monkeypatch.setattr(froniuswebclient, "_http", _not_found)
-    return paths
 
 
 def make_datamanager_entry(hass, **data):

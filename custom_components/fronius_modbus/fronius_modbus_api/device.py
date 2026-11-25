@@ -15,6 +15,7 @@ from modbus_connection import (
     ModbusTimeoutError,
     ModbusUnit,
 )
+from modbus_connection.model import Component
 from modbus_connection.model.sunspec import (
     SunSpecError,
     SunSpecMapShiftError,
@@ -73,6 +74,8 @@ REPORT_MPPT = "mppt"
 REPORT_STORAGE = "storage"
 REPORT_STATE_CODE = "state_code"
 REPORT_SITE = "site"
+# What the model name of an inverter with a battery input contains.
+HYBRID_MODEL = "Hybrid"
 OHM_PER_MEGAOHM = 1_000_000
 PV_LABEL = "MPPT"
 CHARGE_LABEL = "STCHA"
@@ -344,6 +347,13 @@ class FroniusInverter:
             REPORT_MPPT: self._optional(Mppt, chain, MPPT_MODEL_ID),
             REPORT_STORAGE: self._optional(Storage, chain, STORAGE_MODEL_ID),
         }
+        if self._datamanager:
+            components[REPORT_SITE] = await self._async_block(self.site, SiteTotals)
+        # Fronius' register table rules it out for hybrid inverters.
+        if self._datamanager and HYBRID_MODEL not in identity.model:
+            components[REPORT_STATE_CODE] = await self._async_block(
+                self.state_code, StateCode
+            )
         meters: dict[int, MeterInfo] = {}
         undecided: dict[int, ModbusUnit] = {}
         addresses = dict(self._meter_addresses)
@@ -362,6 +372,8 @@ class FroniusInverter:
         self.controls = components[REPORT_CONTROLS]
         self.mppt = components[REPORT_MPPT]
         self.storage = components[REPORT_STORAGE]
+        self.state_code = components.get(REPORT_STATE_CODE)
+        self.site = components.get(REPORT_SITE)
         self.meters = meters
         self._meter_addresses = addresses
         self._undecided_meters = undecided
@@ -371,6 +383,26 @@ class FroniusInverter:
             if component is not None and name != REPORT_INVERTER
         )
         self.discovery_complete = complete
+
+    async def _async_block[Block: Component](
+        self, known: Block | None, block_class: type[Block]
+    ) -> Block | None:
+        """The registers at a fixed address, or None where the device has none.
+
+        A block that does not answer now is kept: the poll reads it again.
+        """
+        block = known if known is not None else block_class(self._unit)
+        try:
+            await block.async_update()
+        except ABSENCE_ERRORS:
+            return None
+        except ModbusConnectionError:
+            raise
+        except ModbusError as err:
+            _LOGGER.debug(
+                "%s did not answer: %s", block_class.__name__, error_text(err)
+            )
+        return block
 
     def _optional(
         self, component_class: Any, chain: SunSpecModels, model_id: int

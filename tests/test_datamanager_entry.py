@@ -532,6 +532,10 @@ async def test_the_state_code_is_shown(hass, datamanager_modbus, datamanager_ent
 async def test_without_the_registers_there_are_no_such_entities(
     hass, datamanager_modbus, datamanager_entry
 ):
+    for address in fronius_words():
+        datamanager_modbus.fail_read(
+            INVERTER_UNIT_ID, address, IllegalDataAddressError()
+        )
     entry = datamanager_entry
     await setup_entry(hass, entry)
 

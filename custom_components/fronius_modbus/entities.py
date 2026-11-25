@@ -52,6 +52,7 @@ from .const import (
     map_code,
 )
 from .coordinator import FroniusConfigEntry, FroniusRuntimeData, assume_present
+from .datamanager_entities import datamanager_sensor_descriptions
 from .descriptions import (
     DeviceKind,
     FroniusButtonDescription,
@@ -1053,6 +1054,7 @@ def sensor_descriptions(runtime: FroniusRuntimeData) -> list[FroniusSensorDescri
     """Every sensor description the current runtime produces."""
     descriptions = [d for d in _STATIC_SENSOR_DESCRIPTIONS if d.exists_fn(runtime)]
     descriptions += _load_and_grid_status_descriptions(runtime)
+    descriptions += datamanager_sensor_descriptions(runtime)
     for unit_id, info in runtime.device.meters.items():
         descriptions += _meter_sensor_descriptions(unit_id, info.phases)
         descriptions += _meter_phase_energy_descriptions(runtime, unit_id, info)

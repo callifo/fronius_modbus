@@ -232,6 +232,21 @@
       "acenergy": {
         "name": "AC energy"
       },
+      "state_code": {
+        "name": "State code"
+      },
+      "site_power": {
+        "name": "Site power"
+      },
+      "site_energy_day": {
+        "name": "Site energy today"
+      },
+      "site_energy_year": {
+        "name": "Site energy this year"
+      },
+      "site_energy_total": {
+        "name": "Site energy total"
+      },
       "pv_power": {
         "name": "PV power"
       },

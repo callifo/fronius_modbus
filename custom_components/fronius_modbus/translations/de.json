@@ -232,6 +232,21 @@
       "acenergy": {
         "name": "AC-Energie"
       },
+      "state_code": {
+        "name": "Statuscode"
+      },
+      "site_power": {
+        "name": "Anlagenleistung"
+      },
+      "site_energy_day": {
+        "name": "Anlagenenergie heute"
+      },
+      "site_energy_year": {
+        "name": "Anlagenenergie dieses Jahr"
+      },
+      "site_energy_total": {
+        "name": "Anlagenenergie gesamt"
+      },
       "pv_power": {
         "name": "PV-Leistung"
       },

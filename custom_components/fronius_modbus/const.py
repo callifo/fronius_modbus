@@ -268,8 +268,15 @@ def entry_title_after(
 
 
 def entry_unique_id(data: Mapping[str, Any]) -> str:
-    """The entry's unique id: its host, spelled one way."""
-    return str(data.get(CONF_HOST, "")).strip().lower()
+    """The entry's unique id: its host, spelled one way.
+
+    A Datamanager serves several inverters; all but the first add their number.
+    """
+    host = str(data.get(CONF_HOST, "")).strip().lower()
+    unit_id = int(data.get(CONF_INVERTER_UNIT_ID, DEFAULT_INVERTER_UNIT_ID))
+    if not data.get(CONF_DATAMANAGER) or unit_id == DEFAULT_INVERTER_UNIT_ID:
+        return host
+    return f"{host}#{unit_id}"
 
 
 def entity_prefix(entry_id: str) -> str:

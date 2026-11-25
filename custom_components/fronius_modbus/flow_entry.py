@@ -7,38 +7,11 @@ from typing import Any
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_API_PASSWORD, DOMAIN, entry_title_after, entry_unique_id
+from .const import CONF_API_PASSWORD, entry_title_after
 from .flow_settings import _entry_payload
 from .flow_state import _AlreadyConfigured
+from .host_sharing import host_holder, unique_id_for
 from .token_store import async_forget_unused_tokens
-
-
-def host_holder(
-    hass: HomeAssistant, unique_id: str
-) -> config_entries.ConfigEntry | None:
-    """The entry that holds this host: by its unique id, or by its host without one."""
-    holder = hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, unique_id)
-    return holder or host_without_unique_id(hass, unique_id)
-
-
-def host_without_unique_id(
-    hass: HomeAssistant, unique_id: str
-) -> config_entries.ConfigEntry | None:
-    """An entry without a unique id whose host this is.
-
-    0.1.9 set no unique id and nothing gives one later; checking the unique id
-    alone let a second entry for its host through. An ignored discovery card
-    always has one.
-    """
-    return next(
-        (
-            entry
-            for entry in hass.config_entries.async_entries(DOMAIN, include_ignore=False)
-            if entry.unique_id is None
-            and entry_unique_id({**entry.data, **entry.options}) == unique_id
-        ),
-        None,
-    )
 
 
 def _claim_host(
@@ -50,11 +23,9 @@ def _claim_host(
     host has to move the id with it, or duplicate detection keeps guarding the
     old host and lets a second entry for the new one through.
     """
-    unique_id = entry_unique_id(settings)
-    holder = host_holder(hass, unique_id)
-    if holder is not None and holder.entry_id != entry.entry_id:
+    if host_holder(hass, settings, entry) is not None:
         raise _AlreadyConfigured
-    return unique_id
+    return unique_id_for(hass, settings, entry)
 
 
 async def async_update_entry_from_input(

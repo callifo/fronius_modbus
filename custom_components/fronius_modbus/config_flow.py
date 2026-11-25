@@ -44,7 +44,6 @@ from .flow_entry import (
     _async_reload_unless_listened,
     _claim_host,
     async_update_entry_from_input,
-    host_without_unique_id,
 )
 from .flow_forms import (
     CONF_ALLOWED_HOST,
@@ -91,6 +90,7 @@ from .froniuswebclient import (
     SunSpecModeChangeNeeded,
     mint_token,
 )
+from .host_sharing import host_holder, unique_id_for
 from .token_store import (
     async_forget_unused_tokens,
     async_get_token_store,
@@ -794,20 +794,20 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
         return self.hass.config_entries.async_get_entry(self.context["entry_id"])
 
     async def _async_claim_new_host(self, settings: dict[str, Any]) -> None:
-        unique_id = entry_unique_id(settings)
+        unique_id = entry_unique_id({CONF_HOST: settings[CONF_HOST]})
         # A card for this host gives way to the owner adding it by hand; two
         # flows adding it by hand still stop each other.
         for card in self._async_in_progress(match_context={"unique_id": unique_id}):
             if card["context"]["source"] == config_entries.SOURCE_ZEROCONF:
                 self.hass.config_entries.flow.async_abort(card["flow_id"])
-        await self.async_set_unique_id(unique_id)
-        self._abort_if_host_held()
+        await self._async_claim_unique_id(settings)
 
-    def _abort_if_host_held(self) -> None:
-        """Abort for a host another entry holds, with or without a unique id."""
+    async def _async_claim_unique_id(self, settings: dict[str, Any]) -> None:
+        """Abort for a host another entry keeps these settings off."""
+        await self.async_set_unique_id(unique_id_for(self.hass, settings))
         # Home Assistant lets a host whose card was ignored be set up by hand.
         self._abort_if_unique_id_configured()
-        if host_without_unique_id(self.hass, str(self.unique_id)) is not None:
+        if host_holder(self.hass, settings) is not None:
             raise data_entry_flow.AbortFlow("already_configured")
 
     async def _async_claim_reconfigured_host(self, settings: dict[str, Any]) -> None:
@@ -815,8 +815,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
 
     async def _async_finish_user(self, settings, info, previous_host):
         del previous_host
-        await self.async_set_unique_id(entry_unique_id(settings))
-        self._abort_if_host_held()
+        await self._async_claim_unique_id(settings)
         return self.async_create_entry(
             title=info["title"],
             data=_entry_payload(settings, reconfigure_required=False),
@@ -844,8 +843,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
         # address cannot be.
         if discovery_info.ip_address.version != 4:
             return self.async_abort(reason="not_ipv4_address")
-        await self.async_set_unique_id(entry_unique_id({CONF_HOST: host}))
-        self._abort_if_host_held()
+        await self._async_claim_unique_id({CONF_HOST: host})
         self._discovered_host = host
         self.context["title_placeholders"] = {
             "name": discovered_model(discovery_info.name)

@@ -24,12 +24,11 @@ from .const import (
     DEFAULT_PORT,
     DOMAIN,
     entry_title_after,
-    entry_unique_id,
     instance_key,
 )
-from .flow_entry import host_holder
 from .fronius_modbus_api.device import FroniusInverter
 from .fronius_modbus_api.exceptions import error_text
+from .host_sharing import host_holder, unique_id_for
 from .token_store import async_get_token_store, canonical_host
 
 _LOGGER = logging.getLogger(__name__)
@@ -150,15 +149,15 @@ async def async_follow_host(
     if _endpoint(entry) != endpoint:
         return
     values = {**entry.data, **entry.options}
-    unique_id = entry_unique_id({CONF_HOST: host})
-    holder = host_holder(hass, unique_id)
-    if holder is not None and holder.entry_id != entry.entry_id:
+    moved_settings = {**values, CONF_HOST: host}
+    if host_holder(hass, moved_settings, entry) is not None:
         _LOGGER.warning(
             "The inverter of %s announces an address another entry serves; "
             "the entry is left as it is",
             entry.entry_id,
         )
         return
+    unique_id = unique_id_for(hass, moved_settings, entry)
     token_store.move_tokens(old_host, host)
     data = {**entry.data, CONF_HOST: host}
     options = dict(entry.options)

@@ -3322,7 +3322,7 @@
     "path": "custom_components/fronius_modbus/flow_settings.py",
     "old": "    if family is datamanager.DeviceFamily.DATAMANAGER:\n",
     "new": "    if family is not datamanager.DeviceFamily.OTHER:\n",
-    "tests": "any_other_answer"
+    "tests": "only_a_datamanager_refuses"
   },
   {
     "label": "config flow: a refused role is not offered again",
@@ -4044,5 +4044,12 @@
     "old": "    moved_settings = {**values, CONF_HOST: host}\n",
     "new": "    moved_settings = {CONF_HOST: host}\n",
     "tests": "follows_its_own_announcement"
+  },
+  {
+    "label": "choice: only a Datamanager refuses the role",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "        if found and settings[CONF_API_USERNAME]",
+    "new": "        if settings[CONF_API_USERNAME]",
+    "tests": "only_a_datamanager_refuses"
   }
 ]

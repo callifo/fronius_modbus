@@ -2484,6 +2484,20 @@ async def test_any_other_answer_goes_on_to_the_password(
     assert result["type"] is FlowResultType.CREATE_ENTRY
 
 
+@pytest.mark.parametrize("family", [DeviceFamily.OTHER, DeviceFamily.UNKNOWN])
+@pytest.mark.parametrize("kind", ["user", "reconfigure", "options", "reauth"])
+async def test_only_a_datamanager_refuses_a_role(
+    hass, mock_modbus, monkeypatch, kind, family
+):
+    answer_family(monkeypatch, family)
+    flow = _SettingsFlow(hass, kind)
+    form = await flow.start()
+
+    result = await flow.submit(form["flow_id"], "technician")
+
+    assert result["step_id"].endswith("password")
+
+
 async def test_another_error_keeps_the_role_offered(hass, mock_modbus):
     """Only a role refused on a Datamanager switches the choice."""
     flow = _SettingsFlow(hass, "user")

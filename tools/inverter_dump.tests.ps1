@@ -142,6 +142,9 @@ Assert-True ($zone.Contains('CET') -and $zone.Contains('3600')) "the offset stay
 # UTC is no place, and redacting it would cut it out of every other text.
 $utc = Protect-One '{"timezone":"UTC","text":"UTC offset"}'
 Assert-True ($utc.Contains('UTC offset')) "a text with the zone's name stays readable: $utc"
+$paris = Protect-One '{"TimezoneLocation":"Paris","path":"/config/views/comparison/"}'
+Assert-True ($paris.Contains('/config/views/comparison/')) "a city inside another word stays: $paris"
+Assert-True (-not $paris.Contains('"Paris"')) "the city itself is redacted: $paris"
 
 $raw = (ConvertTo-ExportBodies @('{"serial":"ABCD1234"}') $false '')[0]
 Assert-True ($raw.Contains('ABCD1234')) 'without redaction the serial is kept'

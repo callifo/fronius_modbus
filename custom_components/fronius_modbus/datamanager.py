@@ -6,6 +6,7 @@ than a GEN24.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import StrEnum
 from http import HTTPStatus
 from typing import Any
@@ -15,6 +16,7 @@ from homeassistant.core import HomeAssistant
 
 from .const import CONF_DATAMANAGER, web_api_disabled
 from .froniuswebclient import _base_url, _http
+from .meter_topology import MeterTopology, parse_meter_topology
 from .web_errors import FroniusWebUnreachable
 
 # Answers without a login. A GEN24 refuses it in the body, with HTTP 200.
@@ -33,6 +35,23 @@ class DeviceFamily(StrEnum):
     DATAMANAGER = "datamanager"
     OTHER = "other"
     UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True)
+class SolarApiMeter:
+    """A meter the Solar API lists: its serial number and where it is installed."""
+
+    serial: str
+    location: int | None
+
+
+@dataclass(frozen=True)
+class Site:
+    """What the Solar API says about a Datamanager's meters and inverters."""
+
+    meters: tuple[SolarApiMeter, ...]
+    # 0 when the inverters could not be read.
+    inverters: int
 
 
 def _family(payload: Any) -> DeviceFamily:
@@ -96,3 +115,15 @@ async def async_on_datamanager(
             entry, data={**entry.data, CONF_DATAMANAGER: found}
         )
     return found
+
+
+def read_site(host: str, timeout: float = 4.0) -> Site | None:
+    """The meters and inverters the Solar API lists; None without an answer."""
+    del host, timeout
+    return None
+
+
+def meter_topology(found: dict[int, str], site: Site | None) -> MeterTopology:
+    """The meters of a Datamanager, from the units that answered and the Solar API."""
+    del found, site
+    return parse_meter_topology(None)

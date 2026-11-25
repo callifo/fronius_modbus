@@ -64,6 +64,7 @@ def pytest_sessionfinish(session, exitstatus):
 FIXTURES = pathlib.Path(__file__).with_name("fixtures")
 INVERTER_UNIT_ID = 1
 METER_UNIT_ID = 200
+DATAMANAGER_METER_UNIT_IDS = range(240, 245)
 # The bound of a number the inverter itself does not cap; tests keep their own
 # value, as one taken from the code would pass if the code went back to WMax.
 NO_INVERTER_CAP_W = 1_000_000
@@ -143,11 +144,12 @@ def _no_real_inverter(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _no_family_question(monkeypatch):
-    """Let no test ask a real device for its family; without an answer nothing changes."""
+def _no_datamanager_answers(monkeypatch):
+    """Let no test ask a real device; without an answer nothing changes."""
     monkeypatch.setattr(
         datamanager, "identify", lambda host, timeout=4.0: DeviceFamily.UNKNOWN
     )
+    monkeypatch.setattr(datamanager, "read_site", lambda host, timeout=4.0: None)
 
 
 class SharedMockModbus:
@@ -212,7 +214,8 @@ def datamanager_modbus(monkeypatch) -> SharedMockModbus:
     It answers for a unit it does not serve with exception 11.
     """
     shared = SharedMockModbus(load_fixture("symo_datamanager.json"))
-    shared.fail_requests(METER_UNIT_ID, GatewayTargetError())
+    for unit_id in (METER_UNIT_ID, *DATAMANAGER_METER_UNIT_IDS):
+        shared.fail_requests(unit_id, GatewayTargetError())
     monkeypatch.setattr(CORE_CONNECTION, shared)
     return shared
 

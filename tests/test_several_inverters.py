@@ -6,7 +6,7 @@ from modbus_connection import GatewayTargetError
 import pytest
 
 from custom_components import fronius_modbus
-from custom_components.fronius_modbus import config_flow, datamanager
+from custom_components.fronius_modbus import config_flow, datamanager, discovery
 from custom_components.fronius_modbus.const import (
     CONF_DATAMANAGER,
     CONF_INVERTER_UNIT_ID,
@@ -14,6 +14,7 @@ from custom_components.fronius_modbus.const import (
     entry_title,
     entry_title_after,
     entry_unique_id,
+    instance_key,
 )
 from custom_components.fronius_modbus.datamanager import (
     DeviceFamily,
@@ -21,8 +22,10 @@ from custom_components.fronius_modbus.datamanager import (
 )
 from custom_components.fronius_modbus.host_sharing import host_holder, unique_id_for
 from custom_components.fronius_modbus.inverter_choice import async_free_units
+from custom_components.fronius_modbus.token_store import async_get_token_store
 from homeassistant.config_entries import SOURCE_IGNORE
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers import device_registry as dr
 
 from .conftest import INVERTER_UNIT_ID
 from .ha_test_plugin import MockConfigEntry
@@ -535,3 +538,85 @@ async def test_a_generated_title_follows_the_address(hass, numbered):
 
     assert entry_title_after(title, before, after) == f"Fronius {OTHER_HOST} #2"
     assert entry_title_after("Garage", before, after) == "Garage"
+
+
+# -- discovery, a new address and the stored login --------------------------------------
+
+SERIALS = {1: "11111111", 2: "22222222"}
+
+
+def with_inverter(hass, unit: int):
+    """An entry set up before, with the serial number its inverter reports."""
+    entry = add_datamanager_entry(hass, unit)
+    dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, f"{instance_key(entry.entry_id)}_inverter")},
+        serial_number=SERIALS[unit],
+    )
+    return entry
+
+
+@pytest.fixture
+def moved(monkeypatch):
+    """The Datamanager answers at another address now, each inverter on its unit."""
+    monkeypatch.setattr(discovery, "MOVE_READ_RETRY_SECONDS", 0)
+
+    async def _serial_at(_hass, host, _port, unit_id):
+        return SERIALS[unit_id] if host == OTHER_HOST else None
+
+    monkeypatch.setattr(discovery, "async_serial_at", _serial_at)
+
+
+async def test_a_host_with_two_inverters_is_not_offered(hass):
+    add_datamanager_entry(hass, 1)
+    add_datamanager_entry(hass, 2)
+
+    result = await discover(hass, discovered())
+
+    assert result["reason"] == "already_configured"
+
+
+@pytest.mark.parametrize("order", [(1, 2), (2, 1)])
+async def test_each_inverter_follows_its_own_announcement(hass, moved, order):
+    entries = {unit: with_inverter(hass, unit) for unit in (1, 2)}
+    first, second = (entries[unit] for unit in order)
+
+    await discover(hass, discovered(OTHER_HOST, SERIALS[order[0]]))
+
+    assert (first.data["host"], second.data["host"]) == (OTHER_HOST, HOST)
+    await discover(hass, discovered(OTHER_HOST, SERIALS[order[1]]))
+
+    assert entries[1].unique_id == OTHER_HOST
+    assert entries[2].unique_id == f"{OTHER_HOST}#2"
+    assert entries[2].title == f"Fronius {OTHER_HOST} #2"
+
+
+async def test_no_inverter_follows_to_an_address_another_device_has(hass, moved):
+    entry = with_inverter(hass, 2)
+    add_entry(hass, GEN24 | {"host": OTHER_HOST}, OTHER_HOST)
+
+    await discover(hass, discovered(OTHER_HOST, SERIALS[2]))
+
+    assert entry.data["host"] == HOST
+    assert entry.unique_id == f"{HOST}#2"
+
+
+async def test_a_login_stays_while_one_inverter_of_the_host_uses_it(hass):
+    store = async_get_token_store(hass)
+    entries = [
+        add_entry(
+            hass,
+            inverter(unit) | {"api_username": "technician"},
+            entry_unique_id(inverter(unit)),
+        )
+        for unit in (1, 2)
+    ]
+    await store.async_save_token(HOST, realm="r", token="t", user="technician")
+
+    await hass.config_entries.async_remove(entries[0].entry_id)
+    await hass.async_block_till_done()
+    assert await store.async_load_token(HOST, "technician") is not None
+
+    await hass.config_entries.async_remove(entries[1].entry_id)
+    await hass.async_block_till_done()
+    assert await store.async_load_token(HOST, "technician") is None

@@ -4037,5 +4037,12 @@
     "old": "        topology, several_inverters=topology.several_inverters or entries > 1\n",
     "new": "        topology, several_inverters=topology.several_inverters\n",
     "tests": "on_with_two_entries"
+  },
+  {
+    "label": "discovery: a moved inverter keeps its number",
+    "path": "custom_components/fronius_modbus/discovery.py",
+    "old": "    moved_settings = {**values, CONF_HOST: host}\n",
+    "new": "    moved_settings = {CONF_HOST: host}\n",
+    "tests": "follows_its_own_announcement"
   }
 ]

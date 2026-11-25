@@ -260,3 +260,33 @@ async def test_the_owner_asleep_is_still_the_owner(hass, site):
 
     assert first.state is ConfigEntryState.SETUP_RETRY
     assert not owns(hass, second)
+
+
+async def test_a_start_by_night_changes_nothing(hass, site, monkeypatch):
+    """The Datamanager may answer without its inverters, or not at all."""
+    entries = [add_inverter(hass, 1), add_inverter(hass, SECOND_UNIT_ID)]
+    await start(hass, *entries)
+    before = [
+        (entry.unique_id, dict(entry.data), row_ids(hass, entry)) for entry in entries
+    ]
+    answer_family(monkeypatch, DeviceFamily.UNKNOWN)
+    answer_site(monkeypatch, inverters=0)
+
+    for entry in reversed(entries):
+        await reload_entry(hass, entry)
+
+    assert before == [
+        (entry.unique_id, dict(entry.data), row_ids(hass, entry)) for entry in entries
+    ]
+    assert owns(hass, entries[0]) and not owns(hass, entries[1])
+
+
+@pytest.mark.parametrize("unit", [2, 100])
+async def test_nothing_looks_at_unit_1_for_another_inverter(hass, site, unit):
+    site.add_unit(unit, like=INVERTER_UNIT_ID)
+    entry = add_inverter(hass, unit)
+
+    await start(hass, entry)
+
+    assert state_of(hass, entry, "acpower") == "597.0"
+    assert site.unit(INVERTER_UNIT_ID).read_events == []

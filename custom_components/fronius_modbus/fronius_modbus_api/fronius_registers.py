@@ -14,7 +14,7 @@ NOT_IMPLEMENTED_UINT64 = 0xFFFFFFFFFFFFFFFF
 
 
 class StateCode(Component):
-    """Register 214: the state code the inverter shows on its display."""
+    """Register 214: the inverter's current state code, as its manual lists it."""
 
     code = integer(213, signed=False, nan=NOT_IMPLEMENTED_UINT16)
 

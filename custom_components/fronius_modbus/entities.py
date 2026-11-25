@@ -20,6 +20,7 @@ from homeassistant.components.number import NumberMode
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.helpers.entity import EntityCategory
 
+from . import datamanager_entities
 from .component_readings import (
     COMPONENT_READINGS,
     DISPLAY_PRECISION,
@@ -43,6 +44,7 @@ from .const import (
     INVERTER_EVENTS,
     INVERTER_STATUS,
     SENSOR_STATE_OPTIONS,
+    SITE_POWER_CEILING_W,
     SOC_MODE_MANUAL_CODE,
     STORAGE_CONTROL_MODE,
     STORAGE_EXT_CONTROL_MODE,
@@ -52,7 +54,6 @@ from .const import (
     map_code,
 )
 from .coordinator import FroniusConfigEntry, FroniusRuntimeData, assume_present
-from .datamanager_entities import datamanager_sensor_descriptions
 from .descriptions import (
     DeviceKind,
     FroniusButtonDescription,
@@ -96,9 +97,6 @@ from .web_control import WebData
 
 # The rated power while settings.w_max is unknown: 0.3's static AC limit maximum.
 RATED_POWER_FALLBACK_W = 50_000
-# The export limit and the target feed-in count at the grid meter, where other
-# generation adds up, and the inverter caps neither (issue 154); no site reaches 1 MW.
-SITE_POWER_CEILING_W = 1_000_000
 
 
 # -- value helpers -----------------------------------------------------------------
@@ -1039,7 +1037,7 @@ def sensor_descriptions(runtime: FroniusRuntimeData) -> list[FroniusSensorDescri
     """Every sensor description the current runtime produces."""
     descriptions = [d for d in _STATIC_SENSOR_DESCRIPTIONS if d.exists_fn(runtime)]
     descriptions += _load_and_grid_status_descriptions(runtime)
-    descriptions += datamanager_sensor_descriptions(runtime)
+    descriptions += datamanager_entities.sensor_descriptions(runtime)
     for unit_id, info in runtime.device.meters.items():
         descriptions += _meter_sensor_descriptions(unit_id, info.phases)
         descriptions += _meter_phase_energy_descriptions(runtime, unit_id, info)
@@ -1328,7 +1326,8 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
 
 def number_descriptions(runtime: FroniusRuntimeData) -> list[FroniusNumberDescription]:
     """Every number description the current runtime produces."""
-    return [d for d in _NUMBER_DESCRIPTIONS if d.exists_fn(runtime)]
+    descriptions = [d for d in _NUMBER_DESCRIPTIONS if d.exists_fn(runtime)]
+    return descriptions + datamanager_entities.number_descriptions(runtime)
 
 
 # -- select table -----------------------------------------------------------------

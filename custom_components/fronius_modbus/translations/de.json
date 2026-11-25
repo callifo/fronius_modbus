@@ -1174,6 +1174,12 @@
     },
     "web_api_refresh_failed": {
       "message": "Das Lesen der Weboberfläche des Wechselrichters ist fehlgeschlagen: {error}"
+    },
+    "export_limit_unknown_form": {
+      "message": "Die Einstellungen der Einspeisebegrenzung im Datamanager haben eine Form, die diese Integration nicht kennt. Es wurde nichts geschrieben."
+    },
+    "export_limit_unconfirmed": {
+      "message": "Der Datamanager hat die neue Einspeisebegrenzung nicht bestätigt. Er kann den alten oder den neuen Wert haben: Prüfe es auf seiner Webseite."
     }
   }
 }

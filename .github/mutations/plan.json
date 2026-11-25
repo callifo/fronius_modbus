@@ -4468,15 +4468,15 @@
   {
     "label": "export limit page: an answer with an error has no values",
     "path": "custom_components/fronius_modbus/datamanager_client.py",
-    "old": "    if isinstance(status, bool) or status != 0:\n        return None\n",
-    "new": "",
+    "old": "    return not isinstance(status, bool) and status == 0\n",
+    "new": "    return True\n",
     "tests": "page_of_another_form_has"
   },
   {
     "label": "export limit page: an answer that is no JSON has no values",
     "path": "custom_components/fronius_modbus/datamanager_client.py",
-    "old": "        except ValueError:\n            payload = None\n",
-    "new": "        except KeyError:\n            payload = None\n",
+    "old": "    except ValueError:\n        return None\n",
+    "new": "    except KeyError:\n        return None\n",
     "tests": "page_of_another_form_has"
   },
   {
@@ -4611,5 +4611,187 @@
     "old": "        if state is not None and state.settings.get(CONF_DATAMANAGER):\n",
     "new": "        if state is not None:\n",
     "tests": "the_config_flow_creates_an_entry"
+  },
+  {
+    "label": "soft limit: only a known form is written",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "        return self.mode == MODE_ENTIRE_SYSTEM and None not in seen\n",
+    "new": "        return True\n",
+    "tests": "form_nobody_has_seen"
+  },
+  {
+    "label": "soft limit: the mode has to be the one seen",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "        return self.mode == MODE_ENTIRE_SYSTEM and None not in seen\n",
+    "new": "        return None not in seen\n",
+    "tests": "form_nobody_has_seen_is_not_written"
+  },
+  {
+    "label": "soft limit: every field of the form has to be read",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "        return self.mode == MODE_ENTIRE_SYSTEM and None not in seen\n",
+    "new": "        return self.mode == MODE_ENTIRE_SYSTEM\n",
+    "tests": "form_nobody_has_seen_is_not_written"
+  },
+  {
+    "label": "soft limit: nothing below 0",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "    if not 0 <= watts <= highest:\n",
+    "new": "    if not watts <= highest:\n",
+    "tests": "out_of_range_is_refused"
+  },
+  {
+    "label": "soft limit: nothing above the ceiling",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "    if not 0 <= watts <= highest:\n",
+    "new": "    if not 0 <= watts:\n",
+    "tests": "out_of_range_is_refused"
+  },
+  {
+    "label": "soft limit: without a ceiling the site's counts",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "    highest = SITE_POWER_CEILING_W if ceiling is None else ceiling\n",
+    "new": "    highest = 18200 if ceiling is None else ceiling\n",
+    "tests": "without_a_reference"
+  },
+  {
+    "label": "soft limit: a reference of 0 is none",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "        if self.reference_w is not None and self.reference_w > 0:\n",
+    "new": "        if self.reference_w is not None:\n",
+    "tests": "highest_soft_limit or without_a_reference"
+  },
+  {
+    "label": "soft limit: an enabled hard limit bounds it",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "        if self.hard_enabled and self.hard_w is not None:\n",
+    "new": "        if False:\n",
+    "tests": "highest_soft_limit or out_of_range_is_refused"
+  },
+  {
+    "label": "soft limit: a disabled hard limit does not",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "        if self.hard_enabled and self.hard_w is not None:\n",
+    "new": "        if self.hard_w is not None:\n",
+    "tests": "highest_soft_limit or the_whole_range"
+  },
+  {
+    "label": "soft limit: the value held is not written",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "            if limits.soft_enabled and limits.soft_w == watts:\n                return limits\n",
+    "new": "",
+    "tests": "held_already_is_not_written"
+  },
+  {
+    "label": "soft limit: a value held while off is written",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "            if limits.soft_enabled and limits.soft_w == watts:\n",
+    "new": "            if limits.soft_w == watts:\n",
+    "tests": "switches_it_on"
+  },
+  {
+    "label": "soft limit: it is switched on",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "            soft[\"enabled\"], soft[\"powerLimit\"] = True, watts\n",
+    "new": "            soft[\"powerLimit\"] = watts\n",
+    "tests": "switches_it_on or the_only_change"
+  },
+  {
+    "label": "soft limit: the whole page is sent back",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "{\"powerLimits\": changed}",
+    "new": "{\"powerLimits\": {\"exportLimits\": changed[\"exportLimits\"]}}",
+    "tests": "the_only_change"
+  },
+  {
+    "label": "soft limit: written to the save query",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "SAVE_QUERY = \"?method=save\"",
+    "new": "SAVE_QUERY = \"\"",
+    "tests": "the_only_change"
+  },
+  {
+    "label": "soft limit: the answer has to report success",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "            if not (_reports_success(_json(answer)) and taken):\n",
+    "new": "            if not taken:\n",
+    "tests": "nobody_confirmed"
+  },
+  {
+    "label": "soft limit: the value has to be shown again",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "            if not (_reports_success(_json(answer)) and taken):\n",
+    "new": "            if not _reports_success(_json(answer)):\n",
+    "tests": "not_shown_again"
+  },
+  {
+    "label": "soft limit: shown again switched on",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "            taken = shown.soft_enabled is True and shown.soft_w == watts\n",
+    "new": "            taken = shown.soft_w == watts\n",
+    "tests": "not_shown_again"
+  },
+  {
+    "label": "soft limit: a failed read after the write is unconfirmed",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "                shown = self.read_export_limits()\n            except (\n                FroniusWebAuthError,\n",
+    "new": "                shown = self.read_export_limits()\n            except (\n                KeyError,\n",
+    "tests": "read_that_fails_after_the_write"
+  },
+  {
+    "label": "soft limit: a lost write is unconfirmed",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "            except (FroniusWebUnreachable, FroniusWebResponseError) as err:\n                raise _unconfirmed() from err\n            try:\n",
+    "new": "            except KeyError as err:\n                raise _unconfirmed() from err\n            try:\n",
+    "tests": "nobody_confirmed"
+  },
+  {
+    "label": "soft limit: the number is off by default",
+    "path": "custom_components/fronius_modbus/datamanager_entities.py",
+    "old": "    entity_registry_enabled_default=False,\n)\n\n\ndef number_descriptions(",
+    "new": "    entity_registry_enabled_default=True,\n)\n\n\ndef number_descriptions(",
+    "tests": "off_until_it_is_switched_on"
+  },
+  {
+    "label": "soft limit: the number ends at the ceiling",
+    "path": "custom_components/fronius_modbus/datamanager_entities.py",
+    "old": "    max_fn=lambda runtime: _limits(runtime).ceiling_w,\n",
+    "new": "",
+    "tests": "ends_at_the_highest"
+  },
+  {
+    "label": "soft limit: a form nobody has seen leaves the number unavailable",
+    "path": "custom_components/fronius_modbus/datamanager_entities.py",
+    "old": "    available_fn=lambda runtime: _limits(runtime).is_writable,\n",
+    "new": "",
+    "tests": "form_nobody_has_seen_cannot_be_written"
+  },
+  {
+    "label": "soft limit: the number exists with the login only",
+    "path": "custom_components/fronius_modbus/datamanager_entities.py",
+    "old": "    return [] if runtime.datamanager_web is None else [_SOFT_LIMIT]\n",
+    "new": "    return [_SOFT_LIMIT]\n",
+    "tests": "without_the_login_its_page or entry_without_its_login"
+  },
+  {
+    "label": "soft limit: what the device holds is shown after a write",
+    "path": "custom_components/fronius_modbus/datamanager_web.py",
+    "old": "        self.async_set_updated_data(limits)\n",
+    "new": "",
+    "tests": "set_and_shown"
+  },
+  {
+    "label": "soft limit: an unconfirmed write shows the device again",
+    "path": "custom_components/fronius_modbus/datamanager_web.py",
+    "old": "            # Show what the device holds now.\n            await self.async_refresh()\n",
+    "new": "",
+    "tests": "unconfirmed_write_says_so"
+  },
+  {
+    "label": "soft limit: a refused login at a write asks for a new one",
+    "path": "custom_components/fronius_modbus/datamanager_web.py",
+    "old": "            # The poll asks for the new login; the refused one is not sent again.\n            await self.async_refresh()\n",
+    "new": "",
+    "tests": "login_refused_at_a_write"
   }
 ]

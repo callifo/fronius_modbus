@@ -1,9 +1,10 @@
-"""The sensors of a Datamanager's own registers and of its export limit."""
+"""The entities of a Datamanager's own registers and of its export limit."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 
+from homeassistant.components.number import NumberDeviceClass, NumberMode
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.const import EntityCategory
 
@@ -11,11 +12,12 @@ from .const import (
     CONTROL_STATUS,
     EXPORT_LIMIT_MODES,
     SENSOR_STATE_OPTIONS,
+    SITE_POWER_CEILING_W,
     UNKNOWN_STATE,
 )
-from .coordinator import FroniusRuntimeData
+from .coordinator import FroniusRuntimeData, assume_present
 from .datamanager_client import ExportLimits
-from .descriptions import FroniusSensorDescription
+from .descriptions import FroniusNumberDescription, FroniusSensorDescription
 from .fronius_modbus_api.device import REPORT_SITE, REPORT_STATE_CODE
 from .fronius_modbus_api.fronius_registers import SiteTotals
 
@@ -125,7 +127,39 @@ _EXPORT_LIMITS = (
 )
 
 
-def datamanager_sensor_descriptions(
+async def _async_set_soft_limit(runtime: FroniusRuntimeData, value: float) -> None:
+    web = assume_present(runtime.datamanager_web)
+    await web.async_set_soft_limit(int(round(value)))
+
+
+_SOFT_LIMIT = FroniusNumberDescription(
+    key="export_soft_limit",
+    translation_key="export_soft_limit",
+    device="inverter",
+    source="datamanager",
+    value_fn=lambda runtime: _limits(runtime).soft_w,
+    set_fn=_async_set_soft_limit,
+    available_fn=lambda runtime: _limits(runtime).is_writable,
+    max_fn=lambda runtime: _limits(runtime).ceiling_w,
+    device_class=NumberDeviceClass.POWER,
+    native_min_value=0,
+    native_max_value=SITE_POWER_CEILING_W,
+    native_step=1,
+    mode=NumberMode.BOX,
+    native_unit_of_measurement="W",
+    # Nobody has seen this write on a device yet.
+    entity_registry_enabled_default=False,
+)
+
+
+def number_descriptions(
+    runtime: FroniusRuntimeData,
+) -> list[FroniusNumberDescription]:
+    """The numbers the technician's login opens."""
+    return [] if runtime.datamanager_web is None else [_SOFT_LIMIT]
+
+
+def sensor_descriptions(
     runtime: FroniusRuntimeData,
 ) -> list[FroniusSensorDescription]:
     """The sensors of the blocks this device answers."""

@@ -3,22 +3,32 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import copy
 from dataclasses import dataclass
 import hashlib
 from http import HTTPStatus
 import os
+import threading
 from typing import Any
 from urllib.parse import urlparse
 
 import requests
 from requests.auth import AuthBase
 
+from .const import SITE_POWER_CEILING_W
+from .fronius_modbus_api.exceptions import ControlRefused, ControlUnavailable
 from .froniuswebclient import _base_url, _digest_challenge, _http, _is_number
-from .web_errors import FroniusWebAuthError, FroniusWebResponseError
+from .web_errors import (
+    FroniusWebAuthError,
+    FroniusWebResponseError,
+    FroniusWebUnreachable,
+)
 
 # The one login that opens the export limit (Fronius' manual 42,0426,0191).
 SERVICE_USER = "service"
 EXPORT_LIMIT_PATH = "/config/exportlimit/"
+SAVE_QUERY = "?method=save"
+MODE_ENTIRE_SYSTEM = "entireSystem"
 # Seconds to connect and to answer; its Solar API was logged with 3.2 s.
 TIMEOUT = (4.0, 10.0)
 QOP = "auth"
@@ -137,6 +147,30 @@ class ExportLimits:
     hard_w: float | None = None
     mode: str | None = None
     fail_safe: bool | None = None
+    reference_w: float | None = None
+
+    @property
+    def ceiling_w(self) -> float | None:
+        """The highest soft limit: the site's power or an enabled hard limit."""
+        bounds = []
+        # 0 where the owner entered none.
+        if self.reference_w is not None and self.reference_w > 0:
+            bounds.append(self.reference_w)
+        if self.hard_enabled and self.hard_w is not None:
+            bounds.append(self.hard_w)
+        return min(bounds, default=None)
+
+    @property
+    def is_writable(self) -> bool:
+        """Whether the page has the one form a write is known for."""
+        seen = (
+            self.soft_enabled,
+            self.soft_w,
+            self.hard_enabled,
+            self.hard_w,
+            self.fail_safe,
+        )
+        return self.mode == MODE_ENTIRE_SYSTEM and None not in seen
 
 
 def _part(node: Any, key: str) -> dict[str, Any]:
@@ -144,13 +178,21 @@ def _part(node: Any, key: str) -> dict[str, Any]:
     return part if isinstance(part, dict) else {}
 
 
+def _json(response: requests.Response) -> Any:
+    """The body; None where it is no JSON."""
+    try:
+        return response.json()
+    except ValueError:
+        return None
+
+
 def _flag(node: dict[str, Any], key: str) -> bool | None:
     value = node.get(key)
     return value if isinstance(value, bool) else None
 
 
-def _watts(node: dict[str, Any]) -> float | None:
-    value: Any = node.get("powerLimit")
+def _watts(node: dict[str, Any], key: str = "powerLimit") -> float | None:
+    value: Any = node.get(key)
     return float(value) if _is_number(value) else None
 
 
@@ -167,20 +209,52 @@ def export_limits(power_limits: dict[str, Any] | None) -> ExportLimits:
         hard_w=_watts(hard),
         mode=mode if isinstance(mode, str) else None,
         fail_safe=_flag(limits, "failSafeModeEnabled"),
+        reference_w=_watts(
+            _part(power_limits, "visualization"), "wattPeakReferenceValue"
+        ),
     )
+
+
+def _reports_success(payload: Any) -> bool:
+    status = _part(_part(payload, "Head"), "Status").get("Code")
+    return not isinstance(status, bool) and status == 0
 
 
 def _power_limits(payload: Any) -> dict[str, Any] | None:
     """The ``powerLimits`` of an answer; None where it is another one."""
-    status = _part(_part(payload, "Head"), "Status").get("Code")
-    if isinstance(status, bool) or status != 0:
+    if not _reports_success(payload):
         return None
     limits = _part(_part(payload, "Body"), "Data").get("powerLimits")
     return limits if isinstance(limits, dict) else None
 
 
+def _require_writable(limits: ExportLimits, watts: int) -> None:
+    """Refuse a form nobody has seen, and a value the device would not take."""
+    if not limits.is_writable:
+        raise ControlRefused(
+            "export_limit_unknown_form",
+            "The export limit page has a form this integration does not know",
+        )
+    ceiling = limits.ceiling_w
+    highest = SITE_POWER_CEILING_W if ceiling is None else ceiling
+    if not 0 <= watts <= highest:
+        raise ControlRefused(
+            "value_out_of_range",
+            f"The soft limit must be between 0 and {highest:g} W",
+            minimum="0",
+            maximum=f"{highest:g}",
+        )
+
+
+def _unconfirmed() -> ControlUnavailable:
+    return ControlUnavailable(
+        "export_limit_unconfirmed",
+        "The new export limit was not confirmed; the device may hold another value",
+    )
+
+
 class DatamanagerClient:
-    """Reads a Datamanager's export limit with the service login."""
+    """Reads and writes a Datamanager's export limit with the service login."""
 
     def __init__(
         self,
@@ -192,9 +266,19 @@ class DatamanagerClient:
         """Log in with the password, or with the token it left."""
         self._url = f"{_base_url(host)}{EXPORT_LIMIT_PATH}"
         self._digest = StandardDigest(password, token)
+        # A write reads, writes and reads again; nothing may come in between.
+        self._one_at_a_time = threading.RLock()
 
-    def _read(self) -> requests.Response:
-        response = _http("get", self._url, auth=self._digest, timeout=TIMEOUT)
+    def _request(
+        self, method: str, query: str = "", payload: Any = None
+    ) -> requests.Response:
+        response = _http(
+            method,
+            f"{self._url}{query}",
+            auth=self._digest,
+            json=payload,
+            timeout=TIMEOUT,
+        )
         status = response.status_code
         # A 403 before anything was signed is the page's answer, not the login's.
         signed = "Authorization" in response.request.headers
@@ -214,15 +298,48 @@ class DatamanagerClient:
     def login(self) -> dict[str, str] | None:
         """The token the login leaves; None when the device refuses it."""
         try:
-            self._read()
+            self._request("get")
         except FroniusWebAuthError:
             return None
         return self._digest.token
 
     def read_export_limits(self) -> ExportLimits:
         """The export limits, as far as the answer has a known form."""
-        try:
-            payload = self._read().json()
-        except ValueError:
-            payload = None
-        return export_limits(_power_limits(payload))
+        return export_limits(self._read())
+
+    def _read(self) -> dict[str, Any] | None:
+        with self._one_at_a_time:
+            return _power_limits(_json(self._request("get")))
+
+    def set_soft_limit(self, watts: int) -> ExportLimits:
+        """Set the soft limit and switch it on; what the device shows after it.
+
+        Refused before anything is sent unless the page has the form the write
+        is known for. Nobody has seen it on a device: the page is written back
+        as a whole, and read again before it counts as written.
+        """
+        with self._one_at_a_time:
+            power_limits = self._read()
+            limits = export_limits(power_limits)
+            _require_writable(limits, watts)
+            if limits.soft_enabled and limits.soft_w == watts:
+                return limits
+            changed = copy.deepcopy(power_limits) or {}
+            soft = changed["exportLimits"]["activePower"]["softLimit"]
+            soft["enabled"], soft["powerLimit"] = True, watts
+            try:
+                answer = self._request("post", SAVE_QUERY, {"powerLimits": changed})
+            except (FroniusWebUnreachable, FroniusWebResponseError) as err:
+                raise _unconfirmed() from err
+            try:
+                shown = self.read_export_limits()
+            except (
+                FroniusWebAuthError,
+                FroniusWebUnreachable,
+                FroniusWebResponseError,
+            ) as err:
+                raise _unconfirmed() from err
+            taken = shown.soft_enabled is True and shown.soft_w == watts
+            if not (_reports_success(_json(answer)) and taken):
+                raise _unconfirmed()
+            return shown

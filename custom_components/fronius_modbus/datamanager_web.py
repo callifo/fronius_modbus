@@ -13,7 +13,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .const import CONF_API_USERNAME, DOMAIN
 from .coordinator import DeviceUnreachable, OfflineIsNotAnError
 from .datamanager_client import DatamanagerClient, ExportLimits
-from .fronius_modbus_api.exceptions import error_text
+from .fronius_modbus_api.exceptions import ControlUnavailable, error_text
 from .token_store import async_get_token_store
 from .web_errors import (
     FroniusWebAuthError,
@@ -77,6 +77,25 @@ class DatamanagerWebCoordinator(DataUpdateCoordinator[ExportLimits]):
                 translation_key="web_api_refresh_failed",
                 translation_placeholders={"error": error_text(err)},
             ) from err
+
+    async def async_set_soft_limit(self, watts: int) -> None:
+        """Set the export soft limit and show what the device holds after it."""
+        try:
+            limits = await self.hass.async_add_executor_job(
+                self._client.set_soft_limit, watts
+            )
+        except FroniusWebAuthError as err:
+            # The poll asks for the new login; the refused one is not sent again.
+            await self.async_refresh()
+            raise ControlUnavailable(
+                "web_api_auth_failed",
+                "The Datamanager refused the login. Log in again when asked.",
+            ) from err
+        except ControlUnavailable:
+            # Show what the device holds now.
+            await self.async_refresh()
+            raise
+        self.async_set_updated_data(limits)
 
 
 async def async_start(

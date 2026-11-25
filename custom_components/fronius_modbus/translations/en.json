@@ -1174,6 +1174,12 @@
     },
     "web_api_refresh_failed": {
       "message": "Reading the inverter's web interface failed: {error}"
+    },
+    "export_limit_unknown_form": {
+      "message": "The export limit settings of the Datamanager have a form this integration does not know. Nothing was written."
+    },
+    "export_limit_unconfirmed": {
+      "message": "The Datamanager did not confirm the new export limit. It may hold the old or the new value: check its web page."
     }
   }
 }

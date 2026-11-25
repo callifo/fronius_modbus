@@ -65,6 +65,11 @@ class Site:
     # 0 when the inverters could not be read.
     inverters: int
 
+    @property
+    def has_grid_meter(self) -> bool:
+        """Whether a meter is listed where the house meets the grid."""
+        return any(meter.location == METER_LOCATION_FEED_IN for meter in self.meters)
+
 
 def _family(payload: Any) -> DeviceFamily:
     """The family a GetLoggerInfo body shows."""
@@ -202,6 +207,9 @@ def meter_topology(found: dict[int, str], site: Site | None) -> MeterTopology:
         # The load adds the one inverter read here to the grid meter's power.
         for unit in grid_meters:
             del locations[unit]
+    if site is not None and site.has_grid_meter and not grid_meters:
+        # Its power would pass for the whole load while the grid meter is silent.
+        locations.pop(primary, None)
     return MeterTopology(
         unit_ids=sorted({METER_UNIT_IDS[0], *found}),
         primary_unit_id=primary,

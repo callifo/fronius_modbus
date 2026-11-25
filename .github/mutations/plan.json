@@ -3491,5 +3491,19 @@
     "old": "    except FroniusWebUnreachable:\n        return None\n",
     "new": "    except ValueError:\n        return None\n",
     "tests": "unreachable_device_is_no_site"
+  },
+  {
+    "label": "datamanager: a sub-meter is no load while the grid meter is silent",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if site is not None and site.has_grid_meter and not grid_meters:\n",
+    "new": "    if False:\n",
+    "tests": "sub_meter_is_no_load or meters_and_where_they_are"
+  },
+  {
+    "label": "datamanager: a sub-meter alone keeps its place",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "site.has_grid_meter and not grid_meters",
+    "new": "not grid_meters",
+    "tests": "meters_and_where_they_are"
   }
 ]

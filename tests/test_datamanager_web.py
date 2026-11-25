@@ -10,6 +10,7 @@ from custom_components.fronius_modbus.const import (
     CONF_DATAMANAGER,
     CONF_INVERTER_UNIT_ID,
     DOMAIN,
+    entity_prefix,
 )
 from custom_components.fronius_modbus.datamanager_client import EXPORT_LIMIT_PATH
 from custom_components.fronius_modbus.diagnostics import (
@@ -18,13 +19,15 @@ from custom_components.fronius_modbus.diagnostics import (
 from custom_components.fronius_modbus.fronius_modbus_api.storage import ExtendedMode
 from custom_components.fronius_modbus.token_store import async_get_token_store
 from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
 from .conftest import INVERTER_UNIT_ID
 from .fake_datamanager import HOST, answer_body, minted, serve_datamanager
 from .ha_test_plugin import async_fire_time_changed
 from .test_datamanager_entry import registered_keys, reload_entry
-from .test_e2e import make_entry, setup_entry, state_of
+from .test_e2e import entity_id_for, make_entry, setup_entry, state_of
 from .test_hybrid_storage import EMPTY, serve_hybrid
 
 pytestmark = [pytest.mark.e2e, pytest.mark.timeout(120)]
@@ -296,3 +299,121 @@ async def test_the_diagnostics_hold_the_limits(hass, device):
 
     assert data["export_limits"]["soft_w"] == 14500.0
     assert data["web"] is None
+
+
+# -- the soft limit as a number -------------------------------------------------------
+
+
+async def number_entry(hass):
+    """An entry whose soft limit number the owner switched on."""
+    await log_in(hass)
+    entry = technician_entry(hass)
+    er.async_get(hass).async_get_or_create(
+        "number",
+        DOMAIN,
+        f"{entity_prefix(entry.entry_id)}_export_soft_limit",
+        config_entry=entry,
+        disabled_by=None,
+    )
+    await setup_entry(hass, entry)
+    return entry
+
+
+async def set_number(hass, entry, value: float) -> None:
+    await hass.services.async_call(
+        "number",
+        "set_value",
+        {
+            "entity_id": entity_id_for(hass, entry, "number", "export_soft_limit"),
+            "value": value,
+        },
+        blocking=True,
+    )
+
+
+async def test_the_soft_limit_number_is_off_until_it_is_switched_on(hass, device):
+    """Nobody has seen this write on a device yet."""
+    await log_in(hass)
+    entry = technician_entry(hass)
+
+    await setup_entry(hass, entry)
+
+    row = er.async_get(hass).async_get(
+        entity_id_for(hass, entry, "number", "export_soft_limit")
+    )
+    assert row.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+
+
+async def test_the_soft_limit_is_set_and_shown(hass, device):
+    entry = await number_entry(hass)
+    assert state_of(hass, entry, "export_soft_limit", "number") == "14500.0"
+
+    await set_number(hass, entry, 9000)
+
+    assert state_of(hass, entry, "export_soft_limit", "number") == "9000.0"
+    assert state_of(hass, entry, "export_soft_limit") == "9000.0"
+    assert len(device.written) == 1
+
+
+async def test_the_number_ends_at_the_highest_soft_limit(hass, device):
+    entry = await number_entry(hass)
+    state = hass.states.get(entity_id_for(hass, entry, "number", "export_soft_limit"))
+
+    assert (state.attributes["min"], state.attributes["max"]) == (0, 18200)
+    with pytest.raises(ServiceValidationError):
+        await set_number(hass, entry, 18201)
+    assert device.written == []
+
+
+async def test_a_form_nobody_has_seen_cannot_be_written(hass, device):
+    active = device.body["Body"]["Data"]["powerLimits"]["exportLimits"]["activePower"]
+    entry = await number_entry(hass)
+    active["mode"] = "perPhase"
+
+    with pytest.raises(ServiceValidationError) as refused:
+        await set_number(hass, entry, 9000)
+
+    assert refused.value.translation_key == "export_limit_unknown_form"
+    await entry.runtime_data.datamanager_web.async_refresh()
+    await hass.async_block_till_done()
+    assert state_of(hass, entry, "export_soft_limit", "number") == "unavailable"
+
+
+async def test_an_unconfirmed_write_says_so(hass, device):
+    """Taken, but with an error: the device is shown as it is now."""
+    entry = await number_entry(hass)
+    device.write_answer = {"Head": {"Status": {"Code": 255}}}
+
+    with pytest.raises(HomeAssistantError) as unconfirmed:
+        await set_number(hass, entry, 9000)
+
+    assert unconfirmed.value.translation_key == "export_limit_unconfirmed"
+    assert state_of(hass, entry, "export_soft_limit", "number") == "9000.0"
+
+
+async def test_a_login_refused_at_a_write_is_asked_for(hass, device):
+    entry = await number_entry(hass)
+    device.password = "changed"
+
+    with pytest.raises(HomeAssistantError) as refused:
+        await set_number(hass, entry, 9000)
+
+    assert refused.value.translation_key == "web_api_auth_failed"
+    assert logins_asked(hass) == [entry.entry_id]
+    assert device.written == []
+    tries = len(device.logins)
+    await after(hass, minutes=30)
+    assert len(device.logins) == tries
+
+
+async def test_a_device_off_at_a_write_is_unreachable(hass, device, monkeypatch):
+    entry = await number_entry(hass)
+
+    def refuse(*_args, **_options):
+        raise requests.ConnectionError
+
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", refuse)
+    with pytest.raises(HomeAssistantError) as unreachable:
+        await set_number(hass, entry, 9000)
+
+    assert unreachable.value.translation_key == "web_api_unreachable"

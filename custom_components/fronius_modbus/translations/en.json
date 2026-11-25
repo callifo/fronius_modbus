@@ -120,7 +120,7 @@
       "invalid_api_credentials": "Login failed for the selected Web API role.",
       "already_configured": "Another entry already uses this host.",
       "invalid_allowed_host": "Enter the IPv4 address of a device on your network, for example 192.168.1.20.",
-      "datamanager_customer": "This is a Datamanager or Hybridmanager (SnapINverter, Symo Hybrid). The customer login opens nothing there. Choose Technician, or Without the web API (Modbus only).",
+      "datamanager_customer": "This is a Datamanager or Hybridmanager (SnapINverter, Symo Hybrid). The customer login opens nothing there. Choose Technician (its service login) or Without the web API (Modbus only).",
       "invalid_inverter_number": "Enter the number of the inverter, 00 to 99.",
       "inverter_not_found": "No inverter with this number answered over Modbus. It may be asleep, or Modbus TCP is off or not set to int + SF."
     }
@@ -1030,7 +1030,7 @@
       "invalid_api_credentials": "Login failed for the selected Web API role.",
       "already_configured": "Another entry already uses this host.",
       "invalid_allowed_host": "Enter the IPv4 address of a device on your network, for example 192.168.1.20.",
-      "datamanager_customer": "This is a Datamanager or Hybridmanager (SnapINverter, Symo Hybrid). The customer login opens nothing there. Choose Technician, or Without the web API (Modbus only)."
+      "datamanager_customer": "This is a Datamanager or Hybridmanager (SnapINverter, Symo Hybrid). The customer login opens nothing there. Choose Technician (its service login) or Without the web API (Modbus only)."
     }
   },
   "selector": {

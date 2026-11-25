@@ -120,7 +120,7 @@
       "invalid_api_credentials": "Anmeldung für die ausgewählte Web-API-Rolle fehlgeschlagen.",
       "already_configured": "Ein anderer Eintrag verwendet diesen Host bereits.",
       "invalid_allowed_host": "Gib die IPv4-Adresse eines Geräts in deinem Netzwerk ein, zum Beispiel 192.168.1.20.",
-      "datamanager_no_login": "Das ist ein Datamanager oder Hybridmanager (SnapINverter, Symo Hybrid). Seine Anmeldung wird nicht unterstützt. Wähle „Ohne Web-API (nur Modbus)“.",
+      "datamanager_customer": "Das ist ein Datamanager oder Hybridmanager (SnapINverter, Symo Hybrid). Die Kundenanmeldung öffnet dort nichts. Wähle „Techniker“ oder „Ohne Web-API (nur Modbus)“.",
       "invalid_inverter_number": "Gib die Nummer des Wechselrichters ein, 00 bis 99.",
       "inverter_not_found": "Unter dieser Nummer hat kein Wechselrichter über Modbus geantwortet. Vielleicht schläft er, oder Modbus TCP ist aus oder nicht auf int + SF eingestellt."
     }
@@ -1000,7 +1000,7 @@
       "invalid_api_credentials": "Anmeldung für die ausgewählte Web-API-Rolle fehlgeschlagen.",
       "already_configured": "Ein anderer Eintrag verwendet diesen Host bereits.",
       "invalid_allowed_host": "Gib die IPv4-Adresse eines Geräts in deinem Netzwerk ein, zum Beispiel 192.168.1.20.",
-      "datamanager_no_login": "Das ist ein Datamanager oder Hybridmanager (SnapINverter, Symo Hybrid). Seine Anmeldung wird nicht unterstützt. Wähle „Ohne Web-API (nur Modbus)“."
+      "datamanager_customer": "Das ist ein Datamanager oder Hybridmanager (SnapINverter, Symo Hybrid). Die Kundenanmeldung öffnet dort nichts. Wähle „Techniker“ oder „Ohne Web-API (nur Modbus)“."
     }
   },
   "selector": {

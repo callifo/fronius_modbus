@@ -57,8 +57,6 @@ class StandardDigest(AuthBase):
         challenged = response.status_code == HTTPStatus.UNAUTHORIZED
         if not challenged or "Authorization" in request.headers:
             return response
-        if not self._password and self.token is None:
-            return response
         challenge = _digest_challenge(response.headers.get("WWW-Authenticate", ""))
         if not _is_known(challenge):
             self.unknown_challenge = True

@@ -766,7 +766,7 @@ async def test_a_host_taken_while_the_token_is_minted_leaves_the_inverter_alone(
     """The claim was not held through minting and validation."""
     applied = _record_modbus_setup(monkeypatch)
 
-    async def mint_while_taken(hass, host, password, username):
+    async def mint_while_taken(hass, host, password, username, **_options):
         make_entry(hass)
         return {"realm": "r", "token": "t"}
 

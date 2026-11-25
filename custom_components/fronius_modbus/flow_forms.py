@@ -39,7 +39,7 @@ from .flow_state import (
     _AlreadyConfigured,
     _CannotConnect,
     _CannotConnectModbus,
-    _DatamanagerFound,
+    _DatamanagerCustomer,
     _InvalidAllowedHost,
     _InvalidApiCredentials,
     _InvalidHost,
@@ -113,6 +113,13 @@ def settings_schema(defaults: dict[str, Any]) -> vol.Schema:
     return vol.Schema(fields)
 
 
+def asks_for_the_address(user_input: dict[str, Any], settings: dict[str, Any]) -> bool:
+    """The owner asked to see the address, and the restriction is to allow one."""
+    requested = bool(user_input.get(CONF_CHANGE_ALLOWED_HOST, False))
+    restricted = settings[CONF_MODBUS_RESTRICTION] == ModbusRestriction.HOME_ASSISTANT
+    return requested and restricted
+
+
 # The address the Modbus restriction allows for this Home Assistant.
 CONF_ALLOWED_HOST = "allowed_host"
 
@@ -168,7 +175,7 @@ _FORM_ERRORS: dict[type[Exception], tuple[str, str]] = {
     _UnsupportedHardware: ("base", "unsupported_hardware"),
     _AddressesNotUnique: ("base", "modbus_address_conflict"),
     _AlreadyConfigured: ("base", "already_configured"),
-    _DatamanagerFound: (CONF_API_USERNAME, "datamanager_no_login"),
+    _DatamanagerCustomer: (CONF_API_USERNAME, "datamanager_customer"),
 }
 
 

@@ -129,11 +129,12 @@ async def async_on_datamanager(
     """Whether the entry's device is a Datamanager, remembered from its last clear answer.
 
     A Datamanager can be asleep when Home Assistant starts. An entry with a role
-    is not asked: a Datamanager accepts none of them.
+    is not asked: the flow that took the role did.
     """
-    if not web_api_disabled({**entry.data, **entry.options}):
-        return False
     remembered = entry.data.get(CONF_DATAMANAGER)
+    if not web_api_disabled({**entry.data, **entry.options}):
+        _follow_with_the_unique_id(hass, entry, bool(remembered))
+        return bool(remembered)
     family = await async_identify(hass, host)
     if family is DeviceFamily.UNKNOWN:
         return bool(remembered)

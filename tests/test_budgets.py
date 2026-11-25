@@ -83,7 +83,8 @@ LINE_BUDGETS = {
     # model type answer keeps the address settled before it.
     # 1099 - the check of the address to allow, now with its form.
     # 1064 - the claim of a new entry, now inverter_choice.py; - the form errors.
-    "config_flow.py": 1064,
+    # 1083 + the login of a Datamanager, - the token and address helpers.
+    "config_flow.py": 1083,
 }
 
 # SonarSource's own default. Above it, a function is one somebody has to

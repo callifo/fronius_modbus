@@ -33,7 +33,8 @@ from .const import (
     WEB_API_DISABLED,
     ModbusRestriction,
 )
-from .flow_state import _DatamanagerFound
+from .flow_state import _DatamanagerCustomer
+from .host_sharing import is_datamanager_host
 
 
 def _default_payload() -> dict[str, Any]:
@@ -91,9 +92,8 @@ def _entry_payload(
     payload.pop(CONF_API_PASSWORD, None)
     payload.pop("meter_modbus_unit_id", None)
     payload.pop("meter_modbus_unit_ids", None)
-    # Kept as the answer it is; a missing key means no.
-    if not payload.get(CONF_DATAMANAGER):
-        payload.pop(CONF_DATAMANAGER, None)
+    # What the device answered is kept apart from the settings.
+    payload.pop(CONF_DATAMANAGER, None)
     payload[CONF_RECONFIGURE_REQUIRED] = reconfigure_required
     return payload
 
@@ -141,13 +141,38 @@ def _should_apply_modbus_config(
     )
 
 
+async def async_look_at_device(hass: HomeAssistant, settings: dict[str, Any]) -> bool:
+    """Put into the settings whether the host is a Datamanager; refuse its customer.
+
+    A Datamanager that does not answer now is known from its entries.
+    """
+    host = settings[CONF_HOST]
+    family = await datamanager.async_identify(hass, host)
+    silent = family is datamanager.DeviceFamily.UNKNOWN
+    found = family is datamanager.DeviceFamily.DATAMANAGER or (
+        silent and is_datamanager_host(hass, host)
+    )
+    if found and settings[CONF_API_USERNAME] == API_USERNAME:
+        raise _DatamanagerCustomer
+    settings[CONF_DATAMANAGER] = found
+    return found
+
+
 async def async_check_role(hass: HomeAssistant, settings: dict[str, Any]) -> None:
-    """Refuse a role on a Datamanager: none of our logins works there."""
-    if settings[CONF_API_USERNAME] == WEB_API_DISABLED:
-        return
-    family = await datamanager.async_identify(hass, settings[CONF_HOST])
-    if family is datamanager.DeviceFamily.DATAMANAGER:
-        raise _DatamanagerFound
+    """Check an existing entry's role against its device; without one nothing is asked."""
+    if settings[CONF_API_USERNAME] != WEB_API_DISABLED:
+        await async_look_at_device(hass, settings)
+
+
+def device_answer(
+    entry: config_entries.ConfigEntry, settings: dict[str, Any]
+) -> dict[str, bool]:
+    """What a flow learned about the device and the entry does not hold yet."""
+    found = settings.get(CONF_DATAMANAGER)
+    # A missing key means no already; most entries never get one.
+    if found is None or found == bool(entry.data.get(CONF_DATAMANAGER)):
+        return {}
+    return {CONF_DATAMANAGER: found}
 
 
 def defaults_after(

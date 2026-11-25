@@ -9,11 +9,15 @@ from custom_components.fronius_modbus.const import (
     DOMAIN,
     entry_unique_id,
 )
+from custom_components.fronius_modbus.datamanager import (
+    DeviceFamily,
+    async_on_datamanager,
+)
 from custom_components.fronius_modbus.host_sharing import host_holder, unique_id_for
 from homeassistant.config_entries import SOURCE_IGNORE
 
 from .ha_test_plugin import MockConfigEntry
-from .test_config_flow import discover, discovered
+from .test_config_flow import answer_family, discover, discovered
 
 HOST = "192.0.2.10"
 OTHER_HOST = "192.0.2.20"
@@ -172,3 +176,39 @@ async def test_a_host_only_a_second_inverter_has_is_not_offered(hass, unique_id)
     result = await discover(hass, discovered())
 
     assert result["reason"] == "already_configured"
+
+
+# -- an entry that learns its device --------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("unit", "stored", "family", "after"),
+    [
+        (2, HOST, DeviceFamily.DATAMANAGER, f"{HOST}#2"),
+        (1, HOST, DeviceFamily.DATAMANAGER, HOST),
+        (2, None, DeviceFamily.DATAMANAGER, None),
+        (2, f"{HOST}#2", DeviceFamily.OTHER, HOST),
+        (2, f"{HOST}#2", DeviceFamily.UNKNOWN, f"{HOST}#2"),
+        (2, HOST, DeviceFamily.OTHER, HOST),
+    ],
+)
+async def test_the_unique_id_follows_what_the_device_is(
+    hass, monkeypatch, unit, stored, family, after
+):
+    """Without it another inverter of the host cannot take the host alone."""
+    entry = add_entry(hass, inverter(unit, datamanager="#" in str(stored)), stored)
+    answer_family(monkeypatch, family)
+
+    await async_on_datamanager(hass, entry, HOST)
+
+    assert entry.unique_id == after
+
+
+async def test_a_taken_unique_id_is_left_to_its_entry(hass, monkeypatch):
+    add_entry(hass, SECOND, f"{HOST}#2")
+    entry = add_entry(hass, inverter(2, datamanager=None), HOST)
+    answer_family(monkeypatch, DeviceFamily.DATAMANAGER)
+
+    await async_on_datamanager(hass, entry, HOST)
+
+    assert entry.unique_id == HOST

@@ -9,7 +9,13 @@ from homeassistant.config_entries import SOURCE_IGNORE, ConfigEntry
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_DATAMANAGER, DOMAIN, entry_unique_id
+from .const import (
+    CONF_DATAMANAGER,
+    CONF_INVERTER_UNIT_ID,
+    DEFAULT_INVERTER_UNIT_ID,
+    DOMAIN,
+    entry_unique_id,
+)
 
 
 def _settings(entry: ConfigEntry) -> dict[str, Any]:
@@ -28,6 +34,14 @@ def host_entries(hass: HomeAssistant, host: str) -> list[ConfigEntry]:
         for entry in hass.config_entries.async_entries(DOMAIN, include_ignore=False)
         if _host(_settings(entry)) == wanted
     ]
+
+
+def taken_units(hass: HomeAssistant, host: str) -> set[int]:
+    """The inverter units on ``host`` that have an entry."""
+    return {
+        int(_settings(entry).get(CONF_INVERTER_UNIT_ID, DEFAULT_INVERTER_UNIT_ID))
+        for entry in host_entries(hass, host)
+    }
 
 
 def is_datamanager_host(hass: HomeAssistant, host: str) -> bool:

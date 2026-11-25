@@ -43,6 +43,9 @@ INVERTERS_PATH = "/solar_api/v1/GetInverterInfo.cgi"
 # The fixed Modbus units of its meters, for the meter addresses 1 to 5
 # (Fronius' manual 42,0410,2049).
 METER_UNIT_IDS = range(240, 245)
+# The inverters' numbers are their Modbus units; number 00 is the one exception.
+HIGHEST_INVERTER_NUMBER = 99
+UNIT_OF_NUMBER_0 = 100
 # Seconds to connect and to answer. A Datamanager was logged with 3.2 s for one
 # of these answers.
 SOLAR_API_TIMEOUT = (4.0, 10.0)
@@ -187,13 +190,43 @@ def _solar_api_meter(value: Any) -> SolarApiMeter | None:
     return SolarApiMeter(serial.strip(), _location(value.get("Meter_Location_Current")))
 
 
+def _inverter_numbers(host: str) -> list[str]:
+    """The numbers of the inverters the Solar API lists."""
+    listed = _data(_read_json(host, INVERTERS_PATH))
+    return list(listed) if isinstance(listed, dict) else []
+
+
+def unit_of(number: str) -> int | None:
+    """The Modbus unit of the inverter with this number; None where there is none.
+
+    Number 00 is on a unit of its own, 0 being every device's (Fronius' manual
+    42,0410,2049). A listing can hold a meter's number too.
+    """
+    if not (number.isascii() and number.isdigit()):
+        return None
+    value = int(number)
+    if value > HIGHEST_INVERTER_NUMBER:
+        return None
+    return value or UNIT_OF_NUMBER_0
+
+
+def read_inverter_units(host: str) -> tuple[int, ...]:
+    """The Modbus units of the inverters the Solar API lists; none without an answer."""
+    try:
+        numbers = _inverter_numbers(host)
+    except FroniusWebUnreachable:
+        return ()
+    units = {unit_of(number) for number in numbers}
+    return tuple(sorted(unit for unit in units if unit is not None))
+
+
 def read_site(host: str) -> Site | None:
     """The meters and inverters the Solar API lists; None without an answer."""
     try:
         meters = _read_json(host, METERS_PATH)
         if meters is None:
             return None
-        inverters = _data(_read_json(host, INVERTERS_PATH))
+        inverters = _inverter_numbers(host)
     except FroniusWebUnreachable:
         return None
     listed = _data(meters)
@@ -203,7 +236,7 @@ def read_site(host: str) -> Site | None:
             for value in (listed.values() if isinstance(listed, dict) else ())
             if (meter := _solar_api_meter(value)) is not None
         ),
-        inverters=len(inverters) if isinstance(inverters, dict) else 0,
+        inverters=len(inverters),
     )
 
 

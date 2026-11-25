@@ -148,6 +148,7 @@ def _no_datamanager_answers(monkeypatch):
     """Let no test ask a real device; without an answer nothing changes."""
     monkeypatch.setattr(datamanager, "identify", lambda host: DeviceFamily.UNKNOWN)
     monkeypatch.setattr(datamanager, "read_site", lambda host: None)
+    monkeypatch.setattr(datamanager, "read_inverter_units", lambda host: ())
 
 
 class SharedMockModbus:

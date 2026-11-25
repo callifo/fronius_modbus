@@ -4793,5 +4793,103 @@
     "old": "            # The poll asks for the new login; the refused one is not sent again.\n            await self.async_refresh()\n",
     "new": "",
     "tests": "login_refused_at_a_write"
+  },
+  {
+    "label": "model type: int is told",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        if chain.first(*INVERTER_MODEL_IDS) is not None:\n            return \"int\"\n",
+    "new": "",
+    "tests": "model_type_a_unit_serves or int_is_not_asked"
+  },
+  {
+    "label": "model type: float is told",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        return None if chain.first(*FLOAT_INVERTER_MODEL_IDS) is None else \"float\"\n",
+    "new": "        return \"float\"\n",
+    "tests": "meter_has_no_inverter_model"
+  },
+  {
+    "label": "model type: the type is written",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        await unit.write_register(MODEL_TYPE_ADDRESS, MODEL_TYPE_INT_SF)\n",
+    "new": "",
+    "tests": "confirmed_switch_is_two_writes"
+  },
+  {
+    "label": "model type: the write is confirmed",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        await unit.write_register(MODEL_TYPE_ADDRESS, MODEL_TYPE_CONFIRMATION)\n",
+    "new": "",
+    "tests": "confirmed_switch_is_two_writes"
+  },
+  {
+    "label": "model type: int + SF is 2",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/fronius_registers.py",
+    "old": "MODEL_TYPE_INT_SF = 2\n",
+    "new": "MODEL_TYPE_INT_SF = 1\n",
+    "tests": "confirmed_switch_is_two_writes"
+  },
+  {
+    "label": "model type: register 216",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/fronius_registers.py",
+    "old": "MODEL_TYPE_ADDRESS = 215\n",
+    "new": "MODEL_TYPE_ADDRESS = 216\n",
+    "tests": "confirmed_switch_is_two_writes"
+  },
+  {
+    "label": "model type: only float is asked about",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "        if await async_model_type(self.hass, settings) != \"float\":\n",
+    "new": "        if await async_model_type(self.hass, settings) is None:\n",
+    "tests": "int_is_not_asked"
+  },
+  {
+    "label": "model type: only a Datamanager is asked about",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "        return await self._async_model_type_question(settings) if found else None\n",
+    "new": "        return await self._async_model_type_question(settings)\n",
+    "tests": "another_device_is_never_switched"
+  },
+  {
+    "label": "model type: the chosen inverter is asked about",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "            question = await self._async_model_type_question(settings)\n            if question is not None:\n                return question\n",
+    "new": "",
+    "tests": "chosen_inverter_is_the_one_written"
+  },
+  {
+    "label": "model type: the switch has to show",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "        if await async_model_type(hass, settings) == \"int\":\n            return True\n",
+    "new": "        return True\n",
+    "tests": "does_not_switch_creates_nothing"
+  },
+  {
+    "label": "model type: a refused write is no switch",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "        _LOGGER.warning(\"The model type was not switched: %s\", error_text(err))\n        return False\n",
+    "new": "        _LOGGER.warning(\"The model type was not switched: %s\", error_text(err))\n        return True\n",
+    "tests": "refused_write_creates_nothing"
+  },
+  {
+    "label": "model type: the host is claimed before the write",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "            await self._async_claim_new_host(settings)\n            if await async_switch_to_int(",
+    "new": "            if await async_switch_to_int(",
+    "tests": "taken_while_the_question_is_open"
+  },
+  {
+    "label": "model type: after the switch the login follows",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "                return await self._async_set_up_inverter(settings)\n            errors[\"base\"] = \"model_type_not_switched\"\n",
+    "new": "                return await self._async_finish_user(settings, {\"title\": \"\"}, None)\n            errors[\"base\"] = \"model_type_not_switched\"\n",
+    "tests": "login_comes_after_the_switch"
+  },
+  {
+    "label": "model type: a failed read is no answer",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "    except MODBUS_ERRORS as err:\n        _LOGGER.debug(\"The model type was not read: %s\", error_text(err))\n        return None\n",
+    "new": "    except KeyError as err:\n        _LOGGER.debug(\"The model type was not read: %s\", error_text(err))\n        return None\n",
+    "tests": "silent_unit_is_no_float"
   }
 ]

@@ -13,6 +13,13 @@ NOT_IMPLEMENTED_UINT32 = 0xFFFFFFFF
 NOT_IMPLEMENTED_UINT64 = 0xFFFFFFFFFFFFFFFF
 
 
+# Register 216 selects the model type. A value is dropped after a few seconds
+# unless the confirmation follows it at once.
+MODEL_TYPE_ADDRESS = 215
+MODEL_TYPE_INT_SF = 2
+MODEL_TYPE_CONFIRMATION = 6
+
+
 class StateCode(Component):
     """Register 214: the inverter's current state code, as its manual lists it."""
 

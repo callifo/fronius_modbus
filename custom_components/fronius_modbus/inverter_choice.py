@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Any
+import asyncio
+from contextlib import AbstractAsyncContextManager
+import logging
+from typing import Any, Literal
 
+from modbus_connection import ModbusError, ModbusTcpParams, ModbusUnit
 import voluptuous as vol
 
 from homeassistant import config_entries, data_entry_flow
-from homeassistant.const import CONF_HOST
+from homeassistant.components.modbus import async_get_temporary_unit
+from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.selector import (
     SelectSelector,
     SelectSelectorConfig,
@@ -33,7 +39,16 @@ from .flow_settings import (
     check_login_on_owner,
 )
 from .flow_state import _CannotConnectModbus
+from .fronius_modbus_api.device import FroniusInverter
+from .fronius_modbus_api.exceptions import error_text
 from .host_sharing import host_holder, is_datamanager_host, taken_units, unique_id_for
+
+_LOGGER = logging.getLogger(__name__)
+
+MODBUS_ERRORS = (ModbusError, HomeAssistantError, OSError, TimeoutError)
+# The change takes effect a moment after the write.
+MODEL_TYPE_READS = 5
+MODEL_TYPE_RETRY_SECONDS = 2.0
 
 
 async def async_free_units(hass: HomeAssistant, host: str) -> list[int] | None:
@@ -43,6 +58,44 @@ async def async_free_units(hass: HomeAssistant, host: str) -> list[int] | None:
         return None
     taken = taken_units(hass, host)
     return [unit for unit in listed if unit not in taken]
+
+
+def _inverter_unit(
+    hass: HomeAssistant, settings: dict[str, Any]
+) -> AbstractAsyncContextManager[ModbusUnit]:
+    params = ModbusTcpParams(host=settings[CONF_HOST], port=settings[CONF_PORT])
+    return async_get_temporary_unit(hass, params, settings[CONF_INVERTER_UNIT_ID])
+
+
+async def async_model_type(
+    hass: HomeAssistant, settings: dict[str, Any]
+) -> Literal["int", "float"] | None:
+    """How the inverter shows its values; None without a clear answer."""
+    try:
+        async with _inverter_unit(hass, settings) as unit:
+            return await FroniusInverter.async_model_type(unit)
+    except MODBUS_ERRORS as err:
+        _LOGGER.debug("The model type was not read: %s", error_text(err))
+        return None
+
+
+async def async_switch_to_int(hass: HomeAssistant, settings: dict[str, Any]) -> bool:
+    """Switch the model type; whether the inverter shows its values that way then.
+
+    An answer to the write is no proof: without its confirmation the device
+    takes the change back after a few seconds.
+    """
+    try:
+        async with _inverter_unit(hass, settings) as unit:
+            await FroniusInverter.async_switch_to_int(unit)
+    except MODBUS_ERRORS as err:
+        _LOGGER.warning("The model type was not switched: %s", error_text(err))
+        return False
+    for _ in range(MODEL_TYPE_READS):
+        await asyncio.sleep(MODEL_TYPE_RETRY_SECONDS)
+        if await async_model_type(hass, settings) == "int":
+            return True
+    return False
 
 
 def _lowest_free_unit(taken: set[int]) -> int:
@@ -132,9 +185,10 @@ class NewInverterMixin(config_entries.ConfigFlow):
             return None
         found = await async_look_at_device(self.hass, settings)
         question = await self._async_inverter_question(settings) if found else None
-        if question is None:
-            await self._async_claim_new_host(settings)
-        return question
+        if question is not None:
+            return question
+        await self._async_claim_new_host(settings)
+        return await self._async_model_type_question(settings) if found else None
 
     async def _async_inverter_question(
         self, settings: dict[str, Any]
@@ -179,6 +233,9 @@ class NewInverterMixin(config_entries.ConfigFlow):
         settings = {**self._inverter_settings, CONF_INVERTER_UNIT_ID: unit_id}
         try:
             await self._async_claim_new_host(settings)
+            question = await self._async_model_type_question(settings)
+            if question is not None:
+                return question
             # Over Modbus alone: the login, if any, comes after it.
             await self._async_check_inverter(
                 {**settings, CONF_API_USERNAME: WEB_API_DISABLED}
@@ -191,3 +248,43 @@ class NewInverterMixin(config_entries.ConfigFlow):
         except Exception as err:  # pylint: disable=broad-except
             _set_form_error(errors, err)
         return self._show_inverter_form(number, errors)
+
+    async def _async_model_type_question(
+        self, settings: dict[str, Any]
+    ) -> config_entries.ConfigFlowResult | None:
+        """Ask before a float inverter is switched; nothing is written before that."""
+        if await async_model_type(self.hass, settings) != "float":
+            return None
+        self._inverter_settings = settings
+        return self._show_model_type_form({})
+
+    def _show_model_type_form(
+        self, errors: dict[str, str]
+    ) -> config_entries.ConfigFlowResult:
+        assert self._inverter_settings is not None
+        schema: Any = vol.Schema({})
+        return self.async_show_form(
+            step_id="model_type",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders={"host": self._inverter_settings[CONF_HOST]},
+        )
+
+    async def async_step_model_type(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Switch the model type once the owner agreed, then go on."""
+        settings = self._inverter_settings
+        if user_input is None or settings is None:
+            return await self.async_step_user()
+        errors: dict[str, str] = {}
+        try:
+            await self._async_claim_new_host(settings)
+            if await async_switch_to_int(self.hass, settings):
+                return await self._async_set_up_inverter(settings)
+            errors["base"] = "model_type_not_switched"
+        except data_entry_flow.AbortFlow:
+            raise
+        except Exception as err:  # pylint: disable=broad-except
+            _set_form_error(errors, err)
+        return self._show_model_type_form(errors)

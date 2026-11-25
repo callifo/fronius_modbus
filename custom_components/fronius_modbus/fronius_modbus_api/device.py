@@ -6,7 +6,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 import logging
 import time
-from typing import Any, NamedTuple, cast
+from typing import Any, Literal, NamedTuple, cast
 
 from modbus_connection import (
     GatewayTargetError,
@@ -31,11 +31,18 @@ from .exceptions import (
     NotAFroniusInverter,
     error_text,
 )
-from .fronius_registers import SiteTotals, StateCode
+from .fronius_registers import (
+    MODEL_TYPE_ADDRESS,
+    MODEL_TYPE_CONFIRMATION,
+    MODEL_TYPE_INT_SF,
+    SiteTotals,
+    StateCode,
+)
 from .sunspec_models import (
     COMMON_MODEL_ID,
     COMMON_SERIAL_WORDS,
     CONTROLS_MODEL_ID,
+    FLOAT_INVERTER_MODEL_IDS,
     INVERTER_MODEL_IDS,
     METER_MODEL_IDS,
     MPPT_MODEL_ID,
@@ -309,6 +316,24 @@ class FroniusInverter:
         if chain.first(*INVERTER_MODEL_IDS) is None:
             raise NotAFroniusInverter("no SunSpec inverter model in the chain")
         return await _read_identity(_common(unit, chain))
+
+    @staticmethod
+    async def async_model_type(unit: ModbusUnit) -> Literal["int", "float"] | None:
+        """How the inverter on ``unit`` shows its values; None without an inverter."""
+        chain, _complete = await _scan(unit)
+        if chain.first(*INVERTER_MODEL_IDS) is not None:
+            return "int"
+        return None if chain.first(*FLOAT_INVERTER_MODEL_IDS) is None else "float"
+
+    @staticmethod
+    async def async_switch_to_int(unit: ModbusUnit) -> None:
+        """Have a Datamanager show its values as integers with scale factors.
+
+        It moves the addresses of every model behind the inverter's, for each
+        device that reads the Datamanager.
+        """
+        await unit.write_register(MODEL_TYPE_ADDRESS, MODEL_TYPE_INT_SF)
+        await unit.write_register(MODEL_TYPE_ADDRESS, MODEL_TYPE_CONFIRMATION)
 
     @staticmethod
     async def async_probe_meter(unit: ModbusUnit) -> DeviceIdentity | None:

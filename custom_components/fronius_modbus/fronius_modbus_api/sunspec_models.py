@@ -27,6 +27,8 @@ from modbus_connection.model.sunspec import (
 from .exceptions import InconsistentModelError
 
 INVERTER_MODEL_IDS = (103, 101)
+# The same inverter with its values as floating point numbers.
+FLOAT_INVERTER_MODEL_IDS = (111, 112, 113)
 METER_MODEL_IDS = (203, 201, 202, 204)
 SINGLE_PHASE_METER_MODEL_ID = 201
 THREE_PHASE_INVERTER_MODEL_ID = 103

@@ -34,6 +34,7 @@ CONF_METER_UNIT_ID = "meter_modbus_unit_id"
 CONF_METER_UNIT_IDS = "meter_modbus_unit_ids"
 # The entry's device is an older inverter behind a Datamanager.
 CONF_DATAMANAGER = "datamanager"
+CONF_DATAMANAGER_INVERTERS = "datamanager_inverters"
 CONF_API_USERNAME = "api_username"
 CONF_API_PASSWORD = "api_password"
 CONF_AUTO_ENABLE_MODBUS = "auto_enable_modbus"

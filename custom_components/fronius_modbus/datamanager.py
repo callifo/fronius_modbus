@@ -6,7 +6,7 @@ than a GEN24.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from http import HTTPStatus
 from typing import Any
@@ -17,7 +17,7 @@ from homeassistant.components.modbus import async_get_unit
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_DATAMANAGER, web_api_disabled
+from .const import CONF_DATAMANAGER, CONF_DATAMANAGER_INVERTERS, web_api_disabled
 from .derived import METER_LOCATION_FEED_IN
 from .fronius_modbus_api.device import FroniusInverter
 from .froniuswebclient import _base_url, _http
@@ -37,6 +37,9 @@ INVERTERS_PATH = "/solar_api/v1/GetInverterInfo.cgi"
 # The fixed Modbus units of its meters, for the meter addresses 1 to 5
 # (Fronius' manual 42,0410,2049).
 METER_UNIT_IDS = range(240, 245)
+# Seconds to connect and to answer. A Datamanager was logged with 3.2 s for one
+# of these answers.
+SOLAR_API_TIMEOUT = (4.0, 10.0)
 # What the Solar API shows for a meter without a serial number.
 NO_SERIAL = "n.a."
 
@@ -88,9 +91,9 @@ async def async_identify(hass: HomeAssistant, host: str) -> DeviceFamily:
     return await hass.async_add_executor_job(identify, host)
 
 
-def _read_json(host: str, path: str, timeout: float) -> Any:
+def _read_json(host: str, path: str) -> Any:
     """What the device answers on ``path``; None unless it is JSON with HTTP 200."""
-    response = _http("get", f"{_base_url(host)}{path}", timeout=timeout)
+    response = _http("get", f"{_base_url(host)}{path}", timeout=SOLAR_API_TIMEOUT)
     if response.status_code != HTTPStatus.OK:
         return None
     try:
@@ -99,13 +102,13 @@ def _read_json(host: str, path: str, timeout: float) -> Any:
         return None
 
 
-def identify(host: str, timeout: float = 4.0) -> DeviceFamily:
+def identify(host: str) -> DeviceFamily:
     """The family of the device at ``host``; UNKNOWN without a clear answer."""
     try:
-        family = _family(_read_json(host, LOGGER_INFO_PATH, timeout))
+        family = _family(_read_json(host, LOGGER_INFO_PATH))
         if family is not DeviceFamily.UNKNOWN:
             return family
-        is_gen24 = isinstance(_read_json(host, GEN24_PATH, timeout), dict)
+        is_gen24 = isinstance(_read_json(host, GEN24_PATH), dict)
     except FroniusWebUnreachable:
         return DeviceFamily.UNKNOWN
     return DeviceFamily.OTHER if is_gen24 else DeviceFamily.UNKNOWN
@@ -160,13 +163,13 @@ def _solar_api_meter(value: Any) -> SolarApiMeter | None:
     return SolarApiMeter(serial.strip(), _location(value.get("Meter_Location_Current")))
 
 
-def read_site(host: str, timeout: float = 4.0) -> Site | None:
+def read_site(host: str) -> Site | None:
     """The meters and inverters the Solar API lists; None without an answer."""
     try:
-        meters = _read_json(host, METERS_PATH, timeout)
+        meters = _read_json(host, METERS_PATH)
         if meters is None:
             return None
-        inverters = _data(_read_json(host, INVERTERS_PATH, timeout))
+        inverters = _data(_read_json(host, INVERTERS_PATH))
     except FroniusWebUnreachable:
         return None
     listed = _data(meters)
@@ -233,4 +236,19 @@ async def async_meter_topology(
         # The first poll reports it and has the setup tried again.
         return meter_topology(found, None)
     site = await hass.async_add_executor_job(read_site, params.host)
+    if site is not None:
+        site = replace(site, inverters=_known_inverters(hass, entry, site.inverters))
     return meter_topology(found, site)
+
+
+def _known_inverters(hass: HomeAssistant, entry: ConfigEntry, listed: int) -> int:
+    """The most inverters ever listed: one asleep at the start is left out.
+
+    A removed one is not noticed; the load then stays unknown, never wrong.
+    """
+    known = int(entry.data.get(CONF_DATAMANAGER_INVERTERS, 0))
+    if listed > known:
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, CONF_DATAMANAGER_INVERTERS: listed}
+        )
+    return max(known, listed)

@@ -106,7 +106,7 @@ def answer_family(monkeypatch, family: DeviceFamily) -> list[str]:
     """Let the device answer with ``family``; returns the hosts asked."""
     asked: list[str] = []
 
-    def _identify(host: str, timeout: float = 4.0) -> DeviceFamily:
+    def _identify(host: str) -> DeviceFamily:
         asked.append(host)
         return family
 
@@ -266,7 +266,7 @@ def answer_site(monkeypatch, *meters: tuple[str, int], inverters: int = 1) -> No
     monkeypatch.setattr(
         datamanager,
         "read_site",
-        lambda host, timeout=4.0: Site(meters=listed, inverters=inverters),
+        lambda host: Site(meters=listed, inverters=inverters),
     )
 
 

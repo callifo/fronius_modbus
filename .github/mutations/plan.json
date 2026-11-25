@@ -3355,8 +3355,8 @@
   {
     "label": "datamanager: only the GEN24 path's own answer shows a GEN24",
     "path": "custom_components/fronius_modbus/datamanager.py",
-    "old": "isinstance(_read_json(host, GEN24_PATH, timeout), dict)",
-    "new": "_read_json(host, GEN24_PATH, timeout) is not None",
+    "old": "isinstance(_read_json(host, GEN24_PATH), dict)",
+    "new": "_read_json(host, GEN24_PATH) is not None",
     "tests": "counts_only_with_its_own_answer"
   },
   {
@@ -3512,5 +3512,33 @@
     "old": "(\"fronius-datamanager\", \"fronius-hybrid\")",
     "new": "(\"fronius-datamanager\",)",
     "tests": "family_an_answer_shows"
+  },
+  {
+    "label": "datamanager: a sleeping inverter is remembered",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    return max(known, listed)\n",
+    "new": "    return listed\n",
+    "tests": "asleep_at_a_start or not_forgotten"
+  },
+  {
+    "label": "datamanager: a second inverter is noticed",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    return max(known, listed)\n",
+    "new": "    return known or listed\n",
+    "tests": "added_later_is_noticed"
+  },
+  {
+    "label": "datamanager: the number of inverters is kept",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if listed > known:\n",
+    "new": "    if False:\n",
+    "tests": "asleep_at_a_start"
+  },
+  {
+    "label": "datamanager: a slow answer is waited for",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "SOLAR_API_TIMEOUT = (4.0, 10.0)\n",
+    "new": "SOLAR_API_TIMEOUT = (4.0, 4.0)\n",
+    "tests": "time_to_answer"
   }
 ]

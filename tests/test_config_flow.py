@@ -2382,7 +2382,7 @@ def answer_family(monkeypatch, family: DeviceFamily) -> list[str]:
     """Let the device answer with ``family``; returns the hosts asked."""
     asked: list[str] = []
 
-    def _identify(host: str, timeout: float = 4.0) -> DeviceFamily:
+    def _identify(host: str) -> DeviceFamily:
         asked.append(host)
         return family
 

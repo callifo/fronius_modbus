@@ -146,10 +146,8 @@ def _no_real_inverter(monkeypatch):
 @pytest.fixture(autouse=True)
 def _no_datamanager_answers(monkeypatch):
     """Let no test ask a real device; without an answer nothing changes."""
-    monkeypatch.setattr(
-        datamanager, "identify", lambda host, timeout=4.0: DeviceFamily.UNKNOWN
-    )
-    monkeypatch.setattr(datamanager, "read_site", lambda host, timeout=4.0: None)
+    monkeypatch.setattr(datamanager, "identify", lambda host: DeviceFamily.UNKNOWN)
+    monkeypatch.setattr(datamanager, "read_site", lambda host: None)
 
 
 class SharedMockModbus:

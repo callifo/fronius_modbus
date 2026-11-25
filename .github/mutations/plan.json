@@ -3229,8 +3229,8 @@
   {
     "label": "datamanager: the product is told by its prefix",
     "path": "custom_components/fronius_modbus/datamanager.py",
-    "old": "product.startswith(DATAMANAGER_PRODUCT_PREFIX)",
-    "new": "product == \"fronius-datamanager-card\"",
+    "old": "product.startswith(DATAMANAGER_PRODUCT_PREFIXES)",
+    "new": "product in (\"fronius-datamanager-card\", \"fronius-hybrid\")",
     "tests": "family_an_answer_shows"
   },
   {
@@ -3505,5 +3505,12 @@
     "old": "site.has_grid_meter and not grid_meters",
     "new": "not grid_meters",
     "tests": "meters_and_where_they_are"
+  },
+  {
+    "label": "datamanager: a Symo Hybrid is recognized",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "(\"fronius-datamanager\", \"fronius-hybrid\")",
+    "new": "(\"fronius-datamanager\",)",
+    "tests": "family_an_answer_shows"
   }
 ]

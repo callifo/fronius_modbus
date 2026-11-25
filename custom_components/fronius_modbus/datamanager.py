@@ -29,9 +29,9 @@ LOGGER_INFO_PATH = "/solar_api/v1/GetLoggerInfo.cgi"
 # Answers without a login on a GEN24, also with its Solar API off; a
 # Datamanager does not have it.
 GEN24_PATH = "/api/status/common"
-# The one value seen is fronius-datamanager-card; the box is expected to start
-# the same way.
-DATAMANAGER_PRODUCT_PREFIX = "fronius-datamanager"
+# Seen are fronius-datamanager-card, whose box is expected to start the same way,
+# and fronius-hybrid on a Symo Hybrid, whose manager has another name.
+DATAMANAGER_PRODUCT_PREFIXES = ("fronius-datamanager", "fronius-hybrid")
 METERS_PATH = "/solar_api/v1/GetMeterRealtimeData.cgi?Scope=System"
 INVERTERS_PATH = "/solar_api/v1/GetInverterInfo.cgi"
 # The fixed Modbus units of its meters, for the meter addresses 1 to 5
@@ -78,7 +78,7 @@ def _family(payload: Any) -> DeviceFamily:
     body = payload.get("Body")
     logger_info = body.get("LoggerInfo") if isinstance(body, dict) else None
     product = logger_info.get("ProductID") if isinstance(logger_info, dict) else None
-    if isinstance(product, str) and product.startswith(DATAMANAGER_PRODUCT_PREFIX):
+    if isinstance(product, str) and product.startswith(DATAMANAGER_PRODUCT_PREFIXES):
         return DeviceFamily.DATAMANAGER
     return DeviceFamily.OTHER
 

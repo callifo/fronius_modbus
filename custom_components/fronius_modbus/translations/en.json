@@ -113,7 +113,7 @@
       "invalid_api_credentials": "Login failed for the selected Web API role.",
       "already_configured": "Another entry already uses this host.",
       "invalid_allowed_host": "Enter the IPv4 address of a device on your network, for example 192.168.1.20.",
-      "datamanager_no_login": "This is a Datamanager (SnapINverter). Its login is not supported. Choose Without the web API (Modbus only)."
+      "datamanager_no_login": "This is a Datamanager or Hybridmanager (SnapINverter, Symo Hybrid). Its login is not supported. Choose Without the web API (Modbus only)."
     }
   },
   "entity": {
@@ -976,7 +976,7 @@
       "invalid_api_credentials": "Login failed for the selected Web API role.",
       "already_configured": "Another entry already uses this host.",
       "invalid_allowed_host": "Enter the IPv4 address of a device on your network, for example 192.168.1.20.",
-      "datamanager_no_login": "This is a Datamanager (SnapINverter). Its login is not supported. Choose Without the web API (Modbus only)."
+      "datamanager_no_login": "This is a Datamanager or Hybridmanager (SnapINverter, Symo Hybrid). Its login is not supported. Choose Without the web API (Modbus only)."
     }
   },
   "selector": {

@@ -3,6 +3,7 @@
 import json
 import pathlib
 
+from modbus_connection import GatewayTargetError
 from modbus_connection.mock import MockModbusConnection
 import pytest
 
@@ -200,6 +201,18 @@ class SharedMockModbus:
 @pytest.fixture
 def mock_modbus(monkeypatch, symo_gen24):
     shared = SharedMockModbus(symo_gen24)
+    monkeypatch.setattr(CORE_CONNECTION, shared)
+    return shared
+
+
+@pytest.fixture
+def datamanager_modbus(monkeypatch) -> SharedMockModbus:
+    """A Symo behind a Datamanager, without a meter (issue 110).
+
+    It answers for a unit it does not serve with exception 11.
+    """
+    shared = SharedMockModbus(load_fixture("symo_datamanager.json"))
+    shared.fail_requests(METER_UNIT_ID, GatewayTargetError())
     monkeypatch.setattr(CORE_CONNECTION, shared)
     return shared
 

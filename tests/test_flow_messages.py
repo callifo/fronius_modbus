@@ -15,7 +15,10 @@ import pytest
 
 INTEGRATION = pathlib.Path(__file__).resolve().parents[1] / "custom_components"
 FLOW = next(INTEGRATION.glob("*/config_flow.py"))
-SOURCES = (FLOW, FLOW.with_name("inverter_choice.py"))
+SOURCES = tuple(
+    FLOW.with_name(name)
+    for name in ("config_flow.py", "flow_forms.py", "inverter_choice.py")
+)
 TRANSLATION_FILES = tuple(
     sorted(
         f"translations/{path.name}" for path in (FLOW.parent / "translations").iterdir()

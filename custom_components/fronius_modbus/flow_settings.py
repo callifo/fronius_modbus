@@ -15,6 +15,8 @@ from .const import (
     CONF_API_PASSWORD,
     CONF_API_USERNAME,
     CONF_AUTO_ENABLE_MODBUS,
+    CONF_DATAMANAGER,
+    CONF_DATAMANAGER_INVERTERS,
     CONF_INVERTER_UNIT_ID,
     CONF_METER_POWER_INTERVAL,
     CONF_MODBUS_RESTRICTION,
@@ -88,6 +90,9 @@ def _entry_payload(
     payload.pop(CONF_API_PASSWORD, None)
     payload.pop("meter_modbus_unit_id", None)
     payload.pop("meter_modbus_unit_ids", None)
+    # Kept as the answer it is; a missing key means no.
+    if not payload.get(CONF_DATAMANAGER):
+        payload.pop(CONF_DATAMANAGER, None)
     payload[CONF_RECONFIGURE_REQUIRED] = reconfigure_required
     return payload
 
@@ -101,6 +106,9 @@ def entry_defaults(entry: config_entries.ConfigEntry) -> dict[str, Any]:
         )
     except TypeError, ValueError:
         defaults[CONF_SCAN_INTERVAL] = DEFAULT_SCAN_INTERVAL
+    # What the device answered is no setting: the setup asks it again.
+    for remembered in (CONF_DATAMANAGER, CONF_DATAMANAGER_INVERTERS):
+        defaults.pop(remembered, None)
     return _expand_settings_input({}, defaults)
 
 

@@ -21,6 +21,7 @@ from .const import (
     CONF_DATAMANAGER,
     CONF_DATAMANAGER_INVERTERS,
     DOMAIN,
+    UNIT_OF_NUMBER_0,
     entry_unique_id,
     web_api_disabled,
 )
@@ -43,9 +44,7 @@ INVERTERS_PATH = "/solar_api/v1/GetInverterInfo.cgi"
 # The fixed Modbus units of its meters, for the meter addresses 1 to 5
 # (Fronius' manual 42,0410,2049).
 METER_UNIT_IDS = range(240, 245)
-# The inverters' numbers are their Modbus units; number 00 is the one exception.
 HIGHEST_INVERTER_NUMBER = 99
-UNIT_OF_NUMBER_0 = 100
 # Seconds to connect and to answer. A Datamanager was logged with 3.2 s for one
 # of these answers.
 SOLAR_API_TIMEOUT = (4.0, 10.0)

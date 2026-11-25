@@ -232,7 +232,7 @@ async def test_a_taken_unique_id_is_left_to_its_entry(hass, monkeypatch):
         ((1, 2, 100), (), [1, 2, 100]),
         ((1, 2), (1,), [2]),
         ((1, 2), (1, 2), []),
-        ((), (1,), []),
+        ((), (1,), None),
     ],
 )
 async def test_the_inverters_without_an_entry(hass, monkeypatch, listed, taken, free):
@@ -398,6 +398,18 @@ async def test_a_number_that_does_not_answer_creates_nothing(hass, new_inverter)
     assert hass.config_entries.async_entries(DOMAIN) == []
     result = await choose(hass, form, "2")
     assert result["type"] is FlowResultType.CREATE_ENTRY
+
+
+async def test_an_inverter_of_another_maker_creates_nothing(
+    hass, new_inverter, monkeypatch
+):
+    monkeypatch.setattr(config_flow, "SUPPORTED_MANUFACTURERS", ["Other"])
+    form = await new_inverter(1, 2)
+
+    result = await choose(hass, form, "2")
+
+    assert result["step_id"] == "inverter"
+    assert result["errors"] == {"base": "unsupported_hardware"}
 
 
 async def test_a_typed_number_with_an_entry_is_not_set_up_again(hass, new_inverter):

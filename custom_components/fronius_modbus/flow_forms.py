@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ipaddress
+import logging
 from typing import Any
 
 import voluptuous as vol
@@ -33,7 +34,23 @@ from .const import (
     WEB_API_DISABLED,
     ModbusRestriction,
 )
-from .flow_state import _InvalidAllowedHost
+from .flow_state import (
+    _AddressesNotUnique,
+    _AlreadyConfigured,
+    _CannotConnect,
+    _CannotConnectModbus,
+    _DatamanagerFound,
+    _InvalidAllowedHost,
+    _InvalidApiCredentials,
+    _InvalidHost,
+    _InvalidPort,
+    _MeterPowerIntervalTooLong,
+    _MissingApiPassword,
+    _ScanIntervalTooShort,
+    _UnsupportedHardware,
+)
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _role_field(defaults: dict[str, Any]) -> dict[vol.Marker, SelectSelector]:
@@ -136,3 +153,27 @@ def checked_allowed_host(value: Any) -> str:
     if address.is_multicast or address.is_reserved:
         raise _InvalidAllowedHost
     return str(address)
+
+
+_FORM_ERRORS: dict[type[Exception], tuple[str, str]] = {
+    _CannotConnect: ("base", "cannot_connect"),
+    _CannotConnectModbus: ("base", "cannot_connect_modbus"),
+    _InvalidPort: ("base", "invalid_port"),
+    _InvalidHost: ("host", "invalid_host"),
+    _ScanIntervalTooShort: ("base", "scan_interval_too_short"),
+    _MeterPowerIntervalTooLong: ("base", "meter_power_interval_too_long"),
+    _MissingApiPassword: ("base", "missing_api_password"),
+    _InvalidApiCredentials: ("base", "invalid_api_credentials"),
+    _InvalidAllowedHost: (CONF_ALLOWED_HOST, "invalid_allowed_host"),
+    _UnsupportedHardware: ("base", "unsupported_hardware"),
+    _AddressesNotUnique: ("base", "modbus_address_conflict"),
+    _AlreadyConfigured: ("base", "already_configured"),
+    _DatamanagerFound: (CONF_API_USERNAME, "datamanager_no_login"),
+}
+
+
+def _set_form_error(errors: dict[str, str], err: Exception) -> None:
+    field, message = _FORM_ERRORS.get(type(err), ("base", "unknown"))
+    if message == "unknown":
+        _LOGGER.error("Unexpected exception", exc_info=err)
+    errors[field] = message

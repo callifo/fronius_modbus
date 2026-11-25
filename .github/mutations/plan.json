@@ -1255,7 +1255,7 @@
   {
     "label": "discovery: a taken address is not followed",
     "path": "custom_components/fronius_modbus/discovery.py",
-    "old": "    if holder is not None and holder.entry_id != entry.entry_id:\n",
+    "old": "    if host_holder(hass, moved_settings, entry) is not None:\n",
     "new": "    if False:\n",
     "tests": "moved_inverter_is_not_followed_to_a_taken_address"
   },
@@ -1275,7 +1275,7 @@
   },
   {
     "label": "discovery: a manual setup closes an open card",
-    "path": "custom_components/fronius_modbus/config_flow.py",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
     "old": "            if card[\"context\"][\"source\"] == config_entries.SOURCE_ZEROCONF:\n",
     "new": "            if False:\n",
     "tests": "manual_setup_is_not_blocked_by_an_open_card"
@@ -1283,8 +1283,8 @@
   {
     "label": "flows: a title the owner gave stays",
     "path": "custom_components/fronius_modbus/const.py",
-    "old": "    return entry_title(after) if title == entry_title(before) else title\n",
-    "new": "    return entry_title(after)\n",
+    "old": "    return entry_title({**known, **after}) if title in generated else title\n",
+    "new": "    return entry_title({**known, **after})\n",
     "tests": "moved_inverter_keeps_the_title_its_owner_gave or owner_gave_survives_every_settings_flow"
   },
   {
@@ -1752,8 +1752,8 @@
   {
     "label": "config flow: the settings step asks before switching",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "                        minted=False,\n                        step_ids=(sunspec_step_id, allowed_host_step_id),\n",
-    "new": "                        minted=False,\n                        step_ids=(\"user\", allowed_host_step_id),\n",
+    "old": "                return await self._async_use_stored_token(\n                    state,\n                    token,\n                    step_ids=(sunspec_step_id, allowed_host_step_id),\n",
+    "new": "                return await self._async_use_stored_token(\n                    state,\n                    token,\n                    step_ids=(\"user\", allowed_host_step_id),\n",
     "tests": "stored_token_asks_before_switching_too"
   },
   {
@@ -2731,37 +2731,37 @@
   },
   {
     "label": "flow: a host an entry without unique id has is held",
-    "path": "custom_components/fronius_modbus/flow_entry.py",
-    "old": "            if entry.unique_id is None\n            and entry_unique_id({**entry.data, **entry.options}) == unique_id\n",
-    "new": "            if False\n",
+    "path": "custom_components/fronius_modbus/host_sharing.py",
+    "old": "            if (other.unique_id is None or datamanager)\n",
+    "new": "            if datamanager\n",
     "tests": "has_is_not_set_up_again or has_is_not_offered or moves_to_a_host_an_entry_without"
   },
   {
     "label": "flow: a new setup aborts for a held host",
-    "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "        if host_without_unique_id(self.hass, str(self.unique_id)) is not None:\n            raise data_entry_flow.AbortFlow(\"already_configured\")\n",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "        if host_holder(self.hass, settings) is not None:\n            raise data_entry_flow.AbortFlow(\"already_configured\")\n",
     "new": "",
     "tests": "has_is_not_set_up_again or has_is_not_offered"
   },
   {
     "label": "flow: a reconfigure is refused for a held host",
     "path": "custom_components/fronius_modbus/flow_entry.py",
-    "old": "    holder = host_holder(hass, unique_id)\n    if holder is not None and holder.entry_id != entry.entry_id:\n        raise _AlreadyConfigured\n",
-    "new": "    holder = hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, unique_id)\n    if holder is not None and holder.entry_id != entry.entry_id:\n        raise _AlreadyConfigured\n",
+    "old": "    if host_holder(hass, settings, entry) is not None:\n        raise _AlreadyConfigured\n",
+    "new": "",
     "tests": "moves_to_a_host_an_entry_without_unique_id_has"
   },
   {
     "label": "discovery: a move onto a host without unique id is refused",
-    "path": "custom_components/fronius_modbus/discovery.py",
-    "old": "    holder = host_holder(hass, unique_id)\n",
-    "new": "    holder = hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, unique_id)\n",
+    "path": "custom_components/fronius_modbus/host_sharing.py",
+    "old": "    holder = by_id or next(\n",
+    "new": "    holder = by_id if by_id is not None or entry is not None else next(\n",
     "tests": "not_followed_to_a_host_an_entry_without_unique_id_has"
   },
   {
     "label": "flow: an ignored card leaves a manual setup to Home Assistant",
-    "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "        if host_without_unique_id(self.hass, str(self.unique_id)) is not None:\n",
-    "new": "        if host_holder(self.hass, str(self.unique_id)) is not None:\n",
+    "path": "custom_components/fronius_modbus/host_sharing.py",
+    "old": "    if entry is None and by_id is not None and by_id.source == SOURCE_IGNORE:\n",
+    "new": "    if False:\n",
     "tests": "ignored_can_be_set_up_by_hand"
   },
   {
@@ -3306,8 +3306,8 @@
   {
     "label": "config flow: a role on a Datamanager is refused",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "                await async_check_role(self.hass, settings)\n",
-    "new": "",
+    "old": "        await async_check_role(self.hass, settings)\n",
+    "new": "        return\n",
     "tests": "role_on_a_datamanager"
   },
   {
@@ -3315,7 +3315,7 @@
     "path": "custom_components/fronius_modbus/flow_settings.py",
     "old": "    if settings[CONF_API_USERNAME] == WEB_API_DISABLED:\n        return\n    family",
     "new": "    family",
-    "tests": "asks_for_no_family"
+    "tests": "only_a_new_entry_asks_for_the_family"
   },
   {
     "label": "config flow: only a Datamanager refuses the role",
@@ -3715,5 +3715,250 @@
     "old": "_FLOWS[status] == direction",
     "new": "_FLOWS[status] != direction",
     "tests": "power_goes_where"
+  },
+  {
+    "label": "sharing: a Datamanager's inverter has its number in the id",
+    "path": "custom_components/fronius_modbus/const.py",
+    "old": "    return host if unit_id is None else f\"{host}#{unit_id}\"\n",
+    "new": "    return host\n",
+    "tests": "is_host_and_unit"
+  },
+  {
+    "label": "sharing: no other device has the number in the id",
+    "path": "custom_components/fronius_modbus/const.py",
+    "old": "    if not data.get(CONF_DATAMANAGER) or unit_id == DEFAULT_INVERTER_UNIT_ID:\n",
+    "new": "    if unit_id == DEFAULT_INVERTER_UNIT_ID:\n",
+    "tests": "unique_id_stays_the_host or existing_entry_keeps"
+  },
+  {
+    "label": "sharing: the first inverter keeps the host alone",
+    "path": "custom_components/fronius_modbus/const.py",
+    "old": "    if not data.get(CONF_DATAMANAGER) or unit_id == DEFAULT_INVERTER_UNIT_ID:\n",
+    "new": "    if not data.get(CONF_DATAMANAGER):\n",
+    "tests": "unique_id_stays_the_host"
+  },
+  {
+    "label": "sharing: the second entry of a host is told by the first",
+    "path": "custom_components/fronius_modbus/host_sharing.py",
+    "old": "    if host_entries(hass, host):\n        return is_datamanager_host(hass, host)\n",
+    "new": "",
+    "tests": "second_entry_of_0_1_9 or may_share"
+  },
+  {
+    "label": "sharing: a moved inverter keeps its number",
+    "path": "custom_components/fronius_modbus/host_sharing.py",
+    "old": "    return bool((settings if entry is None else entry.data).get(CONF_DATAMANAGER))\n",
+    "new": "    return bool(settings.get(CONF_DATAMANAGER))\n",
+    "tests": "moves_to_another_address"
+  },
+  {
+    "label": "sharing: the number counts whatever id is stored",
+    "path": "custom_components/fronius_modbus/host_sharing.py",
+    "old": "            if (other.unique_id is None or datamanager)\n",
+    "new": "            if other.unique_id is None\n",
+    "tests": "may_share"
+  },
+  {
+    "label": "sharing: the entry itself is no holder",
+    "path": "custom_components/fronius_modbus/host_sharing.py",
+    "old": "        return None if holder is entry else holder\n",
+    "new": "        return holder\n",
+    "tests": "existing_entry_keeps"
+  },
+  {
+    "label": "sharing: another device is not added beside a Datamanager",
+    "path": "custom_components/fronius_modbus/host_sharing.py",
+    "old": "    if entry is None and datamanager and not settings.get(CONF_DATAMANAGER):\n        return others[0]\n",
+    "new": "",
+    "tests": "may_share"
+  },
+  {
+    "label": "sharing: an ignored card keeps a move off",
+    "path": "custom_components/fronius_modbus/host_sharing.py",
+    "old": "    if entry is None and by_id is not None and by_id.source == SOURCE_IGNORE:\n",
+    "new": "    if by_id is not None and by_id.source == SOURCE_IGNORE:\n",
+    "tests": "keeps_its_host_from_a_move"
+  },
+  {
+    "label": "datamanager: the unique id follows what was found",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    _follow_with_the_unique_id(hass, entry, found)\n",
+    "new": "",
+    "tests": "unique_id_follows"
+  },
+  {
+    "label": "datamanager: a taken unique id is left",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if not hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, after):\n",
+    "new": "    if True:\n",
+    "tests": "taken_unique_id_is_left"
+  },
+  {
+    "label": "datamanager: an entry without a unique id keeps none",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if entry.unique_id != before or before == after:\n",
+    "new": "    if before == after:\n",
+    "tests": "unique_id_follows"
+  },
+  {
+    "label": "datamanager: number 00 is on unit 100",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    return value or UNIT_OF_NUMBER_0\n",
+    "new": "    return value\n",
+    "tests": "unit_of_an_inverter_number"
+  },
+  {
+    "label": "datamanager: no inverter has a number above 99",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if value > HIGHEST_INVERTER_NUMBER:\n        return None\n",
+    "new": "",
+    "tests": "unit_of_an_inverter_number"
+  },
+  {
+    "label": "datamanager: only digits are a number",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if not (number.isascii() and number.isdigit()):\n",
+    "new": "    if not number.isdigit():\n",
+    "tests": "unit_of_an_inverter_number"
+  },
+  {
+    "label": "datamanager: an unreachable device lists no inverter",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    except FroniusWebUnreachable:\n        return ()\n",
+    "new": "    except KeyError:\n        return ()\n",
+    "tests": "unreachable_device_lists_no_inverter"
+  },
+  {
+    "label": "choice: an inverter with an entry is not offered",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "    return [unit for unit in listed if unit not in taken]\n",
+    "new": "    return list(listed)\n",
+    "tests": "inverters_without_an_entry"
+  },
+  {
+    "label": "choice: the only inverter with number 1 is not asked for",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "        if not taken and free == [DEFAULT_INVERTER_UNIT_ID]:\n",
+    "new": "        if False:\n",
+    "tests": "one_inverter_with_number_1"
+  },
+  {
+    "label": "choice: beside another entry number 1 is asked for",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "        if not taken and free == [DEFAULT_INVERTER_UNIT_ID]:\n",
+    "new": "        if free == [DEFAULT_INVERTER_UNIT_ID]:\n",
+    "tests": "question_offers"
+  },
+  {
+    "label": "choice: nothing left ends the setup",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "        if free == []:\n",
+    "new": "        if False:\n",
+    "tests": "entry_for_every_inverter"
+  },
+  {
+    "label": "choice: the proposed number is free",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "    while unit_id in taken:\n",
+    "new": "    while False:\n",
+    "tests": "lists_none_is_asked"
+  },
+  {
+    "label": "choice: a number can be typed",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "custom_value=True",
+    "new": "custom_value=False",
+    "tests": "question_offers"
+  },
+  {
+    "label": "choice: no such number is an error on the form",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "        if unit_id is None:\n            errors",
+    "new": "        if False:\n            errors",
+    "tests": "no_inverter_has_such"
+  },
+  {
+    "label": "choice: the chosen number is the one set up",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "        settings = {**self._inverter_settings, CONF_INVERTER_UNIT_ID: unit_id}\n",
+    "new": "        settings = {**self._inverter_settings}\n",
+    "tests": "chosen_inverter_is_set_up"
+  },
+  {
+    "label": "choice: the inverter has to answer",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "            info = await self._async_check_inverter(settings)\n",
+    "new": "            info = {\"title\": \"\"}\n",
+    "tests": "does_not_answer_creates_nothing"
+  },
+  {
+    "label": "choice: a role on a known Datamanager is refused",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "        if found and settings[CONF_API_USERNAME] != WEB_API_DISABLED:\n            raise _DatamanagerFound\n",
+    "new": "",
+    "tests": "role_for_a_second_inverter or role_on_a_datamanager"
+  },
+  {
+    "label": "choice: a silent Datamanager is known from its entries",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "            family is datamanager.DeviceFamily.UNKNOWN and remembered\n",
+    "new": "            False and remembered\n",
+    "tests": "silent_datamanager_is_known"
+  },
+  {
+    "label": "choice: only an unclear answer falls back to the entries",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "            family is datamanager.DeviceFamily.UNKNOWN and remembered\n",
+    "new": "            remembered\n",
+    "tests": "not_added"
+  },
+  {
+    "label": "choice: the host alone is not yet a claim on a Datamanager",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "        if datamanager_known and CONF_DATAMANAGER not in settings:\n",
+    "new": "        if False:\n",
+    "tests": "question_offers"
+  },
+  {
+    "label": "choice: an existing entry is not asked for its inverter",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "        if self._flow_entry() is not None:\n",
+    "new": "        if False:\n",
+    "tests": "only_a_new_entry_asks or not_asked_for_again"
+  },
+  {
+    "label": "discovery: no card for a host a second inverter has",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "{CONF_HOST: host, CONF_DATAMANAGER: False}",
+    "new": "{CONF_HOST: host}",
+    "tests": "only_a_second_inverter_has"
+  },
+  {
+    "label": "flows: no other device gets the key",
+    "path": "custom_components/fronius_modbus/flow_settings.py",
+    "old": "    if not payload.get(CONF_DATAMANAGER):\n",
+    "new": "    if False:\n",
+    "tests": "another_device_is_asked_nothing"
+  },
+  {
+    "label": "flows: what the device answered is no option",
+    "path": "custom_components/fronius_modbus/flow_settings.py",
+    "old": "        defaults.pop(remembered, None)\n",
+    "new": "        pass\n",
+    "tests": "not_asked_for_again"
+  },
+  {
+    "label": "flows: the title keeps the inverter's number",
+    "path": "custom_components/fronius_modbus/const.py",
+    "old": "    return entry_title({**known, **after}) if title in generated else title\n",
+    "new": "    return entry_title(after) if title in generated else title\n",
+    "tests": "not_asked_for_again"
+  },
+  {
+    "label": "flows: a title without the number was generated too",
+    "path": "custom_components/fronius_modbus/const.py",
+    "old": "    generated = (entry_title(before), entry_title({**before, CONF_DATAMANAGER: False}))\n",
+    "new": "    generated = (entry_title(before),)\n",
+    "tests": "generated_title_follows"
   }
 ]

@@ -82,7 +82,8 @@ LINE_BUDGETS = {
     # 1108: the owner can ask for the address an allowed list skips, and the
     # model type answer keeps the address settled before it.
     # 1099 - the check of the address to allow, now with its form.
-    "config_flow.py": 1099,
+    # 1064 - the claim of a new entry, now inverter_choice.py; - the form errors.
+    "config_flow.py": 1064,
 }
 
 # SonarSource's own default. Above it, a function is one somebody has to

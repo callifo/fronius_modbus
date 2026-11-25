@@ -3,7 +3,7 @@
 ## Unreleased
 
 ### Changed
-- The setup recognizes a Datamanager (SnapINverter) and asks to choose *Without the web API*. Until now it reported a failed login, whatever the password (issue 110).
+- With a role chosen for a Datamanager (SnapINverter), the setup recognizes it and asks to choose *Without the web API*. Until now it reported a failed login, whatever the password (issue 110).
 - An entry without the web API on a Datamanager no longer requests pages the Datamanager does not have, and no longer creates event entities that stay empty. Event entities such an entry already has stay without a value, and you can delete them.
 - `tools/inverter_dump.bat` also replaces the city of the time zone.
 

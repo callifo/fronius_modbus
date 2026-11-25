@@ -65,6 +65,8 @@ def answer(
     [
         (logger_info("fronius-datamanager-card"), 200, DeviceFamily.DATAMANAGER),
         (logger_info("fronius-datamanager-box"), 200, DeviceFamily.DATAMANAGER),
+        # A Symo Hybrid, on every firmware from 1.2 to 1.23 that was published.
+        (logger_info("fronius-hybrid"), 200, DeviceFamily.DATAMANAGER),
         # A GEN24 refuses the request in the body, with HTTP 200.
         (solar_api({"Data": {}}, code=11), 200, DeviceFamily.OTHER),
         (logger_info("something-else"), 200, DeviceFamily.OTHER),

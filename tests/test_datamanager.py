@@ -118,8 +118,22 @@ def test_a_device_that_does_not_answer_stays_unknown(monkeypatch):
 def test_the_question_is_one_request_without_a_login(monkeypatch, asked):
     answer(monkeypatch, asked, logger_info("fronius-datamanager-card"))
 
-    identify(HOST, timeout=2.0)
+    identify(HOST)
 
-    assert asked == [
-        ("get", f"http://{HOST}/solar_api/v1/GetLoggerInfo.cgi", {"timeout": 2.0})
-    ]
+    ((method, url, options),) = asked
+    assert (method, url) == (
+        "get",
+        f"http://{HOST}/solar_api/v1/GetLoggerInfo.cgi",
+    )
+    assert set(options) == {"timeout"}
+
+
+def test_a_slow_datamanager_has_time_to_answer(monkeypatch, asked):
+    """Its Solar API was logged with 2.6 s for this and 3.2 s for the inverters."""
+    answer(monkeypatch, asked, logger_info("fronius-datamanager-card"))
+
+    identify(HOST)
+
+    connect, read = asked[0][2]["timeout"]
+    assert connect <= 4
+    assert read >= 10

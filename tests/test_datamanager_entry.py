@@ -319,6 +319,52 @@ async def test_the_load_is_unknown_beside_other_inverters(
     assert state_of(hass, entry, "load") == "unknown"
 
 
+async def reload_with(hass, entry, monkeypatch, *, inverters: int) -> None:
+    """Start the entry again while the Solar API lists so many inverters."""
+    answer_site(monkeypatch, ("A1", 0), inverters=inverters)
+    await reload_entry(hass, entry)
+
+
+async def test_an_inverter_asleep_at_a_start_is_still_the_only_one(
+    hass, datamanager_modbus, datamanager_entry, monkeypatch
+):
+    """An IG Plus was listed by day, and by night nothing, with the Datamanager up."""
+    add_meter(datamanager_modbus, 240, "A1")
+    answer_site(monkeypatch, ("A1", 0), inverters=1)
+    entry = datamanager_entry
+    await setup_entry(hass, entry)
+
+    await reload_with(hass, entry, monkeypatch, inverters=0)
+
+    assert state_of(hass, entry, "load") == "627.0"
+
+
+async def test_one_of_two_inverters_asleep_is_not_forgotten(
+    hass, datamanager_modbus, datamanager_entry, monkeypatch
+):
+    add_meter(datamanager_modbus, 240, "A1")
+    answer_site(monkeypatch, ("A1", 0), inverters=2)
+    entry = datamanager_entry
+    await setup_entry(hass, entry)
+
+    await reload_with(hass, entry, monkeypatch, inverters=1)
+
+    assert state_of(hass, entry, "load") == "unknown"
+
+
+async def test_a_second_inverter_added_later_is_noticed(
+    hass, datamanager_modbus, datamanager_entry, monkeypatch
+):
+    add_meter(datamanager_modbus, 240, "A1")
+    answer_site(monkeypatch, ("A1", 0), inverters=1)
+    entry = datamanager_entry
+    await setup_entry(hass, entry)
+
+    await reload_with(hass, entry, monkeypatch, inverters=2)
+
+    assert state_of(hass, entry, "load") == "unknown"
+
+
 async def test_without_the_solar_api_the_meter_is_read_without_the_load(
     hass, datamanager_modbus, datamanager_entry
 ):

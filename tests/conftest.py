@@ -6,6 +6,8 @@ import pathlib
 from modbus_connection.mock import MockModbusConnection
 import pytest
 
+from custom_components.fronius_modbus import datamanager
+from custom_components.fronius_modbus.datamanager import DeviceFamily
 from homeassistant.config_entries import ConfigEntries, ConfigEntry, ConfigEntryState
 
 from .durations import SLOW_TEST_SECONDS, over_budget
@@ -137,6 +139,14 @@ def _no_real_inverter(monkeypatch):
         )
 
     monkeypatch.setattr(CORE_CONNECTION, _refuse)
+
+
+@pytest.fixture(autouse=True)
+def _no_family_question(monkeypatch):
+    """Let no test ask a real device for its family; without an answer nothing changes."""
+    monkeypatch.setattr(
+        datamanager, "identify", lambda host, timeout=4.0: DeviceFamily.UNKNOWN
+    )
 
 
 class SharedMockModbus:

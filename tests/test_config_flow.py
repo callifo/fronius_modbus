@@ -2494,17 +2494,21 @@ async def test_another_error_keeps_the_role_offered(hass, mock_modbus):
     assert shown_defaults(result)["api_username"] == "customer"
 
 
-async def test_without_the_web_api_the_flow_asks_for_no_family(
-    hass, mock_modbus, monkeypatch
+@pytest.mark.parametrize(
+    ("kind", "times"), [("user", 1), ("reconfigure", 0), ("options", 0), ("reauth", 0)]
+)
+async def test_without_the_web_api_only_a_new_entry_asks_for_the_family(
+    hass, mock_modbus, monkeypatch, kind, times
 ):
-    asked = answer_family(monkeypatch, DeviceFamily.DATAMANAGER)
-    flow = _SettingsFlow(hass, "user")
+    """A new one may have to ask which inverter it reads."""
+    asked = answer_family(monkeypatch, DeviceFamily.OTHER)
+    flow = _SettingsFlow(hass, kind)
     form = await flow.start()
 
     result = await flow.submit(form["flow_id"], "none")
 
-    assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert asked == []
+    assert result["type"] in (FlowResultType.CREATE_ENTRY, FlowResultType.ABORT)
+    assert len(asked) == times
 
 
 async def test_a_taken_host_is_refused_before_the_device_is_asked(

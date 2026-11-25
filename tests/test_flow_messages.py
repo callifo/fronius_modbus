@@ -15,6 +15,7 @@ import pytest
 
 INTEGRATION = pathlib.Path(__file__).resolve().parents[1] / "custom_components"
 FLOW = next(INTEGRATION.glob("*/config_flow.py"))
+SOURCES = (FLOW, FLOW.with_name("inverter_choice.py"))
 TRANSLATION_FILES = tuple(
     sorted(
         f"translations/{path.name}" for path in (FLOW.parent / "translations").iterdir()
@@ -51,7 +52,11 @@ def _flow_messages() -> set[str]:
     """
     messages = set()
     implied = set()
-    for node in ast.walk(ast.parse(FLOW.read_text(encoding="utf-8"))):
+    for node in (
+        node
+        for source in SOURCES
+        for node in ast.walk(ast.parse(source.read_text(encoding="utf-8")))
+    ):
         if reason := _implied(node):
             implied.add(reason)
         if (

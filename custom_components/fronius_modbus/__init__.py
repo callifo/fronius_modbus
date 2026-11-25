@@ -38,6 +38,7 @@ from .coordinator import (
     FroniusRuntimeData,
     FroniusWebCoordinator,
 )
+from .datamanager import async_on_datamanager
 from .entity import expected_device_identifiers
 from .fronius_modbus_api.device import FroniusInverter
 from .froniuswebclient import FroniusWebClient
@@ -72,7 +73,7 @@ async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 
 async def _async_meter_topology(
-    hass: HomeAssistant, public_client: FroniusWebClient | None
+    hass: HomeAssistant, public_client: FroniusWebClient | None, on_datamanager: bool
 ) -> MeterTopology:
     """Ask the web API which meters exist; fall back to the single default meter.
 
@@ -80,6 +81,10 @@ async def _async_meter_topology(
     shows at the first protected read of the web poll instead.
     """
     unconfirmed = parse_meter_topology(None)
+    if on_datamanager:
+        # Its meters answer on other units than the one read here: "no meter"
+        # must not let the cleanup delete the meter rows of an older version.
+        return unconfirmed
     if public_client is None:
         # Without a web client the entry only ever serves the default meter, so
         # that is the configuration, not an unread answer.
@@ -146,10 +151,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
         else None
     )
     public_client = client
-    if migrations.web_api_disabled(entry):
+    on_datamanager = await async_on_datamanager(hass, entry, host)
+    if migrations.web_api_disabled(entry) and not on_datamanager:
         public_client = FroniusWebClient(host=host, username=API_USERNAME, password="")
 
-    topology = await _async_meter_topology(hass, public_client)
+    topology = await _async_meter_topology(hass, public_client, on_datamanager)
     meter_unit_ids, primary = topology.unit_ids, topology.primary_unit_id
     locations = topology.locations
 

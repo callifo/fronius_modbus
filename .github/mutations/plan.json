@@ -1136,7 +1136,7 @@
   {
     "label": "setup: an entry without the web API gets the public client",
     "path": "custom_components/fronius_modbus/__init__.py",
-    "old": "    if migrations.web_api_disabled(entry):\n",
+    "old": "    if migrations.web_api_disabled(entry) and not on_datamanager:\n",
     "new": "    if False:\n",
     "tests": "entry_without_the_web_api_reads_the_public_endpoints"
   },
@@ -3225,5 +3225,131 @@
     "old": "        return _restriction_with(restriction, address) == restriction\n",
     "new": "        return True\n",
     "tests": "says_whether_it_already_allows"
+  },
+  {
+    "label": "datamanager: the product is told by its prefix",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "product.startswith(DATAMANAGER_PRODUCT_PREFIX)",
+    "new": "product == \"fronius-datamanager-card\"",
+    "tests": "family_an_answer_shows"
+  },
+  {
+    "label": "datamanager: another product is another device",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    return DeviceFamily.OTHER\n",
+    "new": "    return DeviceFamily.DATAMANAGER\n",
+    "tests": "family_an_answer_shows"
+  },
+  {
+    "label": "datamanager: an answer without a head shows nothing",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": " or not isinstance(payload.get(\"Head\"), dict)",
+    "new": "",
+    "tests": "family_an_answer_shows"
+  },
+  {
+    "label": "datamanager: an error status shows nothing",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if response.status_code != HTTPStatus.OK:\n        return DeviceFamily.UNKNOWN\n",
+    "new": "",
+    "tests": "family_an_answer_shows"
+  },
+  {
+    "label": "datamanager: a product that is no text is no match",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "isinstance(product, str) and ",
+    "new": "",
+    "tests": "family_an_answer_shows"
+  },
+  {
+    "label": "datamanager: an unreachable device shows nothing",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    except FroniusWebUnreachable, ValueError:\n",
+    "new": "    except ValueError:\n",
+    "tests": "does_not_answer_stays_unknown"
+  },
+  {
+    "label": "datamanager: an answer that is no JSON shows nothing",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    except FroniusWebUnreachable, ValueError:\n",
+    "new": "    except FroniusWebUnreachable:\n",
+    "tests": "family_an_answer_shows"
+  },
+  {
+    "label": "datamanager: only an entry without the web API is asked",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if not web_api_disabled({**entry.data, **entry.options}):\n        return False\n",
+    "new": "",
+    "tests": "role_is_not_asked_for_its_family"
+  },
+  {
+    "label": "datamanager: without an answer the last one counts",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "        return bool(remembered)\n",
+    "new": "        return False\n",
+    "tests": "asleep_at_the_start"
+  },
+  {
+    "label": "datamanager: a clear answer is remembered",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if found != bool(remembered):\n",
+    "new": "    if False:\n",
+    "tests": "asleep_at_the_start"
+  },
+  {
+    "label": "setup: a Datamanager gets no public client",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "    if migrations.web_api_disabled(entry) and not on_datamanager:\n",
+    "new": "    if migrations.web_api_disabled(entry):\n",
+    "tests": "sends_no_web_request"
+  },
+  {
+    "label": "setup: no meter on a Datamanager is no proof",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "    if on_datamanager:\n",
+    "new": "    if False:\n",
+    "tests": "loses_no_registry_row"
+  },
+  {
+    "label": "config flow: a role on a Datamanager is refused",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "                await async_check_role(self.hass, settings)\n",
+    "new": "",
+    "tests": "role_on_a_datamanager"
+  },
+  {
+    "label": "config flow: without the web API no family is asked for",
+    "path": "custom_components/fronius_modbus/flow_settings.py",
+    "old": "    if settings[CONF_API_USERNAME] == WEB_API_DISABLED:\n        return\n    family",
+    "new": "    family",
+    "tests": "asks_for_no_family"
+  },
+  {
+    "label": "config flow: only a Datamanager refuses the role",
+    "path": "custom_components/fronius_modbus/flow_settings.py",
+    "old": "    if family is datamanager.DeviceFamily.DATAMANAGER:\n",
+    "new": "    if family is not datamanager.DeviceFamily.OTHER:\n",
+    "tests": "any_other_answer"
+  },
+  {
+    "label": "config flow: a refused role is not offered again",
+    "path": "custom_components/fronius_modbus/flow_settings.py",
+    "old": "    return {**typed, CONF_API_USERNAME: WEB_API_DISABLED}\n",
+    "new": "    return typed\n",
+    "tests": "role_on_a_datamanager"
+  },
+  {
+    "label": "config flow: a refused role keeps what was typed",
+    "path": "custom_components/fronius_modbus/flow_settings.py",
+    "old": "    typed = _expand_settings_input(user_input, defaults)\n",
+    "new": "    typed = defaults\n",
+    "tests": "role_on_a_datamanager"
+  },
+  {
+    "label": "config flow: other errors keep the form's defaults",
+    "path": "custom_components/fronius_modbus/flow_settings.py",
+    "old": " or CONF_API_USERNAME not in errors:",
+    "new": ":",
+    "tests": "another_error_keeps_the_role"
   }
 ]

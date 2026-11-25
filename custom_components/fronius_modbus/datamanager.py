@@ -10,8 +10,10 @@ from enum import StrEnum
 from http import HTTPStatus
 from typing import Any
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
+from .const import CONF_DATAMANAGER, web_api_disabled
 from .froniuswebclient import _base_url, _http
 from .web_errors import FroniusWebUnreachable
 
@@ -57,3 +59,26 @@ def identify(host: str, timeout: float = 4.0) -> DeviceFamily:
     if response.status_code != HTTPStatus.OK:
         return DeviceFamily.UNKNOWN
     return _family(payload)
+
+
+async def async_on_datamanager(
+    hass: HomeAssistant, entry: ConfigEntry, host: str
+) -> bool:
+    """Whether the entry's device is a Datamanager, remembered from its last clear answer.
+
+    A Datamanager can be asleep when Home Assistant starts. An entry with a role
+    is not asked: a Datamanager accepts none of them.
+    """
+    if not web_api_disabled({**entry.data, **entry.options}):
+        return False
+    remembered = entry.data.get(CONF_DATAMANAGER)
+    family = await async_identify(hass, host)
+    if family is DeviceFamily.UNKNOWN:
+        return bool(remembered)
+    found = family is DeviceFamily.DATAMANAGER
+    # A missing key means no already; most entries never get one.
+    if found != bool(remembered):
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, CONF_DATAMANAGER: found}
+        )
+    return found

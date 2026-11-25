@@ -2481,6 +2481,19 @@ async def test_any_other_answer_goes_on_to_the_password(
     assert result["type"] is FlowResultType.CREATE_ENTRY
 
 
+async def test_another_error_keeps_the_role_offered(hass, mock_modbus):
+    """Only a role refused on a Datamanager switches the choice."""
+    flow = _SettingsFlow(hass, "user")
+    form = await flow.start()
+
+    result = await flow.manager.async_configure(
+        form["flow_id"], {"host": "", "scan_interval": 25, "api_username": "customer"}
+    )
+
+    assert result["errors"] == {"host": "invalid_host"}
+    assert shown_defaults(result)["api_username"] == "customer"
+
+
 async def test_without_the_web_api_the_flow_asks_for_no_family(
     hass, mock_modbus, monkeypatch
 ):

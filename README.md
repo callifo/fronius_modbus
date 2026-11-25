@@ -40,7 +40,7 @@ Users of this integration and of redpomodoro/fronius_modbus ran it, mostly in ve
 
 Tauro models (Tauro ECO included) should work the same way: Fronius publishes the same SunSpec register maps for them, without the storage model. There are no reports yet.
 
-Older Fronius inverters with a Datamanager (the SnapINverter family: Symo, Primo, Eco, Galvo without GEN24) are set up *Without the web API (Modbus only)*, as their web interface has other logins and paths. If you choose a role, the setup recognizes the Datamanager and asks to go without the web API. Set the Datamanager's Modbus to the `int+SF` SunSpec model type first; with `float` the inverter model is not found and the setup stops, reporting that Modbus did not answer. Their smart meter and export limit are not read yet. No 1.x version is confirmed on one.
+Older Fronius inverters with a Datamanager (the SnapINverter family: Symo, Primo, Eco, Galvo without GEN24) are set up *Without the web API (Modbus only)*, as their web interface has other logins and paths. If you choose a role, the setup recognizes the Datamanager and asks to go without the web API. Set the Datamanager's Modbus to the `int+SF` SunSpec model type first; with `float` the inverter model is not found and the setup stops, reporting that Modbus did not answer. The Datamanager's smart meters are read where Fronius' manual places them. Its export limit is not read yet. No 1.x version is confirmed on a Datamanager.
 
 ## Coming from 0.3.x
 

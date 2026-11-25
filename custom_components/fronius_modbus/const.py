@@ -179,6 +179,9 @@ CONTROL_STATUS = {
     1: "enabled",
 }
 
+# As a Datamanager names it; another one has not been seen.
+EXPORT_LIMIT_MODES = {"entireSystem": "entire_system"}
+
 AC_LIMIT_STATUS = {
     0: "disabled",
     1: "enabled",
@@ -234,6 +237,10 @@ SENSOR_STATE_OPTIONS = {
     "inverter_controls": [*INVERTER_CONTROL_STATE_VALUES, UNKNOWN_STATE],
     "charge_status": _state_values(CHARGE_STATUS),
     "grid_charging": _state_values(CHARGE_GRID_STATUS),
+    "export_soft_limit_state": _state_values(CONTROL_STATUS),
+    "export_hard_limit_state": _state_values(CONTROL_STATUS),
+    "export_fail_safe": _state_values(CONTROL_STATUS),
+    "export_limit_mode": [*EXPORT_LIMIT_MODES.values(), UNKNOWN_STATE],
     "api_modbus_control": _state_values(CONTROL_STATUS),
     "api_modbus_restriction": _state_values(CONTROL_STATUS),
 }

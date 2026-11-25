@@ -241,7 +241,7 @@ class FroniusInverter:
     ) -> None:
         """Bind to the inverter's unit and the units to probe for meters."""
         self._datamanager = datamanager
-        self._site_totals = datamanager and site_totals
+        self.reads_site_totals = datamanager and site_totals
         self._unit = unit
         self._unit_id = unit_id
         self._monotonic = monotonic
@@ -350,7 +350,7 @@ class FroniusInverter:
             REPORT_MPPT: self._optional(Mppt, chain, MPPT_MODEL_ID),
             REPORT_STORAGE: self._optional(Storage, chain, STORAGE_MODEL_ID),
         }
-        if self._site_totals:
+        if self.reads_site_totals:
             components[REPORT_SITE] = await self._async_block(self.site, SiteTotals)
         # Fronius' register table rules it out for hybrid inverters.
         if self._datamanager and HYBRID_MODEL not in identity.model:

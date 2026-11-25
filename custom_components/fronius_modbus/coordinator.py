@@ -22,7 +22,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .component_readings import limits_reached
-from .const import DOMAIN, web_api_disabled
+from .const import CONF_DATAMANAGER, DOMAIN, web_api_disabled
 from .derived import grid_status, household_load, throttle_reason
 from .fronius_modbus_api.controls import InverterControls
 from .fronius_modbus_api.device import (
@@ -40,6 +40,7 @@ from .froniuswebclient import FroniusWebUnreachable
 from .web_control import soc_minimum_login_lost
 
 if TYPE_CHECKING:
+    from .datamanager_web import DatamanagerWebCoordinator
     from .web_control import FroniusWebControl, WebData
 
 _LOGGER = logging.getLogger(__name__)
@@ -59,7 +60,7 @@ NO_ANSWER = (
 )
 
 
-class _OfflineIsNotAnError(logging.Filter):
+class OfflineIsNotAnError(logging.Filter):
     """Log an expected outage at info, the way the quality scale asks for.
 
     DataUpdateCoordinator logs the outage at error and the recovery at info
@@ -70,6 +71,7 @@ class _OfflineIsNotAnError(logging.Filter):
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
+        """Lower the level of an expected outage; nothing is left out."""
         expected_outage = record.levelno == logging.ERROR and any(
             isinstance(argument, DeviceUnreachable) for argument in record.args or ()
         )
@@ -81,7 +83,7 @@ class _OfflineIsNotAnError(logging.Filter):
 
 # On this logger, not a parent: a filter never sees a child logger's records,
 # and this is the one both coordinators are built with.
-_LOGGER.addFilter(_OfflineIsNotAnError())
+_LOGGER.addFilter(OfflineIsNotAnError())
 
 
 def assume_present[Subsystem](subsystem: Subsystem | None) -> Subsystem:
@@ -128,6 +130,15 @@ class ModbusPoll:
     retained: bool = False
 
 
+def _has_no_web_control(entry: ConfigEntry) -> bool:
+    """Whether the battery is written over Modbus alone.
+
+    The login of a Datamanager opens its export limit only.
+    """
+    values = {**entry.data, **entry.options}
+    return web_api_disabled(values) or bool(entry.data.get(CONF_DATAMANAGER))
+
+
 @dataclass
 class FroniusRuntimeData:
     """What a loaded entry carries."""
@@ -136,6 +147,8 @@ class FroniusRuntimeData:
     modbus: FroniusModbusCoordinator
     web: FroniusWebCoordinator | None
     web_control: FroniusWebControl | None
+    # The web interface of a Datamanager, where the technician logs in.
+    datamanager_web: DatamanagerWebCoordinator | None = None
     meter_locations: dict[int, int] = field(default_factory=dict)
     meter_power: FroniusMeterPowerCoordinator | None = None
     primary_meter_unit_id: int = 200
@@ -193,7 +206,7 @@ class FroniusRuntimeData:
         percent = int(round(value))
         storage = assume_present(self.storage_control)
         entry = assume_present(self.modbus.config_entry)
-        if web_api_disabled({**entry.data, **entry.options}):
+        if _has_no_web_control(entry):
             await storage.set_minimum_reserve(percent)
             return
         web_control = self.web_control
@@ -208,9 +221,7 @@ class FroniusRuntimeData:
         mode = ExtendedMode(code)
         await assume_present(self.storage_control).set_mode(mode)
         entry = assume_present(self.modbus.config_entry)
-        if mode is not ExtendedMode.CHARGE_FROM_GRID or web_api_disabled(
-            {**entry.data, **entry.options}
-        ):
+        if mode is not ExtendedMode.CHARGE_FROM_GRID or _has_no_web_control(entry):
             return
         web_control = self.web_control
         if web_control is None or not web_control.configured:

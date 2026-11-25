@@ -859,6 +859,36 @@
       },
       "active_service_events": {
         "name": "Active service events"
+      },
+      "export_soft_limit_state": {
+        "name": "Export soft limit state",
+        "state": {
+          "disabled": "Disabled",
+          "enabled": "Enabled"
+        }
+      },
+      "export_hard_limit": {
+        "name": "Export hard limit"
+      },
+      "export_hard_limit_state": {
+        "name": "Export hard limit state",
+        "state": {
+          "disabled": "Disabled",
+          "enabled": "Enabled"
+        }
+      },
+      "export_limit_mode": {
+        "name": "Export limit mode",
+        "state": {
+          "entire_system": "Entire system"
+        }
+      },
+      "export_fail_safe": {
+        "name": "Export limit fail-safe mode",
+        "state": {
+          "disabled": "Disabled",
+          "enabled": "Enabled"
+        }
       }
     },
     "switch": {

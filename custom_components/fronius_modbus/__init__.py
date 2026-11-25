@@ -39,6 +39,7 @@ from .coordinator import (
     FroniusWebCoordinator,
 )
 from .datamanager import async_meter_topology, async_on_datamanager
+from .datamanager_web import async_start as datamanager_web_start
 from .entity import expected_device_identifiers
 from .fronius_modbus_api.device import FroniusInverter
 from .froniuswebclient import FroniusWebClient
@@ -120,6 +121,20 @@ def _async_reload_when_a_string_lights_up(
     _check()
 
 
+def _web_clients(
+    entry: ConfigEntry, host: str, username: str, token: dict[str, str] | None
+) -> tuple[FroniusWebClient | None, FroniusWebClient | None]:
+    """The client with the entry's login, and the one for what needs none."""
+    if token:
+        client = FroniusWebClient(
+            host=host, username=username, password="", token=token
+        )
+        return client, client
+    if migrations.web_api_disabled(entry):
+        return None, FroniusWebClient(host=host, username=API_USERNAME, password="")
+    return None, None
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> bool:
     """Set up Fronius Modbus from a config entry."""
     migrations.async_drop_stored_issues(hass)
@@ -141,15 +156,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
     await migrations.async_sync_login_request(
         hass, entry, has_token=api_token is not None
     )
-    client = (
-        FroniusWebClient(host=host, username=api_username, password="", token=api_token)
-        if api_token
-        else None
-    )
-    public_client = client
     on_datamanager = await async_on_datamanager(hass, entry, host)
-    if migrations.web_api_disabled(entry) and not on_datamanager:
-        public_client = FroniusWebClient(host=host, username=API_USERNAME, password="")
+    client, public_client = (
+        (None, None)
+        if on_datamanager
+        else _web_clients(entry, host, api_username, api_token)
+    )
 
     params = ModbusTcpParams(host=host, port=port)
     topology = (
@@ -222,12 +234,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
         # web entities come up unavailable while Modbus entities still load.
         await web.async_refresh()
 
+    datamanager_web = await datamanager_web_start(
+        hass,
+        entry,
+        host,
+        # One of its inverters reads what they share.
+        api_token if device.reads_site_totals else None,
+        interval_seconds=web_scan_interval,
+    )
+
     migrations.async_migrate_callifo_module_temperatures(hass, entry)
     entry.runtime_data = FroniusRuntimeData(
         device=device,
         modbus=modbus,
         web=web,
         web_control=web_control,
+        datamanager_web=datamanager_web,
         meter_locations=locations,
         meter_power=meter_power,
         primary_meter_unit_id=primary,
@@ -254,9 +276,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
     await migrations.async_migrate_name_based_unique_ids(hass, entry)
     await migrations.async_remove_unexpected_entities(hass, entry)
     await migrations.async_remove_legacy_devices(hass, entry)
-    await migrations.async_sync_login_request(
-        hass, entry, has_token=web_control is not None and web_control.configured
-    )
+    has_token = on_datamanager and api_token is not None
+    if web_control is not None:
+        has_token = web_control.configured
+    await migrations.async_sync_login_request(hass, entry, has_token=has_token)
 
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     left_out = left_out_mppt_keys(entry.runtime_data)

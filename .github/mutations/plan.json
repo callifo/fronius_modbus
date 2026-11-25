@@ -1136,8 +1136,8 @@
   {
     "label": "setup: an entry without the web API gets the public client",
     "path": "custom_components/fronius_modbus/__init__.py",
-    "old": "    if migrations.web_api_disabled(entry) and not on_datamanager:\n",
-    "new": "    if False:\n",
+    "old": "    if migrations.web_api_disabled(entry):\n        return None, FroniusWebClient",
+    "new": "    if False:\n        return None, FroniusWebClient",
     "tests": "entry_without_the_web_api_reads_the_public_endpoints"
   },
   {
@@ -2249,8 +2249,8 @@
   {
     "label": "coordinator: an entry without the web API leaves the toggles alone",
     "path": "custom_components/fronius_modbus/coordinator.py",
-    "old": "        if mode is not ExtendedMode.CHARGE_FROM_GRID or web_api_disabled(\n",
-    "new": "        if mode is not ExtendedMode.CHARGE_FROM_GRID or False and web_api_disabled(\n",
+    "old": "        if mode is not ExtendedMode.CHARGE_FROM_GRID or _has_no_web_control(entry):\n",
+    "new": "        if mode is not ExtendedMode.CHARGE_FROM_GRID:\n",
     "tests": "grid_charging_without_the_web_api_is_no_error or select_changes_the_storage_mode"
   },
   {
@@ -3299,8 +3299,8 @@
   {
     "label": "setup: a Datamanager gets no public client",
     "path": "custom_components/fronius_modbus/__init__.py",
-    "old": "    if migrations.web_api_disabled(entry) and not on_datamanager:\n",
-    "new": "    if migrations.web_api_disabled(entry):\n",
+    "old": "        if on_datamanager\n        else _web_clients(",
+    "new": "        if False\n        else _web_clients(",
     "tests": "sends_no_web_request"
   },
   {
@@ -3369,8 +3369,8 @@
   {
     "label": "setup: a Datamanager's meters are looked for",
     "path": "custom_components/fronius_modbus/__init__.py",
-    "old": "        if on_datamanager\n",
-    "new": "        if False\n",
+    "old": "        if on_datamanager\n        else await",
+    "new": "        if False\n        else await",
     "tests": "meter_of_a_datamanager_is_read"
   },
   {
@@ -3544,7 +3544,7 @@
   {
     "label": "device: only a Datamanager is asked for its site totals",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
-    "old": "        if self._site_totals:\n            components[REPORT_SITE]",
+    "old": "        if self.reads_site_totals:\n            components[REPORT_SITE]",
     "new": "        if True:\n            components[REPORT_SITE]",
     "tests": "no_other_inverter_is_asked"
   },
@@ -4197,14 +4197,14 @@
     "path": "custom_components/fronius_modbus/datamanager_client.py",
     "old": "    if isinstance(status, bool) or status != 0:\n        return None\n",
     "new": "",
-    "tests": "answer_of_another_shape_has"
+    "tests": "page_of_another_form_has"
   },
   {
     "label": "export limit page: an answer that is no JSON has no values",
     "path": "custom_components/fronius_modbus/datamanager_client.py",
     "old": "        except ValueError:\n            payload = None\n",
     "new": "        except KeyError:\n            payload = None\n",
-    "tests": "answer_of_another_shape_has"
+    "tests": "page_of_another_form_has"
   },
   {
     "label": "export limit page: a flag is true or false",
@@ -4232,6 +4232,97 @@
     "path": "custom_components/fronius_modbus/datamanager_client.py",
     "old": "    part = node.get(key) if isinstance(node, dict) else None\n",
     "new": "    part = node.get(key)\n",
-    "tests": "answer_of_another_shape_has or value_of_another_form or no_answer_at_all"
+    "tests": "page_of_another_form_has or value_of_another_form or no_answer_at_all"
+  },
+  {
+    "label": "battery: a Datamanager's login opens no web control",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "    return web_api_disabled(values) or bool(entry.data.get(CONF_DATAMANAGER))\n",
+    "new": "    return web_api_disabled(values)\n",
+    "tests": "written_over_modbus_alone"
+  },
+  {
+    "label": "export limit: without a login its page is not asked",
+    "path": "custom_components/fronius_modbus/datamanager_web.py",
+    "old": "    if token is None:\n        return None\n",
+    "new": "",
+    "tests": "without_the_login_its_page or entry_without_its_login"
+  },
+  {
+    "label": "export limit: one inverter reads it",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "        api_token if device.reads_site_totals else None,\n",
+    "new": "        api_token if on_datamanager else None,\n",
+    "tests": "one_inverter_of_a_datamanager_reads_it"
+  },
+  {
+    "label": "export limit: a GEN24's login is not sent to this page",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "        api_token if device.reads_site_totals else None,\n",
+    "new": "        api_token,\n",
+    "tests": "one_inverter_of_a_datamanager_reads_it"
+  },
+  {
+    "label": "export limit: every minute at most",
+    "path": "custom_components/fronius_modbus/datamanager_web.py",
+    "old": "seconds=max(interval_seconds, MINIMUM_INTERVAL_SECONDS)",
+    "new": "seconds=interval_seconds",
+    "tests": "read_every_minute_at_most"
+  },
+  {
+    "label": "export limit: a refused login ends the polls",
+    "path": "custom_components/fronius_modbus/datamanager_web.py",
+    "old": "            raise ConfigEntryAuthFailed(",
+    "new": "            raise UpdateFailed(",
+    "tests": "refused_login_is_sent_once or login_refused_later"
+  },
+  {
+    "label": "export limit: a refused login is forgotten",
+    "path": "custom_components/fronius_modbus/datamanager_web.py",
+    "old": "            await async_get_token_store(self.hass).async_delete_token(\n                self._host, self._role\n            )\n",
+    "new": "",
+    "tests": "refused_login_is_sent_once"
+  },
+  {
+    "label": "export limit: an outage is no error",
+    "path": "custom_components/fronius_modbus/datamanager_web.py",
+    "old": "            raise DeviceUnreachable(",
+    "new": "            raise UpdateFailed(",
+    "tests": "outage_is_one_line"
+  },
+  {
+    "label": "export limit: a server error is no refused login",
+    "path": "custom_components/fronius_modbus/datamanager_web.py",
+    "old": "        except FroniusWebResponseError as err:\n            raise UpdateFailed(",
+    "new": "        except FroniusWebResponseError as err:\n            raise ConfigEntryAuthFailed(",
+    "tests": "server_error_is_no_refused_login"
+  },
+  {
+    "label": "export limit: stale values are not shown",
+    "path": "custom_components/fronius_modbus/entity.py",
+    "old": "            return datamanager_web is not None and datamanager_web.last_update_success\n",
+    "new": "            return datamanager_web is not None\n",
+    "tests": "outage_is_one_line or refused_login_is_sent_once"
+  },
+  {
+    "label": "export limit: a mode not seen yet is unknown",
+    "path": "custom_components/fronius_modbus/datamanager_entities.py",
+    "old": "    return EXPORT_LIMIT_MODES.get(limits.mode, UNKNOWN_STATE)\n",
+    "new": "    return \"entire_system\"\n",
+    "tests": "mode_nobody_has_seen"
+  },
+  {
+    "label": "export limit: an unread flag is unknown",
+    "path": "custom_components/fronius_modbus/datamanager_entities.py",
+    "old": "    return None if flag is None else CONTROL_STATUS[int(flag)]\n",
+    "new": "    return CONTROL_STATUS[int(flag or 0)]\n",
+    "tests": "page_of_another_form_is_unknown"
+  },
+  {
+    "label": "setup: the login of a Datamanager is not asked for again",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "    has_token = on_datamanager and api_token is not None\n",
+    "new": "    has_token = False\n",
+    "tests": "export_limit_is_shown or one_inverter_of"
   }
 ]

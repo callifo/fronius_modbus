@@ -22,8 +22,9 @@ from .coordinator import (
     FroniusWebCoordinator,
     assume_present,
 )
+from .datamanager_web import DatamanagerWebCoordinator
 from .derived import TotalGuard
-from .descriptions import DeviceKind, FroniusDescription, WebClientKind
+from .descriptions import DeviceKind, FroniusDescription, Source, WebClientKind
 from .fronius_modbus_api.exceptions import (
     ControlRefused,
     ControlUnavailable,
@@ -32,6 +33,10 @@ from .fronius_modbus_api.exceptions import (
 from .froniuswebclient import FroniusWebUnreachable
 
 _LOGGER = logging.getLogger(__name__)
+
+type _Coordinator = (
+    FroniusModbusCoordinator | FroniusWebCoordinator | DatamanagerWebCoordinator
+)
 
 # A new poll below the last value, or a jump above it, is a bad reading, not a reset.
 TOTAL_INCREASING_MAX_STEP_WH = 100_000
@@ -45,6 +50,13 @@ def _web_client_present(runtime: FroniusRuntimeData, kind: WebClientKind) -> boo
     if control is None or kind == "public":
         return control is not None
     return control.technician_configured if kind == "technician" else control.configured
+
+
+def _coordinator(runtime: FroniusRuntimeData, source: Source) -> _Coordinator | None:
+    """The poll an entity of this source follows."""
+    if source == "modbus":
+        return runtime.modbus
+    return runtime.web if source == "web" else runtime.datamanager_web
 
 
 def device_info(
@@ -104,9 +116,7 @@ def expected_device_identifiers(
     return identifiers
 
 
-class FroniusEntity(
-    CoordinatorEntity[FroniusModbusCoordinator | FroniusWebCoordinator]
-):
+class FroniusEntity(CoordinatorEntity[_Coordinator]):
     """The entity every platform builds: a description read against the runtime."""
 
     _attr_has_entity_name = True
@@ -118,12 +128,9 @@ class FroniusEntity(
         description: FroniusDescription,
     ) -> None:
         """Bind to the coordinator the description's source picks."""
-        coordinator = (
-            runtime.modbus
-            if description.source == "modbus"
-            else assume_present(runtime.web)
+        super().__init__(
+            cast("_Coordinator", _coordinator(runtime, description.source))
         )
-        super().__init__(coordinator)
         self._runtime = runtime
         self.entity_description = description
         self._attr_translation_key = description.translation_key
@@ -153,6 +160,9 @@ class FroniusEntity(
                 description.report_name is None
                 or description.report_name in coordinator.data.report.updated
             )
+        if description.source == "datamanager":
+            datamanager_web = self._runtime.datamanager_web
+            return datamanager_web is not None and datamanager_web.last_update_success
         # A rejected login clears the client but the coordinator keeps
         # succeeding on what is left: the entities of that login
         # must not stay operable.

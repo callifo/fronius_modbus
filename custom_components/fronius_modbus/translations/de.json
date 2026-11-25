@@ -859,6 +859,36 @@
       },
       "active_service_events": {
         "name": "Aktive Service-Ereignisse"
+      },
+      "export_soft_limit_state": {
+        "name": "Weiche Einspeisebegrenzung aktiv",
+        "state": {
+          "disabled": "Deaktiviert",
+          "enabled": "Aktiviert"
+        }
+      },
+      "export_hard_limit": {
+        "name": "Harte Einspeisebegrenzung"
+      },
+      "export_hard_limit_state": {
+        "name": "Harte Einspeisebegrenzung aktiv",
+        "state": {
+          "disabled": "Deaktiviert",
+          "enabled": "Aktiviert"
+        }
+      },
+      "export_limit_mode": {
+        "name": "Modus der Einspeisebegrenzung",
+        "state": {
+          "entire_system": "Gesamtes System"
+        }
+      },
+      "export_fail_safe": {
+        "name": "Fail-Safe der Einspeisebegrenzung",
+        "state": {
+          "disabled": "Deaktiviert",
+          "enabled": "Aktiviert"
+        }
       }
     },
     "switch": {

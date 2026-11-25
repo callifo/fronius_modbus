@@ -42,11 +42,16 @@ async def async_get_config_entry_diagnostics(
     runtime = entry.runtime_data
     poll = runtime.modbus.data
     web_data = runtime.web_data
+    datamanager_web = runtime.datamanager_web
+    export_limits = datamanager_web.data if datamanager_web is not None else None
     return {
         "identity": runtime.device.identity._replace(serial=REDACTED)._asdict(),
         "updated": sorted(poll.report.updated),
         "failed": {name: error_text(err) for name, err in poll.report.failed.items()},
         "registers": await _async_registers(runtime),
+        "export_limits": None
+        if export_limits is None
+        else dataclasses.asdict(export_limits),
         "web": None
         if web_data is None
         else dataclasses.asdict(web_data)

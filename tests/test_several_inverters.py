@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 
+from custom_components.fronius_modbus import datamanager
 from custom_components.fronius_modbus.const import (
     CONF_DATAMANAGER,
     DOMAIN,
@@ -14,6 +15,7 @@ from custom_components.fronius_modbus.datamanager import (
     async_on_datamanager,
 )
 from custom_components.fronius_modbus.host_sharing import host_holder, unique_id_for
+from custom_components.fronius_modbus.inverter_choice import async_free_units
 from homeassistant.config_entries import SOURCE_IGNORE
 
 from .ha_test_plugin import MockConfigEntry
@@ -212,3 +214,24 @@ async def test_a_taken_unique_id_is_left_to_its_entry(hass, monkeypatch):
     await async_on_datamanager(hass, entry, HOST)
 
     assert entry.unique_id == HOST
+
+
+# -- which inverters there are --------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("listed", "taken", "free"),
+    [
+        ((1, 2, 100), (), [1, 2, 100]),
+        ((1, 2), (1,), [2]),
+        ((1, 2), (1, 2), []),
+        ((), (1,), []),
+    ],
+)
+async def test_the_inverters_without_an_entry(hass, monkeypatch, listed, taken, free):
+    monkeypatch.setattr(datamanager, "read_inverter_units", lambda host: listed)
+    for unit in taken:
+        add_entry(hass, inverter(unit), entry_unique_id(inverter(unit)))
+    add_entry(hass, inverter(1, host=OTHER_HOST), OTHER_HOST)
+
+    assert await async_free_units(hass, HOST) == free

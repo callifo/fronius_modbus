@@ -11,12 +11,17 @@ from enum import StrEnum
 from http import HTTPStatus
 from typing import Any
 
+from modbus_connection import ModbusConnectionError, ModbusTcpParams
+
+from homeassistant.components.modbus import async_get_unit
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .const import CONF_DATAMANAGER, web_api_disabled
+from .derived import METER_LOCATION_FEED_IN
+from .fronius_modbus_api.device import FroniusInverter
 from .froniuswebclient import _base_url, _http
-from .meter_topology import MeterTopology, parse_meter_topology
+from .meter_topology import MeterTopology
 from .web_errors import FroniusWebUnreachable
 
 # Answers without a login. A GEN24 refuses it in the body, with HTTP 200.
@@ -27,6 +32,13 @@ GEN24_PATH = "/api/status/common"
 # The one value seen is fronius-datamanager-card; the box is expected to start
 # the same way.
 DATAMANAGER_PRODUCT_PREFIX = "fronius-datamanager"
+METERS_PATH = "/solar_api/v1/GetMeterRealtimeData.cgi?Scope=System"
+INVERTERS_PATH = "/solar_api/v1/GetInverterInfo.cgi"
+# The fixed Modbus units of its meters, for the meter addresses 1 to 5
+# (Fronius' manual 42,0410,2049).
+METER_UNIT_IDS = range(240, 245)
+# What the Solar API shows for a meter without a serial number.
+NO_SERIAL = "n.a."
 
 
 class DeviceFamily(StrEnum):
@@ -117,13 +129,100 @@ async def async_on_datamanager(
     return found
 
 
+def _data(payload: Any) -> Any:
+    """The data of a Solar API answer; None when it is no such answer."""
+    body = payload.get("Body") if isinstance(payload, dict) else None
+    return body.get("Data") if isinstance(body, dict) else None
+
+
+def _location(value: Any) -> int | None:
+    """Where a meter is installed, as Fronius numbers it."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    # A number that is not a whole one, NaN included, names no place.
+    return int(value) if value >= 0 and value % 1 == 0 else None
+
+
+def _solar_api_meter(value: Any) -> SolarApiMeter | None:
+    """A meter that can be matched to a Modbus unit."""
+    details = value.get("Details") if isinstance(value, dict) else None
+    serial = details.get("Serial") if isinstance(details, dict) else None
+    # A pulse counter on an inverter's input has no serial number, and no unit.
+    if not isinstance(serial, str) or serial.strip() in ("", NO_SERIAL):
+        return None
+    if value.get("Enable") == 0:
+        return None
+    return SolarApiMeter(serial.strip(), _location(value.get("Meter_Location_Current")))
+
+
 def read_site(host: str, timeout: float = 4.0) -> Site | None:
     """The meters and inverters the Solar API lists; None without an answer."""
-    del host, timeout
-    return None
+    try:
+        meters = _read_json(host, METERS_PATH, timeout)
+        if meters is None:
+            return None
+        inverters = _data(_read_json(host, INVERTERS_PATH, timeout))
+    except FroniusWebUnreachable:
+        return None
+    listed = _data(meters)
+    return Site(
+        meters=tuple(
+            meter
+            for value in (listed.values() if isinstance(listed, dict) else ())
+            if (meter := _solar_api_meter(value)) is not None
+        ),
+        inverters=len(inverters) if isinstance(inverters, dict) else 0,
+    )
+
+
+def _locations(found: dict[int, str], site: Site) -> dict[int, int]:
+    """Where the found meters are installed; a meter without a match is left out."""
+    by_serial = {meter.serial: meter.location for meter in site.meters}
+    if len(found) == 1 and len(site.meters) == 1:
+        matched = dict.fromkeys(found, site.meters[0].location)
+    else:
+        matched = {unit: by_serial.get(serial) for unit, serial in found.items()}
+    return {
+        unit: location for unit, location in matched.items() if location is not None
+    }
 
 
 def meter_topology(found: dict[int, str], site: Site | None) -> MeterTopology:
-    """The meters of a Datamanager, from the units that answered and the Solar API."""
-    del found, site
-    return parse_meter_topology(None)
+    """The meters of a Datamanager, from the units that answered and the Solar API.
+
+    The first unit is always listed: a meter silent now is asked again with
+    every poll. Never confirmed: no answer does not prove that a meter is gone.
+    """
+    locations = _locations(found, site) if site is not None else {}
+    grid_meters = [
+        unit for unit in sorted(locations) if locations[unit] == METER_LOCATION_FEED_IN
+    ]
+    primary = next(iter([*grid_meters, *sorted(found)]), METER_UNIT_IDS[0])
+    if site is not None and site.inverters != 1:
+        # The load adds the one inverter read here to the grid meter's power.
+        for unit in grid_meters:
+            del locations[unit]
+    return MeterTopology(
+        unit_ids=sorted({METER_UNIT_IDS[0], *found}),
+        primary_unit_id=primary,
+        locations=locations,
+        confirmed=False,
+    )
+
+
+async def async_meter_topology(
+    hass: HomeAssistant, entry: ConfigEntry, params: ModbusTcpParams
+) -> MeterTopology:
+    """Look for the meters of the Datamanager at the entry's address."""
+    found: dict[int, str] = {}
+    try:
+        for unit_id in METER_UNIT_IDS:
+            unit = async_get_unit(hass, entry, params, unit_id)
+            identity = await FroniusInverter.async_probe_meter(unit)
+            if identity is not None:
+                found[unit_id] = identity.serial.strip()
+    except ModbusConnectionError:
+        # The first poll reports it and has the setup tried again.
+        return meter_topology(found, None)
+    site = await hass.async_add_executor_job(read_site, params.host)
+    return meter_topology(found, site)

@@ -38,7 +38,7 @@ from .coordinator import (
     FroniusRuntimeData,
     FroniusWebCoordinator,
 )
-from .datamanager import async_on_datamanager
+from .datamanager import async_meter_topology, async_on_datamanager
 from .entity import expected_device_identifiers
 from .fronius_modbus_api.device import FroniusInverter
 from .froniuswebclient import FroniusWebClient
@@ -73,7 +73,7 @@ async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 
 async def _async_meter_topology(
-    hass: HomeAssistant, public_client: FroniusWebClient | None, on_datamanager: bool
+    hass: HomeAssistant, public_client: FroniusWebClient | None
 ) -> MeterTopology:
     """Ask the web API which meters exist; fall back to the single default meter.
 
@@ -81,10 +81,6 @@ async def _async_meter_topology(
     shows at the first protected read of the web poll instead.
     """
     unconfirmed = parse_meter_topology(None)
-    if on_datamanager:
-        # Its meters answer on other units than the one read here: "no meter"
-        # must not let the cleanup delete the meter rows of an older version.
-        return unconfirmed
     if public_client is None:
         # Without a web client the entry only ever serves the default meter, so
         # that is the configuration, not an unread answer.
@@ -155,11 +151,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
     if migrations.web_api_disabled(entry) and not on_datamanager:
         public_client = FroniusWebClient(host=host, username=API_USERNAME, password="")
 
-    topology = await _async_meter_topology(hass, public_client, on_datamanager)
+    params = ModbusTcpParams(host=host, port=port)
+    topology = (
+        await async_meter_topology(hass, entry, params)
+        if on_datamanager
+        else await _async_meter_topology(hass, public_client)
+    )
     meter_unit_ids, primary = topology.unit_ids, topology.primary_unit_id
     locations = topology.locations
 
-    params = ModbusTcpParams(host=host, port=port)
     unit = async_get_unit(hass, entry, params, inverter_unit_id)
     meter_units = {
         unit_id: async_get_unit(hass, entry, params, unit_id)

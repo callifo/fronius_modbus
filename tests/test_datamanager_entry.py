@@ -332,9 +332,10 @@ async def test_without_the_solar_api_the_meter_is_read_without_the_load(
 
 @pytest.mark.parametrize("silence", [GatewayTargetError, ModbusTimeoutError])
 async def test_a_meter_silent_at_the_start_is_read_once_it_answers(
-    hass, datamanager_modbus, datamanager_entry, silence
+    hass, datamanager_modbus, datamanager_entry, monkeypatch, silence
 ):
     add_meter(datamanager_modbus, 240, "A1")
+    answer_site(monkeypatch, ("A1", 0))
     datamanager_modbus.fail_requests(240, silence())
     entry = datamanager_entry
     await setup_entry(hass, entry)
@@ -345,6 +346,19 @@ async def test_a_meter_silent_at_the_start_is_read_once_it_answers(
     await hass.async_block_till_done()
 
     assert state_of(hass, entry, "meter_240_power") == "30.0"
+    assert state_of(hass, entry, "load") == "627.0"
+
+
+async def test_a_sub_meter_is_no_load_while_the_grid_meter_is_silent(
+    hass, datamanager_modbus, datamanager_entry, monkeypatch
+):
+    add_meter(datamanager_modbus, 241, "B2")
+    answer_site(monkeypatch, ("A1", 0), ("B2", 256))
+    entry = datamanager_entry
+    await setup_entry(hass, entry)
+
+    assert state_of(hass, entry, "meter_241_power") == "30.0"
+    assert state_of(hass, entry, "load") == "unknown"
 
 
 async def test_a_datamanager_without_a_meter_is_set_up(

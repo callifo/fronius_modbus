@@ -154,6 +154,11 @@ def site(*meters: tuple[str, int | None], inverters: int = 1) -> Site:
         # The first unit stays listed when its meter is silent.
         ({241: "B2"}, site(("B2", GRID)), [240, 241], 241, {241: GRID}),
         ({241: "B2", 243: "D4"}, None, [240, 241, 243], 241, {}),
+        ({}, site(("A1", GRID)), [240], 240, {}),
+        # A sub-meter is no load while the grid meter is silent.
+        ({241: "B2"}, site(("A1", GRID), ("B2", 256)), [240, 241], 241, {}),
+        ({240: "B2"}, site(("A1", GRID), ("B2", LOAD)), [240], 240, {}),
+        ({240: "B2"}, site(("B2", 256), ("C3", 257)), [240], 240, {240: 256}),
     ],
 )
 def test_the_meters_and_where_they_are(found, known, unit_ids, primary, locations):

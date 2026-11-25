@@ -28,6 +28,7 @@ from .const import (
 from .derived import METER_LOCATION_FEED_IN
 from .fronius_modbus_api.device import FroniusInverter
 from .froniuswebclient import _base_url, _http
+from .host_sharing import async_claim_site, host_entries
 from .meter_topology import MeterTopology
 from .web_errors import FroniusWebUnreachable
 
@@ -281,7 +282,16 @@ def meter_topology(found: dict[int, str], site: Site | None) -> MeterTopology:
 async def async_meter_topology(
     hass: HomeAssistant, entry: ConfigEntry, params: ModbusTcpParams
 ) -> MeterTopology:
-    """Look for the meters of the Datamanager at the entry's address."""
+    """Look for the meters of the Datamanager at the entry's address.
+
+    No meter when another entry reads them.
+    """
+    if not async_claim_site(hass, entry):
+        # Nothing is asked, so nothing is known to be gone.
+        return MeterTopology(
+            [], METER_UNIT_IDS[0], {}, confirmed=False, several_inverters=True
+        )
+    entries = len(host_entries(hass, params.host))
     found: dict[int, str] = {}
     try:
         for unit_id in METER_UNIT_IDS:
@@ -294,8 +304,13 @@ async def async_meter_topology(
         return meter_topology(found, None)
     site = await hass.async_add_executor_job(read_site, params.host)
     if site is not None:
-        site = replace(site, inverters=_known_inverters(hass, entry, site.inverters))
-    return meter_topology(found, site)
+        known = _known_inverters(hass, entry, site.inverters)
+        # Unread inverters stay unknown beside a single entry.
+        site = replace(site, inverters=max(known, entries) if entries > 1 else known)
+    topology = meter_topology(found, site)
+    return replace(
+        topology, several_inverters=topology.several_inverters or entries > 1
+    )
 
 
 def _known_inverters(hass: HomeAssistant, entry: ConfigEntry, listed: int) -> int:

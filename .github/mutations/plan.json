@@ -3544,7 +3544,7 @@
   {
     "label": "device: only a Datamanager is asked for its site totals",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
-    "old": "        if self._datamanager:\n            components[REPORT_SITE]",
+    "old": "        if self._site_totals:\n            components[REPORT_SITE]",
     "new": "        if True:\n            components[REPORT_SITE]",
     "tests": "no_other_inverter_is_asked"
   },
@@ -3635,8 +3635,8 @@
   {
     "label": "setup: the device knows its Datamanager",
     "path": "custom_components/fronius_modbus/__init__.py",
-    "old": "meter_units, datamanager=on_datamanager",
-    "new": "meter_units, datamanager=False",
+    "old": "        datamanager=on_datamanager,\n",
+    "new": "        datamanager=False,\n",
     "tests": "state_code_is_shown"
   },
   {
@@ -3960,5 +3960,82 @@
     "old": "    generated = (entry_title(before), entry_title({**before, CONF_DATAMANAGER: False}))\n",
     "new": "    generated = (entry_title(before),)\n",
     "tests": "generated_title_follows"
+  },
+  {
+    "label": "owner: the site totals go with the meters",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "        site_totals=bool(meter_unit_ids),\n",
+    "new": "",
+    "tests": "lowest_inverter_has_what_they_share"
+  },
+  {
+    "label": "owner: a second inverter has no meters",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if not async_claim_site(hass, entry):\n",
+    "new": "    if not async_claim_site(hass, entry) and False:\n",
+    "tests": "lowest_inverter_has_what_they_share"
+  },
+  {
+    "label": "owner: a second inverter's meters are never known to be gone",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "            [], METER_UNIT_IDS[0], {}, confirmed=False, several_inverters=True\n",
+    "new": "            [], METER_UNIT_IDS[0], {}, confirmed=True, several_inverters=True\n",
+    "tests": "second_inverter_loses_nothing"
+  },
+  {
+    "label": "owner: the mark decides before the number",
+    "path": "custom_components/fronius_modbus/host_sharing.py",
+    "old": "    owner = min(marked or able,",
+    "new": "    owner = min(able,",
+    "tests": "lower_inverter_added_later or disabled_keeps_it"
+  },
+  {
+    "label": "owner: without a mark the lowest number has it",
+    "path": "custom_components/fronius_modbus/host_sharing.py",
+    "old": "key=lambda other: (_unit(other), other.entry_id)",
+    "new": "key=lambda other: -_unit(other)",
+    "tests": "lowest_inverter_has_what_they_share"
+  },
+  {
+    "label": "owner: the mark is kept",
+    "path": "custom_components/fronius_modbus/host_sharing.py",
+    "old": "            entry, data={**entry.data, CONF_SITE_OWNER: True}\n",
+    "new": "            entry, data={**entry.data}\n",
+    "tests": "lower_inverter_added_later"
+  },
+  {
+    "label": "owner: a disabled entry is not chosen",
+    "path": "custom_components/fronius_modbus/host_sharing.py",
+    "old": "    return entry.disabled_by is None and bool(without_login)\n",
+    "new": "    return bool(without_login)\n",
+    "tests": "never_had_it"
+  },
+  {
+    "label": "owner: an entry with a login is not chosen",
+    "path": "custom_components/fronius_modbus/host_sharing.py",
+    "old": "    return entry.disabled_by is None and bool(without_login)\n",
+    "new": "    return entry.disabled_by is None\n",
+    "tests": "with_a_login_does_not_hold"
+  },
+  {
+    "label": "owner: the load is unknown with two entries",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "inverters=max(known, entries) if entries > 1 else known",
+    "new": "inverters=known",
+    "tests": "unknown_with_two_entries"
+  },
+  {
+    "label": "owner: unread inverters stay unknown beside one entry",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "inverters=max(known, entries) if entries > 1 else known",
+    "new": "inverters=max(known, entries)",
+    "tests": "unknown_beside_other_inverters"
+  },
+  {
+    "label": "owner: the site totals are on with two entries",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "        topology, several_inverters=topology.several_inverters or entries > 1\n",
+    "new": "        topology, several_inverters=topology.several_inverters\n",
+    "tests": "on_with_two_entries"
   }
 ]

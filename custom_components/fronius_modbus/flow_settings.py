@@ -21,6 +21,7 @@ from .const import (
     CONF_METER_POWER_INTERVAL,
     CONF_MODBUS_RESTRICTION,
     CONF_RECONFIGURE_REQUIRED,
+    CONF_SITE_OWNER,
     CONF_WEB_SCAN_INTERVAL,
     DEFAULT_AUTO_ENABLE_MODBUS,
     DEFAULT_INVERTER_UNIT_ID,
@@ -107,7 +108,11 @@ def entry_defaults(entry: config_entries.ConfigEntry) -> dict[str, Any]:
     except TypeError, ValueError:
         defaults[CONF_SCAN_INTERVAL] = DEFAULT_SCAN_INTERVAL
     # What the device answered is no setting: the setup asks it again.
-    for remembered in (CONF_DATAMANAGER, CONF_DATAMANAGER_INVERTERS):
+    for remembered in (
+        CONF_DATAMANAGER,
+        CONF_DATAMANAGER_INVERTERS,
+        CONF_SITE_OWNER,
+    ):
         defaults.pop(remembered, None)
     return _expand_settings_input({}, defaults)
 

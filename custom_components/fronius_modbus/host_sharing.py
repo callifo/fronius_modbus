@@ -7,19 +7,25 @@ from typing import Any
 
 from homeassistant.config_entries import SOURCE_IGNORE, ConfigEntry
 from homeassistant.const import CONF_HOST
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 
 from .const import (
     CONF_DATAMANAGER,
     CONF_INVERTER_UNIT_ID,
+    CONF_SITE_OWNER,
     DEFAULT_INVERTER_UNIT_ID,
     DOMAIN,
     entry_unique_id,
+    web_api_disabled,
 )
 
 
 def _settings(entry: ConfigEntry) -> dict[str, Any]:
     return {**entry.data, **entry.options}
+
+
+def _unit(entry: ConfigEntry) -> int:
+    return int(_settings(entry).get(CONF_INVERTER_UNIT_ID, DEFAULT_INVERTER_UNIT_ID))
 
 
 def _host(settings: Mapping[str, Any]) -> str:
@@ -38,15 +44,41 @@ def host_entries(hass: HomeAssistant, host: str) -> list[ConfigEntry]:
 
 def taken_units(hass: HomeAssistant, host: str) -> set[int]:
     """The inverter units on ``host`` that have an entry."""
-    return {
-        int(_settings(entry).get(CONF_INVERTER_UNIT_ID, DEFAULT_INVERTER_UNIT_ID))
-        for entry in host_entries(hass, host)
-    }
+    return {_unit(entry) for entry in host_entries(hass, host)}
 
 
 def is_datamanager_host(hass: HomeAssistant, host: str) -> bool:
     """Whether an entry on ``host`` remembers the device there as a Datamanager."""
     return any(entry.data.get(CONF_DATAMANAGER) for entry in host_entries(hass, host))
+
+
+@callback
+def async_claim_site(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Whether this entry reads what the inverters of its Datamanager share.
+
+    The mark stays with its entry, whatever is added later: another entry would
+    go on with the meter under new entities. A deleted owner leaves it to the
+    lowest inverter that can be set up.
+    """
+    entries = host_entries(hass, str(_settings(entry).get(CONF_HOST, "")))
+    marked = [other for other in entries if other.data.get(CONF_SITE_OWNER)]
+    able = [other for other in entries if _can_own_a_site(other)]
+    owner = min(marked or able, key=lambda other: (_unit(other), other.entry_id))
+    if owner is not entry:
+        return False
+    if not entry.data.get(CONF_SITE_OWNER):
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, CONF_SITE_OWNER: True}
+        )
+    return True
+
+
+def _can_own_a_site(entry: ConfigEntry) -> bool:
+    """An entry with a login that opens no Datamanager is never set up as one."""
+    without_login = entry.data.get(CONF_DATAMANAGER) or web_api_disabled(
+        _settings(entry)
+    )
+    return entry.disabled_by is None and bool(without_login)
 
 
 def _on_datamanager(

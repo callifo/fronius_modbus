@@ -166,7 +166,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
         for unit_id in meter_unit_ids
     }
     device = FroniusInverter(
-        unit, inverter_unit_id, meter_units, datamanager=on_datamanager
+        unit,
+        inverter_unit_id,
+        meter_units,
+        datamanager=on_datamanager,
+        # The entry that reads a Datamanager's meters reads these as well.
+        site_totals=bool(meter_unit_ids),
     )
     modbus = FroniusModbusCoordinator(
         hass,

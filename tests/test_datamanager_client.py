@@ -184,7 +184,7 @@ def test_the_export_limits_of_the_dump(device):
         {"Body": {"Data": {"powerLimits": POWER_LIMITS}}},
     ],
 )
-def test_an_answer_of_another_shape_has_no_values(device, body):
+def test_a_page_of_another_form_has_no_values(device, body):
     device.body = body
     client = DatamanagerClient(HOST, token=minted())
 

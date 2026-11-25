@@ -51,6 +51,7 @@ class FakeDatamanager:
 
     def __init__(self) -> None:
         self.challenge = CHALLENGE
+        self.password = PASSWORD
         self.body: Any = answer_body(copy.deepcopy(POWER_LIMITS))
         self.status = 200
         self.calls: list[tuple[str, str]] = []
@@ -61,7 +62,7 @@ class FakeDatamanager:
     def _accepts(self, request: requests.PreparedRequest, header: str) -> bool:
         login = parse_dict_header(header.removeprefix("Digest "))
         self.logins.append(login)
-        secret = md5(f"service:{REALM}:{PASSWORD}")
+        secret = md5(f"service:{REALM}:{self.password}")
         target = md5(f"{request.method}:{request.path_url}")
         signed = ":".join(
             [secret, login["nonce"], login["nc"], login["cnonce"], login["qop"], target]

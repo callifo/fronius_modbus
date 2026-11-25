@@ -3095,14 +3095,14 @@
   },
   {
     "label": "config flow: an address to allow that is no address is refused",
-    "path": "custom_components/fronius_modbus/config_flow.py",
+    "path": "custom_components/fronius_modbus/flow_forms.py",
     "old": "        address = ipaddress.IPv4Address(str(value).strip())\n    except ValueError as err:\n        raise _InvalidAllowedHost from err\n",
     "new": "        return str(value).strip()\n    except ValueError as err:\n        raise _InvalidAllowedHost from err\n",
     "tests": "no_address_is_refused"
   },
   {
     "label": "config flow: an address no client can have is refused",
-    "path": "custom_components/fronius_modbus/config_flow.py",
+    "path": "custom_components/fronius_modbus/flow_forms.py",
     "old": "    if address.is_loopback or address.is_unspecified:\n        raise _InvalidAllowedHost\n",
     "new": "",
     "tests": "no_client_can_have"

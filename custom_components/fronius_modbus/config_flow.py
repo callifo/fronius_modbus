@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import ipaddress
 import logging
 from typing import Any, Awaitable, Callable
 
@@ -51,6 +50,7 @@ from .flow_forms import (
     CONF_ALLOWED_HOST,
     CONF_CHANGE_ALLOWED_HOST,
     allowed_host_schema,
+    checked_allowed_host,
     password_schema,
     role_schema,
     settings_schema,
@@ -122,20 +122,6 @@ _FORM_ERRORS: dict[type[Exception], tuple[str, str]] = {
     _AddressesNotUnique: ("base", "modbus_address_conflict"),
     _AlreadyConfigured: ("base", "already_configured"),
 }
-
-
-def _checked_allowed_host(value: Any) -> str:
-    """The address to allow, as the IPv4 address the inverter's list takes."""
-    try:
-        address = ipaddress.IPv4Address(str(value).strip())
-    except ValueError as err:
-        raise _InvalidAllowedHost from err
-    # No client sends from these; allowed alone they lock every device out.
-    if address.is_loopback or address.is_unspecified:
-        raise _InvalidAllowedHost
-    if address.is_multicast or address.is_reserved:
-        raise _InvalidAllowedHost
-    return str(address)
 
 
 def _asks_for_the_address(user_input: dict[str, Any], settings: dict[str, Any]) -> bool:
@@ -533,7 +519,7 @@ class TokenFlowMixin:
 
         if user_input is not None:
             try:
-                state.allowed_host = _checked_allowed_host(
+                state.allowed_host = checked_allowed_host(
                     user_input.get(CONF_ALLOWED_HOST, "")
                 )
                 await claim_host(state.settings)

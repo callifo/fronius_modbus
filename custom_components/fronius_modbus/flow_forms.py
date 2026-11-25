@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 from typing import Any
 
 import voluptuous as vol
@@ -32,6 +33,7 @@ from .const import (
     WEB_API_DISABLED,
     ModbusRestriction,
 )
+from .flow_state import _InvalidAllowedHost
 
 
 def _role_field(defaults: dict[str, Any]) -> dict[vol.Marker, SelectSelector]:
@@ -120,3 +122,17 @@ def password_schema(*, keep_stored: bool = False) -> vol.Schema:
             ),
         }
     )
+
+
+def checked_allowed_host(value: Any) -> str:
+    """The address to allow, as the IPv4 address the inverter's list takes."""
+    try:
+        address = ipaddress.IPv4Address(str(value).strip())
+    except ValueError as err:
+        raise _InvalidAllowedHost from err
+    # No client sends from these; allowed alone they lock every device out.
+    if address.is_loopback or address.is_unspecified:
+        raise _InvalidAllowedHost
+    if address.is_multicast or address.is_reserved:
+        raise _InvalidAllowedHost
+    return str(address)

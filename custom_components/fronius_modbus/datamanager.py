@@ -10,6 +10,8 @@ from enum import StrEnum
 from http import HTTPStatus
 from typing import Any
 
+from homeassistant.core import HomeAssistant
+
 from .froniuswebclient import _base_url, _http
 from .web_errors import FroniusWebUnreachable
 
@@ -38,6 +40,11 @@ def _family(payload: Any) -> DeviceFamily:
     if isinstance(product, str) and product.startswith(DATAMANAGER_PRODUCT_PREFIX):
         return DeviceFamily.DATAMANAGER
     return DeviceFamily.OTHER
+
+
+async def async_identify(hass: HomeAssistant, host: str) -> DeviceFamily:
+    """Ask the device at ``host`` without blocking the event loop."""
+    return await hass.async_add_executor_job(identify, host)
 
 
 def identify(host: str, timeout: float = 4.0) -> DeviceFamily:

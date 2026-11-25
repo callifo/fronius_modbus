@@ -1158,6 +1158,7 @@ async def test_an_ipv6_only_announcement_is_not_offered(hass):
         (config_flow._UnsupportedHardware, "base", "unsupported_hardware"),
         (config_flow._AddressesNotUnique, "base", "modbus_address_conflict"),
         (config_flow._AlreadyConfigured, "base", "already_configured"),
+        (config_flow._DatamanagerFound, "api_username", "datamanager_no_login"),
         (RuntimeError, "base", "unknown"),
     ],
 )

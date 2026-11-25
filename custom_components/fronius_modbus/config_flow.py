@@ -60,6 +60,8 @@ from .flow_settings import (
     _entry_payload,
     _expand_settings_input,
     _should_apply_modbus_config,
+    async_check_role,
+    defaults_after,
     entry_defaults,
 )
 from .flow_state import (
@@ -68,6 +70,7 @@ from .flow_state import (
     _AlreadyConfigured,
     _CannotConnect,
     _CannotConnectModbus,
+    _DatamanagerFound,
     _InvalidAllowedHost,
     _InvalidApiCredentials,
     _InvalidHost,
@@ -121,6 +124,7 @@ _FORM_ERRORS: dict[type[Exception], tuple[str, str]] = {
     _UnsupportedHardware: ("base", "unsupported_hardware"),
     _AddressesNotUnique: ("base", "modbus_address_conflict"),
     _AlreadyConfigured: ("base", "already_configured"),
+    _DatamanagerFound: (CONF_API_USERNAME, "datamanager_no_login"),
 }
 
 
@@ -579,6 +583,7 @@ class TokenFlowMixin:
                 # Before the login: validation may already write the Modbus
                 # settings of a host another entry owns.
                 await claim_host(settings)
+                await async_check_role(self.hass, settings)
                 ask_allowed_host = _asks_for_the_address(user_input, settings)
                 # The question comes only with a write: Configure writes
                 # unchanged settings only when asked to.
@@ -648,7 +653,7 @@ class TokenFlowMixin:
 
         return self.async_show_form(
             step_id=step_id,
-            data_schema=build_schema(defaults),
+            data_schema=build_schema(defaults_after(errors, user_input, defaults)),
             errors=errors,
         )
 

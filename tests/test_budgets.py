@@ -79,7 +79,8 @@ LINE_BUDGETS = {
     # (- the error for an address that cannot be resolved: the step asks.)
     # 1108: the owner can ask for the address an allowed list skips, and the
     # model type answer keeps the address settled before it.
-    "config_flow.py": 1108,
+    # 1099 - the check of the address to allow, now with its form.
+    "config_flow.py": 1099,
 }
 
 # SonarSource's own default. Above it, a function is one somebody has to

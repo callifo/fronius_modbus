@@ -55,6 +55,10 @@ class _AddressesNotUnique(exceptions.HomeAssistantError):
     """Error to indicate that the modbus addresses are not unique."""
 
 
+class _DatamanagerFound(exceptions.HomeAssistantError):
+    """A role was chosen for a Datamanager, which has other logins."""
+
+
 class _AlreadyConfigured(exceptions.HomeAssistantError):
     """Another entry already serves the host being configured."""
 

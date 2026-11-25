@@ -474,14 +474,14 @@ async def test_another_device_at_a_datamanager_s_address_is_not_added(
 
 
 @pytest.mark.parametrize("family", [DeviceFamily.DATAMANAGER, DeviceFamily.UNKNOWN])
-async def test_a_role_for_a_second_inverter_is_refused_like_for_the_first(
+async def test_the_customer_is_refused_for_a_second_inverter_too(
     hass, new_inverter, family
 ):
     add_datamanager_entry(hass, 1)
 
     result = await new_inverter(1, 2, family=family, role="customer")
 
-    assert result["errors"] == {"api_username": "datamanager_no_login"}
+    assert result["errors"] == {"api_username": "datamanager_customer"}
 
 
 async def test_the_question_without_its_settings_starts_over(hass, new_inverter):

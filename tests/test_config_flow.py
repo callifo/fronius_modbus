@@ -1160,7 +1160,7 @@ async def test_an_ipv6_only_announcement_is_not_offered(hass):
         (flow_state._UnsupportedHardware, "base", "unsupported_hardware"),
         (flow_state._AddressesNotUnique, "base", "modbus_address_conflict"),
         (flow_state._AlreadyConfigured, "base", "already_configured"),
-        (flow_state._DatamanagerFound, "api_username", "datamanager_no_login"),
+        (flow_state._DatamanagerCustomer, "api_username", "datamanager_customer"),
         (RuntimeError, "base", "unknown"),
     ],
 )
@@ -2443,12 +2443,12 @@ def shown_defaults(result: dict) -> dict:
     }
 
 
-@pytest.mark.parametrize("role", ["customer", "technician"])
 @pytest.mark.parametrize("kind", ["user", "reconfigure", "options", "reauth"])
-async def test_a_role_on_a_datamanager_asks_to_go_without_the_web_api(
-    hass, mock_modbus, monkeypatch, kind, role
+async def test_the_customer_on_a_datamanager_may_go_without_the_web_api(
+    hass, mock_modbus, monkeypatch, kind
 ):
     """Its login failed with any password, and the form did not say why."""
+    role = "customer"
     asked = answer_family(monkeypatch, DeviceFamily.DATAMANAGER)
     monkeypatch.setattr(datamanager, "read_inverter_units", lambda host: (1,))
     contacts = record_the_login(monkeypatch)
@@ -2459,7 +2459,7 @@ async def test_a_role_on_a_datamanager_asks_to_go_without_the_web_api(
 
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == form["step_id"]
-    assert result["errors"] == {"api_username": "datamanager_no_login"}
+    assert result["errors"] == {"api_username": "datamanager_customer"}
     defaults = shown_defaults(result)
     assert defaults["api_username"] == "none"
     if kind != "reauth":

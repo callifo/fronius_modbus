@@ -3250,7 +3250,7 @@
   {
     "label": "datamanager: an error status shows nothing",
     "path": "custom_components/fronius_modbus/datamanager.py",
-    "old": "    if response.status_code != HTTPStatus.OK:\n        return DeviceFamily.UNKNOWN\n",
+    "old": "    if response.status_code != HTTPStatus.OK:\n        return None\n",
     "new": "",
     "tests": "family_an_answer_shows"
   },
@@ -3264,15 +3264,15 @@
   {
     "label": "datamanager: an unreachable device shows nothing",
     "path": "custom_components/fronius_modbus/datamanager.py",
-    "old": "    except FroniusWebUnreachable, ValueError:\n",
+    "old": "    except FroniusWebUnreachable:\n",
     "new": "    except ValueError:\n",
     "tests": "does_not_answer_stays_unknown"
   },
   {
     "label": "datamanager: an answer that is no JSON shows nothing",
     "path": "custom_components/fronius_modbus/datamanager.py",
-    "old": "    except FroniusWebUnreachable, ValueError:\n",
-    "new": "    except FroniusWebUnreachable:\n",
+    "old": "    except ValueError:\n",
+    "new": "    except KeyError:\n",
     "tests": "family_an_answer_shows"
   },
   {
@@ -3351,5 +3351,26 @@
     "old": " or CONF_API_USERNAME not in errors:",
     "new": ":",
     "tests": "another_error_keeps_the_role"
+  },
+  {
+    "label": "datamanager: a GEN24 without the Solar API is another device",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    return DeviceFamily.OTHER if is_gen24 else DeviceFamily.UNKNOWN\n",
+    "new": "    return DeviceFamily.UNKNOWN\n",
+    "tests": "gen24_without_the_solar_api"
+  },
+  {
+    "label": "datamanager: only the GEN24 path's own answer shows a GEN24",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "isinstance(_read_json(host, GEN24_PATH, timeout), dict)",
+    "new": "_read_json(host, GEN24_PATH, timeout) is not None",
+    "tests": "counts_only_with_its_own_answer"
+  },
+  {
+    "label": "datamanager: a clear answer needs no second request",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "        if family is not DeviceFamily.UNKNOWN:\n            return family\n",
+    "new": "        if family is DeviceFamily.OTHER:\n            return family\n",
+    "tests": "question_is_one_request"
   }
 ]

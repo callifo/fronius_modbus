@@ -19,6 +19,9 @@ from .web_errors import FroniusWebUnreachable
 
 # Answers without a login. A GEN24 refuses it in the body, with HTTP 200.
 LOGGER_INFO_PATH = "/solar_api/v1/GetLoggerInfo.cgi"
+# Answers without a login on a GEN24, also with its Solar API off; a
+# Datamanager does not have it.
+GEN24_PATH = "/api/status/common"
 # The one value seen is fronius-datamanager-card; the box is expected to start
 # the same way.
 DATAMANAGER_PRODUCT_PREFIX = "fronius-datamanager"
@@ -49,16 +52,27 @@ async def async_identify(hass: HomeAssistant, host: str) -> DeviceFamily:
     return await hass.async_add_executor_job(identify, host)
 
 
+def _read_json(host: str, path: str, timeout: float) -> Any:
+    """What the device answers on ``path``; None unless it is JSON with HTTP 200."""
+    response = _http("get", f"{_base_url(host)}{path}", timeout=timeout)
+    if response.status_code != HTTPStatus.OK:
+        return None
+    try:
+        return response.json()
+    except ValueError:
+        return None
+
+
 def identify(host: str, timeout: float = 4.0) -> DeviceFamily:
     """The family of the device at ``host``; UNKNOWN without a clear answer."""
     try:
-        response = _http("get", f"{_base_url(host)}{LOGGER_INFO_PATH}", timeout=timeout)
-        payload = response.json()
-    except FroniusWebUnreachable, ValueError:
+        family = _family(_read_json(host, LOGGER_INFO_PATH, timeout))
+        if family is not DeviceFamily.UNKNOWN:
+            return family
+        is_gen24 = isinstance(_read_json(host, GEN24_PATH, timeout), dict)
+    except FroniusWebUnreachable:
         return DeviceFamily.UNKNOWN
-    if response.status_code != HTTPStatus.OK:
-        return DeviceFamily.UNKNOWN
-    return _family(payload)
+    return DeviceFamily.OTHER if is_gen24 else DeviceFamily.UNKNOWN
 
 
 async def async_on_datamanager(

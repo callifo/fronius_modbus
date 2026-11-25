@@ -76,6 +76,7 @@ REPORT_STATE_CODE = "state_code"
 REPORT_SITE = "site"
 # What the model name of an inverter with a battery input contains.
 HYBRID_MODEL = "Hybrid"
+HYBRID_INPUTS = ("pv", "battery")
 OHM_PER_MEGAOHM = 1_000_000
 PV_LABEL = "MPPT"
 CHARGE_LABEL = "STCHA"
@@ -666,6 +667,12 @@ class FroniusInverter:
         discharge = next(
             (i for i, label in enumerate(labels) if DISCHARGE_LABEL in label), None
         )
+        # A Symo Hybrid: one input for the roof, one for the battery both ways
+        # (Fronius' manual 42,0410,2049), named "String 1" and "String 2".
+        unlabelled = charge is None and discharge is None
+        two_inputs = len(labels) == len(HYBRID_INPUTS)
+        if self._datamanager and self.storage is not None and unlabelled and two_inputs:
+            return MpptChannels(pv=(0,), charge=1, discharge=1)
         # Older firmware ships no labels; the storage paths are then the last two modules.
         if (
             self.storage is not None

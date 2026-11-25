@@ -4,16 +4,14 @@ from modbus_connection import IllegalDataAddressError, ModbusTimeoutError
 from modbus_connection.mock import MockModbusConnection
 import pytest
 
+from custom_components.fronius_modbus.datamanager import DeviceFamily
 from custom_components.fronius_modbus.fronius_modbus_api.device import FroniusInverter
 
 from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID, load_fixture
-from .test_datamanager_entry import (  # noqa: F401 - the fixtures of a Datamanager
-    _custom_integration,
+from .test_datamanager_entry import (
     answer_family,
-    datamanager_entry,
     make_datamanager_entry,
     registered_keys,
-    web_requests,
 )
 from .test_e2e import make_entry, setup_entry, state_of
 
@@ -45,6 +43,19 @@ def hybrid_words(status: int) -> dict[int, int]:
     words |= {PV_POWER_ADDRESS + o: w for o, w in enumerate([10000, 0, 0])}
     battery = [65, 46840, 30446, 0, 0]
     return words | {BATTERY_CURRENT_ADDRESS + o: w for o, w in enumerate(battery)}
+
+
+@pytest.fixture(autouse=True)
+def _custom_integration(enable_custom_integrations):
+    """Let Home Assistant load custom_components/fronius_modbus in every test here."""
+    return enable_custom_integrations
+
+
+@pytest.fixture
+def hybrid_entry(hass, datamanager_modbus, monkeypatch):
+    """An entry on a Datamanager, not set up yet."""
+    answer_family(monkeypatch, DeviceFamily.DATAMANAGER)
+    return make_datamanager_entry(hass)
 
 
 @pytest.fixture
@@ -123,13 +134,13 @@ FLOW_KEYS = (
 async def test_the_battery_s_power_goes_where_its_status_says(
     hass,
     datamanager_modbus,
-    datamanager_entry,
+    hybrid_entry,
     status,
     expected,
 ):
     """The input shows the power without a sign."""
     serve_hybrid(datamanager_modbus, status)
-    entry = datamanager_entry
+    entry = hybrid_entry
     await setup_entry(hass, entry)
 
     assert tuple(state_of(hass, entry, key) for key in FLOW_KEYS) == expected
@@ -149,12 +160,12 @@ async def test_the_battery_s_power_goes_where_its_status_says(
 async def test_a_counter_the_battery_does_have_is_not_taken_for_one_direction(
     hass,
     datamanager_modbus,
-    datamanager_entry,  # noqa: F811
+    hybrid_entry,
 ):
     serve_hybrid(datamanager_modbus, CHARGING)
     words = datamanager_modbus._fixture[INVERTER_UNIT_ID]["holding"]
     words[BATTERY_CURRENT_ADDRESS + 4] = 5000
-    entry = datamanager_entry
+    entry = hybrid_entry
     await setup_entry(hass, entry)
 
     assert state_of(hass, entry, "storage_charge_lfte") == "unknown"
@@ -164,11 +175,11 @@ async def test_a_counter_the_battery_does_have_is_not_taken_for_one_direction(
 async def test_the_direction_is_unknown_while_the_status_is_not_read(
     hass,
     datamanager_modbus,
-    datamanager_entry,  # noqa: F811
+    hybrid_entry,
 ):
     """A direction from the last poll would give the power to the wrong side."""
     serve_hybrid(datamanager_modbus, CHARGING)
-    entry = datamanager_entry
+    entry = hybrid_entry
     await setup_entry(hass, entry)
     assert state_of(hass, entry, "storage_charge_power") == "304.46"
 

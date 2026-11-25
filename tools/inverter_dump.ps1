@@ -131,6 +131,10 @@ $MeterCandidates = 10
 # numbering from 200; a SnapINverter's dump showed none at 200 to 209 (issue 110).
 $DatamanagerMeterUnit = 240
 $LastModbusUnit = 247
+# A Datamanager's own registers: address and count. The state code, the model
+# type with the storage view, and the sums over its inverters (Fronius' manual
+# 42,0410,2049 numbers them one higher).
+$FroniusRegisters = @(@(213, 1), @(215, 2), @(499, 14))
 $MaxRegistersPerRead = 125
 # The common model carries the serial number in registers 48 to 63 of its body.
 $CommonModel = 1
@@ -619,6 +623,20 @@ function Read-ModbusUnits([scriptblock]$Read, [int[]]$Units, [bool]$Redact) {
     return $results
 }
 
+function Read-FroniusRegisters([scriptblock]$Read, [int]$Unit) {
+    $results = [ordered]@{}
+    foreach ($block in $FroniusRegisters) {
+        $result = [ordered]@{ registers = @(); error = $null }
+        try {
+            $result.registers = [int[]](& $Read $Unit $block[0] $block[1])
+        } catch {
+            $result.error = $_.Exception.GetBaseException().Message
+        }
+        $results["$($block[0])"] = $result
+    }
+    return $results
+}
+
 function Test-MeterAnswered($Results) {
     # A meter is any unit beside the inverter that answered with SunSpec models.
     foreach ($key in $Results.Keys) {
@@ -659,7 +677,9 @@ function Read-Modbus([bool]$Redact, [bool]$Datamanager) {
             $more = Read-ModbusUnits $read $rest $Redact
             foreach ($key in $more.Keys) { $results[$key] = $more[$key] }
         }
-        return [ordered]@{ port = $ModbusPort; units = $results }
+        $modbus = [ordered]@{ port = $ModbusPort; units = $results }
+        if ($Datamanager) { $modbus.fronius = Read-FroniusRegisters $read $InverterUnit }
+        return $modbus
     } catch {
         return [ordered]@{ port = $ModbusPort; error = $_.Exception.GetBaseException().Message }
     } finally {
@@ -671,8 +691,9 @@ function ConvertTo-ModbusJson($Modbus, [bool]$Redact) {
     # Registers are measurements, never text to redact; only the error texts
     # can name the host.
     if ($Modbus.error) { $Modbus.error = Protect-TextIf $Modbus.error $Redact }
-    if ($Modbus.units) {
-        foreach ($unit in $Modbus.units.Values) {
+    foreach ($part in @($Modbus.units, $Modbus.fronius)) {
+        if (-not $part) { continue }
+        foreach ($unit in $part.Values) {
             if ($unit.error) { $unit.error = Protect-TextIf $unit.error $Redact }
         }
     }

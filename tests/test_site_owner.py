@@ -12,6 +12,7 @@ from custom_components.fronius_modbus.const import (
     instance_key,
 )
 from custom_components.fronius_modbus.datamanager import DeviceFamily
+from custom_components.fronius_modbus.fronius_modbus_api.device import FroniusInverter
 from homeassistant.config_entries import ConfigEntryDisabler, ConfigEntryState
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 
@@ -222,6 +223,32 @@ async def test_the_load_turns_unknown_when_a_second_inverter_joins(
 
     assert state_of(hass, first, "load") == "unknown"
     assert first.runtime_data.several_inverters is True
+
+
+async def test_the_load_turns_unknown_when_a_second_inverter_joins_the_search(
+    hass, site, monkeypatch
+):
+    """The owner had counted the entries before its search; nobody told it later."""
+    answer_site(monkeypatch, ("A1", 0), inverters=1)
+    first = add_inverter(hass, 1)
+    probe = FroniusInverter.async_probe_meter
+    joined = []
+
+    async def set_up_the_second_meanwhile(unit):
+        if not joined:
+            joined.append(add_inverter(hass, SECOND_UNIT_ID))
+            assert await hass.config_entries.async_setup(joined[0].entry_id)
+        return await probe(unit)
+
+    monkeypatch.setattr(
+        FroniusInverter, "async_probe_meter", staticmethod(set_up_the_second_meanwhile)
+    )
+
+    assert await hass.config_entries.async_setup(first.entry_id)
+    await hass.async_block_till_done()
+
+    assert joined[0].state is ConfigEntryState.LOADED
+    assert state_of(hass, first, "load") == "unknown"
 
 
 @pytest.mark.parametrize("answers", [True, False])

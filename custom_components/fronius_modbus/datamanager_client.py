@@ -195,7 +195,14 @@ class DatamanagerClient:
 
     def _read(self) -> requests.Response:
         response = _http("get", self._url, auth=self._digest, timeout=TIMEOUT)
-        if response.status_code in REFUSED and not self._digest.unknown_challenge:
+        status = response.status_code
+        # A 403 before anything was signed is the page's answer, not the login's.
+        signed = "Authorization" in response.request.headers
+        forbidden_login = status == HTTPStatus.FORBIDDEN and signed
+        unanswered = (
+            status == HTTPStatus.UNAUTHORIZED and not self._digest.unknown_challenge
+        )
+        if forbidden_login or unanswered:
             raise FroniusWebAuthError("the service login was refused")
         if response.status_code != HTTPStatus.OK:
             raise FroniusWebResponseError(

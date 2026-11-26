@@ -4839,9 +4839,23 @@
   {
     "label": "soft limit: a write given up by its caller runs to its end",
     "path": "custom_components/fronius_modbus/datamanager_web.py",
-    "old": "        await asyncio.shield(write)\n",
-    "new": "        await write\n",
+    "old": "            await asyncio.wait([write])\n",
+    "new": "            await write\n",
     "tests": "write_given_up_by_its_caller_still_goes_first"
+  },
+  {
+    "label": "soft limit: the order of writes outlasts a reload",
+    "path": "custom_components/fronius_modbus/datamanager_web.py",
+    "old": "        self._write_turn = _write_turn(hass, host)\n",
+    "new": "        self._write_turn = asyncio.Lock()\n",
+    "tests": "write_from_before_a_reload_goes_first"
+  },
+  {
+    "label": "soft limit: a given up write reports its failure itself",
+    "path": "custom_components/fronius_modbus/datamanager_web.py",
+    "old": "            write.add_done_callback(_report_a_write_nobody_waits_for)\n",
+    "new": "",
+    "tests": "given_up_write_that_fails_names_no_address"
   },
   {
     "label": "model type: int is told",

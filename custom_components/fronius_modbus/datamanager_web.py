@@ -29,6 +29,30 @@ _LOGGER.addFilter(OfflineIsNotAnError())
 MINIMUM_INTERVAL_SECONDS = 60
 
 
+_WRITE_TURNS_DATA_KEY = "datamanager_write_turns"
+
+
+def _write_turn(hass: HomeAssistant, host: str) -> asyncio.Lock:
+    """The lock a write to ``host`` waits for; it wakes its waiters in order.
+
+    One per host, kept across reloads: a reloaded entry has a new coordinator
+    while a write of the old one may still be on its way.
+    """
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    turns: dict[str, asyncio.Lock] = domain_data.setdefault(_WRITE_TURNS_DATA_KEY, {})
+    return turns.setdefault(host, asyncio.Lock())
+
+
+def _report_a_write_nobody_waits_for(write: asyncio.Task[None]) -> None:
+    """Log the failure of a write its caller gave up, without the device's address."""
+    error = None if write.cancelled() else write.exception()
+    if error is None:
+        return
+    _LOGGER.warning(
+        "A soft limit write whose caller gave up failed: %s", error_text(error)
+    )
+
+
 class DatamanagerWebCoordinator(DataUpdateCoordinator[ExportLimits]):
     """Reads the export limit; a refused login ends the polls until a new one."""
 
@@ -54,8 +78,7 @@ class DatamanagerWebCoordinator(DataUpdateCoordinator[ExportLimits]):
         self._host = host
         self._role = str({**entry.data, **entry.options}[CONF_API_USERNAME])
         self._client = client
-        # asyncio.Lock wakes its waiters in the order they came.
-        self._write_turn = asyncio.Lock()
+        self._write_turn = _write_turn(hass, host)
 
     async def _async_update_data(self) -> ExportLimits:
         try:
@@ -84,12 +107,17 @@ class DatamanagerWebCoordinator(DataUpdateCoordinator[ExportLimits]):
     async def async_set_soft_limit(self, watts: int) -> None:
         """Set the export soft limit and show what the device holds after it.
 
-        Writes go out in the order they were asked for, and one its caller
-        gave up runs to its end first: its thread cannot be stopped, and a
-        later value would otherwise be overwritten by it.
+        Writes go out in the order they were asked for, also across a reload,
+        and one its caller gave up runs to its end first: its thread cannot be
+        stopped, and a later value would otherwise be overwritten by it.
         """
         write = self.hass.async_create_task(self._async_write_in_turn(watts))
-        await asyncio.shield(write)
+        try:
+            await asyncio.wait([write])
+        except asyncio.CancelledError:
+            write.add_done_callback(_report_a_write_nobody_waits_for)
+            raise
+        write.result()
 
     async def _async_write_in_turn(self, watts: int) -> None:
         async with self._write_turn:

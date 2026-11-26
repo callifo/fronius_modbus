@@ -4940,5 +4940,19 @@
     "old": "    except MODBUS_ERRORS as err:\n        _LOGGER.debug(\"The model type was not read: %s\", error_text(err))\n        return None\n",
     "new": "    except KeyError as err:\n        _LOGGER.debug(\"The model type was not read: %s\", error_text(err))\n        return None\n",
     "tests": "silent_unit_is_no_float"
+  },
+  {
+    "label": "model type: a split-phase float device is not switched",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/sunspec_models.py",
+    "old": "FLOAT_INVERTER_MODEL_IDS = (111, 113)\n",
+    "new": "FLOAT_INVERTER_MODEL_IDS = (111, 112, 113)\n",
+    "tests": "split_phase_float_device_is_not_offered"
+  },
+  {
+    "label": "model type: a single-phase float device is switched",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/sunspec_models.py",
+    "old": "FLOAT_INVERTER_MODEL_IDS = (111, 113)\n",
+    "new": "FLOAT_INVERTER_MODEL_IDS = (113,)\n",
+    "tests": "confirmed_switch_is_two_writes"
   }
 ]

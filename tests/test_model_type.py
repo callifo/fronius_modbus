@@ -229,6 +229,22 @@ async def test_the_chosen_inverter_is_the_one_written(hass, float_device, monkey
     assert float_device.writes == [(2, 215, 2), (2, 215, 6)]
 
 
+async def test_a_technician_beside_the_owner_is_refused_before_a_switch(
+    hass, float_device, monkeypatch
+):
+    """The role would be refused after the switch: nothing is written for it."""
+    serve_datamanager(monkeypatch)
+    float_device._fixture[2] = {"holding": float_words()}
+    monkeypatch.setattr(datamanager, "read_inverter_units", lambda host: (1, 2))
+    add_datamanager_entry(hass, 1)
+    form = await submit(hass, "technician")
+
+    result = await choose(hass, form, "2")
+
+    assert result["errors"] == {"base": "datamanager_login_on_owner"}
+    assert float_device.writes == []
+
+
 async def test_a_host_taken_while_the_question_is_open_is_not_written(
     hass, float_device
 ):

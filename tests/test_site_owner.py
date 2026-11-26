@@ -3,6 +3,7 @@
 from modbus_connection import ModbusConnectionError, ModbusTimeoutError
 import pytest
 
+from custom_components.fronius_modbus import migrations
 from custom_components.fronius_modbus.const import (
     CONF_DATAMANAGER,
     CONF_INVERTER_UNIT_ID,
@@ -242,6 +243,32 @@ async def test_the_load_turns_unknown_when_a_second_inverter_joins_the_search(
 
     monkeypatch.setattr(
         FroniusInverter, "async_probe_meter", staticmethod(set_up_the_second_meanwhile)
+    )
+
+    assert await hass.config_entries.async_setup(first.entry_id)
+    await hass.async_block_till_done()
+
+    assert joined[0].state is ConfigEntryState.LOADED
+    assert state_of(hass, first, "load") == "unknown"
+
+
+async def test_the_load_turns_unknown_when_an_inverter_joins_the_migrations(
+    hass, site, monkeypatch
+):
+    """The owner had counted again before them; nobody told it later."""
+    answer_site(monkeypatch, ("A1", 0), inverters=1)
+    first = add_inverter(hass, 1)
+    remove = migrations.async_remove_legacy_devices
+    joined = []
+
+    async def set_up_the_second_meanwhile(hass, entry):
+        if not joined and entry is first:
+            joined.append(add_inverter(hass, SECOND_UNIT_ID))
+            assert await hass.config_entries.async_setup(joined[0].entry_id)
+        await remove(hass, entry)
+
+    monkeypatch.setattr(
+        migrations, "async_remove_legacy_devices", set_up_the_second_meanwhile
     )
 
     assert await hass.config_entries.async_setup(first.entry_id)

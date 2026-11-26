@@ -201,6 +201,14 @@ def site(*meters: tuple[str, int | None], inverters: int = 1) -> Site:
             241,
             {240: 256, 241: GRID},
         ),
+        # Without a grid meter the consumption meter leads, not a sub-meter.
+        (
+            {240: "A1", 241: "B2"},
+            site(("A1", 256), ("B2", LOAD)),
+            [240, 241],
+            241,
+            {240: 256, 241: LOAD},
+        ),
         # Two meters and no matching number: nothing is guessed.
         ({240: "", 241: ""}, site(("A1", GRID), ("B2", 256)), [240, 241], 240, {}),
         ({240: "A1", 241: ""}, site(("A1", 256)), [240, 241], 240, {240: 256}),

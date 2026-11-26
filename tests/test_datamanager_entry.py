@@ -489,6 +489,43 @@ async def test_a_grid_meter_busy_only_at_the_search_leads_after_it(
     assert state_of(hass, entry, "load") == "627.0"
 
 
+@pytest.mark.parametrize(
+    ("at", "failure"),
+    [
+        # The first unit answers exception 11 only while it is searched.
+        (1, None),
+        # The link is lost right after the meter was found.
+        (2, ModbusConnectionError),
+    ],
+)
+async def test_a_grid_meter_whose_place_the_search_missed_gets_it(
+    hass, datamanager_modbus, datamanager_entry, monkeypatch, at, failure
+):
+    add_meter(datamanager_modbus, 240, "A1")
+    answer_site(monkeypatch, ("A1", 0))
+    probe = FroniusInverter.async_probe_meter
+    looked_at = []
+
+    async def fail_once(unit):
+        looked_at.append(unit)
+        if len(looked_at) != at:
+            return await probe(unit)
+        if failure is None:
+            return None
+        raise failure
+
+    monkeypatch.setattr(FroniusInverter, "async_probe_meter", staticmethod(fail_once))
+    entry = datamanager_entry
+    await setup_entry(hass, entry)
+    assert state_of(hass, entry, "meter_240_power") == "30.0"
+
+    await entry.runtime_data.modbus.async_refresh()
+    await hass.async_block_till_done()
+
+    assert entry.runtime_data.meter_locations == {240: 0}
+    assert state_of(hass, entry, "load") == "627.0"
+
+
 async def test_a_gen24_is_not_asked_on_a_datamanagers_units(
     hass, mock_modbus, monkeypatch
 ):

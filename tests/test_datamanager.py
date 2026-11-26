@@ -74,6 +74,8 @@ def answer(
         # Datamanager's: it is no proof of another device.
         (logger_info(7), 200, DeviceFamily.UNKNOWN),
         (logger_info(None), 200, DeviceFamily.UNKNOWN),
+        (logger_info(""), 200, DeviceFamily.UNKNOWN),
+        (logger_info("  "), 200, DeviceFamily.UNKNOWN),
         (solar_api({"LoggerInfo": ["card"]}), 200, DeviceFamily.UNKNOWN),
         (solar_api(None), 200, DeviceFamily.UNKNOWN),
         (solar_api({}, code=8), 200, DeviceFamily.UNKNOWN),

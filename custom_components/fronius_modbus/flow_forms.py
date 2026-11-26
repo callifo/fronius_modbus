@@ -40,6 +40,7 @@ from .flow_state import (
     _CannotConnect,
     _CannotConnectModbus,
     _DatamanagerCustomer,
+    _DatamanagerLoginOnOwner,
     _DatamanagerPageMissing,
     _InvalidAllowedHost,
     _InvalidApiCredentials,
@@ -178,6 +179,7 @@ _FORM_ERRORS: dict[type[Exception], tuple[str, str]] = {
     _AlreadyConfigured: ("base", "already_configured"),
     _DatamanagerCustomer: (CONF_API_USERNAME, "datamanager_customer"),
     _DatamanagerPageMissing: ("base", "datamanager_page_missing"),
+    _DatamanagerLoginOnOwner: ("base", "datamanager_login_on_owner"),
 }
 
 

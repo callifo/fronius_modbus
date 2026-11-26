@@ -36,8 +36,13 @@ from .const import (
     ModbusRestriction,
 )
 from .datamanager_client import DatamanagerClient
-from .flow_state import _CannotConnect, _DatamanagerCustomer, _DatamanagerPageMissing
-from .host_sharing import is_datamanager_host
+from .flow_state import (
+    _CannotConnect,
+    _DatamanagerCustomer,
+    _DatamanagerLoginOnOwner,
+    _DatamanagerPageMissing,
+)
+from .host_sharing import is_datamanager_host, would_own_site
 from .web_errors import FroniusWebResponseError
 
 
@@ -182,10 +187,28 @@ async def async_datamanager_login(
         raise _CannotConnect from err
 
 
-async def async_check_role(hass: HomeAssistant, settings: dict[str, Any]) -> None:
+def check_login_on_owner(
+    hass: HomeAssistant,
+    settings: dict[str, Any],
+    entry: config_entries.ConfigEntry | None,
+) -> None:
+    """Refuse a login on a Datamanager entry that would read nothing behind it."""
+    login = settings[CONF_API_USERNAME] != WEB_API_DISABLED
+    if not (login and settings.get(CONF_DATAMANAGER)):
+        return
+    if not would_own_site(hass, settings, entry):
+        raise _DatamanagerLoginOnOwner
+
+
+async def async_check_role(
+    hass: HomeAssistant,
+    settings: dict[str, Any],
+    entry: config_entries.ConfigEntry | None,
+) -> None:
     """Check an existing entry's role against its device; without one nothing is asked."""
     if settings[CONF_API_USERNAME] != WEB_API_DISABLED:
         await async_look_at_device(hass, settings)
+        check_login_on_owner(hass, settings, entry)
 
 
 def device_answer(

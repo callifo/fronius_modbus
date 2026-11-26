@@ -143,6 +143,7 @@
       "invalid_allowed_host": "Gib die IPv4-Adresse eines Geräts in deinem Netzwerk ein, zum Beispiel 192.168.1.20.",
       "datamanager_customer": "Das ist ein Datamanager oder Hybridmanager (SnapINverter, Symo Hybrid). Die Kundenanmeldung öffnet dort nichts. Wähle „Techniker“ (die Anmeldung „service“) oder „Ohne Web-API (nur Modbus)“.",
       "datamanager_page_missing": "Dieser Datamanager antwortet, hat aber keine Seite für die Einspeisegrenze. Seine Firmware bietet sie vielleicht nicht an. Wähle „Ohne Web-API (nur Modbus)“.",
+      "datamanager_login_on_owner": "Ein anderer Eintrag dieses Datamanagers liest seine Zähler und seine Einspeisegrenze, darum kann sich nur dieser Eintrag als Techniker anmelden. Richte diesen Wechselrichter ohne Web-API (nur Modbus) ein.",
       "invalid_inverter_number": "Gib die Nummer des Wechselrichters ein, 00 bis 99.",
       "inverter_not_found": "Unter dieser Nummer hat kein Wechselrichter über Modbus geantwortet. Vielleicht schläft er, oder Modbus TCP ist aus oder nicht auf int + SF eingestellt."
     }
@@ -1060,7 +1061,8 @@
       "already_configured": "Ein anderer Eintrag verwendet diesen Host bereits.",
       "invalid_allowed_host": "Gib die IPv4-Adresse eines Geräts in deinem Netzwerk ein, zum Beispiel 192.168.1.20.",
       "datamanager_customer": "Das ist ein Datamanager oder Hybridmanager (SnapINverter, Symo Hybrid). Die Kundenanmeldung öffnet dort nichts. Wähle „Techniker“ (die Anmeldung „service“) oder „Ohne Web-API (nur Modbus)“.",
-      "datamanager_page_missing": "Dieser Datamanager antwortet, hat aber keine Seite für die Einspeisegrenze. Seine Firmware bietet sie vielleicht nicht an. Wähle „Ohne Web-API (nur Modbus)“."
+      "datamanager_page_missing": "Dieser Datamanager antwortet, hat aber keine Seite für die Einspeisegrenze. Seine Firmware bietet sie vielleicht nicht an. Wähle „Ohne Web-API (nur Modbus)“.",
+      "datamanager_login_on_owner": "Ein anderer Eintrag dieses Datamanagers liest seine Zähler und seine Einspeisegrenze, darum kann sich nur dieser Eintrag als Techniker anmelden. Richte diesen Wechselrichter ohne Web-API (nur Modbus) ein."
     }
   },
   "selector": {

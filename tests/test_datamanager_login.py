@@ -365,9 +365,7 @@ async def test_an_inverter_that_does_not_answer_asks_for_no_password(
     assert result["errors"] == {CONF_INVERTER_UNIT_ID: "inverter_not_found"}
 
 
-async def test_a_second_inverter_cannot_take_the_technician_role(
-    hass, two_inverters
-):
+async def test_a_second_inverter_cannot_take_the_technician_role(hass, two_inverters):
     """The first one reads the meters and the export limit; a login here shows nothing."""
     await async_get_token_store(hass).async_save_token(
         HOST, user="technician", **minted()
@@ -411,8 +409,9 @@ async def test_an_entry_that_is_not_the_owner_cannot_take_the_role(
 async def test_the_owner_takes_the_role_beside_another_inverter(
     hass, two_inverters, kind
 ):
-    add_entry(hass, inverter(2), f"{HOST}#2")
-    flow = RoleFlow(hass, kind, **{CONF_SITE_OWNER: True})
+    """It has the meters, although a lower inverter came later."""
+    add_entry(hass, inverter(1), HOST)
+    flow = RoleFlow(hass, kind, inverter_modbus_unit_id=2, **{CONF_SITE_OWNER: True})
 
     form = await flow.submit("technician")
 

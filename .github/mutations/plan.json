@@ -3327,9 +3327,51 @@
   {
     "label": "config flow: a role on a Datamanager is refused",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "        await async_check_role(self.hass, settings)\n",
+    "old": "        await async_check_role(self.hass, settings, self._flow_entry())\n",
     "new": "        return\n",
     "tests": "customer_on_a_datamanager"
+  },
+  {
+    "label": "technician: a new inverter beside the owner is refused",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "            check_login_on_owner(self.hass, settings, None)\n",
+    "new": "",
+    "tests": "second_inverter_cannot_take_the_technician_role"
+  },
+  {
+    "label": "technician: an existing entry beside the owner is refused",
+    "path": "custom_components/fronius_modbus/flow_settings.py",
+    "old": "        check_login_on_owner(hass, settings, entry)\n",
+    "new": "",
+    "tests": "entry_that_is_not_the_owner_cannot_take_the_role"
+  },
+  {
+    "label": "technician: the owner's mark keeps the role",
+    "path": "custom_components/fronius_modbus/host_sharing.py",
+    "old": "    if entry is not None and entry.data.get(CONF_SITE_OWNER):\n        return True\n",
+    "new": "",
+    "tests": "owner_takes_the_role_beside_another"
+  },
+  {
+    "label": "technician: another owner's mark takes the role",
+    "path": "custom_components/fronius_modbus/host_sharing.py",
+    "old": "    if any(other.data.get(CONF_SITE_OWNER) for other in others):\n        return False\n",
+    "new": "",
+    "tests": "lower_inverter_cannot_take_the_role_from_the_owner"
+  },
+  {
+    "label": "technician: a lower inverter would own",
+    "path": "custom_components/fronius_modbus/host_sharing.py",
+    "old": "    return all(unit < _unit(other) for other in others if _can_own_a_site(other))\n",
+    "new": "    return True\n",
+    "tests": "second_inverter_cannot_take_the_technician_role or entry_that_is_not_the_owner"
+  },
+  {
+    "label": "technician: only a login is checked",
+    "path": "custom_components/fronius_modbus/flow_settings.py",
+    "old": "    if not (login and settings.get(CONF_DATAMANAGER)):\n",
+    "new": "    if not settings.get(CONF_DATAMANAGER):\n",
+    "tests": "first_inverter_is_left_as_it_is"
   },
   {
     "label": "config flow: without the web API no family is asked for",
@@ -3999,8 +4041,8 @@
   {
     "label": "choice: an existing entry is not asked for its inverter",
     "path": "custom_components/fronius_modbus/inverter_choice.py",
-    "old": "        if self._flow_entry() is not None:\n",
-    "new": "        if False:\n",
+    "old": "        if (entry := self._flow_entry()) is not None:\n",
+    "new": "        if (entry := self._flow_entry()) is None and False:\n",
     "tests": "only_a_new_entry_asks or not_asked_for_again"
   },
   {

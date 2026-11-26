@@ -310,7 +310,7 @@ class TokenFlowMixin:
 
     async def _async_look_at_device(self, settings: dict[str, Any]):
         """Check the role against the device; a question it raises is shown first."""
-        await async_check_role(self.hass, settings)
+        await async_check_role(self.hass, settings, self._flow_entry())
 
     async def _async_show_password_step(
         self,

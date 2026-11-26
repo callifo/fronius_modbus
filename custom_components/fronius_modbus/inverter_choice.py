@@ -26,7 +26,12 @@ from .const import (
     inverter_number,
 )
 from .flow_forms import _set_form_error
-from .flow_settings import _entry_payload, async_check_role, async_look_at_device
+from .flow_settings import (
+    _entry_payload,
+    async_check_role,
+    async_look_at_device,
+    check_login_on_owner,
+)
 from .flow_state import _CannotConnectModbus
 from .host_sharing import host_holder, is_datamanager_host, taken_units, unique_id_for
 
@@ -116,8 +121,8 @@ class NewInverterMixin(config_entries.ConfigFlow):
         self, settings: dict[str, Any]
     ) -> config_entries.ConfigFlowResult | None:
         """Ask a new entry's device what it is, and which of its inverters is meant."""
-        if self._flow_entry() is not None:
-            await async_check_role(self.hass, settings)
+        if (entry := self._flow_entry()) is not None:
+            await async_check_role(self.hass, settings, entry)
             return None
         found = await async_look_at_device(self.hass, settings)
         question = await self._async_inverter_question(settings) if found else None
@@ -172,6 +177,7 @@ class NewInverterMixin(config_entries.ConfigFlow):
             await self._async_check_inverter(
                 {**settings, CONF_API_USERNAME: WEB_API_DISABLED}
             )
+            check_login_on_owner(self.hass, settings, None)
             return await self._async_set_up_inverter(settings)
         except data_entry_flow.AbortFlow:
             raise

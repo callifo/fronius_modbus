@@ -214,7 +214,8 @@ def unit_of(number: str) -> int | None:
     """The Modbus unit of the inverter with this number; None where there is none.
 
     Number 00 is on a unit of its own, 0 being every device's (Fronius' manual
-    42,0410,2049). A listing can hold a meter's number too.
+    42,0410,2049). The Solar API's listing can name another device too, as
+    240 in one published answer: above the highest number, it is no inverter.
     """
     if not (number.isascii() and number.isdigit()):
         return None

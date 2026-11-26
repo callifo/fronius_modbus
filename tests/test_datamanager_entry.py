@@ -5,6 +5,7 @@ from modbus_connection import (
     IllegalDataAddressError,
     ModbusConnectionError,
     ModbusTimeoutError,
+    ServerDeviceBusyError,
 )
 import pytest
 
@@ -373,6 +374,23 @@ async def test_a_meter_silent_at_the_start_is_read_once_it_answers(
 
     assert state_of(hass, entry, "meter_240_power") == "30.0"
     assert state_of(hass, entry, "load") == "627.0"
+
+
+@pytest.mark.parametrize("silence", [ServerDeviceBusyError, ModbusTimeoutError])
+async def test_a_second_meter_busy_at_the_start_is_read_once_it_answers(
+    hass, datamanager_modbus, datamanager_entry, monkeypatch, silence
+):
+    add_meter(datamanager_modbus, 241, "B2")
+    answer_site(monkeypatch, ("B2", 0))
+    datamanager_modbus.fail_requests(241, silence())
+    entry = datamanager_entry
+    await setup_entry(hass, entry)
+    datamanager_modbus.fail_requests(241, None)
+
+    await entry.runtime_data.modbus.async_refresh()
+    await hass.async_block_till_done()
+
+    assert state_of(hass, entry, "meter_241_power") == "30.0"
 
 
 async def test_a_sub_meter_is_no_load_while_the_grid_meter_is_silent(

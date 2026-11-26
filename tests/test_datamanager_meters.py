@@ -242,6 +242,14 @@ def test_the_meters_and_where_they_are(found, known, unit_ids, primary, location
     assert topology.reported_unit_ids == ()
 
 
+def test_a_unit_that_did_not_answer_clearly_is_asked_again():
+    """A busy meter at the start would be left out until a reload."""
+    topology = meter_topology({240: "A1"}, site(("A1", GRID)), open_units={242})
+
+    assert topology.unit_ids == [240, 242]
+    assert topology.primary_unit_id == 240
+
+
 @pytest.mark.parametrize("inverters", [0, 2])
 def test_the_grid_meter_s_place_is_left_out_with_other_inverters(inverters):
     """The load adds one inverter's power to the grid meter's."""

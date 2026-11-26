@@ -389,6 +389,24 @@ async def test_a_busy_meter_is_undecided_rather_than_absent(connection):
     assert meter_report_name(METER_UNIT_ID) in report.updated
 
 
+@pytest.mark.parametrize("absence", [GatewayTargetError, IllegalDataAddressError])
+async def test_a_unit_without_a_device_has_no_meter_on_a_look(connection, absence):
+    unit = connection.for_unit(METER_UNIT_ID)
+    unit.fail_requests(absence())
+
+    assert await FroniusInverter.async_probe_meter(unit) is None
+
+
+@pytest.mark.parametrize("silence", [ServerDeviceBusyError, ModbusTimeoutError])
+async def test_a_busy_meter_leaves_a_look_open(connection, silence):
+    """A meter filed as absent at the start was never asked again."""
+    unit = connection.for_unit(METER_UNIT_ID)
+    unit.fail_requests(silence())
+
+    with pytest.raises(silence):
+        await FroniusInverter.async_probe_meter(unit)
+
+
 async def test_a_failed_meter_probe_during_a_retry_keeps_the_poll_coherent(
     connection, monkeypatch
 ):

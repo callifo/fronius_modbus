@@ -4461,9 +4461,23 @@
   {
     "label": "service login: a forbidden login is not sent again",
     "path": "custom_components/fronius_modbus/datamanager_client.py",
-    "old": "        if second.status_code in REFUSED:\n",
-    "new": "        if second.status_code == HTTPStatus.UNAUTHORIZED:\n",
+    "old": "        if second.status_code not in REFUSED:\n",
+    "new": "        if second.status_code != HTTPStatus.UNAUTHORIZED:\n",
     "tests": "forbidden_login_is_not_sent_again"
+  },
+  {
+    "label": "service login: a refused write keeps the login",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "        elif request.method == \"GET\":\n",
+    "new": "        else:\n",
+    "tests": "refused_write_keeps_the_login or write_refused_after_the_login"
+  },
+  {
+    "label": "soft limit: a refused write is a failed write",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "            except FroniusWebAuthError as err:\n                raise ControlUnavailable(\n                    \"write_failed\",",
+    "new": "            except KeyError as err:\n                raise ControlUnavailable(\n                    \"write_failed\",",
+    "tests": "refused_write_keeps_the_login or write_refused_after_the_login"
   },
   {
     "label": "export limit page: an answer with an error has no values",

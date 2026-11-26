@@ -86,11 +86,13 @@ class StandardDigest(AuthBase):
         second = response.connection.send(answered, **options)
         second.history.append(response)
         second.request = answered
-        if second.status_code in REFUSED:
-            # Not sent again: the device may lock the login after a few tries.
-            self._password, self.token = "", None
-        else:
+        if second.status_code not in REFUSED:
             self.token = {"realm": challenge["realm"], "token": token}
+        elif request.method == "GET":
+            # Not sent again: the device may lock the login after a few tries.
+            # A write comes after a read it let in: refusing it is no wrong
+            # password.
+            self._password, self.token = "", None
         return second
 
     def _token_for(self, realm: str) -> str | None:
@@ -339,6 +341,12 @@ class DatamanagerClient:
             soft["enabled"], soft["powerLimit"] = True, watts
             try:
                 answer = self._request("post", SAVE_QUERY, {"powerLimits": changed})
+            except FroniusWebAuthError as err:
+                raise ControlUnavailable(
+                    "write_failed",
+                    "The Datamanager refused the write",
+                    error="the Datamanager refused the write",
+                ) from err
             except (FroniusWebUnreachable, FroniusWebResponseError) as err:
                 raise _unconfirmed() from err
             try:

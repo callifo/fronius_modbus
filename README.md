@@ -29,7 +29,7 @@ See [Entities](https://github.com/callifo/fronius_modbus/wiki/Entities) and [Bat
 ## Requirements
 
 - Home Assistant 2026.9.0 or newer. The integration depends on the built-in `modbus` integration for its connection.
-- Modbus TCP enabled on the inverter. The setup can enable it for you when a Web API password is provided.
+- Modbus TCP enabled on the inverter. The setup can enable it for you when a Web API password is provided, except on a Datamanager.
 - Optional: the password of a local Web API role. Without it the integration runs on Modbus alone; see [Web API](https://github.com/callifo/fronius_modbus/wiki/Web-API) in the wiki.
 
 ## Supported devices
@@ -81,7 +81,7 @@ Copy the contents of the `custom_components` folder to your Home Assistant `conf
 
 The setup asks for the inverter's host, the Web API access role (`customer`, `technician` or *Without the web API*), the update intervals and the Modbus IP restriction. With a role it asks for that role's password; this is the local login of the inverter's web interface, not the Solar.web login. The password is not stored; the integration keeps a derived token that only Home Assistant can read.
 
-With a role, the setup sets the inverter's Modbus itself, except on a Datamanager: there, switch Modbus TCP on in its web interface first, with the SunSpec model type `int + SF`. Without the web API, set it first in the inverter's web UI: Modbus TCP on, port 502, the SunSpec model type `int + SF`, inverter address 1 and meter address offset 200, and *Allow Control* on for the Modbus controls.
+With a role, the setup sets the inverter's Modbus itself, except on a Datamanager. Without the web API, set it first in the inverter's web UI: Modbus TCP on, port 502, the SunSpec model type `int + SF`, inverter address 1 and meter address offset 200, and *Allow Control* on for the Modbus controls. On a Datamanager, whatever the role, switch Modbus TCP on in its web interface first, with port 502, the SunSpec model type `int + SF` and *Inverter control via Modbus* for the Modbus controls. The setup asks for the inverter's number there, and reads the meters on Modbus units 240 to 244.
 
 Every parameter, discovery, the Modbus IP restriction and reconfiguring are in [Installation and Setup](https://github.com/callifo/fronius_modbus/wiki/Installation-and-Setup) in the wiki.
 

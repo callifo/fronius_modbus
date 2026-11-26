@@ -3572,9 +3572,23 @@
   {
     "label": "datamanager: the units not asked before a lost link stay listed",
     "path": "custom_components/fronius_modbus/datamanager.py",
-    "old": "            return meter_topology(found, None, {*open_units, *unasked})\n",
-    "new": "            return meter_topology(found, None, open_units)\n",
+    "old": "            open_units.update(METER_UNIT_IDS[position:])\n",
+    "new": "",
     "tests": "not_asked_before_a_lost_link"
+  },
+  {
+    "label": "datamanager: a lost link in the search still counts the entries",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    topology = meter_topology(found, site, open_units)\n    return replace(\n",
+    "new": "    topology = meter_topology(found, site, open_units)\n    if link_lost:\n        return topology\n    return replace(\n",
+    "tests": "link_lost_in_the_owner_s_search"
+  },
+  {
+    "label": "datamanager: a lost link asks the Solar API nothing",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if not link_lost:\n        site = await",
+    "new": "    if True:\n        site = await",
+    "tests": "link_lost_in_the_owner_s_search or not_asked_before_a_lost_link or gone_during_the_search"
   },
   {
     "label": "datamanager: a busy meter unit stays listed",

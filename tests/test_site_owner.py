@@ -269,12 +269,19 @@ async def test_a_link_lost_in_the_owner_s_search_still_counts_the_entries(
         "async_probe_meter",
         staticmethod(lose_the_link_at_the_second_unit),
     )
+    asked_the_site = []
+    monkeypatch.setattr(
+        "custom_components.fronius_modbus.datamanager.read_site",
+        asked_the_site.append,
+    )
     first, second = add_inverter(hass, 1), add_inverter(hass, SECOND_UNIT_ID)
 
     await start(hass, first, second)
 
     assert first.runtime_data.several_inverters is True
     assert len(looked_at) == 2
+    # Over a lost link its Solar API would only add a timeout.
+    assert asked_the_site == []
 
 
 @pytest.mark.parametrize("answers", [True, False])

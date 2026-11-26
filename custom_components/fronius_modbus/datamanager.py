@@ -318,22 +318,10 @@ async def async_meter_topology(
             [], METER_UNIT_IDS[0], {}, confirmed=False, several_inverters=True
         )
     entries = len(host_entries(hass, params.host))
-    found: dict[int, str] = {}
-    open_units: set[int] = set()
-    for position, unit_id in enumerate(METER_UNIT_IDS):
-        unit = async_get_unit(hass, entry, params, unit_id)
-        try:
-            identity = await FroniusInverter.async_probe_meter(unit)
-        except ModbusConnectionError:
-            # The first poll reports it and has the setup tried again.
-            unasked = METER_UNIT_IDS[position:]
-            return meter_topology(found, None, {*open_units, *unasked})
-        except ModbusError:
-            open_units.add(unit_id)
-            continue
-        if identity is not None:
-            found[unit_id] = identity.serial.strip()
-    site = await hass.async_add_executor_job(read_site, params.host)
+    found, open_units, link_lost = await _async_look_for_meters(hass, entry, params)
+    site = None
+    if not link_lost:
+        site = await hass.async_add_executor_job(read_site, params.host)
     if site is not None:
         known = _known_inverters(hass, entry, site.inverters)
         # Unread inverters stay unknown beside a single entry.
@@ -342,6 +330,28 @@ async def async_meter_topology(
     return replace(
         topology, several_inverters=topology.several_inverters or entries > 1
     )
+
+
+async def _async_look_for_meters(
+    hass: HomeAssistant, entry: ConfigEntry, params: ModbusTcpParams
+) -> tuple[dict[int, str], set[int], bool]:
+    """The serials of the meters that answered, the units left open, and a lost link."""
+    found: dict[int, str] = {}
+    open_units: set[int] = set()
+    for position, unit_id in enumerate(METER_UNIT_IDS):
+        unit = async_get_unit(hass, entry, params, unit_id)
+        try:
+            identity = await FroniusInverter.async_probe_meter(unit)
+        except ModbusConnectionError:
+            # The first poll reports it and has the setup tried again.
+            open_units.update(METER_UNIT_IDS[position:])
+            return found, open_units, True
+        except ModbusError:
+            open_units.add(unit_id)
+            continue
+        if identity is not None:
+            found[unit_id] = identity.serial.strip()
+    return found, open_units, False
 
 
 @callback

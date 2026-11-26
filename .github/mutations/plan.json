@@ -4816,6 +4816,20 @@
     "tests": "login_refused_at_a_write"
   },
   {
+    "label": "soft limit: writes go out in the order asked for",
+    "path": "custom_components/fronius_modbus/datamanager_web.py",
+    "old": "        async with self._write_turn:\n            await self._async_write(watts)\n",
+    "new": "        await self._async_write(watts)\n",
+    "tests": "last_value_asked_for_is_the_one_kept"
+  },
+  {
+    "label": "soft limit: a write given up by its caller runs to its end",
+    "path": "custom_components/fronius_modbus/datamanager_web.py",
+    "old": "        await asyncio.shield(write)\n",
+    "new": "        await write\n",
+    "tests": "write_given_up_by_its_caller_still_goes_first"
+  },
+  {
     "label": "model type: int is told",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
     "old": "        if chain.first(*INVERTER_MODEL_IDS) is not None:\n            return \"int\"\n",

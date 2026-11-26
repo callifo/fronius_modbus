@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 import logging
 
@@ -53,6 +54,8 @@ class DatamanagerWebCoordinator(DataUpdateCoordinator[ExportLimits]):
         self._host = host
         self._role = str({**entry.data, **entry.options}[CONF_API_USERNAME])
         self._client = client
+        # asyncio.Lock wakes its waiters in the order they came.
+        self._write_turn = asyncio.Lock()
 
     async def _async_update_data(self) -> ExportLimits:
         try:
@@ -79,7 +82,20 @@ class DatamanagerWebCoordinator(DataUpdateCoordinator[ExportLimits]):
             ) from err
 
     async def async_set_soft_limit(self, watts: int) -> None:
-        """Set the export soft limit and show what the device holds after it."""
+        """Set the export soft limit and show what the device holds after it.
+
+        Writes go out in the order they were asked for, and one its caller
+        gave up runs to its end first: its thread cannot be stopped, and a
+        later value would otherwise be overwritten by it.
+        """
+        write = self.hass.async_create_task(self._async_write_in_turn(watts))
+        await asyncio.shield(write)
+
+    async def _async_write_in_turn(self, watts: int) -> None:
+        async with self._write_turn:
+            await self._async_write(watts)
+
+    async def _async_write(self, watts: int) -> None:
         try:
             limits = await self.hass.async_add_executor_job(
                 self._client.set_soft_limit, watts

@@ -80,6 +80,19 @@ def test_a_token_that_does_not_fit_is_a_refused_login(device, token):
     assert len(device.logins) <= 1
 
 
+@pytest.mark.parametrize("credentials", [{"token": minted()}, {"password": PASSWORD}])
+def test_a_forbidden_login_is_not_sent_again(device, credentials):
+    """The service login may lack the right; every try counts towards a lock."""
+    device.status = 403
+    client = DatamanagerClient(HOST, **credentials)
+
+    with pytest.raises(FroniusWebAuthError):
+        client.read_export_limits()
+    with pytest.raises(FroniusWebAuthError):
+        client.read_export_limits()
+    assert len(device.logins) == 1
+
+
 def test_nothing_is_sent_without_credentials(device):
     with pytest.raises(FroniusWebAuthError):
         DatamanagerClient(HOST).read_export_limits()

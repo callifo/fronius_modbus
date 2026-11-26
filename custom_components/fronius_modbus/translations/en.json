@@ -150,7 +150,7 @@
       "datamanager_login_on_owner": "Another entry of this Datamanager reads what its inverters share (meters, site totals, export limit), so only that entry can log in as Technician. Set this inverter up without the web API (Modbus only).",
       "invalid_inverter_number": "Enter the number of the inverter, 00 to 99.",
       "inverter_not_found": "No inverter with this number answered over Modbus. It may be asleep, or Modbus TCP is off or not set to int + SF.",
-      "model_type_not_switched": "The Datamanager still uses the float model type. Set int + SF on its web page, under Modbus, or try again."
+      "model_type_not_switched": "The switch to int + SF was not confirmed, so the model type the Datamanager uses now is unknown. Check it on the Datamanager's web page, under Modbus, and set int + SF there, or try again."
     }
   },
   "entity": {

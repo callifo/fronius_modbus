@@ -4907,13 +4907,6 @@
     "tests": "chosen_inverter_is_the_one_written"
   },
   {
-    "label": "model type: the switch has to show",
-    "path": "custom_components/fronius_modbus/inverter_choice.py",
-    "old": "        if await async_model_type(hass, settings) == \"int\":\n            return True\n",
-    "new": "        return True\n",
-    "tests": "does_not_switch_creates_nothing"
-  },
-  {
     "label": "model type: a refused write is no switch",
     "path": "custom_components/fronius_modbus/inverter_choice.py",
     "old": "        _LOGGER.warning(\"The model type was not switched: %s\", error_text(err))\n        return False\n",
@@ -4940,6 +4933,13 @@
     "old": "    except MODBUS_ERRORS as err:\n        _LOGGER.debug(\"The model type was not read: %s\", error_text(err))\n        return None\n",
     "new": "    except KeyError as err:\n        _LOGGER.debug(\"The model type was not read: %s\", error_text(err))\n        return None\n",
     "tests": "silent_unit_is_no_float"
+  },
+  {
+    "label": "model type: an int read has to hold beyond the reset",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "    await asyncio.sleep(MODEL_TYPE_HOLD_SECONDS)\n    return await async_model_type(hass, settings) == \"int\"\n",
+    "new": "    return True\n",
+    "tests": "switch_taken_back_after_a_few_seconds"
   },
   {
     "label": "model type: a split-phase float device is not switched",

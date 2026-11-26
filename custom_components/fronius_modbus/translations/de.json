@@ -150,7 +150,7 @@
       "datamanager_login_on_owner": "Ein anderer Eintrag dieses Datamanagers liest, was seine Wechselrichter teilen (Zähler, Summen der Anlage, Einspeisegrenze), darum kann sich nur dieser Eintrag als Techniker anmelden. Richte diesen Wechselrichter ohne Web-API (nur Modbus) ein.",
       "invalid_inverter_number": "Gib die Nummer des Wechselrichters ein, 00 bis 99.",
       "inverter_not_found": "Unter dieser Nummer hat kein Wechselrichter über Modbus geantwortet. Vielleicht schläft er, oder Modbus TCP ist aus oder nicht auf int + SF eingestellt.",
-      "model_type_not_switched": "Der Datamanager verwendet weiterhin den Modelltyp float. Stelle int + SF auf seiner Webseite unter Modbus ein, oder versuche es noch einmal."
+      "model_type_not_switched": "Die Umstellung auf int + SF wurde nicht bestätigt, darum ist unbekannt, welchen Modelltyp der Datamanager jetzt verwendet. Prüfe ihn auf der Webseite des Datamanagers unter Modbus und stelle dort int + SF ein, oder versuche es noch einmal."
     }
   },
   "entity": {

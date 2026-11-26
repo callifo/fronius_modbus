@@ -88,7 +88,7 @@ def float_device(hass, monkeypatch) -> FloatDatamanager:
     shared = FloatDatamanager()
     monkeypatch.setattr(CORE_CONNECTION, shared)
     monkeypatch.setattr(inverter_choice, "MODEL_TYPE_RETRY_SECONDS", 0)
-    monkeypatch.setattr(inverter_choice, "MODEL_TYPE_HOLD_SECONDS", 0, raising=False)
+    monkeypatch.setattr(inverter_choice, "MODEL_TYPE_HOLD_SECONDS", 0)
     answer_family(monkeypatch, DeviceFamily.DATAMANAGER)
     monkeypatch.setattr(datamanager, "read_inverter_units", lambda host: (1,))
 

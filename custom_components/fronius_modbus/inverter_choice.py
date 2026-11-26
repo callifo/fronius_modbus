@@ -49,6 +49,9 @@ MODBUS_ERRORS = (ModbusError, HomeAssistantError, OSError, TimeoutError)
 # The change takes effect a moment after the write.
 MODEL_TYPE_READS = 5
 MODEL_TYPE_RETRY_SECONDS = 2.0
+# Without its confirmation the Datamanager takes the change back after "a few
+# seconds" (Fronius' manual); an int read after this long has held.
+MODEL_TYPE_HOLD_SECONDS = 12.0
 
 
 async def async_free_units(hass: HomeAssistant, host: str) -> list[int] | None:
@@ -91,6 +94,13 @@ async def async_switch_to_int(hass: HomeAssistant, settings: dict[str, Any]) -> 
     except MODBUS_ERRORS as err:
         _LOGGER.warning("The model type was not switched: %s", error_text(err))
         return False
+    if not await _async_shows_int_soon(hass, settings):
+        return False
+    await asyncio.sleep(MODEL_TYPE_HOLD_SECONDS)
+    return await async_model_type(hass, settings) == "int"
+
+
+async def _async_shows_int_soon(hass: HomeAssistant, settings: dict[str, Any]) -> bool:
     for _ in range(MODEL_TYPE_READS):
         await asyncio.sleep(MODEL_TYPE_RETRY_SECONDS)
         if await async_model_type(hass, settings) == "int":

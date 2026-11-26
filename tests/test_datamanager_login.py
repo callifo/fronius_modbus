@@ -169,6 +169,46 @@ async def test_a_challenge_of_another_kind_is_no_wrong_password(hass, device, ki
     assert result["errors"] == {"base": "cannot_connect"}
 
 
+@pytest.mark.parametrize("kind", KINDS)
+async def test_a_datamanager_without_the_export_limit_page_says_so(
+    hass, device, kind
+):
+    """Its firmware may have no such page; the password can be right."""
+    device.status = 404
+    flow = RoleFlow(hass, kind)
+    form = await flow.submit("technician")
+
+    result = await flow.enter(form, PASSWORD)
+
+    assert result["errors"] == {"base": "datamanager_page_missing"}
+
+
+async def store_a_login_where_the_page_is_missing(hass, device) -> None:
+    device.status = 404
+    await async_get_token_store(hass).async_save_token(
+        HOST, user="technician", **minted()
+    )
+
+
+async def test_a_stored_login_kept_without_the_page_says_so(hass, device):
+    await store_a_login_where_the_page_is_missing(hass, device)
+    flow = RoleFlow(hass, "options", api_username="technician")
+    form = await flow.submit("technician")
+
+    result = await flow.enter(form, "")
+
+    assert result["errors"] == {"base": "datamanager_page_missing"}
+
+
+async def test_a_stored_login_tried_without_the_page_says_so(hass, device):
+    await store_a_login_where_the_page_is_missing(hass, device)
+    flow = RoleFlow(hass, "reconfigure", api_username="technician")
+
+    result = await flow.submit("technician")
+
+    assert result["errors"] == {"base": "datamanager_page_missing"}
+
+
 async def test_a_device_gone_during_the_login_is_not_reached(hass, device, monkeypatch):
     flow = RoleFlow(hass, "user")
     form = await flow.submit("technician")

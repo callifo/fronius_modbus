@@ -4144,6 +4144,20 @@
     "tests": "load_turns_unknown_when_a_second_inverter_joins"
   },
   {
+    "label": "owner: an inverter set up during the owner's setup restarts it",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if len(host_entries(hass, host)) > 1:\n        hass.config_entries.async_schedule_reload(entry.entry_id)\n",
+    "new": "    if False:\n        hass.config_entries.async_schedule_reload(entry.entry_id)\n",
+    "tests": "joins_the_search"
+  },
+  {
+    "label": "setup: the owner counts the site again at its end",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "    async_recount_the_site(hass, entry, host)\n",
+    "new": "",
+    "tests": "joins_the_search"
+  },
+  {
     "label": "owner: without a mark the lowest number has it",
     "path": "custom_components/fronius_modbus/host_sharing.py",
     "old": "key=lambda other: (_unit(other), other.entry_id)",

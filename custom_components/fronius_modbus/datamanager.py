@@ -354,6 +354,20 @@ def _async_tell_the_owner(hass: HomeAssistant, host: str) -> None:
         hass.config_entries.async_schedule_reload(owner.entry_id)
 
 
+@callback
+def async_recount_the_site(hass: HomeAssistant, entry: ConfigEntry, host: str) -> None:
+    """Restart the owner when an entry was set up during its own setup.
+
+    That entry found the owner still starting, so nothing told it.
+    """
+    if not entry.data.get(CONF_DATAMANAGER) or site_owner(hass, host) is not entry:
+        return
+    if entry.runtime_data.several_inverters:
+        return
+    if len(host_entries(hass, host)) > 1:
+        hass.config_entries.async_schedule_reload(entry.entry_id)
+
+
 def _known_inverters(hass: HomeAssistant, entry: ConfigEntry, listed: int) -> int:
     """The most inverters ever listed: one asleep at the start is left out.
 

@@ -38,7 +38,11 @@ from .coordinator import (
     FroniusRuntimeData,
     FroniusWebCoordinator,
 )
-from .datamanager import async_meter_topology, async_on_datamanager
+from .datamanager import (
+    async_meter_topology,
+    async_on_datamanager,
+    async_recount_the_site,
+)
 from .datamanager_web import async_start as datamanager_web_start
 from .entity import expected_device_identifiers
 from .fronius_modbus_api.device import FroniusInverter
@@ -268,6 +272,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
     )
 
     # Before the migrations: they move the 0.1.9 ids taken over.
+    async_recount_the_site(hass, entry, host)
     adoption.async_adopt_deleted_entities(hass, entry)
     adoption.async_adopt_deleted_devices(hass, entry)
     await migrations.async_migrate_v019_mppt_statistics(hass, entry)

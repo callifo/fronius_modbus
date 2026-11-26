@@ -93,6 +93,9 @@ class NewInverterMixin(config_entries.ConfigFlow):
             if card["context"]["source"] == config_entries.SOURCE_ZEROCONF:
                 self.hass.config_entries.flow.async_abort(card["flow_id"])
         await self._async_claim_unique_id(settings)
+        # Again before each step that acts: another flow may have set up the
+        # owner while a form was open.
+        check_login_on_owner(self.hass, settings, None)
 
     async def _async_claim_unique_id(self, settings: dict[str, Any]) -> None:
         """Abort for a host another entry keeps these settings off."""
@@ -177,7 +180,6 @@ class NewInverterMixin(config_entries.ConfigFlow):
             await self._async_check_inverter(
                 {**settings, CONF_API_USERNAME: WEB_API_DISABLED}
             )
-            check_login_on_owner(self.hass, settings, None)
             return await self._async_set_up_inverter(settings)
         except data_entry_flow.AbortFlow:
             raise

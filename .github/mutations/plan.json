@@ -3341,9 +3341,9 @@
   {
     "label": "technician: a new inverter beside the owner is refused",
     "path": "custom_components/fronius_modbus/inverter_choice.py",
-    "old": "            check_login_on_owner(self.hass, settings, None)\n",
+    "old": "        check_login_on_owner(self.hass, settings, None)\n",
     "new": "",
-    "tests": "second_inverter_cannot_take_the_technician_role"
+    "tests": "second_inverter_cannot_take_the_technician_role or while_the_password_is_asked"
   },
   {
     "label": "technician: an existing entry beside the owner is refused",

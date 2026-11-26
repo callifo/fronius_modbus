@@ -459,6 +459,36 @@ async def test_the_units_not_asked_before_a_lost_link_stay_listed(
     assert entry.runtime_data.device.meter_unit_ids == tuple(DATAMANAGER_METER_UNIT_IDS)
 
 
+async def test_a_grid_meter_busy_only_at_the_search_leads_after_it(
+    hass, datamanager_modbus, datamanager_entry, monkeypatch
+):
+    """It answered the first poll, so no later answer looked new to reload for."""
+    add_meter(datamanager_modbus, 241, "B2")
+    answer_site(monkeypatch, ("B2", 0))
+    probe = FroniusInverter.async_probe_meter
+    looked_at = []
+
+    async def busy_once_at_the_second_unit(unit):
+        looked_at.append(unit)
+        if len(looked_at) == 2:
+            raise ServerDeviceBusyError
+        return await probe(unit)
+
+    monkeypatch.setattr(
+        FroniusInverter, "async_probe_meter", staticmethod(busy_once_at_the_second_unit)
+    )
+    entry = datamanager_entry
+    await setup_entry(hass, entry)
+    assert state_of(hass, entry, "meter_241_power") == "30.0"
+
+    await entry.runtime_data.modbus.async_refresh()
+    await hass.async_block_till_done()
+
+    assert entry.runtime_data.primary_meter_unit_id == 241
+    assert entry.runtime_data.meter_locations == {241: 0}
+    assert state_of(hass, entry, "load") == "627.0"
+
+
 async def test_a_gen24_is_not_asked_on_a_datamanagers_units(
     hass, mock_modbus, monkeypatch
 ):

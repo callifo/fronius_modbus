@@ -374,9 +374,7 @@ async def test_the_number_ends_below_an_enabled_hard_limit(hass, device):
     assert state.attributes["max"] == 7999
 
 
-async def test_an_enabled_hard_limit_of_0_leaves_the_number_unavailable(
-    hass, device
-):
+async def test_an_enabled_hard_limit_of_0_leaves_the_number_unavailable(hass, device):
     active = device.body["Body"]["Data"]["powerLimits"]["exportLimits"]["activePower"]
     active["hardLimit"] = {"enabled": True, "powerLimit": 0}
     entry = await number_entry(hass)

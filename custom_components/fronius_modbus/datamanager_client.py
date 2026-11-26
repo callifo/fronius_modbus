@@ -7,6 +7,7 @@ import copy
 from dataclasses import dataclass
 import hashlib
 from http import HTTPStatus
+import math
 import os
 import threading
 from typing import Any
@@ -151,14 +152,23 @@ class ExportLimits:
 
     @property
     def ceiling_w(self) -> float | None:
-        """The highest soft limit: the site's power or an enabled hard limit."""
-        bounds = []
+        """The highest soft limit: the site's power, or the watt below an enabled hard limit.
+
+        Fronius' manual has the hard limit higher than the soft limit.
+        """
+        bounds: list[float] = []
         # 0 where the owner entered none.
         if self.reference_w is not None and self.reference_w > 0:
             bounds.append(self.reference_w)
         if self.hard_enabled and self.hard_w is not None:
-            bounds.append(self.hard_w)
+            bounds.append(math.ceil(self.hard_w) - 1)
         return min(bounds, default=None)
+
+    @property
+    def takes_a_soft_limit(self) -> bool:
+        """Whether a soft limit can be written: a known form, and room below the ceiling."""
+        ceiling = self.ceiling_w
+        return self.is_writable and (ceiling is None or ceiling >= 0)
 
     @property
     def is_writable(self) -> bool:

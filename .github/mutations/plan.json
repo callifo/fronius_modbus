@@ -4762,9 +4762,30 @@
   {
     "label": "soft limit: a form nobody has seen leaves the number unavailable",
     "path": "custom_components/fronius_modbus/datamanager_entities.py",
-    "old": "    available_fn=lambda runtime: _limits(runtime).is_writable,\n",
+    "old": "    available_fn=lambda runtime: _limits(runtime).takes_a_soft_limit,\n",
     "new": "",
     "tests": "form_nobody_has_seen_cannot_be_written"
+  },
+  {
+    "label": "soft limit: it stays below an enabled hard limit",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "            bounds.append(math.ceil(self.hard_w) - 1)\n",
+    "new": "            bounds.append(math.ceil(self.hard_w))\n",
+    "tests": "highest_soft_limit or at_an_enabled_hard_limit_is_refused"
+  },
+  {
+    "label": "soft limit: a fractional hard limit leaves the whole watt below",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "            bounds.append(math.ceil(self.hard_w) - 1)\n",
+    "new": "            bounds.append(self.hard_w - 1)\n",
+    "tests": "highest_soft_limit"
+  },
+  {
+    "label": "soft limit: no room below a hard limit of 0 leaves the number unavailable",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "        return self.is_writable and (ceiling is None or ceiling >= 0)\n",
+    "new": "        return self.is_writable\n",
+    "tests": "hard_limit_of_0_leaves_the_number_unavailable"
   },
   {
     "label": "soft limit: the number exists with the login only",

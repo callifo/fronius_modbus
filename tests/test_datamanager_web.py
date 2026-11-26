@@ -462,6 +462,56 @@ async def test_a_write_given_up_by_its_caller_still_goes_first(
     assert state_of(hass, entry, "export_soft_limit", "number") == "8000.0"
 
 
+async def test_a_write_from_before_a_reload_goes_first(hass, device, monkeypatch):
+    """The reloaded entry has a new coordinator; the old write was still on its way."""
+    entry = await number_entry(hass)
+    held = HeldWrite(monkeypatch)
+
+    first = hass.async_create_task(set_number(hass, entry, 9000))
+    await asyncio.sleep(0.05)
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    second = hass.async_create_task(set_number(hass, entry, 8000))
+    await asyncio.sleep(0.05)
+    await held.let_go(hass)
+    await asyncio.gather(first, second, return_exceptions=True)
+    await hass.async_block_till_done()
+
+    assert soft_limit_on(device) == 8000
+
+
+async def test_a_given_up_write_that_fails_names_no_address(
+    hass, device, monkeypatch, caplog
+):
+    """Nobody waits for it, so its error reaches the log on its own."""
+    entry = await number_entry(hass)
+    held = HeldWrite(monkeypatch)
+    first = hass.async_create_task(set_number(hass, entry, 9000))
+    await asyncio.sleep(0.05)
+    first.cancel()
+    send = requests.adapters.HTTPAdapter.send
+
+    def unreachable(*_args, **_options):
+        raise requests.ConnectionError(f"Max retries exceeded: http://{HOST}/config/")
+
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", unreachable)
+    await held.let_go(hass)
+    await hass.async_block_till_done()
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", send)
+
+    await set_number(hass, entry, 8000)
+
+    format_record = logging.Formatter().format
+    reported = [
+        format_record(record)
+        for record in caplog.records
+        if record.levelno >= logging.ERROR
+        or record.name.startswith("custom_components.fronius_modbus")
+    ]
+    assert not [text for text in reported if HOST in text]
+    assert any("gave up" in text for text in reported)
+    assert soft_limit_on(device) == 8000
+
+
 async def test_an_unconfirmed_write_says_so(hass, device):
     """Taken, but with an error: the device is shown as it is now."""
     entry = await number_entry(hass)

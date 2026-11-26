@@ -1,7 +1,9 @@
 """The export limit of a Datamanager, read with the technician's login."""
 
+import asyncio
 from datetime import timedelta
 import logging
+import threading
 
 import pytest
 import requests
@@ -12,7 +14,10 @@ from custom_components.fronius_modbus.const import (
     DOMAIN,
     entity_prefix,
 )
-from custom_components.fronius_modbus.datamanager_client import EXPORT_LIMIT_PATH
+from custom_components.fronius_modbus.datamanager_client import (
+    EXPORT_LIMIT_PATH,
+    DatamanagerClient,
+)
 from custom_components.fronius_modbus.diagnostics import (
     async_get_config_entry_diagnostics,
 )
@@ -394,6 +399,67 @@ async def test_a_form_nobody_has_seen_cannot_be_written(hass, device):
     await entry.runtime_data.datamanager_web.async_refresh()
     await hass.async_block_till_done()
     assert state_of(hass, entry, "export_soft_limit", "number") == "unavailable"
+
+
+def soft_limit_on(device) -> float:
+    active = device.body["Body"]["Data"]["powerLimits"]["exportLimits"]["activePower"]
+    return active["softLimit"]["powerLimit"]
+
+
+class HeldWrite:
+    """The write of 9000 W waits outside the client's lock until it is let go."""
+
+    def __init__(self, monkeypatch) -> None:
+        self.released, self.finished = threading.Event(), threading.Event()
+        write = DatamanagerClient.set_soft_limit
+
+        def held(client, watts):
+            if watts != 9000:
+                return write(client, watts)
+            self.released.wait(5)
+            try:
+                return write(client, watts)
+            finally:
+                self.finished.set()
+
+        monkeypatch.setattr(DatamanagerClient, "set_soft_limit", held)
+
+    async def let_go(self, hass) -> None:
+        self.released.set()
+        await hass.async_add_executor_job(self.finished.wait, 5)
+
+
+async def test_the_last_value_asked_for_is_the_one_kept(hass, device, monkeypatch):
+    entry = await number_entry(hass)
+    held = HeldWrite(monkeypatch)
+
+    first = hass.async_create_task(set_number(hass, entry, 9000))
+    await asyncio.sleep(0.05)
+    second = hass.async_create_task(set_number(hass, entry, 8000))
+    await asyncio.sleep(0.05)
+    await held.let_go(hass)
+    await asyncio.gather(first, second)
+
+    assert soft_limit_on(device) == 8000
+    assert state_of(hass, entry, "export_soft_limit", "number") == "8000.0"
+
+
+async def test_a_write_given_up_by_its_caller_still_goes_first(
+    hass, device, monkeypatch
+):
+    entry = await number_entry(hass)
+    held = HeldWrite(monkeypatch)
+
+    first = hass.async_create_task(set_number(hass, entry, 9000))
+    await asyncio.sleep(0.05)
+    first.cancel()
+    second = hass.async_create_task(set_number(hass, entry, 8000))
+    await asyncio.sleep(0.05)
+    await held.let_go(hass)
+    await second
+
+    assert soft_limit_on(device) == 8000
+    assert state_of(hass, entry, "export_soft_limit", "number") == "8000.0"
 
 
 async def test_an_unconfirmed_write_says_so(hass, device):

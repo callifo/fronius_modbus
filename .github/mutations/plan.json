@@ -3343,7 +3343,7 @@
     "path": "custom_components/fronius_modbus/inverter_choice.py",
     "old": "        # owner while a form was open.\n        check_login_on_owner(self.hass, settings, None)\n",
     "new": "        # owner while a form was open.\n",
-    "tests": "second_inverter_cannot_take_the_technician_role or while_the_password_is_asked"
+    "tests": "second_inverter_cannot_take_the_technician_role or while_the_password_is_asked or technician_beside_the_owner_is_refused_before"
   },
   {
     "label": "technician: an existing entry beside the owner is refused",

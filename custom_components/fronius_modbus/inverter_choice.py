@@ -1,4 +1,8 @@
-"""A new entry's claim on its host, and which of a Datamanager's inverters it reads."""
+"""A new entry's claim on its host, its inverter on a Datamanager, and the model type.
+
+A Datamanager that shows its values as floats is switched to int + SF only
+after the owner agreed; nothing is written before that.
+"""
 
 from __future__ import annotations
 

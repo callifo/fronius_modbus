@@ -25,7 +25,7 @@ from .const import (
     entry_unique_id,
     web_api_disabled,
 )
-from .derived import METER_LOCATION_FEED_IN
+from .derived import METER_LOCATION_CONSUMPTION, METER_LOCATION_FEED_IN
 from .fronius_modbus_api.device import FroniusInverter
 from .froniuswebclient import _base_url, _http
 from .host_sharing import async_claim_site, host_entries
@@ -263,7 +263,13 @@ def meter_topology(found: dict[int, str], site: Site | None) -> MeterTopology:
     grid_meters = [
         unit for unit in sorted(locations) if locations[unit] == METER_LOCATION_FEED_IN
     ]
-    primary = next(iter([*grid_meters, *sorted(found)]), METER_UNIT_IDS[0])
+    consumption_meters = [
+        unit
+        for unit in sorted(locations)
+        if locations[unit] == METER_LOCATION_CONSUMPTION
+    ]
+    leading = [*grid_meters, *consumption_meters, *sorted(found)]
+    primary = next(iter(leading), METER_UNIT_IDS[0])
     if site is not None and site.inverters != 1:
         # The load adds the one inverter read here to the grid meter's power.
         for unit in grid_meters:

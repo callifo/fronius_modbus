@@ -15,6 +15,7 @@
 - On a Datamanager, `tools/inverter_dump.bat` also reads its own Modbus registers: the state code, the model type and the site totals.
 
 ### Fixed
+- `Load` no longer shows the power of a sub-meter, a meter on one circuit such as a heat pump or a wallbox. Without a grid meter, `Load` uses the meter in the consumption path, also when a sub-meter has the lower address. This was wrong since callifo 0.3.0.
 - A Symo Hybrid with a battery got no sensors at all. Its second input is now shown as the battery, charging or discharging as the battery's status says, and no longer counts as PV. This follows Fronius' manual and the registers a user published, and is not confirmed on a device yet.
 
 ## 1.4.2

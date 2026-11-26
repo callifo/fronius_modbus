@@ -15,7 +15,6 @@ INVERTER_GRID_BAND_HZ = 5.0
 STANDSTILL_HZ = 1.0
 METER_LOCATION_FEED_IN = 0
 METER_LOCATION_CONSUMPTION = 1
-METER_LOCATION_CONSUMPTION_RANGE = range(256, 512)
 # From the start of the inverter read to the end of the primary meter read; a
 # pair further apart than this is not one moment.
 LOAD_SAMPLE_WINDOW_S = 0.5
@@ -98,10 +97,8 @@ def household_load(
     """
     if meter_power_w is None or meter_location is None:
         return None
-    if (
-        meter_location == METER_LOCATION_CONSUMPTION
-        or meter_location in METER_LOCATION_CONSUMPTION_RANGE
-    ):
+    # A sub-meter (locations 256 to 511) measures one circuit, not the house.
+    if meter_location == METER_LOCATION_CONSUMPTION:
         return round(-meter_power_w, 2)
     if meter_location != METER_LOCATION_FEED_IN or inverter_power_w is None:
         return None

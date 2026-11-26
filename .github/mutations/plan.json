@@ -3390,9 +3390,37 @@
   {
     "label": "datamanager: the grid meter leads",
     "path": "custom_components/fronius_modbus/datamanager.py",
-    "old": "next(iter([*grid_meters, *sorted(found)]), METER_UNIT_IDS[0])",
-    "new": "next(iter(sorted(found)), METER_UNIT_IDS[0])",
+    "old": "leading = [*grid_meters, *consumption_meters, *sorted(found)]",
+    "new": "leading = [*consumption_meters, *sorted(found)]",
     "tests": "meters_and_where_they_are"
+  },
+  {
+    "label": "datamanager: the grid meter leads the consumption meter",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "leading = [*grid_meters, *consumption_meters, *sorted(found)]",
+    "new": "leading = [*consumption_meters, *grid_meters, *sorted(found)]",
+    "tests": "meters_and_where_they_are"
+  },
+  {
+    "label": "datamanager: the consumption meter leads a sub-meter",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "leading = [*grid_meters, *consumption_meters, *sorted(found)]",
+    "new": "leading = [*grid_meters, *sorted(found)]",
+    "tests": "meters_and_where_they_are"
+  },
+  {
+    "label": "derived: a sub-meter gives no load",
+    "path": "custom_components/fronius_modbus/derived.py",
+    "old": "    if meter_location == METER_LOCATION_CONSUMPTION:\n",
+    "new": "    if meter_location == METER_LOCATION_CONSUMPTION or meter_location >= 256:\n",
+    "tests": "subload_meter_gives_no_load"
+  },
+  {
+    "label": "web client: the consumption meter leads a sub-meter",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "            meter[\"location\"] != METER_LOCATION_CONSUMPTION,\n",
+    "new": "",
+    "tests": "consumption_meter_leads_a_sub_meter"
   },
   {
     "label": "datamanager: no load beside other inverters",

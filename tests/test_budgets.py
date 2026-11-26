@@ -64,7 +64,7 @@ LINE_BUDGETS = {
     # 922 + the address to allow is confirmed in the flow, not only resolved.
     # 923 + a challenge part without a value is refused like a missing one.
     # 931 + the restriction says whether it already allows an address.
-    "froniuswebclient.py": 931,
+    "froniuswebclient.py": 935,
     # 916 + a reserve without the web login is refused instead of reaching
     # Modbus alone; the check sits in the write lock, next to the other one.
     # 932 + a cancelled write waits for its thread before it leaves the
@@ -97,7 +97,7 @@ COMPLEXITY_LIMIT = 15
 # and every improvement is written down, so an entry that got under the limit
 # stays as a ratchet at its new value.
 COMPLEXITY_BUDGETS = {
-    "froniuswebclient.py::_parse_power_meter_info": 24,
+    "froniuswebclient.py::_parse_power_meter_info": 19,
     "migrations.py::async_migrate_v019_mppt_statistics": 14,
 }
 

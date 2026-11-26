@@ -3579,8 +3579,8 @@
   {
     "label": "datamanager: a lost link in the search still counts the entries",
     "path": "custom_components/fronius_modbus/datamanager.py",
-    "old": "    topology = meter_topology(found, site, open_units)\n    return replace(\n",
-    "new": "    topology = meter_topology(found, site, open_units)\n    if link_lost:\n        return topology\n    return replace(\n",
+    "old": "        several_inverters=topology.several_inverters or entries > 1,\n",
+    "new": "        several_inverters=topology.several_inverters or (entries > 1 and not link_lost),\n",
     "tests": "link_lost_in_the_owner_s_search"
   },
   {
@@ -3614,9 +3614,23 @@
   {
     "label": "datamanager: the open units reach the setup",
     "path": "custom_components/fronius_modbus/datamanager.py",
-    "old": "        open_unit_ids=tuple(sorted(set(open_units) - set(found))),\n",
+    "old": "        open_unit_ids=tuple(unplaced),\n",
     "new": "",
-    "tests": "busy_only_at_the_search_leads_after_it"
+    "tests": "busy_only_at_the_search_leads_after_it or place_the_search_missed"
+  },
+  {
+    "label": "datamanager: the first unit unanswered awaits its place",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "        open_unit_ids=tuple(unit for unit in unit_ids if unit not in found),\n",
+    "new": "        open_unit_ids=tuple(sorted(set(open_units) - set(found))),\n",
+    "tests": "place_the_search_missed"
+  },
+  {
+    "label": "datamanager: after a lost link every meter awaits its place",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    unplaced = topology.unit_ids if link_lost else topology.open_unit_ids\n",
+    "new": "    unplaced = topology.open_unit_ids\n",
+    "tests": "place_the_search_missed"
   },
   {
     "label": "setup: the open meters reach the coordinator",
@@ -4216,8 +4230,8 @@
   {
     "label": "owner: the site totals are on with two entries",
     "path": "custom_components/fronius_modbus/datamanager.py",
-    "old": "        topology, several_inverters=topology.several_inverters or entries > 1\n",
-    "new": "        topology, several_inverters=topology.several_inverters\n",
+    "old": "        several_inverters=topology.several_inverters or entries > 1,\n",
+    "new": "        several_inverters=topology.several_inverters,\n",
     "tests": "on_with_two_entries"
   },
   {

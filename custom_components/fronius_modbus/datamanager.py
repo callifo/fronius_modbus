@@ -294,13 +294,15 @@ def meter_topology(
     if site is not None and site.has_grid_meter and not grid_meters:
         # Its power would pass for the whole load while the grid meter is silent.
         locations.pop(primary, None)
+    unit_ids = sorted({METER_UNIT_IDS[0], *found, *open_units})
     return MeterTopology(
-        unit_ids=sorted({METER_UNIT_IDS[0], *found, *open_units}),
+        unit_ids=unit_ids,
         primary_unit_id=primary,
         locations=locations,
         confirmed=False,
         several_inverters=site is not None and site.inverters > 1,
-        open_unit_ids=tuple(sorted(set(open_units) - set(found))),
+        # The first unit too: it is listed whether its meter answered or not.
+        open_unit_ids=tuple(unit for unit in unit_ids if unit not in found),
     )
 
 
@@ -327,8 +329,12 @@ async def async_meter_topology(
         # Unread inverters stay unknown beside a single entry.
         site = replace(site, inverters=max(known, entries) if entries > 1 else known)
     topology = meter_topology(found, site, open_units)
+    # Without the Solar API's answer even a meter found has no place yet.
+    unplaced = topology.unit_ids if link_lost else topology.open_unit_ids
     return replace(
-        topology, several_inverters=topology.several_inverters or entries > 1
+        topology,
+        several_inverters=topology.several_inverters or entries > 1,
+        open_unit_ids=tuple(unplaced),
     )
 
 

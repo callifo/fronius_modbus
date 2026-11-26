@@ -4162,14 +4162,14 @@
     "path": "custom_components/fronius_modbus/datamanager.py",
     "old": "    if len(host_entries(hass, host)) > 1:\n        hass.config_entries.async_schedule_reload(entry.entry_id)\n",
     "new": "    if False:\n        hass.config_entries.async_schedule_reload(entry.entry_id)\n",
-    "tests": "joins_the_search"
+    "tests": "joins_the_search or joins_the_migrations"
   },
   {
     "label": "setup: the owner counts the site again at its end",
     "path": "custom_components/fronius_modbus/__init__.py",
     "old": "    async_recount_the_site(hass, entry, host)\n",
     "new": "",
-    "tests": "joins_the_search"
+    "tests": "joins_the_search or joins_the_migrations"
   },
   {
     "label": "owner: without a mark the lowest number has it",

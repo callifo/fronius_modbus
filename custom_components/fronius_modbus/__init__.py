@@ -272,7 +272,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
     )
 
     # Before the migrations: they move the 0.1.9 ids taken over.
-    async_recount_the_site(hass, entry, host)
     adoption.async_adopt_deleted_entities(hass, entry)
     adoption.async_adopt_deleted_devices(hass, entry)
     await migrations.async_migrate_v019_mppt_statistics(hass, entry)
@@ -304,6 +303,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
 
         _mark_reported_rows()
         entry.async_on_unload(web.async_add_listener(_mark_reported_rows))
+    # After the last await: an entry set up before it found this one starting.
+    async_recount_the_site(hass, entry, host)
     return True
 
 

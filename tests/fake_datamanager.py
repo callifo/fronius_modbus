@@ -57,6 +57,8 @@ class FakeDatamanager:
         self.calls: list[tuple[str, str]] = []
         self.logins: list[dict[str, str]] = []
         self.same_nonce = False
+        # What a request without a login gets instead of the challenge.
+        self.unsigned_status: int | None = None
         self._asked = 0
 
     def _accepts(self, request: requests.PreparedRequest, header: str) -> bool:
@@ -83,6 +85,10 @@ class FakeDatamanager:
             response.status_code = self.status
             text = self.body if isinstance(self.body, str) else json.dumps(self.body)
             response._content = text.encode()
+            return response
+        if self.unsigned_status is not None:
+            response.status_code = self.unsigned_status
+            response._content = b"<html>refused</html>"
             return response
         self._asked += 1
         nonce = "1" if self.same_nonce else str(self._asked)

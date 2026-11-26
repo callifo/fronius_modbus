@@ -237,6 +237,21 @@ async def test_a_server_error_is_no_refused_login(hass, device):
     assert shown(hass, entry) == SHOWN
 
 
+async def test_a_page_forbidden_before_the_login_asks_for_no_new_login(hass, device):
+    device.unsigned_status = 403
+    await log_in(hass)
+    entry = technician_entry(hass)
+
+    await setup_entry(hass, entry)
+
+    assert logins_asked(hass) == []
+    store = async_get_token_store(hass)
+    assert await store.async_load_token(HOST, "technician") == minted()
+    device.unsigned_status = None
+    await after(hass, seconds=61)
+    assert shown(hass, entry) == SHOWN
+
+
 async def test_one_inverter_of_a_datamanager_reads_it(hass, device, datamanager_modbus):
     datamanager_modbus.add_unit(2, like=INVERTER_UNIT_ID)
     await log_in(hass)

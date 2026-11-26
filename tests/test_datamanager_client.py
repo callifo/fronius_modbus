@@ -244,6 +244,18 @@ def test_an_error_status_is_an_error(device, status):
         client.read_export_limits()
 
 
+def test_a_page_forbidden_before_the_login_keeps_the_login(device):
+    """Nothing was signed, so nothing says the password is wrong."""
+    device.unsigned_status = 403
+    client = DatamanagerClient(HOST, token=minted())
+
+    with pytest.raises(FroniusWebResponseError):
+        client.read_export_limits()
+
+    device.unsigned_status = None
+    assert client.read_export_limits().soft_w == 14500
+
+
 def test_a_device_that_is_off_is_unreachable(monkeypatch):
     def refuse(*_args, **_options):
         raise requests.ConnectionError(f"http://{HOST}")

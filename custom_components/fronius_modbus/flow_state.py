@@ -59,6 +59,10 @@ class _DatamanagerCustomer(exceptions.HomeAssistantError):
     """The customer role was chosen for a Datamanager, where it opens nothing."""
 
 
+class _DatamanagerPageMissing(exceptions.HomeAssistantError):
+    """The Datamanager answered, but has no page for the export limit."""
+
+
 class _AlreadyConfigured(exceptions.HomeAssistantError):
     """Another entry already serves the host being configured."""
 

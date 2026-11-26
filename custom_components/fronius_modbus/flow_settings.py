@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from http import HTTPStatus
 from typing import Any
 
 from homeassistant import config_entries
@@ -33,8 +35,10 @@ from .const import (
     WEB_API_DISABLED,
     ModbusRestriction,
 )
-from .flow_state import _DatamanagerCustomer
+from .datamanager_client import DatamanagerClient
+from .flow_state import _CannotConnect, _DatamanagerCustomer, _DatamanagerPageMissing
 from .host_sharing import is_datamanager_host
+from .web_errors import FroniusWebResponseError
 
 
 def _default_payload() -> dict[str, Any]:
@@ -156,6 +160,26 @@ async def async_look_at_device(hass: HomeAssistant, settings: dict[str, Any]) ->
         raise _DatamanagerCustomer
     settings[CONF_DATAMANAGER] = found
     return found
+
+
+async def async_datamanager_login(
+    hass: HomeAssistant,
+    host: str,
+    *,
+    password: str = "",
+    token: Mapping[str, str] | None = None,
+) -> dict[str, str] | None:
+    """The token the service login leaves; None when the device refuses it."""
+    client = DatamanagerClient(host, password=password, token=token)
+    try:
+        return await hass.async_add_executor_job(client.login)
+    except FroniusWebResponseError as err:
+        # Its firmware may have no such page; the password can be right.
+        if err.status_code == HTTPStatus.NOT_FOUND:
+            raise _DatamanagerPageMissing from err
+        raise _CannotConnect from err
+    except Exception as err:
+        raise _CannotConnect from err
 
 
 async def async_check_role(hass: HomeAssistant, settings: dict[str, Any]) -> None:

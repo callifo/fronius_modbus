@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from functools import partial
 import logging
 from typing import Any, Awaitable, Callable
 
@@ -35,7 +34,6 @@ from .const import (
     entry_title,
     entry_title_after,
 )
-from .datamanager_client import DatamanagerClient
 from .discovery import (
     async_follow_host,
     discovered_model,
@@ -63,6 +61,7 @@ from .flow_settings import (
     _expand_settings_input,
     _should_apply_modbus_config,
     async_check_role,
+    async_datamanager_login,
     defaults_after,
     device_answer,
     entry_defaults,
@@ -73,6 +72,7 @@ from .flow_state import (
     _AlreadyConfigured,
     _CannotConnect,
     _CannotConnectModbus,
+    _DatamanagerPageMissing,
     _InvalidApiCredentials,
     _InvalidHost,
     _InvalidPort,
@@ -144,15 +144,15 @@ async def _async_mint_token(
     if password == "":
         raise _MissingApiPassword
 
-    job: Callable[[], dict[str, str] | None] = partial(
-        mint_token, host, username, password
-    )
     if on_datamanager:
-        job = DatamanagerClient(host, password=password).login
-    try:
-        token = await hass.async_add_executor_job(job)
-    except Exception as err:
-        raise _CannotConnect from err
+        token = await async_datamanager_login(hass, host, password=password)
+    else:
+        try:
+            token = await hass.async_add_executor_job(
+                mint_token, host, username, password
+            )
+        except Exception as err:
+            raise _CannotConnect from err
 
     if not token:
         raise _InvalidApiCredentials
@@ -200,8 +200,7 @@ async def _async_prepare_web_api(
     the settings would then change on an inverter this flow does not own.
     """
     if data.get(CONF_DATAMANAGER):
-        datamanager_client = DatamanagerClient(data[CONF_HOST], token=api_token)
-        if not await hass.async_add_executor_job(datamanager_client.login):
+        if not await async_datamanager_login(hass, data[CONF_HOST], token=api_token):
             raise _InvalidApiCredentials
         return
     client = FroniusWebClient(
@@ -272,6 +271,7 @@ async def _validate_input(
             identity = await FroniusInverter.async_probe(unit)
     except (
         _InvalidApiCredentials,
+        _DatamanagerPageMissing,
         _AlreadyConfigured,
         _SunSpecSwitchNeeded,
         _AllowedHostNeeded,

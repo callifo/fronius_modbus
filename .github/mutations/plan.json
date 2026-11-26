@@ -4188,9 +4188,23 @@
   {
     "label": "flows: a stored login a Datamanager refuses is asked again",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "        if not await hass.async_add_executor_job(datamanager_client.login):\n            raise _InvalidApiCredentials\n",
-    "new": "        await hass.async_add_executor_job(datamanager_client.login)\n",
+    "old": "        if not await async_datamanager_login(hass, data[CONF_HOST], token=api_token):\n            raise _InvalidApiCredentials\n",
+    "new": "        await async_datamanager_login(hass, data[CONF_HOST], token=api_token)\n",
     "tests": "stored_login_the_device_refuses"
+  },
+  {
+    "label": "flows: a missing export limit page is named",
+    "path": "custom_components/fronius_modbus/flow_settings.py",
+    "old": "        if err.status_code == HTTPStatus.NOT_FOUND:\n            raise _DatamanagerPageMissing from err\n",
+    "new": "",
+    "tests": "without_the_export_limit_page_says_so"
+  },
+  {
+    "label": "flows: a stored login without the page names it",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "        _InvalidApiCredentials,\n        _DatamanagerPageMissing,\n        _AlreadyConfigured,\n",
+    "new": "        _InvalidApiCredentials,\n        _AlreadyConfigured,\n",
+    "tests": "stored_login_kept_without_the_page or stored_login_tried_without_the_page"
   },
   {
     "label": "datamanager: an entry with a login gets its number",

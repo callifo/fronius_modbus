@@ -170,9 +170,7 @@ async def test_a_challenge_of_another_kind_is_no_wrong_password(hass, device, ki
 
 
 @pytest.mark.parametrize("kind", KINDS)
-async def test_a_datamanager_without_the_export_limit_page_says_so(
-    hass, device, kind
-):
+async def test_a_datamanager_without_the_export_limit_page_says_so(hass, device, kind):
     """Its firmware may have no such page; the password can be right."""
     device.status = 404
     flow = RoleFlow(hass, kind)

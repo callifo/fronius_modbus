@@ -3341,8 +3341,8 @@
   {
     "label": "technician: a new inverter beside the owner is refused",
     "path": "custom_components/fronius_modbus/inverter_choice.py",
-    "old": "        check_login_on_owner(self.hass, settings, None)\n",
-    "new": "",
+    "old": "        # owner while a form was open.\n        check_login_on_owner(self.hass, settings, None)\n",
+    "new": "        # owner while a form was open.\n",
     "tests": "second_inverter_cannot_take_the_technician_role or while_the_password_is_asked"
   },
   {
@@ -3379,6 +3379,13 @@
     "old": "    if not (login and settings.get(CONF_DATAMANAGER)):\n",
     "new": "    if not settings.get(CONF_DATAMANAGER):\n",
     "tests": "first_inverter_is_left_as_it_is"
+  },
+  {
+    "label": "technician: the owner is checked again when the entry is created",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "        # token saved for this one is rolled back with the refusal.\n        check_login_on_owner(self.hass, settings, None)\n",
+    "new": "        # token saved for this one is rolled back with the refusal.\n",
+    "tests": "while_the_login_is_checked"
   },
   {
     "label": "config flow: without the web API no family is asked for",

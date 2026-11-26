@@ -114,6 +114,9 @@ class NewInverterMixin(config_entries.ConfigFlow):
     ) -> config_entries.ConfigFlowResult:
         del previous_host
         await self._async_claim_unique_id(settings)
+        # The login took a while: another flow may have set up the owner. The
+        # token saved for this one is rolled back with the refusal.
+        check_login_on_owner(self.hass, settings, None)
         return self.async_create_entry(
             title=info["title"],
             data=_entry_payload(settings, reconfigure_required=False)

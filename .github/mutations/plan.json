@@ -4279,9 +4279,16 @@
   {
     "label": "service login: a forbidden page is a refused login",
     "path": "custom_components/fronius_modbus/datamanager_client.py",
-    "old": "        refused = (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN)\n",
-    "new": "        refused = (HTTPStatus.UNAUTHORIZED,)\n",
+    "old": "        if response.status_code in REFUSED and not self._digest.unknown_challenge:",
+    "new": "        if response.status_code == HTTPStatus.UNAUTHORIZED and not self._digest.unknown_challenge:",
     "tests": "error_status_is_an_error"
+  },
+  {
+    "label": "service login: a forbidden login is not sent again",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "        if second.status_code in REFUSED:\n",
+    "new": "        if second.status_code == HTTPStatus.UNAUTHORIZED:\n",
+    "tests": "forbidden_login_is_not_sent_again"
   },
   {
     "label": "export limit page: an answer with an error has no values",

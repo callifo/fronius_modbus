@@ -30,6 +30,9 @@ def _md5(text: str) -> str:
     return hashlib.md5(text.encode()).hexdigest()
 
 
+REFUSED = (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN)
+
+
 class StandardDigest(AuthBase):
     """The digest of RFC 7616, answered from a password or the token it left.
 
@@ -72,7 +75,7 @@ class StandardDigest(AuthBase):
         second = response.connection.send(answered, **options)
         second.history.append(response)
         second.request = answered
-        if second.status_code == HTTPStatus.UNAUTHORIZED:
+        if second.status_code in REFUSED:
             # Not sent again: the device may lock the login after a few tries.
             self._password, self.token = "", None
         else:
@@ -192,8 +195,7 @@ class DatamanagerClient:
 
     def _read(self) -> requests.Response:
         response = _http("get", self._url, auth=self._digest, timeout=TIMEOUT)
-        refused = (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN)
-        if response.status_code in refused and not self._digest.unknown_challenge:
+        if response.status_code in REFUSED and not self._digest.unknown_challenge:
             raise FroniusWebAuthError("the service login was refused")
         if response.status_code != HTTPStatus.OK:
             raise FroniusWebResponseError(

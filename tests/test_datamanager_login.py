@@ -380,6 +380,23 @@ async def test_a_second_inverter_cannot_take_the_technician_role(hass, two_inver
     assert two_inverters.calls == []
 
 
+async def test_an_owner_set_up_while_the_password_is_asked_keeps_the_role(
+    hass, two_inverters
+):
+    """Another flow set up the first inverter meanwhile; it reads the site now."""
+    flow = RoleFlow(hass, "user")
+    form = await flow.submit("technician")
+    form = await choose(hass, form, "2")
+    assert form["step_id"] == "user_password_service"
+    add_entry(hass, inverter(1), HOST)
+
+    result = await flow.enter(form, PASSWORD)
+
+    assert result["errors"] == {"base": "datamanager_login_on_owner"}
+    assert two_inverters.calls == []
+    assert await stored(hass) is None
+
+
 async def test_a_lower_inverter_cannot_take_the_role_from_the_owner(
     hass, two_inverters
 ):

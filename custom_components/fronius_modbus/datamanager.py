@@ -101,7 +101,7 @@ def _family(payload: Any) -> DeviceFamily:
     body = payload.get("Body")
     logger_info = body.get("LoggerInfo") if isinstance(body, dict) else None
     product = logger_info.get("ProductID") if isinstance(logger_info, dict) else None
-    if not isinstance(product, str):
+    if not isinstance(product, str) or not product.strip():
         return DeviceFamily.UNKNOWN
     if product.startswith(DATAMANAGER_PRODUCT_PREFIXES):
         return DeviceFamily.DATAMANAGER

@@ -3257,8 +3257,15 @@
   {
     "label": "datamanager: an answer without a product shows nothing",
     "path": "custom_components/fronius_modbus/datamanager.py",
-    "old": "    if not isinstance(product, str):\n        return DeviceFamily.UNKNOWN\n",
+    "old": "    if not isinstance(product, str) or not product.strip():\n        return DeviceFamily.UNKNOWN\n",
     "new": "    if not isinstance(product, str):\n        return DeviceFamily.OTHER\n",
+    "tests": "family_an_answer_shows"
+  },
+  {
+    "label": "datamanager: a blank product shows nothing",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if not isinstance(product, str) or not product.strip():\n",
+    "new": "    if not isinstance(product, str):\n",
     "tests": "family_an_answer_shows"
   },
   {
@@ -3278,7 +3285,7 @@
   {
     "label": "datamanager: a product that is no text is no match",
     "path": "custom_components/fronius_modbus/datamanager.py",
-    "old": "    if not isinstance(product, str):\n        return DeviceFamily.UNKNOWN\n",
+    "old": "    if not isinstance(product, str) or not product.strip():\n        return DeviceFamily.UNKNOWN\n",
     "new": "",
     "tests": "family_an_answer_shows"
   },

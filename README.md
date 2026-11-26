@@ -40,7 +40,7 @@ Users of this integration and of redpomodoro/fronius_modbus ran it, mostly in ve
 
 Tauro models (Tauro ECO included) should work the same way: Fronius publishes the same SunSpec register maps for them, without the storage model. There are no reports yet.
 
-Older Fronius inverters with a Datamanager (the SnapINverter family: Symo, Primo, Eco, Galvo without GEN24, and the Symo Hybrid) are set up *Without the web API (Modbus only)* or with the technician role, which logs in as the Datamanager's `service` user and reads its export limit. The customer role opens nothing there; the setup says so. Set the Datamanager's Modbus to the `int+SF` SunSpec model type first; with `float` the inverter model is not found and the setup stops, reporting that Modbus did not answer. The Datamanager's smart meters are read where Fronius' manual places them. With several inverters on one Datamanager, set up its address once for each of them: the setup asks for the inverter's number, and the meters belong to one of the entries. No 1.x version is confirmed on a Datamanager.
+Older Fronius inverters with a Datamanager (the SnapINverter family: Symo, Primo, Eco, Galvo without GEN24, and the Symo Hybrid) are set up *Without the web API (Modbus only)* or with the technician role, which logs in as the Datamanager's `service` user and reads its export limit. The customer role opens nothing there; the setup says so. Set the Datamanager's Modbus to the `int+SF` SunSpec model type first; with `float` the inverter model is not found and the setup stops, reporting that Modbus did not answer. The Datamanager's smart meters are read where Fronius' manual places them. With several inverters on one Datamanager, set up its address once for each of them: the setup asks for the inverter's number. The meters, `Load`, the site sensors and the export limit belong to one entry, the first one set up, and only that entry can use the technician role. Disabling that entry hides them; after deleting it, another entry takes them over at its next start. No 1.x version is confirmed on a Datamanager.
 
 ## Coming from 0.3.x
 
@@ -81,7 +81,7 @@ Copy the contents of the `custom_components` folder to your Home Assistant `conf
 
 The setup asks for the inverter's host, the Web API access role (`customer`, `technician` or *Without the web API*), the update intervals and the Modbus IP restriction. With a role it asks for that role's password; this is the local login of the inverter's web interface, not the Solar.web login. The password is not stored; the integration keeps a derived token that only Home Assistant can read.
 
-With a role, the setup sets the inverter's Modbus itself. Without the web API, set it first in the inverter's web UI: Modbus TCP on, port 502, the SunSpec model type `int + SF`, inverter address 1 and meter address offset 200, and *Allow Control* on for the Modbus controls.
+With a role, the setup sets the inverter's Modbus itself, except on a Datamanager: there, switch Modbus TCP on in its web interface first, with the SunSpec model type `int + SF`. Without the web API, set it first in the inverter's web UI: Modbus TCP on, port 502, the SunSpec model type `int + SF`, inverter address 1 and meter address offset 200, and *Allow Control* on for the Modbus controls.
 
 Every parameter, discovery, the Modbus IP restriction and reconfiguring are in [Installation and Setup](https://github.com/callifo/fronius_modbus/wiki/Installation-and-Setup) in the wiki.
 

@@ -20,6 +20,7 @@ from custom_components.fronius_modbus.fronius_modbus_api.device import (
     meter_report_name,
 )
 from custom_components.fronius_modbus.fronius_modbus_api.exceptions import (
+    IncompleteChainError,
     NotAFroniusInverter,
 )
 from custom_components.fronius_modbus.fronius_modbus_api.sunspec_models import AcMeter
@@ -404,6 +405,14 @@ async def test_a_busy_meter_leaves_a_look_open(connection, silence):
     unit.fail_requests(silence())
 
     with pytest.raises(silence):
+        await FroniusInverter.async_probe_meter(unit)
+
+
+async def test_a_chain_broken_before_any_meter_leaves_a_look_open(connection):
+    unit = connection.for_unit(INVERTER_UNIT_ID)
+    unit.fail_read(INVERTER_HEADER_ADDRESS, IllegalDataAddressError())
+
+    with pytest.raises(IncompleteChainError):
         await FroniusInverter.async_probe_meter(unit)
 
 

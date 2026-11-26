@@ -21,6 +21,7 @@ from custom_components.fronius_modbus.datamanager import (
     Site,
     SolarApiMeter,
 )
+from custom_components.fronius_modbus.fronius_modbus_api.device import FroniusInverter
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 
@@ -432,6 +433,30 @@ async def test_a_datamanager_gone_during_the_search_is_tried_again(
     await hass.async_block_till_done()
 
     assert entry.state is ConfigEntryState.SETUP_RETRY
+
+
+async def test_the_units_not_asked_before_a_lost_link_stay_listed(
+    hass, datamanager_entry, monkeypatch
+):
+    """The link came back before the first poll, and they were never asked."""
+    probe = FroniusInverter.async_probe_meter
+    looked_at = []
+
+    async def lose_the_link_at_the_second_unit(unit):
+        looked_at.append(unit)
+        if len(looked_at) == 2:
+            raise ModbusConnectionError("link lost")
+        return await probe(unit)
+
+    monkeypatch.setattr(
+        FroniusInverter,
+        "async_probe_meter",
+        staticmethod(lose_the_link_at_the_second_unit),
+    )
+    entry = datamanager_entry
+    await setup_entry(hass, entry)
+
+    assert entry.runtime_data.device.meter_unit_ids == tuple(DATAMANAGER_METER_UNIT_IDS)
 
 
 async def test_a_gen24_is_not_asked_on_a_datamanagers_units(

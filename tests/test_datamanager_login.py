@@ -7,7 +7,7 @@ import pytest
 import requests
 
 from custom_components import fronius_modbus
-from custom_components.fronius_modbus import datamanager
+from custom_components.fronius_modbus import config_flow, datamanager
 from custom_components.fronius_modbus.const import (
     CONF_DATAMANAGER,
     CONF_INVERTER_UNIT_ID,
@@ -395,6 +395,31 @@ async def test_an_owner_set_up_while_the_password_is_asked_keeps_the_role(
     assert result["errors"] == {"base": "datamanager_login_on_owner"}
     assert two_inverters.calls == []
     assert await stored(hass) is None
+
+
+async def test_an_owner_set_up_while_the_login_is_checked_keeps_the_role(
+    hass, two_inverters, monkeypatch
+):
+    """The check before the login passed; the owner came while it ran."""
+    flow = RoleFlow(hass, "user")
+    form = await flow.submit("technician")
+    form = await choose(hass, form, "2")
+    log_in = config_flow.async_datamanager_login
+
+    async def set_up_the_owner_meanwhile(*args, **options):
+        if not hass.config_entries.async_entries("fronius_modbus"):
+            add_entry(hass, inverter(1), HOST)
+        return await log_in(*args, **options)
+
+    monkeypatch.setattr(
+        config_flow, "async_datamanager_login", set_up_the_owner_meanwhile
+    )
+
+    result = await flow.enter(form, PASSWORD)
+
+    assert result["errors"] == {"base": "datamanager_login_on_owner"}
+    assert await stored(hass) is None
+    assert len(hass.config_entries.async_entries("fronius_modbus")) == 1
 
 
 async def test_a_lower_inverter_cannot_take_the_role_from_the_owner(

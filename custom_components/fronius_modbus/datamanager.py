@@ -300,6 +300,7 @@ def meter_topology(
         locations=locations,
         confirmed=False,
         several_inverters=site is not None and site.inverters > 1,
+        open_unit_ids=tuple(sorted(set(open_units) - set(found))),
     )
 
 

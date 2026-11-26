@@ -192,6 +192,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
         interval=timedelta(seconds=scan_interval),
         primary_meter_unit_id=primary,
         meter_locations=locations,
+        open_meter_unit_ids=topology.open_unit_ids,
     )
     await modbus.async_config_entry_first_refresh()
 

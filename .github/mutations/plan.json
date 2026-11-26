@@ -3591,6 +3591,27 @@
     "tests": "busy_at_the_start_is_read_once"
   },
   {
+    "label": "coordinator: an open meter's first answer reloads",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "            self._built_for = answered - self._open_meters\n",
+    "new": "            self._built_for = answered\n",
+    "tests": "busy_only_at_the_search_leads_after_it"
+  },
+  {
+    "label": "datamanager: the open units reach the setup",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "        open_unit_ids=tuple(sorted(set(open_units) - set(found))),\n",
+    "new": "",
+    "tests": "busy_only_at_the_search_leads_after_it"
+  },
+  {
+    "label": "setup: the open meters reach the coordinator",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "        open_meter_unit_ids=topology.open_unit_ids,\n",
+    "new": "",
+    "tests": "busy_only_at_the_search_leads_after_it"
+  },
+  {
     "label": "device: exception 11 is no meter on a look",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
     "old": "        except (*ABSENCE_ERRORS, GatewayTargetError) as err:\n",

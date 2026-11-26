@@ -261,6 +261,7 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
         interval: timedelta,
         primary_meter_unit_id: int,
         meter_locations: dict[int, int],
+        open_meter_unit_ids: tuple[int, ...] = (),
     ) -> None:
         """Bind to the device and the entry the poll results are reloaded through."""
         super().__init__(
@@ -281,6 +282,11 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
         # by the first refresh. One that answers only later has no entities
         # yet, so the entry reloads once to build them.
         self._built_for: frozenset[str] | None = None
+        # A meter the search could not tell has no place yet: its first answer,
+        # in the first refresh too, reloads the entry to find it.
+        self._open_meters = frozenset(
+            meter_report_name(unit_id) for unit_id in open_meter_unit_ids
+        )
         # Set by an outage: a firmware update restarts the inverter, so the
         # identity read at setup is read again once it answers.
         self._identity_check_due = False
@@ -374,7 +380,7 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
     def _reload_for_new_sub_systems(self, report: UpdateReport) -> None:
         answered = frozenset(report.updated)
         if self._built_for is None:
-            self._built_for = answered
+            self._built_for = answered - self._open_meters
             return
         new = answered - self._built_for
         if not new:

@@ -60,17 +60,24 @@ def async_claim_site(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     go on with the meter under new entities. A deleted owner leaves it to the
     lowest inverter that can be set up.
     """
-    entries = host_entries(hass, str(_settings(entry).get(CONF_HOST, "")))
-    marked = [other for other in entries if other.data.get(CONF_SITE_OWNER)]
-    able = [other for other in entries if _can_own_a_site(other)]
-    owner = min(marked or able, key=lambda other: (_unit(other), other.entry_id))
-    if owner is not entry:
+    if site_owner(hass, str(_settings(entry).get(CONF_HOST, ""))) is not entry:
         return False
     if not entry.data.get(CONF_SITE_OWNER):
         hass.config_entries.async_update_entry(
             entry, data={**entry.data, CONF_SITE_OWNER: True}
         )
     return True
+
+
+def site_owner(hass: HomeAssistant, host: str) -> ConfigEntry | None:
+    """The entry that reads what the inverters of the Datamanager at ``host`` share."""
+    entries = host_entries(hass, host)
+    marked = [other for other in entries if other.data.get(CONF_SITE_OWNER)]
+    able = [other for other in entries if _can_own_a_site(other)]
+    candidates = marked or able
+    if not candidates:
+        return None
+    return min(candidates, key=lambda other: (_unit(other), other.entry_id))
 
 
 def _can_own_a_site(entry: ConfigEntry) -> bool:

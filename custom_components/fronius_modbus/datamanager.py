@@ -14,8 +14,8 @@ from typing import Any
 from modbus_connection import ModbusConnectionError, ModbusTcpParams
 
 from homeassistant.components.modbus import async_get_unit
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
+from homeassistant.core import HomeAssistant, callback
 
 from .const import (
     CONF_DATAMANAGER,
@@ -28,7 +28,7 @@ from .const import (
 from .derived import METER_LOCATION_CONSUMPTION, METER_LOCATION_FEED_IN
 from .fronius_modbus_api.device import FroniusInverter
 from .froniuswebclient import _base_url, _http
-from .host_sharing import async_claim_site, host_entries
+from .host_sharing import async_claim_site, host_entries, site_owner
 from .meter_topology import MeterTopology
 from .web_errors import FroniusWebUnreachable
 
@@ -294,6 +294,7 @@ async def async_meter_topology(
     No meter when another entry reads them.
     """
     if not async_claim_site(hass, entry):
+        _async_tell_the_owner(hass, params.host)
         # Nothing is asked, so nothing is known to be gone.
         return MeterTopology(
             [], METER_UNIT_IDS[0], {}, confirmed=False, several_inverters=True
@@ -318,6 +319,16 @@ async def async_meter_topology(
     return replace(
         topology, several_inverters=topology.several_inverters or entries > 1
     )
+
+
+@callback
+def _async_tell_the_owner(hass: HomeAssistant, host: str) -> None:
+    """Restart the owner that counted its own inverter alone into the load."""
+    owner = site_owner(hass, host)
+    if owner is None or owner.state is not ConfigEntryState.LOADED:
+        return
+    if not owner.runtime_data.several_inverters:
+        hass.config_entries.async_schedule_reload(owner.entry_id)
 
 
 def _known_inverters(hass: HomeAssistant, entry: ConfigEntry, listed: int) -> int:

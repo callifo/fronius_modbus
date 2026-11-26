@@ -4006,9 +4006,16 @@
   {
     "label": "owner: the mark decides before the number",
     "path": "custom_components/fronius_modbus/host_sharing.py",
-    "old": "    owner = min(marked or able,",
-    "new": "    owner = min(able,",
+    "old": "    candidates = marked or able\n",
+    "new": "    candidates = able\n",
     "tests": "lower_inverter_added_later or disabled_keeps_it"
+  },
+  {
+    "label": "owner: a joining inverter restarts an owner that was alone",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "        hass.config_entries.async_schedule_reload(owner.entry_id)\n",
+    "new": "        pass\n",
+    "tests": "load_turns_unknown_when_a_second_inverter_joins"
   },
   {
     "label": "owner: without a mark the lowest number has it",

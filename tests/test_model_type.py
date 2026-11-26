@@ -25,8 +25,10 @@ INT_LENGTH, FLOAT_LENGTH = 50, 60
 MODEL_TYPE_ADDRESS = 215
 
 
-def int_words() -> dict[int, int]:
-    return dict(load_fixture("symo_datamanager.json")[INVERTER_UNIT_ID]["holding"])
+def int_words(model_id: int = 103) -> dict[int, int]:
+    """The captured device, as the single-phase 101 or the three-phase 103."""
+    words = dict(load_fixture("symo_datamanager.json")[INVERTER_UNIT_ID]["holding"])
+    return words | {MODEL_HEADER: model_id}
 
 
 def float_words(model_id: int = 113) -> dict[int, int]:
@@ -55,6 +57,8 @@ class FloatDatamanager(SharedMockModbus):
         super().__init__({INVERTER_UNIT_ID: {"holding": float_words()}})
         self.writes: list[tuple[int, int, int]] = []
         self.switches = True
+        # The int model the float one becomes: 111 is 101, 113 is 103.
+        self.int_model_id = 103
 
     def __call__(self, params, **options):
         connection = super().__call__(params, **options)
@@ -73,9 +77,9 @@ class FloatDatamanager(SharedMockModbus):
         confirmed = [value for *_unit, value in self.writes[-2:]] == [2, 6]
         if confirmed and self.switches:
             for spaces in self._fixture.values():
-                spaces["holding"] = int_words()
+                spaces["holding"] = int_words(self.int_model_id)
             unit.holding.clear()
-            unit.load_raw({"holding": int_words()})
+            unit.load_raw({"holding": int_words(self.int_model_id)})
 
 
 @pytest.fixture(autouse=True)
@@ -135,9 +139,12 @@ async def test_float_is_asked_about_before_anything_is_written(hass, float_devic
     assert hass.config_entries.async_entries(DOMAIN) == []
 
 
-@pytest.mark.parametrize("model_id", [111, 113])
-async def test_the_confirmed_switch_is_two_writes(hass, float_device, model_id):
+@pytest.mark.parametrize(("model_id", "int_model_id"), [(111, 101), (113, 103)])
+async def test_the_confirmed_switch_is_two_writes(
+    hass, float_device, model_id, int_model_id
+):
     float_device._fixture[1]["holding"] = float_words(model_id)
+    float_device.int_model_id = int_model_id
     form = await submit(hass)
 
     result = await answer(hass, form)

@@ -6,12 +6,13 @@ than a GEN24.
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from http import HTTPStatus
 from typing import Any
 
-from modbus_connection import ModbusConnectionError, ModbusTcpParams
+from modbus_connection import ModbusConnectionError, ModbusError, ModbusTcpParams
 
 from homeassistant.components.modbus import async_get_unit
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
@@ -253,11 +254,14 @@ def _locations(found: dict[int, str], site: Site) -> dict[int, int]:
     }
 
 
-def meter_topology(found: dict[int, str], site: Site | None) -> MeterTopology:
+def meter_topology(
+    found: dict[int, str], site: Site | None, open_units: Collection[int] = ()
+) -> MeterTopology:
     """The meters of a Datamanager, from the units that answered and the Solar API.
 
-    The first unit is always listed: a meter silent now is asked again with
-    every poll. Never confirmed: no answer does not prove that a meter is gone.
+    The first unit is always listed, and so are the units that gave no clear
+    answer: a meter silent now is asked again with every poll. Never confirmed:
+    no answer does not prove that a meter is gone.
     """
     locations = _locations(found, site) if site is not None else {}
     grid_meters = [
@@ -278,7 +282,7 @@ def meter_topology(found: dict[int, str], site: Site | None) -> MeterTopology:
         # Its power would pass for the whole load while the grid meter is silent.
         locations.pop(primary, None)
     return MeterTopology(
-        unit_ids=sorted({METER_UNIT_IDS[0], *found}),
+        unit_ids=sorted({METER_UNIT_IDS[0], *found, *open_units}),
         primary_unit_id=primary,
         locations=locations,
         confirmed=False,
@@ -301,21 +305,26 @@ async def async_meter_topology(
         )
     entries = len(host_entries(hass, params.host))
     found: dict[int, str] = {}
-    try:
-        for unit_id in METER_UNIT_IDS:
-            unit = async_get_unit(hass, entry, params, unit_id)
+    open_units: set[int] = set()
+    for position, unit_id in enumerate(METER_UNIT_IDS):
+        unit = async_get_unit(hass, entry, params, unit_id)
+        try:
             identity = await FroniusInverter.async_probe_meter(unit)
-            if identity is not None:
-                found[unit_id] = identity.serial.strip()
-    except ModbusConnectionError:
-        # The first poll reports it and has the setup tried again.
-        return meter_topology(found, None)
+        except ModbusConnectionError:
+            # The first poll reports it and has the setup tried again.
+            unasked = METER_UNIT_IDS[position:]
+            return meter_topology(found, None, {*open_units, *unasked})
+        except ModbusError:
+            open_units.add(unit_id)
+            continue
+        if identity is not None:
+            found[unit_id] = identity.serial.strip()
     site = await hass.async_add_executor_job(read_site, params.host)
     if site is not None:
         known = _known_inverters(hass, entry, site.inverters)
         # Unread inverters stay unknown beside a single entry.
         site = replace(site, inverters=max(known, entries) if entries > 1 else known)
-    topology = meter_topology(found, site)
+    topology = meter_topology(found, site, open_units)
     return replace(
         topology, several_inverters=topology.several_inverters or entries > 1
     )

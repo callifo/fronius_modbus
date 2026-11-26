@@ -9,6 +9,7 @@ import time
 from typing import Any, NamedTuple, cast
 
 from modbus_connection import (
+    GatewayTargetError,
     IllegalDataAddressError,
     ModbusConnectionError,
     ModbusError,
@@ -311,17 +312,23 @@ class FroniusInverter:
 
     @staticmethod
     async def async_probe_meter(unit: ModbusUnit) -> DeviceIdentity | None:
-        """The identity of the meter on ``unit``; None when none answers there now."""
+        """The identity of the meter on ``unit``; None when there is none.
+
+        A Datamanager answers exception 11 for each of its units without a
+        meter, so that counts as none. Any other error propagates: a busy
+        meter is still there.
+        """
         try:
-            chain, _complete = await _scan(unit)
-            if chain.first(*METER_MODEL_IDS) is None:
-                return None
-            return await _read_identity(_common(unit, chain))
-        except ModbusConnectionError:
-            raise
-        except ModbusError as err:
+            chain, complete = await _scan(unit)
+        except (*ABSENCE_ERRORS, GatewayTargetError) as err:
             _LOGGER.debug("No meter found on a unit: %s", error_text(err))
             return None
+        model = chain.first(*METER_MODEL_IDS)
+        if model is None and not complete:
+            raise IncompleteChainError("a meter unit answered an incomplete chain")
+        if model is None:
+            return None
+        return await _read_identity(_common(unit, chain))
 
     @property
     def is_set_up(self) -> bool:

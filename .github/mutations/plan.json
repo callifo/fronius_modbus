@@ -3047,8 +3047,8 @@
   {
     "label": "device: a meter model in an incomplete chain is placed",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
-    "old": "        if model is None and not complete:\n",
-    "new": "        if not complete:\n",
+    "old": "        if model is None and not complete:\n            raise IncompleteChainError(f\"meter {unit_id}",
+    "new": "        if not complete:\n            raise IncompleteChainError(f\"meter {unit_id}",
     "tests": "meter_model_in_an_incomplete_chain_is_placed"
   },
   {
@@ -3383,8 +3383,8 @@
   {
     "label": "datamanager: the first meter unit is always listed",
     "path": "custom_components/fronius_modbus/datamanager.py",
-    "old": "sorted({METER_UNIT_IDS[0], *found})",
-    "new": "sorted(found) or [METER_UNIT_IDS[0]]",
+    "old": "sorted({METER_UNIT_IDS[0], *found, *open_units})",
+    "new": "sorted({*found, *open_units}) or [METER_UNIT_IDS[0]]",
     "tests": "meters_and_where_they_are"
   },
   {
@@ -3500,16 +3500,51 @@
     "tests": "no_answer_is_no_site"
   },
   {
-    "label": "datamanager: a lost connection ends the search",
+    "label": "datamanager: the units not asked before a lost link stay listed",
     "path": "custom_components/fronius_modbus/datamanager.py",
-    "old": "    except ModbusConnectionError:\n",
-    "new": "    except KeyError:\n",
-    "tests": "gone_during_the_search"
+    "old": "            return meter_topology(found, None, {*open_units, *unasked})\n",
+    "new": "            return meter_topology(found, None, open_units)\n",
+    "tests": "not_asked_before_a_lost_link"
+  },
+  {
+    "label": "datamanager: a busy meter unit stays listed",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "            open_units.add(unit_id)\n",
+    "new": "            pass\n",
+    "tests": "busy_at_the_start_is_read_once"
+  },
+  {
+    "label": "datamanager: the open units reach the topology",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    topology = meter_topology(found, site, open_units)\n",
+    "new": "    topology = meter_topology(found, site)\n",
+    "tests": "busy_at_the_start_is_read_once"
+  },
+  {
+    "label": "device: exception 11 is no meter on a look",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        except (*ABSENCE_ERRORS, GatewayTargetError) as err:\n",
+    "new": "        except ABSENCE_ERRORS as err:\n",
+    "tests": "without_a_device_has_no_meter_on_a_look"
+  },
+  {
+    "label": "device: a look at a busy meter stays open",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        except (*ABSENCE_ERRORS, GatewayTargetError) as err:\n",
+    "new": "        except ModbusError as err:\n",
+    "tests": "busy_meter_leaves_a_look_open"
+  },
+  {
+    "label": "device: a broken chain leaves a look open",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "            raise IncompleteChainError(\"a meter unit answered an incomplete chain\")\n",
+    "new": "            return None\n",
+    "tests": "broken_before_any_meter_leaves_a_look_open"
   },
   {
     "label": "device: a silent meter unit has no meter now",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
-    "old": "        except ModbusError as err:\n            _LOGGER.debug(\"No meter found on a unit: %s\", error_text(err))\n            return None\n",
+    "old": "        except (*ABSENCE_ERRORS, GatewayTargetError) as err:\n            _LOGGER.debug(\"No meter found on a unit: %s\", error_text(err))\n            return None\n",
     "new": "        except KeyError:\n            return None\n",
     "tests": "silent_at_the_start or datamanager_without_a_meter"
   },

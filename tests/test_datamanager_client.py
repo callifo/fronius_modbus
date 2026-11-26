@@ -98,6 +98,19 @@ def test_a_forbidden_login_is_not_sent_again(device, credentials):
     assert len(device.logins) == 1
 
 
+@pytest.mark.parametrize("status", [401, 403])
+def test_a_refused_write_keeps_the_login(device, status):
+    device.write_status = status
+    client = DatamanagerClient(HOST, token=minted())
+
+    with pytest.raises(ControlUnavailable) as refused:
+        client.set_soft_limit(9000)
+
+    assert refused.value.key == "write_failed"
+    assert len(device.written) == 1
+    assert client.read_export_limits().soft_w is not None
+
+
 def test_nothing_is_sent_without_credentials(device):
     with pytest.raises(FroniusWebAuthError):
         DatamanagerClient(HOST).read_export_limits()

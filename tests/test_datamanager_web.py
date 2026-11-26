@@ -489,6 +489,25 @@ async def test_a_login_refused_at_a_write_is_asked_for(hass, device):
     assert len(device.logins) == tries
 
 
+@pytest.mark.parametrize("status", [401, 403])
+async def test_a_write_refused_after_the_login_asks_for_no_new_login(
+    hass, device, status
+):
+    """The read before it was let in: the password is right, the write is not."""
+    entry = await number_entry(hass)
+    device.write_status = status
+
+    with pytest.raises(HomeAssistantError) as refused:
+        await set_number(hass, entry, 9000)
+
+    assert refused.value.translation_key == "write_failed"
+    assert logins_asked(hass) == []
+    assert len(device.written) == 1
+    await after(hass, minutes=2)
+    assert logins_asked(hass) == []
+    assert state_of(hass, entry, "export_soft_limit") != "unavailable"
+
+
 async def test_a_device_off_at_a_write_is_unreachable(hass, device, monkeypatch):
     entry = await number_entry(hass)
 

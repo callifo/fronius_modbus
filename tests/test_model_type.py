@@ -295,6 +295,24 @@ async def test_a_technician_beside_the_owner_is_refused_before_a_switch(
     assert float_device.writes == []
 
 
+async def test_an_owner_set_up_while_the_switch_is_asked_stops_it(
+    hass, float_device, monkeypatch
+):
+    """Another flow set up the first inverter meanwhile; the role is refused here now."""
+    serve_datamanager(monkeypatch)
+    float_device._fixture[2] = {"holding": float_words()}
+    monkeypatch.setattr(datamanager, "read_inverter_units", lambda host: (1, 2))
+    form = await submit(hass, "technician")
+    form = await choose(hass, form, "2")
+    assert form["step_id"] == "model_type"
+    add_datamanager_entry(hass, 1)
+
+    result = await answer(hass, form)
+
+    assert result["errors"] == {"base": "datamanager_login_on_owner"}
+    assert float_device.writes == []
+
+
 async def test_a_host_taken_while_the_question_is_open_is_not_written(
     hass, float_device
 ):

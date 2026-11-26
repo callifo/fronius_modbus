@@ -29,7 +29,7 @@ def int_words() -> dict[int, int]:
     return dict(load_fixture("symo_datamanager.json")[INVERTER_UNIT_ID]["holding"])
 
 
-def float_words() -> dict[int, int]:
+def float_words(model_id: int = 113) -> dict[int, int]:
     """The same device as float: its inverter model is 10 registers longer."""
     words = int_words()
     behind = MODEL_HEADER + 2 + INT_LENGTH
@@ -39,7 +39,7 @@ def float_words() -> dict[int, int]:
         if address >= behind
     }
     kept = {address: word for address, word in words.items() if address < MODEL_HEADER}
-    model = [113, FLOAT_LENGTH, *[0] * FLOAT_LENGTH]
+    model = [model_id, FLOAT_LENGTH, *[0] * FLOAT_LENGTH]
     return (
         kept
         | {MODEL_HEADER + offset: word for offset, word in enumerate(model)}
@@ -134,7 +134,9 @@ async def test_float_is_asked_about_before_anything_is_written(hass, float_devic
     assert hass.config_entries.async_entries(DOMAIN) == []
 
 
-async def test_the_confirmed_switch_is_two_writes(hass, float_device):
+@pytest.mark.parametrize("model_id", [111, 113])
+async def test_the_confirmed_switch_is_two_writes(hass, float_device, model_id):
+    float_device._fixture[1]["holding"] = float_words(model_id)
     form = await submit(hass)
 
     result = await answer(hass, form)
@@ -168,6 +170,18 @@ async def test_a_refused_write_creates_nothing(hass, float_device, error):
 
     assert result["errors"] == {"base": "model_type_not_switched"}
     assert hass.config_entries.async_entries(DOMAIN) == []
+
+
+async def test_a_split_phase_float_device_is_not_offered_a_switch(
+    hass, float_device
+):
+    """Its int model 102 is not read here; the switch would leave nothing to read."""
+    float_device._fixture[1]["holding"] = float_words(112)
+
+    result = await submit(hass)
+
+    assert result.get("step_id") != "model_type"
+    assert float_device.writes == []
 
 
 async def test_int_is_not_asked_about(hass, float_device):

@@ -207,6 +207,23 @@ async def test_the_load_stays_unknown_with_two_entries(hass, site, monkeypatch):
     assert state_of(hass, first, "load") == "unknown"
 
 
+async def test_the_load_turns_unknown_when_a_second_inverter_joins(
+    hass, site, monkeypatch
+):
+    """The owner added its own inverter alone to the grid meter's power."""
+    answer_site(monkeypatch, ("A1", 0), inverters=1)
+    first = add_inverter(hass, 1)
+    await start(hass, first)
+    assert state_of(hass, first, "load") not in ("unknown", "unavailable")
+
+    second = add_inverter(hass, SECOND_UNIT_ID)
+    assert await hass.config_entries.async_setup(second.entry_id)
+    await hass.async_block_till_done()
+
+    assert state_of(hass, first, "load") == "unknown"
+    assert first.runtime_data.several_inverters is True
+
+
 @pytest.mark.parametrize("answers", [True, False])
 async def test_the_site_totals_are_on_with_two_entries(
     hass, site, monkeypatch, answers

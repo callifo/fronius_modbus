@@ -11,6 +11,7 @@ from custom_components.fronius_modbus import datamanager
 from custom_components.fronius_modbus.const import (
     CONF_DATAMANAGER,
     CONF_INVERTER_UNIT_ID,
+    CONF_SITE_OWNER,
     entry_title,
     entry_unique_id,
 )
@@ -364,7 +365,10 @@ async def test_an_inverter_that_does_not_answer_asks_for_no_password(
     assert result["errors"] == {CONF_INVERTER_UNIT_ID: "inverter_not_found"}
 
 
-async def test_a_second_inverter_uses_the_login_of_the_first(hass, two_inverters):
+async def test_a_second_inverter_cannot_take_the_technician_role(
+    hass, two_inverters
+):
+    """The first one reads the meters and the export limit; a login here shows nothing."""
     await async_get_token_store(hass).async_save_token(
         HOST, user="technician", **minted()
     )
@@ -374,5 +378,42 @@ async def test_a_second_inverter_uses_the_login_of_the_first(hass, two_inverters
     form = await flow.submit("technician")
     result = await choose(hass, form, "2")
 
-    assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["data"]["api_username"] == "technician"
+    assert result["errors"] == {"base": "datamanager_login_on_owner"}
+    assert two_inverters.calls == []
+
+
+async def test_a_lower_inverter_cannot_take_the_role_from_the_owner(
+    hass, two_inverters
+):
+    add_entry(hass, inverter(2) | {CONF_SITE_OWNER: True}, f"{HOST}#2")
+    flow = RoleFlow(hass, "user")
+
+    form = await flow.submit("technician")
+    result = await choose(hass, form, "1")
+
+    assert result["errors"] == {"base": "datamanager_login_on_owner"}
+
+
+@pytest.mark.parametrize("kind", ["reconfigure", "options", "reauth"])
+async def test_an_entry_that_is_not_the_owner_cannot_take_the_role(
+    hass, two_inverters, kind
+):
+    add_entry(hass, inverter(1), HOST)
+    flow = RoleFlow(hass, kind, inverter_modbus_unit_id=2)
+
+    result = await flow.submit("technician")
+
+    assert result["errors"] == {"base": "datamanager_login_on_owner"}
+    assert two_inverters.calls == []
+
+
+@pytest.mark.parametrize("kind", ["reconfigure", "options", "reauth"])
+async def test_the_owner_takes_the_role_beside_another_inverter(
+    hass, two_inverters, kind
+):
+    add_entry(hass, inverter(2), f"{HOST}#2")
+    flow = RoleFlow(hass, kind, **{CONF_SITE_OWNER: True})
+
+    form = await flow.submit("technician")
+
+    assert form["step_id"] == PASSWORD_STEPS[kind]

@@ -88,6 +88,7 @@ def float_device(hass, monkeypatch) -> FloatDatamanager:
     shared = FloatDatamanager()
     monkeypatch.setattr(CORE_CONNECTION, shared)
     monkeypatch.setattr(inverter_choice, "MODEL_TYPE_RETRY_SECONDS", 0)
+    monkeypatch.setattr(inverter_choice, "MODEL_TYPE_HOLD_SECONDS", 0, raising=False)
     answer_family(monkeypatch, DeviceFamily.DATAMANAGER)
     monkeypatch.setattr(datamanager, "read_inverter_units", lambda host: (1,))
 
@@ -159,6 +160,36 @@ async def test_a_device_that_does_not_switch_creates_nothing(hass, float_device)
     assert result["type"] is FlowResultType.CREATE_ENTRY
 
 
+async def test_a_switch_taken_back_after_a_few_seconds_is_no_switch(
+    hass, float_device, monkeypatch
+):
+    """Without its confirmation the Datamanager takes the change back (manual)."""
+    read = inverter_choice.async_model_type
+    seen = []
+
+    async def taken_back_after_the_first_read(hass, settings):
+        shown = await read(hass, settings)
+        if shown == "int" and not seen:
+            seen.append(shown)
+            float_device._fixture[1]["holding"] = float_words()
+            for connection in float_device.connections:
+                unit = connection.for_unit(1)
+                unit.holding.clear()
+                unit.load_raw({"holding": float_words()})
+        return shown
+
+    monkeypatch.setattr(
+        inverter_choice, "async_model_type", taken_back_after_the_first_read
+    )
+    form = await submit(hass)
+
+    result = await answer(hass, form)
+
+    assert seen == ["int"]
+    assert result["errors"] == {"base": "model_type_not_switched"}
+    assert hass.config_entries.async_entries(DOMAIN) == []
+
+
 @pytest.mark.parametrize("error", [IllegalDataValueError, ModbusTimeoutError])
 async def test_a_refused_write_creates_nothing(hass, float_device, error):
     form = await submit(hass)
@@ -172,9 +203,7 @@ async def test_a_refused_write_creates_nothing(hass, float_device, error):
     assert hass.config_entries.async_entries(DOMAIN) == []
 
 
-async def test_a_split_phase_float_device_is_not_offered_a_switch(
-    hass, float_device
-):
+async def test_a_split_phase_float_device_is_not_offered_a_switch(hass, float_device):
     """Its int model 102 is not read here; the switch would leave nothing to read."""
     float_device._fixture[1]["holding"] = float_words(112)
 

@@ -365,6 +365,25 @@ async def test_the_number_ends_at_the_highest_soft_limit(hass, device):
     assert device.written == []
 
 
+async def test_the_number_ends_below_an_enabled_hard_limit(hass, device):
+    active = device.body["Body"]["Data"]["powerLimits"]["exportLimits"]["activePower"]
+    active["hardLimit"] = {"enabled": True, "powerLimit": 8000}
+    entry = await number_entry(hass)
+    state = hass.states.get(entity_id_for(hass, entry, "number", "export_soft_limit"))
+
+    assert state.attributes["max"] == 7999
+
+
+async def test_an_enabled_hard_limit_of_0_leaves_the_number_unavailable(
+    hass, device
+):
+    active = device.body["Body"]["Data"]["powerLimits"]["exportLimits"]["activePower"]
+    active["hardLimit"] = {"enabled": True, "powerLimit": 0}
+    entry = await number_entry(hass)
+
+    assert state_of(hass, entry, "export_soft_limit", "number") == "unavailable"
+
+
 async def test_a_form_nobody_has_seen_cannot_be_written(hass, device):
     active = device.body["Body"]["Data"]["powerLimits"]["exportLimits"]["activePower"]
     entry = await number_entry(hass)

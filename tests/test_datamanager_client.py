@@ -364,11 +364,27 @@ def test_without_a_reference_the_site_ceiling_counts(device, reference):
         client.set_soft_limit(1_000_001)
 
 
-def test_a_limit_at_an_enabled_hard_limit_is_written(device):
+def test_a_limit_at_an_enabled_hard_limit_is_refused(device):
+    """Fronius' manual: the hard limit has to be higher than the soft limit."""
     active_power(device)["hardLimit"] = {"enabled": True, "powerLimit": 8000}
     client = DatamanagerClient(HOST, token=minted())
 
-    assert client.set_soft_limit(8000).soft_w == 8000.0
+    with pytest.raises(ControlRefused) as refused:
+        client.set_soft_limit(8000)
+
+    assert refused.value.key == "value_out_of_range"
+    assert device.written == []
+    assert client.set_soft_limit(7999).soft_w == 7999.0
+
+
+def test_an_enabled_hard_limit_of_0_leaves_no_soft_limit(device):
+    active_power(device)["hardLimit"] = {"enabled": True, "powerLimit": 0}
+    client = DatamanagerClient(HOST, token=minted())
+
+    with pytest.raises(ControlRefused):
+        client.set_soft_limit(0)
+
+    assert device.written == []
 
 
 @pytest.mark.parametrize(
@@ -508,10 +524,12 @@ def test_two_writes_do_not_interleave(device):
     ("change", "reference", "ceiling"),
     [
         ({}, 18200, 18200.0),
-        ({"hardLimit": {"enabled": True, "powerLimit": 8000}}, 18200, 8000.0),
-        ({"hardLimit": {"enabled": True, "powerLimit": 20000}}, 18200, 18200.0),
+        ({"hardLimit": {"enabled": True, "powerLimit": 8000}}, 18200, 7999.0),
+        ({"hardLimit": {"enabled": True, "powerLimit": 8000.5}}, 18200, 8000.0),
+        ({"hardLimit": {"enabled": True, "powerLimit": 18201}}, 18200, 18200.0),
+        ({"hardLimit": {"enabled": False, "powerLimit": 8000}}, 18200, 18200.0),
         ({}, 0, None),
-        ({"hardLimit": {"enabled": True, "powerLimit": 8000}}, 0, 8000.0),
+        ({"hardLimit": {"enabled": True, "powerLimit": 8000}}, 0, 7999.0),
         ({}, None, None),
     ],
 )

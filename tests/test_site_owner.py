@@ -1,6 +1,6 @@
 """What the inverters of one Datamanager share: one entry has it, the others do not."""
 
-from modbus_connection import ModbusTimeoutError
+from modbus_connection import ModbusConnectionError, ModbusTimeoutError
 import pytest
 
 from custom_components.fronius_modbus.const import (
@@ -249,6 +249,32 @@ async def test_the_load_turns_unknown_when_a_second_inverter_joins_the_search(
 
     assert joined[0].state is ConfigEntryState.LOADED
     assert state_of(hass, first, "load") == "unknown"
+
+
+async def test_a_link_lost_in_the_owner_s_search_still_counts_the_entries(
+    hass, site, monkeypatch
+):
+    """Without the count the owner restarted at the end of every such setup."""
+    probe = FroniusInverter.async_probe_meter
+    looked_at = []
+
+    async def lose_the_link_at_the_second_unit(unit):
+        looked_at.append(unit)
+        if len(looked_at) == 2:
+            raise ModbusConnectionError("link lost")
+        return await probe(unit)
+
+    monkeypatch.setattr(
+        FroniusInverter,
+        "async_probe_meter",
+        staticmethod(lose_the_link_at_the_second_unit),
+    )
+    first, second = add_inverter(hass, 1), add_inverter(hass, SECOND_UNIT_ID)
+
+    await start(hass, first, second)
+
+    assert first.runtime_data.several_inverters is True
+    assert len(looked_at) == 2
 
 
 @pytest.mark.parametrize("answers", [True, False])

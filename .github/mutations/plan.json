@@ -3236,15 +3236,36 @@
   {
     "label": "datamanager: another product is another device",
     "path": "custom_components/fronius_modbus/datamanager.py",
-    "old": "    return DeviceFamily.OTHER\n",
-    "new": "    return DeviceFamily.DATAMANAGER\n",
+    "old": "        return DeviceFamily.DATAMANAGER\n    return DeviceFamily.OTHER\n",
+    "new": "        return DeviceFamily.DATAMANAGER\n    return DeviceFamily.DATAMANAGER\n",
+    "tests": "family_an_answer_shows"
+  },
+  {
+    "label": "datamanager: the GEN24's refusal is another device",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "== GEN24_REFUSAL_CODE:",
+    "new": "== -1:",
+    "tests": "family_an_answer_shows"
+  },
+  {
+    "label": "datamanager: another error is no other device",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if isinstance(status, dict) and status.get(\"Code\") == GEN24_REFUSAL_CODE:\n",
+    "new": "    if isinstance(status, dict) and status.get(\"Code\"):\n",
+    "tests": "family_an_answer_shows"
+  },
+  {
+    "label": "datamanager: an answer without a product shows nothing",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if not isinstance(product, str):\n        return DeviceFamily.UNKNOWN\n",
+    "new": "    if not isinstance(product, str):\n        return DeviceFamily.OTHER\n",
     "tests": "family_an_answer_shows"
   },
   {
     "label": "datamanager: an answer without a head shows nothing",
     "path": "custom_components/fronius_modbus/datamanager.py",
-    "old": " or not isinstance(payload.get(\"Head\"), dict)",
-    "new": "",
+    "old": "    if not isinstance(head, dict):\n        return DeviceFamily.UNKNOWN\n",
+    "new": "    if not isinstance(head, dict):\n        return DeviceFamily.OTHER\n",
     "tests": "family_an_answer_shows"
   },
   {
@@ -3257,7 +3278,7 @@
   {
     "label": "datamanager: a product that is no text is no match",
     "path": "custom_components/fronius_modbus/datamanager.py",
-    "old": "isinstance(product, str) and ",
+    "old": "    if not isinstance(product, str):\n        return DeviceFamily.UNKNOWN\n",
     "new": "",
     "tests": "family_an_answer_shows"
   },

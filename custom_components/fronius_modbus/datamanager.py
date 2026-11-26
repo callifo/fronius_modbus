@@ -38,6 +38,8 @@ LOGGER_INFO_PATH = "/solar_api/v1/GetLoggerInfo.cgi"
 # Answers without a login on a GEN24, also with its Solar API off; a
 # Datamanager does not have it.
 GEN24_PATH = "/api/status/common"
+# A GEN24 answers GetLoggerInfo with this code: it has no such request.
+GEN24_REFUSAL_CODE = 11
 # Seen are fronius-datamanager-card, whose box is expected to start the same way,
 # and fronius-hybrid on a Symo Hybrid, whose manager has another name.
 DATAMANAGER_PRODUCT_PREFIXES = ("fronius-datamanager", "fronius-hybrid")
@@ -85,13 +87,23 @@ class Site:
 
 
 def _family(payload: Any) -> DeviceFamily:
-    """The family a GetLoggerInfo body shows."""
-    if not isinstance(payload, dict) or not isinstance(payload.get("Head"), dict):
+    """The family a GetLoggerInfo body shows.
+
+    Only a product name, or the GEN24's refusal, tells: another error or an
+    answer without a product proves no other device.
+    """
+    head = payload.get("Head") if isinstance(payload, dict) else None
+    if not isinstance(head, dict):
         return DeviceFamily.UNKNOWN
+    status = head.get("Status")
+    if isinstance(status, dict) and status.get("Code") == GEN24_REFUSAL_CODE:
+        return DeviceFamily.OTHER
     body = payload.get("Body")
     logger_info = body.get("LoggerInfo") if isinstance(body, dict) else None
     product = logger_info.get("ProductID") if isinstance(logger_info, dict) else None
-    if isinstance(product, str) and product.startswith(DATAMANAGER_PRODUCT_PREFIXES):
+    if not isinstance(product, str):
+        return DeviceFamily.UNKNOWN
+    if product.startswith(DATAMANAGER_PRODUCT_PREFIXES):
         return DeviceFamily.DATAMANAGER
     return DeviceFamily.OTHER
 

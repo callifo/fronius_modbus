@@ -4963,6 +4963,13 @@
     "tests": "switch_taken_back_after_a_few_seconds"
   },
   {
+    "label": "model type: the hold outlasts the reset",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "MODEL_TYPE_HOLD_SECONDS = 12.0\n",
+    "new": "MODEL_TYPE_HOLD_SECONDS = 5.0\n",
+    "tests": "hold_outlasts_the_reset_the_manual_names"
+  },
+  {
     "label": "model type: a split-phase float device is not switched",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/sunspec_models.py",
     "old": "FLOAT_INVERTER_MODEL_IDS = (111, 113)\n",

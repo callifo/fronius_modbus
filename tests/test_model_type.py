@@ -167,6 +167,11 @@ async def test_a_device_that_does_not_switch_creates_nothing(hass, float_device)
     assert result["type"] is FlowResultType.CREATE_ENTRY
 
 
+def test_the_hold_outlasts_the_reset_the_manual_names():
+    """Unconfirmed, the switch is taken back after "a few seconds"; the tests run it at 0."""
+    assert inverter_choice.MODEL_TYPE_HOLD_SECONDS > 10
+
+
 async def test_a_switch_taken_back_after_a_few_seconds_is_no_switch(
     hass, float_device, monkeypatch
 ):

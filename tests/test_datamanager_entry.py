@@ -18,6 +18,7 @@ from custom_components.fronius_modbus.const import (
     DOMAIN,
     entity_prefix,
 )
+from custom_components.fronius_modbus.coordinator import FroniusModbusCoordinator
 from custom_components.fronius_modbus.datamanager import (
     DeviceFamily,
     Site,
@@ -521,6 +522,51 @@ async def test_a_meter_busy_at_every_search_reloads_the_entry_once(
     assert len(searches) == 2 * len(DATAMANAGER_METER_UNIT_IDS)
     assert state_of(hass, entry, "meter_241_power") == "30.0"
     assert "unit 241" in caplog.text
+
+
+async def test_a_meter_silent_until_after_every_first_poll_reloads_once(
+    hass, datamanager_modbus, datamanager_entry, monkeypatch, caplog
+):
+    """Its later answer took the reload for a new sub-system after every setup."""
+    add_meter(datamanager_modbus, 241, "B2")
+    answer_site(monkeypatch, ("B2", 0))
+    probe = FroniusInverter.async_probe_meter
+    searches = []
+
+    async def busy_at_every_search(unit):
+        searches.append(unit)
+        if len(searches) % len(DATAMANAGER_METER_UNIT_IDS) == 2:
+            raise ServerDeviceBusyError
+        return await probe(unit)
+
+    first_refresh = FroniusModbusCoordinator.async_config_entry_first_refresh
+
+    async def silent_through_the_first_poll(coordinator):
+        datamanager_modbus.fail_requests(241, ServerDeviceBusyError())
+        try:
+            await first_refresh(coordinator)
+        finally:
+            datamanager_modbus.fail_requests(241, None)
+
+    monkeypatch.setattr(
+        FroniusInverter, "async_probe_meter", staticmethod(busy_at_every_search)
+    )
+    monkeypatch.setattr(
+        FroniusModbusCoordinator,
+        "async_config_entry_first_refresh",
+        silent_through_the_first_poll,
+    )
+    entry = datamanager_entry
+    await setup_entry(hass, entry)
+    caplog.set_level(logging.INFO)
+
+    for _ in range(4):
+        await entry.runtime_data.modbus.async_refresh()
+        await hass.async_block_till_done()
+
+    assert len(searches) == 2 * len(DATAMANAGER_METER_UNIT_IDS)
+    assert entry.state is ConfigEntryState.LOADED
+    assert "meter_241" in caplog.text
 
 
 async def test_a_retried_setup_still_reloads_for_a_meter_busy_at_its_search(

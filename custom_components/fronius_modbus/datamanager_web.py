@@ -15,7 +15,7 @@ from .const import CONF_API_USERNAME, DOMAIN
 from .coordinator import DeviceUnreachable, OfflineIsNotAnError
 from .datamanager_client import DatamanagerClient, ExportLimits
 from .fronius_modbus_api.exceptions import ControlUnavailable, error_text
-from .token_store import async_get_token_store
+from .token_store import async_get_token_store, canonical_host
 from .web_errors import (
     FroniusWebAuthError,
     FroniusWebResponseError,
@@ -36,11 +36,12 @@ def _write_turn(hass: HomeAssistant, host: str) -> asyncio.Lock:
     """The lock a write to ``host`` waits for; it wakes its waiters in order.
 
     One per host, kept across reloads: a reloaded entry has a new coordinator
-    while a write of the old one may still be on its way.
+    while a write of the old one may still be on its way. Keyed like the stored
+    login, so that a host reconfigured in another spelling keeps its turn.
     """
     domain_data = hass.data.setdefault(DOMAIN, {})
     turns: dict[str, asyncio.Lock] = domain_data.setdefault(_WRITE_TURNS_DATA_KEY, {})
-    return turns.setdefault(host, asyncio.Lock())
+    return turns.setdefault(canonical_host(host), asyncio.Lock())
 
 
 def _report_a_write_nobody_waits_for(write: asyncio.Task[None]) -> None:

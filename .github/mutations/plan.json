@@ -4858,6 +4858,13 @@
     "tests": "given_up_write_that_fails_names_no_address"
   },
   {
+    "label": "soft limit: every spelling of a host shares one write turn",
+    "path": "custom_components/fronius_modbus/datamanager_web.py",
+    "old": "    return turns.setdefault(canonical_host(host), asyncio.Lock())\n",
+    "new": "    return turns.setdefault(host, asyncio.Lock())\n",
+    "tests": "spelled_another_way_shares_its_write_turn"
+  },
+  {
     "label": "model type: int is told",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
     "old": "        if chain.first(*INVERTER_MODEL_IDS) is not None:\n            return \"int\"\n",

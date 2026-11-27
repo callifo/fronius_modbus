@@ -8,7 +8,7 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 
 from .const import CONF_API_PASSWORD, entry_title_after
-from .flow_settings import _entry_payload, device_answer
+from .flow_settings import _entry_payload, check_login_on_owner, device_answer
 from .flow_state import _AlreadyConfigured
 from .host_sharing import host_holder, unique_id_for
 from .token_store import async_forget_unused_tokens
@@ -25,6 +25,9 @@ def _claim_host(
     """
     if host_holder(hass, settings, entry) is not None:
         raise _AlreadyConfigured
+    # Again right before the change: another entry may have become the owner
+    # while the form was open.
+    check_login_on_owner(hass, settings, entry)
     return unique_id_for(hass, settings, entry)
 
 

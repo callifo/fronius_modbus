@@ -3388,6 +3388,13 @@
     "tests": "while_the_login_is_checked"
   },
   {
+    "label": "technician: an existing entry is checked again when it is changed",
+    "path": "custom_components/fronius_modbus/flow_entry.py",
+    "old": "    check_login_on_owner(hass, settings, entry)\n",
+    "new": "",
+    "tests": "while_an_entry_asks_its_password"
+  },
+  {
     "label": "config flow: without the web API no family is asked for",
     "path": "custom_components/fronius_modbus/flow_settings.py",
     "old": "    if settings[CONF_API_USERNAME] != WEB_API_DISABLED:\n        await",

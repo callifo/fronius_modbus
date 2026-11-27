@@ -3638,5 +3638,82 @@
     "old": "meter_units, datamanager=on_datamanager",
     "new": "meter_units, datamanager=False",
     "tests": "state_code_is_shown"
+  },
+  {
+    "label": "device: a hybrid's second input is its battery",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "            return MpptChannels(pv=(0,), charge=1, discharge=1)\n",
+    "new": "            return MpptChannels(pv=(0, 1), charge=1, discharge=1)\n",
+    "tests": "second_input_of_a_hybrid"
+  },
+  {
+    "label": "device: only a Datamanager has a hybrid's inputs",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        if self._datamanager and self.storage is not None and unlabelled and two_inputs:\n",
+    "new": "        if self.storage is not None and unlabelled and two_inputs:\n",
+    "tests": "gen24_with_two_inputs"
+  },
+  {
+    "label": "device: without a battery both inputs are PV",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        if self._datamanager and self.storage is not None and unlabelled and two_inputs:\n",
+    "new": "        if self._datamanager and unlabelled and two_inputs:\n",
+    "tests": "two_inputs_without_a_battery"
+  },
+  {
+    "label": "device: labelled channels stay two",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        if self._datamanager and self.storage is not None and unlabelled and two_inputs:\n",
+    "new": "        if self._datamanager and self.storage is not None:\n",
+    "tests": "labelled_channels_stay_two"
+  },
+  {
+    "label": "storage: no channel shows nothing",
+    "path": "custom_components/fronius_modbus/storage_dc.py",
+    "old": "    if module is None:\n        return None\n",
+    "new": "    if module is None:\n        return 0.0\n",
+    "tests": "without_any_channel"
+  },
+  {
+    "label": "storage: a shared counter is for neither direction",
+    "path": "custom_components/fronius_modbus/storage_dc.py",
+    "old": "    return None if point == \"dcwh\" else _of_direction(runtime, direction, value)\n",
+    "new": "    return _of_direction(runtime, direction, value)\n",
+    "tests": "not_taken_for_one_direction"
+  },
+  {
+    "label": "storage: the voltage is for both directions",
+    "path": "custom_components/fronius_modbus/storage_dc.py",
+    "old": " or point == \"dcv\":",
+    "new": ":",
+    "tests": "power_goes_where"
+  },
+  {
+    "label": "storage: a status not read gives no direction",
+    "path": "custom_components/fronius_modbus/storage_dc.py",
+    "old": "    if storage is None or REPORT_STORAGE not in runtime.modbus.data.report.updated:\n",
+    "new": "    if storage is None:\n",
+    "tests": "while_the_status_is_not_read"
+  },
+  {
+    "label": "storage: an idle battery moves nothing",
+    "path": "custom_components/fronius_modbus/storage_dc.py",
+    "old": "    if status in _IDLE:\n        return 0.0\n",
+    "new": "",
+    "tests": "power_goes_where"
+  },
+  {
+    "label": "storage: an unknown status gives no direction",
+    "path": "custom_components/fronius_modbus/storage_dc.py",
+    "old": "    if status not in _FLOWS:\n        return None\n",
+    "new": "    if status not in _FLOWS:\n        return 0.0\n",
+    "tests": "power_goes_where"
+  },
+  {
+    "label": "storage: the status says the direction",
+    "path": "custom_components/fronius_modbus/storage_dc.py",
+    "old": "_FLOWS[status] == direction",
+    "new": "_FLOWS[status] != direction",
+    "tests": "power_goes_where"
   }
 ]

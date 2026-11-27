@@ -52,7 +52,8 @@ LINE_BUDGETS = {
     # 1562 + the energy output sensors, whose rows are energy_output_entities.py
     # 1570 + the storage mode select waits for readable registers
     # 1572 + a Datamanager's sensors, whose rows are datamanager_entities.py
-    "entities.py": 1572,
+    # 1557 - the battery's DC side, now storage_dc.py
+    "entities.py": 1557,
     # 898 + a meter the answer names without a usable address marks the
     # answer incomplete; the parser shares _body_data,
     # _clean_text and _as_int with the other payloads, so it stays here.

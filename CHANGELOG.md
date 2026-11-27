@@ -12,6 +12,9 @@
 - `tools/inverter_dump.bat` also replaces the city of the time zone.
 - On a Datamanager, `tools/inverter_dump.bat` also reads its own Modbus registers: the state code, the model type and the site totals.
 
+### Fixed
+- A Symo Hybrid with a battery got no sensors at all. Its second input is now shown as the battery, charging or discharging as the battery's status says, and no longer counts as PV. This follows Fronius' manual and the registers a user published, and is not confirmed on a device yet.
+
 ## 1.4.2
 
 Released 2026-11-25. It brings back the entities of an old entry after a failed delete, shows the address the Modbus IP restriction allows, and fixes errors in reading and writing. Coming from redpomodoro/fronius_modbus, read the README's *Coming from redpomodoro/fronius_modbus* first.

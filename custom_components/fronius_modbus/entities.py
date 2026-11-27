@@ -89,9 +89,9 @@ from .fronius_modbus_api.storage import (
     DISCHARGE_LIMIT_MODES,
     ExtendedMode,
 )
-from .fronius_modbus_api.sunspec_models import MpptModule
 from .inverter_events import EVENT_TYPES
 from .mppt_entities import _mppt_sensor_descriptions
+from .storage_dc import storage_dc
 from .web_control import WebData
 
 # The rated power while settings.w_max is unknown: 0.3's static AC limit maximum.
@@ -122,13 +122,6 @@ def _ac_limit_status(value: bool | None) -> str:
     if value is None:
         return UNKNOWN_STATE
     return AC_LIMIT_STATUS[1] if value else AC_LIMIT_STATUS[0]
-
-
-def _mppt_channel_module(
-    runtime: FroniusRuntimeData, channel: int | None
-) -> MpptModule:
-    """The MPPT module on a storage channel, assumed present like its channel."""
-    return assume_present(runtime.device.mppt_module(assume_present(channel)))
 
 
 def _storage_present(runtime: FroniusRuntimeData) -> bool:
@@ -574,7 +567,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "storage_charge_current",
         "storage_charge_current",
         report_name=REPORT_MPPT,
-        value_fn=lambda r: _mppt_channel_module(r, r.device.mppt_channels.charge).dca,
+        value_fn=partial(storage_dc, direction="charge", point="dca"),
         exists_fn=_storage_present,
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
@@ -584,7 +577,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "storage_charge_voltage",
         "storage_charge_voltage",
         report_name=REPORT_MPPT,
-        value_fn=lambda r: _mppt_channel_module(r, r.device.mppt_channels.charge).dcv,
+        value_fn=partial(storage_dc, direction="charge", point="dcv"),
         exists_fn=_storage_present,
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -594,7 +587,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "storage_charge_power",
         "storage_charge_power",
         report_name=REPORT_MPPT,
-        value_fn=lambda r: _mppt_channel_module(r, r.device.mppt_channels.charge).dcw,
+        value_fn=partial(storage_dc, direction="charge", point="dcw"),
         exists_fn=_storage_present,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -604,7 +597,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "storage_charge_lfte",
         "storage_charge_lfte",
         report_name=REPORT_MPPT,
-        value_fn=lambda r: _mppt_channel_module(r, r.device.mppt_channels.charge).dcwh,
+        value_fn=partial(storage_dc, direction="charge", point="dcwh"),
         exists_fn=_storage_present,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -614,9 +607,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "storage_discharge_current",
         "storage_discharge_current",
         report_name=REPORT_MPPT,
-        value_fn=lambda r: (
-            _mppt_channel_module(r, r.device.mppt_channels.discharge).dca
-        ),
+        value_fn=partial(storage_dc, direction="discharge", point="dca"),
         exists_fn=_storage_present,
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
@@ -626,9 +617,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "storage_discharge_voltage",
         "storage_discharge_voltage",
         report_name=REPORT_MPPT,
-        value_fn=lambda r: (
-            _mppt_channel_module(r, r.device.mppt_channels.discharge).dcv
-        ),
+        value_fn=partial(storage_dc, direction="discharge", point="dcv"),
         exists_fn=_storage_present,
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -638,9 +627,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "storage_discharge_power",
         "storage_discharge_power",
         report_name=REPORT_MPPT,
-        value_fn=lambda r: (
-            _mppt_channel_module(r, r.device.mppt_channels.discharge).dcw
-        ),
+        value_fn=partial(storage_dc, direction="discharge", point="dcw"),
         exists_fn=_storage_present,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -650,9 +637,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "storage_discharge_lfte",
         "storage_discharge_lfte",
         report_name=REPORT_MPPT,
-        value_fn=lambda r: (
-            _mppt_channel_module(r, r.device.mppt_channels.discharge).dcwh
-        ),
+        value_fn=partial(storage_dc, direction="discharge", point="dcwh"),
         exists_fn=_storage_present,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,

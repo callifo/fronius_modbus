@@ -18,6 +18,7 @@ from custom_components.fronius_modbus.datamanager_client import (
     EXPORT_LIMIT_PATH,
     DatamanagerClient,
 )
+from custom_components.fronius_modbus.datamanager_web import _write_turn
 from custom_components.fronius_modbus.diagnostics import (
     async_get_config_entry_diagnostics,
 )
@@ -460,6 +461,12 @@ async def test_a_write_given_up_by_its_caller_still_goes_first(
 
     assert soft_limit_on(device) == 8000
     assert state_of(hass, entry, "export_soft_limit", "number") == "8000.0"
+
+
+@pytest.mark.parametrize("spelling", ["DM.EXAMPLE", "http://dm.Example"])
+async def test_one_host_spelled_another_way_shares_its_write_turn(hass, spelling):
+    """Reconfigured with another spelling, the reloaded entry would write first."""
+    assert _write_turn(hass, spelling) is _write_turn(hass, "dm.example")
 
 
 async def test_a_write_from_before_a_reload_goes_first(hass, device, monkeypatch):

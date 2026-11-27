@@ -364,35 +364,12 @@ async def _async_look_for_meters(
     return found, open_units, False
 
 
-@callback
-def async_open_units_to_follow(
-    hass: HomeAssistant, entry: ConfigEntry, open_unit_ids: tuple[int, ...]
-) -> tuple[int, ...]:
-    """The open units whose first answer may reload the entry: each once per run.
+def followed_meter_units(hass: HomeAssistant, entry: ConfigEntry) -> set[int]:
+    """The meter units a Datamanager entry has reloaded for in this run.
 
-    A meter busy at every search but answering every poll would reload it again
-    and again; after the first time it stays without its place.
+    Each gets one automatic reload: a meter busy at every search and silent at
+    every first poll would otherwise reload the entry after each setup.
     """
-    followed = _followed_units(hass, entry)
-    again = [unit for unit in open_unit_ids if unit in followed]
-    for unit in again:
-        _LOGGER.info(
-            "The meter on unit %s did not answer the search again; it stays "
-            "without its place until Home Assistant restarts",
-            unit,
-        )
-    return tuple(unit for unit in open_unit_ids if unit not in again)
-
-
-@callback
-def async_remember_followed(
-    hass: HomeAssistant, entry: ConfigEntry, unit_ids: Collection[int]
-) -> None:
-    """Note the open units the entry reloads for, when it does: not at a failed setup."""
-    _followed_units(hass, entry).update(unit_ids)
-
-
-def _followed_units(hass: HomeAssistant, entry: ConfigEntry) -> set[int]:
     domain_data = hass.data.setdefault(DOMAIN, {})
     by_entry: dict[str, set[int]] = domain_data.setdefault(_FOLLOWED_UNITS_DATA_KEY, {})
     return by_entry.setdefault(entry.entry_id, set())

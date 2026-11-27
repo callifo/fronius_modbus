@@ -521,7 +521,7 @@ async def test_a_meter_busy_at_every_search_reloads_the_entry_once(
 
     assert len(searches) == 2 * len(DATAMANAGER_METER_UNIT_IDS)
     assert state_of(hass, entry, "meter_241_power") == "30.0"
-    assert "unit 241" in caplog.text
+    assert "meter_241 answered late again" in caplog.text
 
 
 async def test_a_meter_silent_until_after_every_first_poll_reloads_once(

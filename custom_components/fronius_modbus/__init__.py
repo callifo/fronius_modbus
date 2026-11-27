@@ -41,7 +41,6 @@ from .coordinator import (
 from .datamanager import (
     async_meter_topology,
     async_on_datamanager,
-    async_open_units_to_follow,
     async_recount_the_site,
 )
 from .datamanager_web import async_start as datamanager_web_start
@@ -197,9 +196,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
         interval=timedelta(seconds=scan_interval),
         primary_meter_unit_id=primary,
         meter_locations=locations,
-        open_meter_unit_ids=async_open_units_to_follow(
-            hass, entry, topology.open_unit_ids
-        ),
+        open_meter_unit_ids=topology.open_unit_ids,
     )
     await modbus.async_config_entry_first_refresh()
 

@@ -3621,16 +3621,30 @@
   {
     "label": "coordinator: an open meter's first answer reloads",
     "path": "custom_components/fronius_modbus/coordinator.py",
-    "old": "            self._built_for = answered - self._open_meters.keys()\n",
+    "old": "            self._built_for = answered - self._open_meters\n",
     "new": "            self._built_for = answered\n",
     "tests": "busy_only_at_the_search_leads_after_it"
   },
   {
-    "label": "datamanager: a unit is followed only once the entry reloads for it",
-    "path": "custom_components/fronius_modbus/datamanager.py",
-    "old": "    return tuple(unit for unit in open_unit_ids if unit not in again)\n",
-    "new": "    _followed_units(hass, entry).update(open_unit_ids)\n    return tuple(unit for unit in open_unit_ids if unit not in again)\n",
-    "tests": "retried_setup_still_reloads"
+    "label": "coordinator: a late meter reloads the entry once per run",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "        again = frozenset(name for name, unit in late.items() if unit in followed)\n",
+    "new": "        again: frozenset[str] = frozenset()\n",
+    "tests": "busy_at_every_search_reloads_the_entry_once or silent_until_after_every_first_poll"
+  },
+  {
+    "label": "coordinator: a late meter's reload is noted",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "        followed.update(unit for name, unit in late.items() if name not in again)\n",
+    "new": "",
+    "tests": "busy_at_every_search_reloads_the_entry_once or silent_until_after_every_first_poll"
+  },
+  {
+    "label": "coordinator: the late answers after their reload are held back",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "        new = answered - self._built_for - self._late_again(answered)\n",
+    "new": "        new = answered - self._built_for\n",
+    "tests": "busy_at_every_search_reloads_the_entry_once or silent_until_after_every_first_poll"
   },
   {
     "label": "datamanager: the open units reach the setup",
@@ -3656,23 +3670,9 @@
   {
     "label": "setup: the open meters reach the coordinator",
     "path": "custom_components/fronius_modbus/__init__.py",
-    "old": "        open_meter_unit_ids=async_open_units_to_follow(\n            hass, entry, topology.open_unit_ids\n        ),\n",
+    "old": "        open_meter_unit_ids=topology.open_unit_ids,\n",
     "new": "",
     "tests": "busy_only_at_the_search_leads_after_it"
-  },
-  {
-    "label": "datamanager: an open unit reloads the entry once per run",
-    "path": "custom_components/fronius_modbus/datamanager.py",
-    "old": "    again = [unit for unit in open_unit_ids if unit in followed]\n",
-    "new": "    again: list[int] = []\n",
-    "tests": "busy_at_every_search_reloads_the_entry_once"
-  },
-  {
-    "label": "datamanager: a followed unit is remembered",
-    "path": "custom_components/fronius_modbus/coordinator.py",
-    "old": "        async_remember_followed(self.hass, entry, found)\n",
-    "new": "",
-    "tests": "busy_at_every_search_reloads_the_entry_once"
   },
   {
     "label": "device: exception 11 is no meter on a look",

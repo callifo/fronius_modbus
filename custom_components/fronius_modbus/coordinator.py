@@ -23,7 +23,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .component_readings import limits_reached
 from .const import CONF_DATAMANAGER, DOMAIN, web_api_disabled
-from .datamanager import async_remember_followed
+from .datamanager import followed_meter_units
 from .derived import grid_status, household_load, throttle_reason
 from .fronius_modbus_api.controls import InverterControls
 from .fronius_modbus_api.device import (
@@ -285,9 +285,9 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
         self._built_for: frozenset[str] | None = None
         # A meter the search could not tell has no place yet: its first answer,
         # in the first refresh too, reloads the entry to find it.
-        self._open_meters = {
-            meter_report_name(unit_id): unit_id for unit_id in open_meter_unit_ids
-        }
+        self._open_meters = frozenset(
+            meter_report_name(unit_id) for unit_id in open_meter_unit_ids
+        )
         # Set by an outage: a firmware update restarts the inverter, so the
         # identity read at setup is read again once it answers.
         self._identity_check_due = False
@@ -381,20 +381,46 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
     def _reload_for_new_sub_systems(self, report: UpdateReport) -> None:
         answered = frozenset(report.updated)
         if self._built_for is None:
-            self._built_for = answered - self._open_meters.keys()
+            self._built_for = answered - self._open_meters
             return
-        new = answered - self._built_for
+        new = answered - self._built_for - self._late_again(answered)
         if not new:
             return
         entry = assume_present(self.config_entry)
-        found = [self._open_meters[name] for name in new if name in self._open_meters]
-        async_remember_followed(self.hass, entry, found)
         _LOGGER.info(
             "%s answered for the first time; reloading the entry to add its entities",
             ", ".join(sorted(new)),
         )
         self._built_for = self._built_for | new
         self.hass.config_entries.async_schedule_reload(entry.entry_id)
+
+    def _late_again(self, answered: frozenset[str]) -> frozenset[str]:
+        """The Datamanager meters that answered late after their one reload.
+
+        They are counted as built: their entities and their place come with the
+        next reload of the entry, not with another automatic one. The other late
+        meters are noted, as this answer is their one reload.
+        """
+        entry = assume_present(self.config_entry)
+        if not entry.data.get(CONF_DATAMANAGER) or self._built_for is None:
+            return frozenset()
+        followed = followed_meter_units(self.hass, entry)
+        names = {meter_report_name(unit): unit for unit in self.device.meter_unit_ids}
+        late = {
+            name: unit
+            for name, unit in names.items()
+            if name in answered and name not in self._built_for
+        }
+        again = frozenset(name for name, unit in late.items() if unit in followed)
+        for name in sorted(again):
+            _LOGGER.info(
+                "%s answered late again after its automatic reload; its entities "
+                "and its place come with the next reload of the entry",
+                name,
+            )
+        self._built_for |= again
+        followed.update(unit for name, unit in late.items() if name not in again)
+        return again
 
     async def _reload_for_a_new_identity(self) -> None:
         if not self._identity_check_due:

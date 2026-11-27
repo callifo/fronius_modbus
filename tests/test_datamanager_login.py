@@ -422,6 +422,24 @@ async def test_an_owner_set_up_while_the_login_is_checked_keeps_the_role(
     assert len(hass.config_entries.async_entries("fronius_modbus")) == 1
 
 
+@pytest.mark.parametrize("kind", ["reconfigure", "options", "reauth"])
+async def test_an_owner_set_up_while_an_entry_asks_its_password_keeps_the_role(
+    hass, two_inverters, kind
+):
+    """The second inverter owned the site when its form opened, not when it was sent."""
+    flow = RoleFlow(hass, kind, inverter_modbus_unit_id=2)
+    form = await flow.submit("technician")
+    assert form["step_id"] == PASSWORD_STEPS[kind]
+    add_entry(hass, inverter(1), HOST)
+
+    result = await flow.enter(form, PASSWORD)
+
+    assert result["errors"] == {"base": "datamanager_login_on_owner"}
+    settings = {**flow.entry.data, **flow.entry.options}
+    assert settings["api_username"] == "none"
+    assert await stored(hass) is None
+
+
 async def test_a_lower_inverter_cannot_take_the_role_from_the_owner(
     hass, two_inverters
 ):

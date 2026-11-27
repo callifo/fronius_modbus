@@ -38,6 +38,7 @@ from .coordinator import (
     FroniusRuntimeData,
     FroniusWebCoordinator,
 )
+from .datamanager import async_meter_topology, async_on_datamanager
 from .entity import expected_device_identifiers
 from .fronius_modbus_api.device import FroniusInverter
 from .froniuswebclient import FroniusWebClient
@@ -146,14 +147,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
         else None
     )
     public_client = client
-    if migrations.web_api_disabled(entry):
+    on_datamanager = await async_on_datamanager(hass, entry, host)
+    if migrations.web_api_disabled(entry) and not on_datamanager:
         public_client = FroniusWebClient(host=host, username=API_USERNAME, password="")
 
-    topology = await _async_meter_topology(hass, public_client)
+    params = ModbusTcpParams(host=host, port=port)
+    topology = (
+        await async_meter_topology(hass, entry, params)
+        if on_datamanager
+        else await _async_meter_topology(hass, public_client)
+    )
     meter_unit_ids, primary = topology.unit_ids, topology.primary_unit_id
     locations = topology.locations
 
-    params = ModbusTcpParams(host=host, port=port)
     unit = async_get_unit(hass, entry, params, inverter_unit_id)
     meter_units = {
         unit_id: async_get_unit(hass, entry, params, unit_id)

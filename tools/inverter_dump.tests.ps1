@@ -132,6 +132,20 @@ $logger = Protect-One '{"Body":{"LoggerInfo":{"UniqueIdentifier":"240.100013","P
 Assert-True (-not $logger.Contains('240.100013')) "the Datamanager serial is redacted: $logger"
 Assert-True ($logger.Contains('fronius-datamanager-card')) "the product beside it stays: $logger"
 
+# The time zone's city says where the device is: a Datamanager names it in
+# GetLoggerInfo, a GEN24 under timezone and timeZone.
+$zone = Protect-One '{"a":{"TimezoneLocation":"Vienna","TimezoneName":"CET","UTCOffset":3600},"b":{"timezone":"Europe/Lisbon"},"c":{"timeZone":"Europe/Madrid"}}'
+foreach ($city in @('Vienna', 'Lisbon', 'Madrid')) {
+    Assert-True (-not $zone.Contains($city)) "the city $city is redacted: $zone"
+}
+Assert-True ($zone.Contains('CET') -and $zone.Contains('3600')) "the offset stays: $zone"
+# UTC is no place, and redacting it would cut it out of every other text.
+$utc = Protect-One '{"timezone":"UTC","text":"UTC offset"}'
+Assert-True ($utc.Contains('UTC offset')) "a text with the zone's name stays readable: $utc"
+$paris = Protect-One '{"TimezoneLocation":"Paris","path":"/config/views/comparison/"}'
+Assert-True ($paris.Contains('/config/views/comparison/')) "a city inside another word stays: $paris"
+Assert-True (-not $paris.Contains('"Paris"')) "the city itself is redacted: $paris"
+
 $raw = (ConvertTo-ExportBodies @('{"serial":"ABCD1234"}') $false '')[0]
 Assert-True ($raw.Contains('ABCD1234')) 'without redaction the serial is kept'
 

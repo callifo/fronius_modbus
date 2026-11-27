@@ -10,13 +10,19 @@ from modbus_connection import ModbusConnectionError
 import pytest
 
 from custom_components import fronius_modbus
-from custom_components.fronius_modbus import config_flow, discovery, froniuswebclient
+from custom_components.fronius_modbus import (
+    config_flow,
+    datamanager,
+    discovery,
+    froniuswebclient,
+)
 from custom_components.fronius_modbus.const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     entry_title,
     instance_key,
 )
+from custom_components.fronius_modbus.datamanager import DeviceFamily
 from custom_components.fronius_modbus.fronius_modbus_api.device import DeviceIdentity
 from custom_components.fronius_modbus.froniuswebclient import (
     FroniusWebResponseError,
@@ -1152,6 +1158,7 @@ async def test_an_ipv6_only_announcement_is_not_offered(hass):
         (config_flow._UnsupportedHardware, "base", "unsupported_hardware"),
         (config_flow._AddressesNotUnique, "base", "modbus_address_conflict"),
         (config_flow._AlreadyConfigured, "base", "already_configured"),
+        (config_flow._DatamanagerFound, "api_username", "datamanager_no_login"),
         (RuntimeError, "base", "unknown"),
     ],
 )
@@ -2366,3 +2373,149 @@ def test_an_unreadable_update_interval_shows_the_default(hass):
     )
 
     assert config_flow.entry_defaults(entry)["scan_interval"] == DEFAULT_SCAN_INTERVAL
+
+
+# -- a Datamanager -------------------------------------------------------------------
+
+
+def answer_family(monkeypatch, family: DeviceFamily) -> list[str]:
+    """Let the device answer with ``family``; returns the hosts asked."""
+    asked: list[str] = []
+
+    def _identify(host: str) -> DeviceFamily:
+        asked.append(host)
+        return family
+
+    monkeypatch.setattr(datamanager, "identify", _identify)
+    return asked
+
+
+def record_the_login(monkeypatch) -> list[str]:
+    """Every login, minted token and Modbus settings write a flow makes."""
+    contacts: list[str] = []
+    for name in ("login", "ensure_modbus_enabled"):
+        monkeypatch.setattr(
+            config_flow.FroniusWebClient,
+            name,
+            lambda self, *_args, name=name: contacts.append(name),
+        )
+    monkeypatch.setattr(
+        config_flow, "mint_token", lambda *_args: contacts.append("mint_token")
+    )
+    return contacts
+
+
+class _SettingsFlow:
+    """One of the four flows that show the role, up to its settings form."""
+
+    def __init__(self, hass, kind: str) -> None:
+        self.kind = kind
+        self.hass = hass
+        self.manager = hass.config_entries.flow
+        if kind == "options":
+            self.manager = hass.config_entries.options
+
+    async def start(self) -> dict:
+        if self.kind == "user":
+            return await self.manager.async_init(DOMAIN, context={"source": "user"})
+        entry = make_entry(self.hass)
+        if self.kind == "reconfigure":
+            return await entry.start_reconfigure_flow(self.hass)
+        if self.kind == "reauth":
+            return await entry.start_reauth_flow(self.hass)
+        return await self.manager.async_init(entry.entry_id)
+
+    async def submit(self, flow_id: str, role: str) -> dict:
+        typed = {"api_username": role}
+        if self.kind != "reauth":
+            typed |= {"host": HOST, "scan_interval": 25}
+        return await self.manager.async_configure(flow_id, typed)
+
+
+def shown_defaults(result: dict) -> dict:
+    """What a form is filled in with."""
+    return {
+        str(marker): marker.default()
+        for marker in result["data_schema"].schema
+        if callable(marker.default)
+    }
+
+
+@pytest.mark.parametrize("role", ["customer", "technician"])
+@pytest.mark.parametrize("kind", ["user", "reconfigure", "options", "reauth"])
+async def test_a_role_on_a_datamanager_asks_to_go_without_the_web_api(
+    hass, mock_modbus, monkeypatch, kind, role
+):
+    """Its login failed with any password, and the form did not say why."""
+    asked = answer_family(monkeypatch, DeviceFamily.DATAMANAGER)
+    contacts = record_the_login(monkeypatch)
+    flow = _SettingsFlow(hass, kind)
+    form = await flow.start()
+
+    result = await flow.submit(form["flow_id"], role)
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == form["step_id"]
+    assert result["errors"] == {"api_username": "datamanager_no_login"}
+    defaults = shown_defaults(result)
+    assert defaults["api_username"] == "none"
+    if kind != "reauth":
+        assert (defaults["host"], defaults["scan_interval"]) == (HOST, 25)
+    assert asked == [HOST]
+
+    result = await flow.submit(form["flow_id"], "none")
+
+    assert result["type"] in (FlowResultType.CREATE_ENTRY, FlowResultType.ABORT)
+    assert contacts == []
+    assert await async_get_token_store(hass).async_load_token(HOST, role) is None
+
+
+@pytest.mark.parametrize("family", [DeviceFamily.OTHER, DeviceFamily.UNKNOWN])
+async def test_any_other_answer_goes_on_to_the_password(
+    hass, mock_modbus, monkeypatch, family
+):
+    answer_family(monkeypatch, family)
+
+    result = await run_flow(hass)
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+
+
+async def test_another_error_keeps_the_role_offered(hass, mock_modbus):
+    """Only a role refused on a Datamanager switches the choice."""
+    flow = _SettingsFlow(hass, "user")
+    form = await flow.start()
+
+    result = await flow.manager.async_configure(
+        form["flow_id"], {"host": "", "scan_interval": 25, "api_username": "customer"}
+    )
+
+    assert result["errors"] == {"host": "invalid_host"}
+    assert shown_defaults(result)["api_username"] == "customer"
+
+
+async def test_without_the_web_api_the_flow_asks_for_no_family(
+    hass, mock_modbus, monkeypatch
+):
+    asked = answer_family(monkeypatch, DeviceFamily.DATAMANAGER)
+    flow = _SettingsFlow(hass, "user")
+    form = await flow.start()
+
+    result = await flow.submit(form["flow_id"], "none")
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert asked == []
+
+
+async def test_a_taken_host_is_refused_before_the_device_is_asked(
+    hass, mock_modbus, monkeypatch
+):
+    asked = answer_family(monkeypatch, DeviceFamily.DATAMANAGER)
+    make_entry(hass)
+    flow = _SettingsFlow(hass, "user")
+    form = await flow.start()
+
+    result = await flow.submit(form["flow_id"], "customer")
+
+    assert result["type"] is FlowResultType.ABORT
+    assert asked == []

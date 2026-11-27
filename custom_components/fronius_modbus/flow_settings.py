@@ -6,7 +6,9 @@ from typing import Any
 
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL
+from homeassistant.core import HomeAssistant
 
+from . import datamanager
 from .const import (
     API_USERNAME,
     API_USERNAMES,
@@ -28,6 +30,7 @@ from .const import (
     WEB_API_DISABLED,
     ModbusRestriction,
 )
+from .flow_state import _DatamanagerFound
 
 
 def _default_payload() -> dict[str, Any]:
@@ -123,3 +126,24 @@ def _should_apply_modbus_config(
             ModbusRestriction.KEEP,
         )
     )
+
+
+async def async_check_role(hass: HomeAssistant, settings: dict[str, Any]) -> None:
+    """Refuse a role on a Datamanager: none of our logins works there."""
+    if settings[CONF_API_USERNAME] == WEB_API_DISABLED:
+        return
+    family = await datamanager.async_identify(hass, settings[CONF_HOST])
+    if family is datamanager.DeviceFamily.DATAMANAGER:
+        raise _DatamanagerFound
+
+
+def defaults_after(
+    errors: dict[str, str],
+    user_input: dict[str, Any] | None,
+    defaults: dict[str, Any],
+) -> dict[str, Any]:
+    """The form's defaults; after a refused role, what was typed, without the web API."""
+    if user_input is None or CONF_API_USERNAME not in errors:
+        return defaults
+    typed = _expand_settings_input(user_input, defaults)
+    return {**typed, CONF_API_USERNAME: WEB_API_DISABLED}

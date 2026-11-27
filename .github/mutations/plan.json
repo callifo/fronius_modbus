@@ -1136,7 +1136,7 @@
   {
     "label": "setup: an entry without the web API gets the public client",
     "path": "custom_components/fronius_modbus/__init__.py",
-    "old": "    if migrations.web_api_disabled(entry):\n",
+    "old": "    if migrations.web_api_disabled(entry) and not on_datamanager:\n",
     "new": "    if False:\n",
     "tests": "entry_without_the_web_api_reads_the_public_endpoints"
   },
@@ -3095,14 +3095,14 @@
   },
   {
     "label": "config flow: an address to allow that is no address is refused",
-    "path": "custom_components/fronius_modbus/config_flow.py",
+    "path": "custom_components/fronius_modbus/flow_forms.py",
     "old": "        address = ipaddress.IPv4Address(str(value).strip())\n    except ValueError as err:\n        raise _InvalidAllowedHost from err\n",
     "new": "        return str(value).strip()\n    except ValueError as err:\n        raise _InvalidAllowedHost from err\n",
     "tests": "no_address_is_refused"
   },
   {
     "label": "config flow: an address no client can have is refused",
-    "path": "custom_components/fronius_modbus/config_flow.py",
+    "path": "custom_components/fronius_modbus/flow_forms.py",
     "old": "    if address.is_loopback or address.is_unspecified:\n        raise _InvalidAllowedHost\n",
     "new": "",
     "tests": "no_client_can_have"
@@ -3225,5 +3225,320 @@
     "old": "        return _restriction_with(restriction, address) == restriction\n",
     "new": "        return True\n",
     "tests": "says_whether_it_already_allows"
+  },
+  {
+    "label": "datamanager: the product is told by its prefix",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "product.startswith(DATAMANAGER_PRODUCT_PREFIXES)",
+    "new": "product in (\"fronius-datamanager-card\", \"fronius-hybrid\")",
+    "tests": "family_an_answer_shows"
+  },
+  {
+    "label": "datamanager: another product is another device",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    return DeviceFamily.OTHER\n",
+    "new": "    return DeviceFamily.DATAMANAGER\n",
+    "tests": "family_an_answer_shows"
+  },
+  {
+    "label": "datamanager: an answer without a head shows nothing",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": " or not isinstance(payload.get(\"Head\"), dict)",
+    "new": "",
+    "tests": "family_an_answer_shows"
+  },
+  {
+    "label": "datamanager: an error status shows nothing",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if response.status_code != HTTPStatus.OK:\n        return None\n",
+    "new": "",
+    "tests": "family_an_answer_shows"
+  },
+  {
+    "label": "datamanager: a product that is no text is no match",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "isinstance(product, str) and ",
+    "new": "",
+    "tests": "family_an_answer_shows"
+  },
+  {
+    "label": "datamanager: an unreachable device shows nothing",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    except FroniusWebUnreachable:\n        return DeviceFamily.UNKNOWN\n",
+    "new": "    except ValueError:\n        return DeviceFamily.UNKNOWN\n",
+    "tests": "does_not_answer_stays_unknown"
+  },
+  {
+    "label": "datamanager: an answer that is no JSON shows nothing",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    except ValueError:\n",
+    "new": "    except KeyError:\n",
+    "tests": "family_an_answer_shows"
+  },
+  {
+    "label": "datamanager: only an entry without the web API is asked",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if not web_api_disabled({**entry.data, **entry.options}):\n        return False\n",
+    "new": "",
+    "tests": "role_is_not_asked_for_its_family"
+  },
+  {
+    "label": "datamanager: without an answer the last one counts",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "        return bool(remembered)\n",
+    "new": "        return False\n",
+    "tests": "asleep_at_the_start"
+  },
+  {
+    "label": "datamanager: a clear answer is remembered",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if found != bool(remembered):\n",
+    "new": "    if False:\n",
+    "tests": "asleep_at_the_start"
+  },
+  {
+    "label": "setup: a Datamanager gets no public client",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "    if migrations.web_api_disabled(entry) and not on_datamanager:\n",
+    "new": "    if migrations.web_api_disabled(entry):\n",
+    "tests": "sends_no_web_request"
+  },
+  {
+    "label": "config flow: a role on a Datamanager is refused",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "                await async_check_role(self.hass, settings)\n",
+    "new": "",
+    "tests": "role_on_a_datamanager"
+  },
+  {
+    "label": "config flow: without the web API no family is asked for",
+    "path": "custom_components/fronius_modbus/flow_settings.py",
+    "old": "    if settings[CONF_API_USERNAME] == WEB_API_DISABLED:\n        return\n    family",
+    "new": "    family",
+    "tests": "asks_for_no_family"
+  },
+  {
+    "label": "config flow: only a Datamanager refuses the role",
+    "path": "custom_components/fronius_modbus/flow_settings.py",
+    "old": "    if family is datamanager.DeviceFamily.DATAMANAGER:\n",
+    "new": "    if family is not datamanager.DeviceFamily.OTHER:\n",
+    "tests": "any_other_answer"
+  },
+  {
+    "label": "config flow: a refused role is not offered again",
+    "path": "custom_components/fronius_modbus/flow_settings.py",
+    "old": "    return {**typed, CONF_API_USERNAME: WEB_API_DISABLED}\n",
+    "new": "    return typed\n",
+    "tests": "role_on_a_datamanager"
+  },
+  {
+    "label": "config flow: a refused role keeps what was typed",
+    "path": "custom_components/fronius_modbus/flow_settings.py",
+    "old": "    typed = _expand_settings_input(user_input, defaults)\n",
+    "new": "    typed = defaults\n",
+    "tests": "role_on_a_datamanager"
+  },
+  {
+    "label": "config flow: other errors keep the form's defaults",
+    "path": "custom_components/fronius_modbus/flow_settings.py",
+    "old": " or CONF_API_USERNAME not in errors:",
+    "new": ":",
+    "tests": "another_error_keeps_the_role"
+  },
+  {
+    "label": "datamanager: a GEN24 without the Solar API is another device",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    return DeviceFamily.OTHER if is_gen24 else DeviceFamily.UNKNOWN\n",
+    "new": "    return DeviceFamily.UNKNOWN\n",
+    "tests": "gen24_without_the_solar_api"
+  },
+  {
+    "label": "datamanager: only the GEN24 path's own answer shows a GEN24",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "isinstance(_read_json(host, GEN24_PATH), dict)",
+    "new": "_read_json(host, GEN24_PATH) is not None",
+    "tests": "counts_only_with_its_own_answer"
+  },
+  {
+    "label": "datamanager: a clear answer needs no second request",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "        if family is not DeviceFamily.UNKNOWN:\n            return family\n",
+    "new": "        if family is DeviceFamily.OTHER:\n            return family\n",
+    "tests": "question_is_one_request"
+  },
+  {
+    "label": "setup: a Datamanager's meters are looked for",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "        if on_datamanager\n",
+    "new": "        if False\n",
+    "tests": "meter_of_a_datamanager_is_read"
+  },
+  {
+    "label": "datamanager: no meter found is no proof that it is gone",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "        confirmed=False,\n",
+    "new": "        confirmed=True,\n",
+    "tests": "loses_no_registry_row or meters_and_where_they_are"
+  },
+  {
+    "label": "datamanager: the first meter unit is always listed",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "sorted({METER_UNIT_IDS[0], *found})",
+    "new": "sorted(found) or [METER_UNIT_IDS[0]]",
+    "tests": "meters_and_where_they_are"
+  },
+  {
+    "label": "datamanager: the grid meter leads",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "next(iter([*grid_meters, *sorted(found)]), METER_UNIT_IDS[0])",
+    "new": "next(iter(sorted(found)), METER_UNIT_IDS[0])",
+    "tests": "meters_and_where_they_are"
+  },
+  {
+    "label": "datamanager: no load beside other inverters",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if site is not None and site.inverters != 1:\n",
+    "new": "    if False:\n",
+    "tests": "beside_other_inverters"
+  },
+  {
+    "label": "datamanager: unread inverters are no single one",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if site is not None and site.inverters != 1:\n",
+    "new": "    if site is not None and site.inverters > 1:\n",
+    "tests": "beside_other_inverters"
+  },
+  {
+    "label": "datamanager: one meter on each side is the same",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if len(found) == 1 and len(site.meters) == 1:\n",
+    "new": "    if False:\n",
+    "tests": "meters_and_where_they_are"
+  },
+  {
+    "label": "datamanager: one meter among several is not guessed",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if len(found) == 1 and len(site.meters) == 1:\n",
+    "new": "    if len(found) == 1 and site.meters:\n",
+    "tests": "meters_and_where_they_are"
+  },
+  {
+    "label": "datamanager: one listed meter among several found is not guessed",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if len(found) == 1 and len(site.meters) == 1:\n",
+    "new": "    if found and len(site.meters) == 1:\n",
+    "tests": "meters_and_where_they_are"
+  },
+  {
+    "label": "datamanager: a meter without a serial number is left out",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if not isinstance(serial, str) or serial.strip() in (\"\", NO_SERIAL):\n",
+    "new": "    if not isinstance(serial, str):\n",
+    "tests": "without_a_serial_number"
+  },
+  {
+    "label": "datamanager: a meter switched off is left out",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if value.get(\"Enable\") == 0:\n        return None\n",
+    "new": "",
+    "tests": "without_a_serial_number"
+  },
+  {
+    "label": "datamanager: a place that is no whole number is unknown",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": " if value >= 0 and value % 1 == 0 else None",
+    "new": " if value >= 0 else None",
+    "tests": "location_that_is_no_number"
+  },
+  {
+    "label": "datamanager: a negative place is unknown",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "value >= 0 and ",
+    "new": "",
+    "tests": "location_that_is_no_number"
+  },
+  {
+    "label": "datamanager: a flag is no place",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if isinstance(value, bool) or not",
+    "new": "    if not",
+    "tests": "location_that_is_no_number"
+  },
+  {
+    "label": "datamanager: without an answer there is no site",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "        if meters is None:\n            return None\n",
+    "new": "",
+    "tests": "no_answer_is_no_site"
+  },
+  {
+    "label": "datamanager: a lost connection ends the search",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    except ModbusConnectionError:\n",
+    "new": "    except KeyError:\n",
+    "tests": "gone_during_the_search"
+  },
+  {
+    "label": "device: a silent meter unit has no meter now",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        except ModbusError as err:\n            _LOGGER.debug(\"No meter found on a unit: %s\", error_text(err))\n            return None\n",
+    "new": "        except KeyError:\n            return None\n",
+    "tests": "silent_at_the_start or datamanager_without_a_meter"
+  },
+  {
+    "label": "datamanager: an unreachable Solar API is no site",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    except FroniusWebUnreachable:\n        return None\n",
+    "new": "    except ValueError:\n        return None\n",
+    "tests": "unreachable_device_is_no_site"
+  },
+  {
+    "label": "datamanager: a sub-meter is no load while the grid meter is silent",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if site is not None and site.has_grid_meter and not grid_meters:\n",
+    "new": "    if False:\n",
+    "tests": "sub_meter_is_no_load or meters_and_where_they_are"
+  },
+  {
+    "label": "datamanager: a sub-meter alone keeps its place",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "site.has_grid_meter and not grid_meters",
+    "new": "not grid_meters",
+    "tests": "meters_and_where_they_are"
+  },
+  {
+    "label": "datamanager: a Symo Hybrid is recognized",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "(\"fronius-datamanager\", \"fronius-hybrid\")",
+    "new": "(\"fronius-datamanager\",)",
+    "tests": "family_an_answer_shows"
+  },
+  {
+    "label": "datamanager: a sleeping inverter is remembered",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    return max(known, listed)\n",
+    "new": "    return listed\n",
+    "tests": "asleep_at_a_start or not_forgotten"
+  },
+  {
+    "label": "datamanager: a second inverter is noticed",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    return max(known, listed)\n",
+    "new": "    return known or listed\n",
+    "tests": "added_later_is_noticed"
+  },
+  {
+    "label": "datamanager: the number of inverters is kept",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if listed > known:\n",
+    "new": "    if False:\n",
+    "tests": "asleep_at_a_start"
+  },
+  {
+    "label": "datamanager: a slow answer is waited for",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "SOLAR_API_TIMEOUT = (4.0, 10.0)\n",
+    "new": "SOLAR_API_TIMEOUT = (4.0, 4.0)\n",
+    "tests": "time_to_answer"
   }
 ]

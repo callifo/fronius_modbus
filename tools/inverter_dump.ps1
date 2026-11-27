@@ -97,6 +97,9 @@ $Redacted = '<redacted>'
 # replaced wherever else it appears. A field's description (_psk_meta) names
 # its type, not its value, and stays.
 $SensitiveKey = '^(?!_\w*_meta$)(serial|serialNumber|UniqueID|UniqueIdentifier|systemName|CustomName|hostname|hw_address|mac|ssid|ip|ipAddress|dns|nameservers|gateway|e-?mail|latitude|longitude|street|city|zip|postalCode|\w*(passw|secret|apikey|privatekey|psk)\w*|\w*token)$'
+# Replaced like the keys above, but not elsewhere: a city is part of other
+# words, as Paris is of "comparison".
+$SensitiveHereKey = '^(timezone|TimezoneLocation)$'
 $SensitivePattern = @(
     '\b(?:(?:10|127)(?:\.\d{1,3}){3}|(?:192\.168|169\.254|172\.(?:1[6-9]|2\d|3[01]))(?:\.\d{1,3}){2})\b',
     '\b[0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5}\b',
@@ -395,6 +398,7 @@ function Read-JsonDocument([string]$Text) {
     One loop with a stack of open containers: a function call per token made
     a login export take two minutes. Each frame knows what it expects next. #>
     $sensitiveKey = New-Object regex ($SensitiveKey, 'IgnoreCase')
+    $sensitiveHereKey = New-Object regex ($SensitiveHereKey, 'IgnoreCase')
     $parents = New-Object System.Collections.Generic.Stack[object]
     # "learn": the value sits right under a sensitive key (or in its array).
     # A sensitive object's other settings, such as an address mode "manual",
@@ -453,7 +457,7 @@ function Read-JsonDocument([string]$Text) {
                 $key = $token.Substring(1, $token.Length - 2)
                 if ($key.Contains('\')) { $key = ConvertFrom-JsonString $token }
                 $frame.valueLearn = $sensitiveKey.IsMatch($key)
-                $frame.valueSensitive = $frame.sensitive -or $frame.valueLearn
+                $frame.valueSensitive = $frame.sensitive -or $frame.valueLearn -or $sensitiveHereKey.IsMatch($key)
                 $frame.key = $token
                 if ($script:Redacting -and -not $script:Collecting) {
                     $protected = $key

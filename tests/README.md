@@ -165,10 +165,12 @@ against the library's in-memory mock unit, `test_coordinator.py` and
 `test_e2e.py` the parts that only exist once Home Assistant is driving the
 integration. The slow files carry the `e2e` mark: `test_e2e.py`,
 `test_meter_power.py` (the grid meter's power on its own interval),
-`test_adoption.py` and `test_repairs.py`.
+`test_adoption.py`, `test_repairs.py` and `test_datamanager_entry.py`.
 The `mock_modbus` fixture in `conftest.py` stands in for the connection Home
 Assistant's `modbus` integration shares - a fresh in-memory connection per
 (re)load, seeded from the captured Symo GEN24 in `tests/fixtures/`.
+`datamanager_modbus` does the same for a Symo behind a Datamanager, from the
+dump in issue 110.
 A test that schedules the reload of an entry that is not loaded (never set up,
 or unloaded) fails, because that reload would run the real setup after the
 test. The `reload_requests`

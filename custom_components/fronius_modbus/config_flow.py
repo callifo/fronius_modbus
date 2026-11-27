@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import ipaddress
 import logging
 from typing import Any, Awaitable, Callable
 
@@ -51,6 +50,7 @@ from .flow_forms import (
     CONF_ALLOWED_HOST,
     CONF_CHANGE_ALLOWED_HOST,
     allowed_host_schema,
+    checked_allowed_host,
     password_schema,
     role_schema,
     settings_schema,
@@ -60,6 +60,8 @@ from .flow_settings import (
     _entry_payload,
     _expand_settings_input,
     _should_apply_modbus_config,
+    async_check_role,
+    defaults_after,
     entry_defaults,
 )
 from .flow_state import (
@@ -68,6 +70,7 @@ from .flow_state import (
     _AlreadyConfigured,
     _CannotConnect,
     _CannotConnectModbus,
+    _DatamanagerFound,
     _InvalidAllowedHost,
     _InvalidApiCredentials,
     _InvalidHost,
@@ -121,21 +124,8 @@ _FORM_ERRORS: dict[type[Exception], tuple[str, str]] = {
     _UnsupportedHardware: ("base", "unsupported_hardware"),
     _AddressesNotUnique: ("base", "modbus_address_conflict"),
     _AlreadyConfigured: ("base", "already_configured"),
+    _DatamanagerFound: (CONF_API_USERNAME, "datamanager_no_login"),
 }
-
-
-def _checked_allowed_host(value: Any) -> str:
-    """The address to allow, as the IPv4 address the inverter's list takes."""
-    try:
-        address = ipaddress.IPv4Address(str(value).strip())
-    except ValueError as err:
-        raise _InvalidAllowedHost from err
-    # No client sends from these; allowed alone they lock every device out.
-    if address.is_loopback or address.is_unspecified:
-        raise _InvalidAllowedHost
-    if address.is_multicast or address.is_reserved:
-        raise _InvalidAllowedHost
-    return str(address)
 
 
 def _asks_for_the_address(user_input: dict[str, Any], settings: dict[str, Any]) -> bool:
@@ -533,7 +523,7 @@ class TokenFlowMixin:
 
         if user_input is not None:
             try:
-                state.allowed_host = _checked_allowed_host(
+                state.allowed_host = checked_allowed_host(
                     user_input.get(CONF_ALLOWED_HOST, "")
                 )
                 await claim_host(state.settings)
@@ -593,6 +583,7 @@ class TokenFlowMixin:
                 # Before the login: validation may already write the Modbus
                 # settings of a host another entry owns.
                 await claim_host(settings)
+                await async_check_role(self.hass, settings)
                 ask_allowed_host = _asks_for_the_address(user_input, settings)
                 # The question comes only with a write: Configure writes
                 # unchanged settings only when asked to.
@@ -662,7 +653,7 @@ class TokenFlowMixin:
 
         return self.async_show_form(
             step_id=step_id,
-            data_schema=build_schema(defaults),
+            data_schema=build_schema(defaults_after(errors, user_input, defaults)),
             errors=errors,
         )
 

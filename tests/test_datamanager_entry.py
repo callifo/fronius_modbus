@@ -40,6 +40,7 @@ from .test_e2e import (
     setup_entry,
     state_of,
 )
+from .test_fronius_registers import fronius_words
 
 # Fed by the event paths of a GEN24; a Datamanager has none of them.
 EVENT_KEYS = {
@@ -485,3 +486,67 @@ async def test_the_meter_0_1_9_read_on_a_datamanager_keeps_its_rows(
         ).state
         == "30.0"
     )
+
+
+# -- its own registers ---------------------------------------------------------------
+
+SITE_KEYS = {"site_power", "site_energy_day", "site_energy_year", "site_energy_total"}
+
+
+def add_fronius_registers(shared) -> None:
+    """Serve the registers the dump of issue 110 does not hold."""
+    shared._fixture[INVERTER_UNIT_ID]["holding"] |= fronius_words()
+
+
+@pytest.mark.parametrize("inverters", [0, 1, 2])
+async def test_the_site_totals_are_on_beside_other_inverters(
+    hass, datamanager_modbus, datamanager_entry, monkeypatch, inverters
+):
+    """With one inverter they repeat its own power and energy."""
+    add_fronius_registers(datamanager_modbus)
+    answer_site(monkeypatch, inverters=inverters)
+    entry = datamanager_entry
+    await setup_entry(hass, entry)
+
+    registry = er.async_get(hass)
+    prefix = entity_prefix(entry.entry_id)
+    for key in SITE_KEYS:
+        entity_id = registry.async_get_entity_id("sensor", DOMAIN, f"{prefix}_{key}")
+        off = registry.async_get(entity_id).disabled_by is not None
+        assert off is (inverters != 2)
+    if inverters == 2:
+        assert state_of(hass, entry, "site_power") == "1200"
+        assert state_of(hass, entry, "site_energy_day") == "5600"
+        assert state_of(hass, entry, "site_energy_year") == "70000"
+        assert state_of(hass, entry, "site_energy_total") == "4294967396"
+
+
+async def test_the_state_code_is_shown(hass, datamanager_modbus, datamanager_entry):
+    add_fronius_registers(datamanager_modbus)
+    entry = datamanager_entry
+    await setup_entry(hass, entry)
+
+    assert state_of(hass, entry, "state_code") == "307"
+
+
+async def test_without_the_registers_there_are_no_such_entities(
+    hass, datamanager_modbus, datamanager_entry
+):
+    for address in fronius_words():
+        datamanager_modbus.fail_read(
+            INVERTER_UNIT_ID, address, IllegalDataAddressError()
+        )
+    entry = datamanager_entry
+    await setup_entry(hass, entry)
+
+    assert not (SITE_KEYS | {"state_code"}) & registered_keys(hass, entry)
+
+
+async def test_a_gen24_is_not_asked_for_them(hass, mock_modbus, monkeypatch):
+    serve_the_public_endpoints(mock_modbus, monkeypatch)
+    answer_family(monkeypatch, DeviceFamily.OTHER)
+    entry = make_datamanager_entry(hass)
+    await setup_entry(hass, entry)
+
+    asked = {event.address for event in mock_modbus.unit(INVERTER_UNIT_ID).read_events}
+    assert not asked & set(fronius_words())

@@ -25,6 +25,8 @@ class MeterTopology:
     confirmed: bool
     # False for the default, which counts as confirmed without a web client.
     answered: bool = False
+    # Several inverters answer at this address, each on its own unit.
+    several_inverters: bool = False
 
     @property
     def reported_unit_ids(self) -> tuple[int, ...]:

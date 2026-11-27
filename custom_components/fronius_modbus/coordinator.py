@@ -145,6 +145,8 @@ class FroniusRuntimeData:
     # Only these prove a site has a single meter: the meters that answered may
     # leave one out, and without a web client its one meter is a default.
     reported_meter_unit_ids: tuple[int, ...] = ()
+    # Other inverters share the Datamanager; only one of them is read here.
+    several_inverters: bool = False
     # Reported at an earlier start: a power module seen once stays, since one
     # answer without it would otherwise retire it.
     reported_keys: frozenset[str] = frozenset()

@@ -218,6 +218,7 @@ def meter_topology(found: dict[int, str], site: Site | None) -> MeterTopology:
         primary_unit_id=primary,
         locations=locations,
         confirmed=False,
+        several_inverters=site is not None and site.inverters > 1,
     )
 
 

@@ -165,7 +165,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
         unit_id: async_get_unit(hass, entry, params, unit_id)
         for unit_id in meter_unit_ids
     }
-    device = FroniusInverter(unit, inverter_unit_id, meter_units)
+    device = FroniusInverter(
+        unit, inverter_unit_id, meter_units, datamanager=on_datamanager
+    )
     modbus = FroniusModbusCoordinator(
         hass,
         entry,
@@ -226,6 +228,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
         primary_meter_unit_id=primary,
         topology_confirmed=topology.confirmed,
         reported_meter_unit_ids=topology.reported_unit_ids,
+        several_inverters=topology.several_inverters,
         reported_keys=migrations.reported_keys(hass, entry),
         registered_keys=migrations.registered_keys(
             hass,

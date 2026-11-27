@@ -305,6 +305,24 @@ Assert-True ((Get-SortedAskedUnits) -eq $everyUnit) "a Datamanager without a met
 $asked = Get-AskedUnits $false @(1, 57)
 Assert-True ($script:ModbusRead.units['57'].complete -eq $true) "a meter outside the usual units is found without -AllUnits: $($script:AskedUnits.Count) units asked"
 
+# The registers of a Datamanager outside SunSpec; a refused one leaves the others.
+$asked = New-Object System.Collections.Generic.List[string]
+$fronius = Read-FroniusRegisters {
+    param($Unit, $Address, $Count)
+    $asked.Add("${Unit}:${Address}+${Count}")
+    if ($Address -eq 215) { throw "$ModbusProtocolError 2" }
+    return , [int[]]@(1..$Count)
+} 1
+Assert-True (($asked -join ' ') -eq '1:213+1 1:215+2 1:499+14') "the Fronius registers asked: $asked"
+Assert-True ($fronius['499'].registers.Count -eq 14 -and -not $fronius['499'].error) 'the site totals are kept'
+Assert-True ($fronius['215'].error -and $fronius['213'].registers[0] -eq 1) 'a refused Fronius register does not end the read'
+$null = Get-AskedUnits $true @(1, 240)
+Assert-True ($script:ModbusRead.fronius['499'].registers.Count -eq 14) "a Datamanager's own registers are in the file"
+$export = New-ExportText $null $true $script:ModbusRead @('/a') @(200) @('{}')
+Assert-True ((Test-ValidJson $export) -and $export.Contains('"fronius"')) 'the file with them is valid JSON'
+$null = Get-AskedUnits $false @(1, 200)
+Assert-True (-not $script:ModbusRead.Contains('fronius')) 'an inverter with the GEN24 web interface is not asked for them'
+
 $script:Connects = 0
 & {
     function Connect-Modbus { $script:Connects++ }

@@ -3540,5 +3540,103 @@
     "old": "SOLAR_API_TIMEOUT = (4.0, 10.0)\n",
     "new": "SOLAR_API_TIMEOUT = (4.0, 4.0)\n",
     "tests": "time_to_answer"
+  },
+  {
+    "label": "device: only a Datamanager is asked for its site totals",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        if self._datamanager:\n            components[REPORT_SITE]",
+    "new": "        if True:\n            components[REPORT_SITE]",
+    "tests": "no_other_inverter_is_asked"
+  },
+  {
+    "label": "device: only a Datamanager is asked for its state code",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        if self._datamanager and HYBRID_MODEL not in identity.model:\n",
+    "new": "        if HYBRID_MODEL not in identity.model:\n",
+    "tests": "no_other_inverter_is_asked"
+  },
+  {
+    "label": "device: a hybrid has no state code",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        if self._datamanager and HYBRID_MODEL not in identity.model:\n",
+    "new": "        if self._datamanager:\n",
+    "tests": "hybrid_has_no_state_code"
+  },
+  {
+    "label": "device: a refused block is absent",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        except ABSENCE_ERRORS:\n            return None\n        except ModbusConnectionError:\n            raise\n        except ModbusError as err:\n            _LOGGER.debug(\n                \"%s did not",
+    "new": "        except ModbusConnectionError:\n            raise\n        except ModbusError as err:\n            _LOGGER.debug(\n                \"%s did not",
+    "tests": "refused_block"
+  },
+  {
+    "label": "registers: the state code's address",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/fronius_registers.py",
+    "old": "integer(213,",
+    "new": "integer(214,",
+    "tests": "state_code_and_the_site_totals"
+  },
+  {
+    "label": "registers: the site power's address",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/fronius_registers.py",
+    "old": "uint32(499,",
+    "new": "uint32(500,",
+    "tests": "state_code_and_the_site_totals"
+  },
+  {
+    "label": "registers: the total energy's address",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/fronius_registers.py",
+    "old": "uint64(509,",
+    "new": "uint64(508,",
+    "tests": "state_code_and_the_site_totals"
+  },
+  {
+    "label": "registers: the year's address",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/fronius_registers.py",
+    "old": "uint64(505,",
+    "new": "uint64(506,",
+    "tests": "state_code_and_the_site_totals"
+  },
+  {
+    "label": "registers: a state code the device does not have is unknown",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/fronius_registers.py",
+    "old": "integer(213, signed=False, nan=NOT_IMPLEMENTED_UINT16)",
+    "new": "integer(213, signed=False)",
+    "tests": "does_not_have_is_unknown"
+  },
+  {
+    "label": "registers: a power the device does not have is unknown",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/fronius_registers.py",
+    "old": "uint32(499, nan=NOT_IMPLEMENTED_UINT32, unit=\"W\")",
+    "new": "uint32(499, unit=\"W\")",
+    "tests": "does_not_have_is_unknown"
+  },
+  {
+    "label": "registers: a total the device does not have is unknown",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/fronius_registers.py",
+    "old": "energy_total = uint64(509, nan=NOT_IMPLEMENTED_UINT64, unit=\"Wh\")",
+    "new": "energy_total = uint64(509, unit=\"Wh\")",
+    "tests": "does_not_have_is_unknown"
+  },
+  {
+    "label": "entities: the site totals are on only beside other inverters",
+    "path": "custom_components/fronius_modbus/datamanager_entities.py",
+    "old": "        entity_registry_enabled_default=runtime.several_inverters,\n",
+    "new": "        entity_registry_enabled_default=True,\n",
+    "tests": "site_totals_are_on"
+  },
+  {
+    "label": "datamanager: unread inverters are not several",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "site is not None and site.inverters > 1",
+    "new": "site is not None and site.inverters != 1",
+    "tests": "site_totals_are_on"
+  },
+  {
+    "label": "setup: the device knows its Datamanager",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "meter_units, datamanager=on_datamanager",
+    "new": "meter_units, datamanager=False",
+    "tests": "state_code_is_shown"
   }
 ]

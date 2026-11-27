@@ -523,6 +523,43 @@ async def test_a_meter_busy_at_every_search_reloads_the_entry_once(
     assert "unit 241" in caplog.text
 
 
+async def test_a_retried_setup_still_reloads_for_a_meter_busy_at_its_search(
+    hass, datamanager_modbus, datamanager_entry, monkeypatch
+):
+    """The first try failed before any reload; the meter was not followed yet."""
+    add_meter(datamanager_modbus, 241, "B2")
+    answer_site(monkeypatch, ("B2", 0))
+    probe = FroniusInverter.async_probe_meter
+    calls = []
+
+    async def busy_at_the_first_two_searches(unit):
+        calls.append(unit)
+        units = len(DATAMANAGER_METER_UNIT_IDS)
+        if len(calls) % units == 2 and len(calls) <= 2 * units:
+            raise ServerDeviceBusyError
+        return await probe(unit)
+
+    monkeypatch.setattr(
+        FroniusInverter,
+        "async_probe_meter",
+        staticmethod(busy_at_the_first_two_searches),
+    )
+    datamanager_modbus.fail_requests(INVERTER_UNIT_ID, ModbusTimeoutError())
+    entry = datamanager_entry
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+    datamanager_modbus.fail_requests(INVERTER_UNIT_ID, None)
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    for _ in range(2):
+        await entry.runtime_data.modbus.async_refresh()
+        await hass.async_block_till_done()
+
+    assert entry.runtime_data.meter_locations == {241: 0}
+
+
 @pytest.mark.parametrize(
     ("at", "failure"),
     [

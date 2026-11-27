@@ -23,6 +23,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .component_readings import limits_reached
 from .const import CONF_DATAMANAGER, DOMAIN, web_api_disabled
+from .datamanager import async_remember_followed
 from .derived import grid_status, household_load, throttle_reason
 from .fronius_modbus_api.controls import InverterControls
 from .fronius_modbus_api.device import (
@@ -284,9 +285,9 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
         self._built_for: frozenset[str] | None = None
         # A meter the search could not tell has no place yet: its first answer,
         # in the first refresh too, reloads the entry to find it.
-        self._open_meters = frozenset(
-            meter_report_name(unit_id) for unit_id in open_meter_unit_ids
-        )
+        self._open_meters = {
+            meter_report_name(unit_id): unit_id for unit_id in open_meter_unit_ids
+        }
         # Set by an outage: a firmware update restarts the inverter, so the
         # identity read at setup is read again once it answers.
         self._identity_check_due = False
@@ -380,19 +381,20 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
     def _reload_for_new_sub_systems(self, report: UpdateReport) -> None:
         answered = frozenset(report.updated)
         if self._built_for is None:
-            self._built_for = answered - self._open_meters
+            self._built_for = answered - self._open_meters.keys()
             return
         new = answered - self._built_for
         if not new:
             return
+        entry = assume_present(self.config_entry)
+        found = [self._open_meters[name] for name in new if name in self._open_meters]
+        async_remember_followed(self.hass, entry, found)
         _LOGGER.info(
             "%s answered for the first time; reloading the entry to add its entities",
             ", ".join(sorted(new)),
         )
         self._built_for = self._built_for | new
-        self.hass.config_entries.async_schedule_reload(
-            assume_present(self.config_entry).entry_id
-        )
+        self.hass.config_entries.async_schedule_reload(entry.entry_id)
 
     async def _reload_for_a_new_identity(self) -> None:
         if not self._identity_check_due:

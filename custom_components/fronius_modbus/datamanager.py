@@ -10,6 +10,7 @@ from collections.abc import Collection
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from http import HTTPStatus
+import logging
 from typing import Any
 
 from modbus_connection import ModbusConnectionError, ModbusError, ModbusTcpParams
@@ -54,6 +55,9 @@ HIGHEST_INVERTER_NUMBER = 99
 SOLAR_API_TIMEOUT = (4.0, 10.0)
 # What the Solar API shows for a meter without a serial number.
 NO_SERIAL = "n.a."
+_FOLLOWED_UNITS_DATA_KEY = "datamanager_open_units_followed"
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class DeviceFamily(StrEnum):
@@ -358,6 +362,40 @@ async def _async_look_for_meters(
         if identity is not None:
             found[unit_id] = identity.serial.strip()
     return found, open_units, False
+
+
+@callback
+def async_open_units_to_follow(
+    hass: HomeAssistant, entry: ConfigEntry, open_unit_ids: tuple[int, ...]
+) -> tuple[int, ...]:
+    """The open units whose first answer may reload the entry: each once per run.
+
+    A meter busy at every search but answering every poll would reload it again
+    and again; after the first time it stays without its place.
+    """
+    followed = _followed_units(hass, entry)
+    again = [unit for unit in open_unit_ids if unit in followed]
+    for unit in again:
+        _LOGGER.info(
+            "The meter on unit %s did not answer the search again; it stays "
+            "without its place until Home Assistant restarts",
+            unit,
+        )
+    return tuple(unit for unit in open_unit_ids if unit not in again)
+
+
+@callback
+def async_remember_followed(
+    hass: HomeAssistant, entry: ConfigEntry, unit_ids: Collection[int]
+) -> None:
+    """Note the open units the entry reloads for, when it does: not at a failed setup."""
+    _followed_units(hass, entry).update(unit_ids)
+
+
+def _followed_units(hass: HomeAssistant, entry: ConfigEntry) -> set[int]:
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    by_entry: dict[str, set[int]] = domain_data.setdefault(_FOLLOWED_UNITS_DATA_KEY, {})
+    return by_entry.setdefault(entry.entry_id, set())
 
 
 @callback

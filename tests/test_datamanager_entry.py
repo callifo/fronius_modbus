@@ -1,5 +1,7 @@
 """An entry on a Datamanager, end to end, with the registers of issue 110."""
 
+import logging
+
 from modbus_connection import (
     GatewayTargetError,
     IllegalDataAddressError,
@@ -487,6 +489,38 @@ async def test_a_grid_meter_busy_only_at_the_search_leads_after_it(
     assert entry.runtime_data.primary_meter_unit_id == 241
     assert entry.runtime_data.meter_locations == {241: 0}
     assert state_of(hass, entry, "load") == "627.0"
+
+
+async def test_a_meter_busy_at_every_search_reloads_the_entry_once(
+    hass, datamanager_modbus, datamanager_entry, monkeypatch, caplog
+):
+    """It answers every poll, so each first answer would reload once more."""
+    add_meter(datamanager_modbus, 241, "B2")
+    answer_site(monkeypatch, ("B2", 0))
+    probe = FroniusInverter.async_probe_meter
+    searches = []
+
+    async def busy_at_every_search(unit):
+        if len(searches) % len(DATAMANAGER_METER_UNIT_IDS) == 1:
+            searches.append(unit)
+            raise ServerDeviceBusyError
+        searches.append(unit)
+        return await probe(unit)
+
+    monkeypatch.setattr(
+        FroniusInverter, "async_probe_meter", staticmethod(busy_at_every_search)
+    )
+    entry = datamanager_entry
+    await setup_entry(hass, entry)
+    caplog.set_level(logging.INFO)
+
+    for _ in range(3):
+        await entry.runtime_data.modbus.async_refresh()
+        await hass.async_block_till_done()
+
+    assert len(searches) == 2 * len(DATAMANAGER_METER_UNIT_IDS)
+    assert state_of(hass, entry, "meter_241_power") == "30.0"
+    assert "unit 241" in caplog.text
 
 
 @pytest.mark.parametrize(

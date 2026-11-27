@@ -306,7 +306,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
 
         _mark_reported_rows()
         entry.async_on_unload(web.async_add_listener(_mark_reported_rows))
-    # After the last await: an entry set up before it found this one starting.
+    # After the last await: an entry set up meanwhile found this owner still
+    # starting and could not tell it.
     async_recount_the_site(hass, entry, host)
     return True
 

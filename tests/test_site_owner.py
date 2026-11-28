@@ -269,11 +269,12 @@ async def test_the_load_turns_unknown_when_a_second_inverter_joins_the_search(
     )
     release = hold_the_restart(monkeypatch, first)
 
-    loaded = await hass.config_entries.async_setup(first.entry_id)
+    # Its answer is the state at that moment, which the restart may have left.
+    await hass.config_entries.async_setup(first.entry_id)
     release.set()
     await hass.async_block_till_done()
 
-    assert loaded
+    assert first.state is ConfigEntryState.LOADED
     assert joined[0].state is ConfigEntryState.LOADED
     assert state_of(hass, first, "load") == "unknown"
 
@@ -298,11 +299,12 @@ async def test_the_load_turns_unknown_when_an_inverter_joins_the_migrations(
     )
     release = hold_the_restart(monkeypatch, first)
 
-    loaded = await hass.config_entries.async_setup(first.entry_id)
+    # Its answer is the state at that moment, which the restart may have left.
+    await hass.config_entries.async_setup(first.entry_id)
     release.set()
     await hass.async_block_till_done()
 
-    assert loaded
+    assert first.state is ConfigEntryState.LOADED
     assert joined[0].state is ConfigEntryState.LOADED
     assert state_of(hass, first, "load") == "unknown"
 

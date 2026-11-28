@@ -1047,14 +1047,21 @@ def _saved(mode: ExtendedMode, image: tuple[int, int, int]) -> dict:
 async def test_a_mode_at_0_w_stays_after_a_restart_without_a_write(
     hass, mock_modbus, monkeypatch, symo_gen24, image, mode, shown, limit
 ):
-    """Issue 187: PV Charge Limit at 0 W came back as block_charging, its limit gone."""
+    """Issue 187: PV Charge Limit at 0 W came back as block_charging, its limit gone.
+
+    The platforms start in no fixed order; a number set up before the select
+    follows the kept mode with the next poll.
+    """
+    _select_last(monkeypatch)
     entry, writes = await _restart_with(
         hass, mock_modbus, monkeypatch, symo_gen24, image, _saved(mode, image)
     )
 
     assert state_of(hass, entry, "ext_control_mode", "select") == shown
+    await entry.runtime_data.modbus.async_refresh()
+    await hass.async_block_till_done()
     assert float(state_of(hass, entry, limit, "number")) == 0
-    for _ in range(MODE_WRITE_GRACE_POLLS):
+    for _ in range(MODE_WRITE_GRACE_POLLS - 1):
         await entry.runtime_data.modbus.async_refresh()
     await hass.async_block_till_done()
     assert state_of(hass, entry, "ext_control_mode", "select") == shown
@@ -1144,6 +1151,8 @@ async def test_two_low_energy_readings_are_no_reset_when_the_mode_is_kept(
 async def test_pv_charge_limit_at_0_w_stays_after_a_reload(
     hass, mock_modbus, monkeypatch, symo_gen24
 ):
+    """A number set up before the select follows the kept mode with the next poll."""
+    _select_last(monkeypatch)
     serve_the_public_endpoints(mock_modbus, monkeypatch)
     entry = make_entry(hass, api_username="none")
     await setup_entry(hass, entry)
@@ -1172,4 +1181,6 @@ async def test_pv_charge_limit_at_0_w_stays_after_a_reload(
     await hass.async_block_till_done()
 
     assert hass.states.get(select_id).state == "pv_charge_limit"
+    await entry.runtime_data.modbus.async_refresh()
+    await hass.async_block_till_done()
     assert hass.states.get(number_id).state == "0.0"

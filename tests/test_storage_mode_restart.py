@@ -15,6 +15,7 @@ from custom_components.fronius_modbus.fronius_modbus_api.exceptions import (
     ControlUnavailable,
 )
 from custom_components.fronius_modbus.fronius_modbus_api.storage import (
+    FULL_RATE_PCT,
     MODE_WRITE_GRACE_POLLS,
     ExtendedMode,
     StorageControl,
@@ -151,6 +152,17 @@ def _writes(unit) -> list:
     return events
 
 
+def _half_power_write(mode, image) -> list:
+    """The one register write a setter at half the maximum makes: the 0 W rate."""
+    grid = mode in (ExtendedMode.CHARGE_FROM_GRID, ExtendedMode.DISCHARGE_TO_GRID)
+    raw = -FULL // 2 if grid else FULL // 2
+    return [(_zero_rate(image), [raw & 0xFFFF])]
+
+
+def _written(events) -> list:
+    return [(event.address, list(event.values)) for event in events]
+
+
 @pytest.mark.parametrize(
     ("mode", "setter", "image", "shared", "foreign"), AT_ZERO, ids=AT_ZERO_IDS
 )
@@ -169,7 +181,7 @@ async def test_a_mode_at_0_w_is_kept_across_a_restart_on_unchanged_registers(
     assert restarted.extended_mode is mode
     assert writes == []
     await getattr(restarted, setter)(HALF_W)
-    assert writes != []
+    assert _written(writes) == _half_power_write(mode, image)
 
 
 @pytest.mark.parametrize(
@@ -237,6 +249,61 @@ async def test_a_kept_mode_refuses_a_command_while_the_registers_cannot_be_read(
 
     assert unavailable.value.key == "storage_mode_unverified"
     assert writes == []
+    inverter_unit.fail_read(_zero_rate(image), None)
+    await getattr(restarted, setter)(HALF_W)
+    assert _written(writes) == _half_power_write(mode, image)
+
+
+@pytest.mark.parametrize(
+    ("mode", "setter", "image", "shared", "foreign"), AT_ZERO, ids=AT_ZERO_IDS
+)
+async def test_a_live_read_that_disproves_a_kept_mode_ends_it(
+    inverter_unit, mode, setter, image, shared, foreign
+):
+    """Refused once, the kept mode let the same command through when the 0 W came back."""
+    saved = await _saved_at_zero(inverter_unit, mode, setter)
+    restarted = await _control(inverter_unit)
+    restarted.restore(saved)
+    _hold(inverter_unit.holding, foreign)
+    writes = _writes(inverter_unit)
+    with pytest.raises(ControlRefused):
+        await getattr(restarted, setter)(HALF_W)
+    _hold(inverter_unit.holding, image)
+
+    with pytest.raises(ControlRefused):
+        await getattr(restarted, setter)(HALF_W)
+    assert writes == []
+    assert restarted.saved() is None
+
+
+@pytest.mark.parametrize(
+    ("mode", "setter", "image", "shared", "foreign"), AT_ZERO, ids=AT_ZERO_IDS
+)
+async def test_a_mode_change_that_fails_half_way_ends_the_kept_mode(
+    inverter_unit, mode, setter, image, shared, foreign
+):
+    """The rates may already be on the device: the kept claim no longer holds."""
+    saved = await _saved_at_zero(inverter_unit, mode, setter)
+    restarted = await _control(inverter_unit)
+    restarted.restore(saved)
+    write = restarted._storage.write
+
+    async def mode_write_fails(name, value):
+        if name == "stor_ctl_mod":
+            raise ServerDeviceFailureError
+        await write(name, value)
+
+    restarted._storage.write = mode_write_fails
+    with pytest.raises(ServerDeviceFailureError):
+        await restarted.set_mode(ExtendedMode.AUTO)
+    restarted._storage.write = write
+    _hold(inverter_unit.holding, image)
+    writes = _writes(inverter_unit)
+
+    with pytest.raises(ControlRefused):
+        await getattr(restarted, setter)(HALF_W)
+    assert writes == []
+    assert restarted.saved() is None
 
 
 async def test_a_kept_mode_refuses_a_command_after_a_change_the_poll_missed(
@@ -280,6 +347,67 @@ async def test_a_0_w_the_polls_showed_only_as_the_old_rate_is_not_saved(
 
     assert control.extended_mode is ExtendedMode.PV_CHARGE_LIMIT
     assert control.saved() is None
+
+
+@pytest.mark.parametrize(
+    ("mode", "setter", "image", "shared", "foreign"), AT_ZERO, ids=AT_ZERO_IDS
+)
+async def test_a_0_w_that_returns_after_a_change_is_not_saved(
+    inverter_unit, mode, setter, image, shared, foreign
+):
+    """The 0 W that comes back may be another controller's hold, not the one confirmed."""
+    control = await _control(inverter_unit)
+    await control.set_mode(mode)
+    await getattr(control, setter)(0)
+    await _poll(control)
+    zero_rate = _zero_rate(image)
+    inverter_unit.holding[zero_rate] = _KEPT_MODE_CHANGE[mode] & 0xFFFF
+    await _poll(control, 1)
+    inverter_unit.holding[zero_rate] = 0
+    await _poll(control)
+
+    assert control.saved() is None
+
+
+async def test_a_0_w_found_in_place_is_not_saved_before_a_poll(inverter_unit):
+    """Nothing to write is still a choice no poll has shown yet."""
+    _hold(inverter_unit.holding, (1, 0, FULL))
+    control = await _control(inverter_unit)
+    writes = _writes(inverter_unit)
+    await control.set_mode(ExtendedMode.DISCHARGE_TO_GRID)
+
+    assert writes == []
+    assert control.saved() is None
+    await _poll(control, 1)
+    assert control.saved() == {
+        "mode": "DISCHARGE_TO_GRID",
+        "image": [1, 0.0, FULL_RATE_PCT],
+    }
+
+
+async def test_a_change_read_but_not_judged_yet_saves_nothing(inverter_unit):
+    """The coordinator judges the storage after the whole poll; a save may come between."""
+    control = await _control(inverter_unit)
+    await control.set_mode(ExtendedMode.PV_CHARGE_LIMIT)
+    await control.set_charge_limit_w(0)
+    await _poll(control)
+    inverter_unit.holding[IN_W_RTE] = FULL // 2
+
+    await control._storage.async_update()
+
+    assert control.saved() is None
+
+
+async def test_a_mode_waiting_for_the_first_full_read_is_saved_again(inverter_unit):
+    """A second reload before the storage answered lost the mode kept for it."""
+    saved = await _saved_at_zero(
+        inverter_unit, ExtendedMode.PV_CHARGE_LIMIT, "set_charge_limit_w"
+    )
+    restarted = await _control(inverter_unit, read=False)
+
+    restarted.restore(saved)
+
+    assert restarted.saved() == saved
 
 
 async def test_a_mode_its_registers_name_alone_saves_nothing(inverter_unit):
@@ -406,6 +534,11 @@ async def test_a_kept_mode_is_saved_again_for_the_next_restart(inverter_unit):
         {"mode": 1, "image": [1, 0.0, 100.0]},
         # Charge from Grid never holds these registers.
         {"mode": "CHARGE_FROM_GRID", "image": [1, 0.0, 100.0]},
+        {"mode": "PV_CHARGE_LIMIT", "image": [1, 10**401, 100.0]},
+        {"mode": "PV_CHARGE_LIMIT", "image": [1, float("nan"), 100.0]},
+        {"mode": "PV_CHARGE_LIMIT", "image": [1, 0.0, 100.5]},
+        ["PV_CHARGE_LIMIT", [1, 0.0, 100.0]],
+        None,
     ],
 )
 async def test_saved_data_that_names_no_mode_of_these_registers_is_ignored(

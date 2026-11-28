@@ -185,6 +185,7 @@ async def test_a_mode_at_0_w_is_kept_across_a_restart_on_unchanged_registers(
     assert writes == []
     await getattr(restarted, setter)(HALF_W)
     assert _written(writes) == _half_power_write(mode, image)
+    assert restarted.extended_mode is mode
 
 
 @pytest.mark.parametrize(

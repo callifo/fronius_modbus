@@ -35,6 +35,8 @@ CONF_METER_UNIT_IDS = "meter_modbus_unit_ids"
 # The entry's device is an older inverter behind a Datamanager.
 CONF_DATAMANAGER = "datamanager"
 CONF_DATAMANAGER_INVERTERS = "datamanager_inverters"
+# Marks the one entry of a Datamanager that reads what its inverters share.
+CONF_SITE_OWNER = "site_owner"
 CONF_API_USERNAME = "api_username"
 CONF_API_PASSWORD = "api_password"
 CONF_AUTO_ENABLE_MODBUS = "auto_enable_modbus"
@@ -254,7 +256,27 @@ def entry_title(data: Mapping[str, Any]) -> str:
     """The entry's title: its name and the host it serves."""
     host = str(data.get(CONF_HOST, "")).strip()
     name = str(data.get(CONF_NAME, DEFAULT_NAME)).strip() or DEFAULT_NAME
-    return f"{name} {host}" if host else name
+    title = f"{name} {host}" if host else name
+    if unit_id := _further_unit(data):
+        return f"{title} #{inverter_number(unit_id)}"
+    return title
+
+
+# The inverters' numbers are their Modbus units; number 00 is the one exception.
+UNIT_OF_NUMBER_0 = 100
+
+
+def inverter_number(unit_id: int) -> str:
+    """The number a Datamanager's inverter shows on its display."""
+    return "00" if unit_id == UNIT_OF_NUMBER_0 else str(unit_id)
+
+
+def _further_unit(data: Mapping[str, Any]) -> int | None:
+    """The Modbus unit of a Datamanager's inverter that is not its first one."""
+    unit_id = int(data.get(CONF_INVERTER_UNIT_ID, DEFAULT_INVERTER_UNIT_ID))
+    if not data.get(CONF_DATAMANAGER) or unit_id == DEFAULT_INVERTER_UNIT_ID:
+        return None
+    return unit_id
 
 
 def entry_title_after(
@@ -262,14 +284,22 @@ def entry_title_after(
 ) -> str:
     """The title for changed settings: only a generated one follows them.
 
-    A title the owner gave is theirs.
+    A title the owner gave is theirs. One without the inverter's number was
+    generated before its device was known.
     """
-    return entry_title(after) if title == entry_title(before) else title
+    known = {CONF_DATAMANAGER: before.get(CONF_DATAMANAGER)}
+    generated = (entry_title(before), entry_title({**before, CONF_DATAMANAGER: False}))
+    return entry_title({**known, **after}) if title in generated else title
 
 
 def entry_unique_id(data: Mapping[str, Any]) -> str:
-    """The entry's unique id: its host, spelled one way."""
-    return str(data.get(CONF_HOST, "")).strip().lower()
+    """The entry's unique id: its host, spelled one way.
+
+    A Datamanager serves several inverters; all but the first add their number.
+    """
+    host = str(data.get(CONF_HOST, "")).strip().lower()
+    unit_id = _further_unit(data)
+    return host if unit_id is None else f"{host}#{unit_id}"
 
 
 def entity_prefix(entry_id: str) -> str:

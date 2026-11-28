@@ -14,6 +14,8 @@ from custom_components.fronius_modbus import (
     config_flow,
     datamanager,
     discovery,
+    flow_forms,
+    flow_state,
     froniuswebclient,
 )
 from custom_components.fronius_modbus.const import (
@@ -1143,29 +1145,29 @@ async def test_an_ipv6_only_announcement_is_not_offered(hass):
 @pytest.mark.parametrize(
     ("error", "field", "message"),
     [
-        (config_flow._CannotConnect, "base", "cannot_connect"),
-        (config_flow._CannotConnectModbus, "base", "cannot_connect_modbus"),
-        (config_flow._InvalidPort, "base", "invalid_port"),
-        (config_flow._InvalidHost, "host", "invalid_host"),
-        (config_flow._ScanIntervalTooShort, "base", "scan_interval_too_short"),
+        (flow_state._CannotConnect, "base", "cannot_connect"),
+        (flow_state._CannotConnectModbus, "base", "cannot_connect_modbus"),
+        (flow_state._InvalidPort, "base", "invalid_port"),
+        (flow_state._InvalidHost, "host", "invalid_host"),
+        (flow_state._ScanIntervalTooShort, "base", "scan_interval_too_short"),
         (
-            config_flow._MeterPowerIntervalTooLong,
+            flow_state._MeterPowerIntervalTooLong,
             "base",
             "meter_power_interval_too_long",
         ),
-        (config_flow._MissingApiPassword, "base", "missing_api_password"),
-        (config_flow._InvalidApiCredentials, "base", "invalid_api_credentials"),
-        (config_flow._UnsupportedHardware, "base", "unsupported_hardware"),
-        (config_flow._AddressesNotUnique, "base", "modbus_address_conflict"),
-        (config_flow._AlreadyConfigured, "base", "already_configured"),
-        (config_flow._DatamanagerFound, "api_username", "datamanager_no_login"),
+        (flow_state._MissingApiPassword, "base", "missing_api_password"),
+        (flow_state._InvalidApiCredentials, "base", "invalid_api_credentials"),
+        (flow_state._UnsupportedHardware, "base", "unsupported_hardware"),
+        (flow_state._AddressesNotUnique, "base", "modbus_address_conflict"),
+        (flow_state._AlreadyConfigured, "base", "already_configured"),
+        (flow_state._DatamanagerFound, "api_username", "datamanager_no_login"),
         (RuntimeError, "base", "unknown"),
     ],
 )
 def test_every_flow_error_shows_its_message(error, field, message):
     errors: dict[str, str] = {}
 
-    config_flow._set_form_error(errors, error())
+    flow_forms._set_form_error(errors, error())
 
     assert errors == {field: message}
 
@@ -2448,6 +2450,7 @@ async def test_a_role_on_a_datamanager_asks_to_go_without_the_web_api(
 ):
     """Its login failed with any password, and the form did not say why."""
     asked = answer_family(monkeypatch, DeviceFamily.DATAMANAGER)
+    monkeypatch.setattr(datamanager, "read_inverter_units", lambda host: (1,))
     contacts = record_the_login(monkeypatch)
     flow = _SettingsFlow(hass, kind)
     form = await flow.start()
@@ -2481,6 +2484,20 @@ async def test_any_other_answer_goes_on_to_the_password(
     assert result["type"] is FlowResultType.CREATE_ENTRY
 
 
+@pytest.mark.parametrize("family", [DeviceFamily.OTHER, DeviceFamily.UNKNOWN])
+@pytest.mark.parametrize("kind", ["user", "reconfigure", "options", "reauth"])
+async def test_only_a_datamanager_refuses_a_role(
+    hass, mock_modbus, monkeypatch, kind, family
+):
+    answer_family(monkeypatch, family)
+    flow = _SettingsFlow(hass, kind)
+    form = await flow.start()
+
+    result = await flow.submit(form["flow_id"], "technician")
+
+    assert result["step_id"].endswith("password")
+
+
 async def test_another_error_keeps_the_role_offered(hass, mock_modbus):
     """Only a role refused on a Datamanager switches the choice."""
     flow = _SettingsFlow(hass, "user")
@@ -2494,17 +2511,21 @@ async def test_another_error_keeps_the_role_offered(hass, mock_modbus):
     assert shown_defaults(result)["api_username"] == "customer"
 
 
-async def test_without_the_web_api_the_flow_asks_for_no_family(
-    hass, mock_modbus, monkeypatch
+@pytest.mark.parametrize(
+    ("kind", "times"), [("user", 1), ("reconfigure", 0), ("options", 0), ("reauth", 0)]
+)
+async def test_without_the_web_api_only_a_new_entry_asks_for_the_family(
+    hass, mock_modbus, monkeypatch, kind, times
 ):
-    asked = answer_family(monkeypatch, DeviceFamily.DATAMANAGER)
-    flow = _SettingsFlow(hass, "user")
+    """A new one may have to ask which inverter it reads."""
+    asked = answer_family(monkeypatch, DeviceFamily.OTHER)
+    flow = _SettingsFlow(hass, kind)
     form = await flow.start()
 
     result = await flow.submit(form["flow_id"], "none")
 
-    assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert asked == []
+    assert result["type"] in (FlowResultType.CREATE_ENTRY, FlowResultType.ABORT)
+    assert len(asked) == times
 
 
 async def test_a_taken_host_is_refused_before_the_device_is_asked(

@@ -17,10 +17,18 @@ from homeassistant.components.modbus import async_get_unit
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_DATAMANAGER, CONF_DATAMANAGER_INVERTERS, web_api_disabled
+from .const import (
+    CONF_DATAMANAGER,
+    CONF_DATAMANAGER_INVERTERS,
+    DOMAIN,
+    UNIT_OF_NUMBER_0,
+    entry_unique_id,
+    web_api_disabled,
+)
 from .derived import METER_LOCATION_FEED_IN
 from .fronius_modbus_api.device import FroniusInverter
 from .froniuswebclient import _base_url, _http
+from .host_sharing import async_claim_site, host_entries
 from .meter_topology import MeterTopology
 from .web_errors import FroniusWebUnreachable
 
@@ -37,6 +45,7 @@ INVERTERS_PATH = "/solar_api/v1/GetInverterInfo.cgi"
 # The fixed Modbus units of its meters, for the meter addresses 1 to 5
 # (Fronius' manual 42,0410,2049).
 METER_UNIT_IDS = range(240, 245)
+HIGHEST_INVERTER_NUMBER = 99
 # Seconds to connect and to answer. A Datamanager was logged with 3.2 s for one
 # of these answers.
 SOLAR_API_TIMEOUT = (4.0, 10.0)
@@ -134,7 +143,25 @@ async def async_on_datamanager(
         hass.config_entries.async_update_entry(
             entry, data={**entry.data, CONF_DATAMANAGER: found}
         )
+    _follow_with_the_unique_id(hass, entry, found)
     return found
+
+
+def _follow_with_the_unique_id(
+    hass: HomeAssistant, entry: ConfigEntry, found: bool
+) -> None:
+    """Add an inverter's number to its unique id, or take it off again.
+
+    Only where the entry has the one of the other device: an entry without a
+    unique id keeps none, and a taken one is left to its entry.
+    """
+    settings = {**entry.data, **entry.options}
+    before = entry_unique_id({**settings, CONF_DATAMANAGER: not found})
+    after = entry_unique_id({**settings, CONF_DATAMANAGER: found})
+    if entry.unique_id != before or before == after:
+        return
+    if not hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, after):
+        hass.config_entries.async_update_entry(entry, unique_id=after)
 
 
 def _data(payload: Any) -> Any:
@@ -163,13 +190,43 @@ def _solar_api_meter(value: Any) -> SolarApiMeter | None:
     return SolarApiMeter(serial.strip(), _location(value.get("Meter_Location_Current")))
 
 
+def _inverter_numbers(host: str) -> list[str]:
+    """The numbers of the inverters the Solar API lists."""
+    listed = _data(_read_json(host, INVERTERS_PATH))
+    return list(listed) if isinstance(listed, dict) else []
+
+
+def unit_of(number: str) -> int | None:
+    """The Modbus unit of the inverter with this number; None where there is none.
+
+    Number 00 is on a unit of its own, 0 being every device's (Fronius' manual
+    42,0410,2049). A listing can hold a meter's number too.
+    """
+    if not (number.isascii() and number.isdigit()):
+        return None
+    value = int(number)
+    if value > HIGHEST_INVERTER_NUMBER:
+        return None
+    return value or UNIT_OF_NUMBER_0
+
+
+def read_inverter_units(host: str) -> tuple[int, ...]:
+    """The Modbus units of the inverters the Solar API lists; none without an answer."""
+    try:
+        numbers = _inverter_numbers(host)
+    except FroniusWebUnreachable:
+        return ()
+    units = {unit_of(number) for number in numbers}
+    return tuple(sorted(unit for unit in units if unit is not None))
+
+
 def read_site(host: str) -> Site | None:
     """The meters and inverters the Solar API lists; None without an answer."""
     try:
         meters = _read_json(host, METERS_PATH)
         if meters is None:
             return None
-        inverters = _data(_read_json(host, INVERTERS_PATH))
+        inverters = _inverter_numbers(host)
     except FroniusWebUnreachable:
         return None
     listed = _data(meters)
@@ -179,7 +236,7 @@ def read_site(host: str) -> Site | None:
             for value in (listed.values() if isinstance(listed, dict) else ())
             if (meter := _solar_api_meter(value)) is not None
         ),
-        inverters=len(inverters) if isinstance(inverters, dict) else 0,
+        inverters=len(inverters),
     )
 
 
@@ -225,7 +282,16 @@ def meter_topology(found: dict[int, str], site: Site | None) -> MeterTopology:
 async def async_meter_topology(
     hass: HomeAssistant, entry: ConfigEntry, params: ModbusTcpParams
 ) -> MeterTopology:
-    """Look for the meters of the Datamanager at the entry's address."""
+    """Look for the meters of the Datamanager at the entry's address.
+
+    No meter when another entry reads them.
+    """
+    if not async_claim_site(hass, entry):
+        # Nothing is asked, so nothing is known to be gone.
+        return MeterTopology(
+            [], METER_UNIT_IDS[0], {}, confirmed=False, several_inverters=True
+        )
+    entries = len(host_entries(hass, params.host))
     found: dict[int, str] = {}
     try:
         for unit_id in METER_UNIT_IDS:
@@ -238,8 +304,13 @@ async def async_meter_topology(
         return meter_topology(found, None)
     site = await hass.async_add_executor_job(read_site, params.host)
     if site is not None:
-        site = replace(site, inverters=_known_inverters(hass, entry, site.inverters))
-    return meter_topology(found, site)
+        known = _known_inverters(hass, entry, site.inverters)
+        # Unread inverters stay unknown beside a single entry.
+        site = replace(site, inverters=max(known, entries) if entries > 1 else known)
+    topology = meter_topology(found, site)
+    return replace(
+        topology, several_inverters=topology.several_inverters or entries > 1
+    )
 
 
 def _known_inverters(hass: HomeAssistant, entry: ConfigEntry, listed: int) -> int:

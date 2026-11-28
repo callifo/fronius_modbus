@@ -2,12 +2,14 @@
 
 import json
 import pathlib
+from typing import Any
 
 from modbus_connection import GatewayTargetError
 from modbus_connection.mock import MockModbusConnection
 import pytest
+import requests
 
-from custom_components.fronius_modbus import datamanager
+from custom_components.fronius_modbus import datamanager, froniuswebclient
 from custom_components.fronius_modbus.datamanager import DeviceFamily
 from homeassistant.config_entries import ConfigEntries, ConfigEntry, ConfigEntryState
 
@@ -148,6 +150,7 @@ def _no_datamanager_answers(monkeypatch):
     """Let no test ask a real device; without an answer nothing changes."""
     monkeypatch.setattr(datamanager, "identify", lambda host: DeviceFamily.UNKNOWN)
     monkeypatch.setattr(datamanager, "read_site", lambda host: None)
+    monkeypatch.setattr(datamanager, "read_inverter_units", lambda host: ())
 
 
 class SharedMockModbus:
@@ -216,6 +219,24 @@ def datamanager_modbus(monkeypatch) -> SharedMockModbus:
         shared.fail_requests(unit_id, GatewayTargetError())
     monkeypatch.setattr(CORE_CONNECTION, shared)
     return shared
+
+
+@pytest.fixture
+def web_requests(monkeypatch) -> list[str]:
+    """Every path asked over HTTP; a Datamanager answers the GEN24 ones with 404."""
+    paths: list[str] = []
+
+    def _not_found(method: str, url: str, **options: Any) -> requests.Response:
+        del method, options
+        paths.append(url.removeprefix("http://192.0.2.10"))
+        response = requests.Response()
+        response.status_code = 404
+        response.url = url
+        response._content = b"<html><title>404 Not Found</title></html>"
+        return response
+
+    monkeypatch.setattr(froniuswebclient, "_http", _not_found)
+    return paths
 
 
 @pytest.fixture

@@ -89,6 +89,13 @@
         "data": {
           "allowed_host": "Address to allow"
         }
+      },
+      "inverter": {
+        "title": "Which inverter?",
+        "description": "The Datamanager at {host} can serve several inverters. Choose the one to add, or type its number. The number is set in the menu of the inverter, 00 to 99. Each inverter gets an entry of its own.",
+        "data": {
+          "inverter_modbus_unit_id": "Inverter number"
+        }
       }
     },
     "abort": {
@@ -113,7 +120,9 @@
       "invalid_api_credentials": "Login failed for the selected Web API role.",
       "already_configured": "Another entry already uses this host.",
       "invalid_allowed_host": "Enter the IPv4 address of a device on your network, for example 192.168.1.20.",
-      "datamanager_no_login": "This is a Datamanager or Hybridmanager (SnapINverter, Symo Hybrid). Its login is not supported. Choose Without the web API (Modbus only)."
+      "datamanager_no_login": "This is a Datamanager or Hybridmanager (SnapINverter, Symo Hybrid). Its login is not supported. Choose Without the web API (Modbus only).",
+      "invalid_inverter_number": "Enter the number of the inverter, 00 to 99.",
+      "inverter_not_found": "No inverter with this number answered over Modbus. It may be asleep, or Modbus TCP is off or not set to int + SF."
     }
   },
   "entity": {

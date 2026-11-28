@@ -18,6 +18,7 @@ from .const import (
     CONF_API_PASSWORD,
     CONF_API_USERNAME,
     CONF_AUTO_ENABLE_MODBUS,
+    CONF_DATAMANAGER,
     CONF_INVERTER_UNIT_ID,
     CONF_METER_POWER_INTERVAL,
     CONF_MODBUS_RESTRICTION,
@@ -32,7 +33,6 @@ from .const import (
     ModbusRestriction,
     entry_title,
     entry_title_after,
-    entry_unique_id,
 )
 from .discovery import (
     async_follow_host,
@@ -44,11 +44,11 @@ from .flow_entry import (
     _async_reload_unless_listened,
     _claim_host,
     async_update_entry_from_input,
-    host_without_unique_id,
 )
 from .flow_forms import (
     CONF_ALLOWED_HOST,
     CONF_CHANGE_ALLOWED_HOST,
+    _set_form_error,
     allowed_host_schema,
     checked_allowed_host,
     password_schema,
@@ -70,8 +70,6 @@ from .flow_state import (
     _AlreadyConfigured,
     _CannotConnect,
     _CannotConnectModbus,
-    _DatamanagerFound,
-    _InvalidAllowedHost,
     _InvalidApiCredentials,
     _InvalidHost,
     _InvalidPort,
@@ -91,6 +89,7 @@ from .froniuswebclient import (
     SunSpecModeChangeNeeded,
     mint_token,
 )
+from .inverter_choice import NewInverterMixin
 from .token_store import (
     async_forget_unused_tokens,
     async_get_token_store,
@@ -111,35 +110,11 @@ type _FlowRestartCallback = Callable[[], Awaitable[Any]]
 type _HostClaim = Callable[[dict[str, Any]], Awaitable[None]]
 
 
-_FORM_ERRORS: dict[type[Exception], tuple[str, str]] = {
-    _CannotConnect: ("base", "cannot_connect"),
-    _CannotConnectModbus: ("base", "cannot_connect_modbus"),
-    _InvalidPort: ("base", "invalid_port"),
-    _InvalidHost: ("host", "invalid_host"),
-    _ScanIntervalTooShort: ("base", "scan_interval_too_short"),
-    _MeterPowerIntervalTooLong: ("base", "meter_power_interval_too_long"),
-    _MissingApiPassword: ("base", "missing_api_password"),
-    _InvalidApiCredentials: ("base", "invalid_api_credentials"),
-    _InvalidAllowedHost: (CONF_ALLOWED_HOST, "invalid_allowed_host"),
-    _UnsupportedHardware: ("base", "unsupported_hardware"),
-    _AddressesNotUnique: ("base", "modbus_address_conflict"),
-    _AlreadyConfigured: ("base", "already_configured"),
-    _DatamanagerFound: (CONF_API_USERNAME, "datamanager_no_login"),
-}
-
-
 def _asks_for_the_address(user_input: dict[str, Any], settings: dict[str, Any]) -> bool:
     """The owner asked to see the address, and the restriction is to allow one."""
     requested = bool(user_input.get(CONF_CHANGE_ALLOWED_HOST, False))
     restricted = settings[CONF_MODBUS_RESTRICTION] == ModbusRestriction.HOME_ASSISTANT
     return requested and restricted
-
-
-def _set_form_error(errors: dict[str, str], err: Exception) -> None:
-    field, message = _FORM_ERRORS.get(type(err), ("base", "unknown"))
-    if message == "unknown":
-        _LOGGER.exception("Unexpected exception")
-    errors[field] = message
 
 
 def _validate_static_input(data: dict[str, Any]) -> None:
@@ -346,6 +321,10 @@ class TokenFlowMixin:
         self, entry: config_entries.ConfigEntry, settings: dict[str, Any]
     ) -> None:
         _claim_host(self.hass, entry, settings)
+
+    async def _async_look_at_device(self, settings: dict[str, Any]):
+        """Check the role against the device; a question it raises is shown first."""
+        await async_check_role(self.hass, settings)
 
     async def _async_show_password_step(
         self,
@@ -557,6 +536,32 @@ class TokenFlowMixin:
 
         return await self._async_show_allowed_host_step(step_id=step_id, errors=errors)
 
+    async def _async_use_stored_token(
+        self,
+        state: _PendingFlowState,
+        token: dict[str, str],
+        *,
+        step_ids: tuple[str, str],
+        claim_host: _HostClaim,
+        on_success: _FlowFinishCallback,
+    ):
+        """Check the inverter with the token held already, and finish."""
+        try:
+            info = await _validate_input(
+                self.hass,
+                state.settings,
+                api_token=token,
+                apply_modbus_config=state.apply_modbus_config,
+                claim_host=lambda: claim_host(state.settings),
+                ask_allowed_host=state.ask_allowed_host,
+            )
+        except (_SunSpecSwitchNeeded, _AllowedHostNeeded) as needed:
+            return await self._async_ask_before_writing(
+                needed, state, token, minted=False, step_ids=step_ids
+            )
+        self._pending_flow_state = None
+        return await on_success(state.settings, info, state.previous_host)
+
     async def _async_handle_settings_step(
         self,
         *,
@@ -583,7 +588,8 @@ class TokenFlowMixin:
                 # Before the login: validation may already write the Modbus
                 # settings of a host another entry owns.
                 await claim_host(settings)
-                await async_check_role(self.hass, settings)
+                if (question := await self._async_look_at_device(settings)) is not None:
+                    return question
                 ask_allowed_host = _asks_for_the_address(user_input, settings)
                 # The question comes only with a write: Configure writes
                 # unchanged settings only when asked to.
@@ -602,42 +608,25 @@ class TokenFlowMixin:
                 token = await _async_load_token(
                     self.hass, settings[CONF_HOST], settings[CONF_API_USERNAME]
                 )
+                state = _PendingFlowState(
+                    settings,
+                    previous_host,
+                    apply_modbus_config,
+                    ask_allowed_host=ask_allowed_host,
+                )
                 if token is None or always_ask_password:
-                    self._pending_flow_state = _PendingFlowState(
-                        settings,
-                        previous_host,
-                        apply_modbus_config,
-                        existing_token=token,
-                        ask_allowed_host=ask_allowed_host,
-                    )
+                    state.existing_token = token
+                    self._pending_flow_state = state
                     return await self._async_show_password_step(
                         step_id=password_step_id
                     )
-
-                try:
-                    info = await _validate_input(
-                        self.hass,
-                        settings,
-                        api_token=token,
-                        apply_modbus_config=apply_modbus_config,
-                        claim_host=lambda: claim_host(settings),
-                        ask_allowed_host=ask_allowed_host,
-                    )
-                except (_SunSpecSwitchNeeded, _AllowedHostNeeded) as needed:
-                    return await self._async_ask_before_writing(
-                        needed,
-                        _PendingFlowState(
-                            settings,
-                            previous_host,
-                            apply_modbus_config,
-                            ask_allowed_host=ask_allowed_host,
-                        ),
-                        token,
-                        minted=False,
-                        step_ids=(sunspec_step_id, allowed_host_step_id),
-                    )
-                self._pending_flow_state = None
-                return await on_success(settings, info, previous_host)
+                return await self._async_use_stored_token(
+                    state,
+                    token,
+                    step_ids=(sunspec_step_id, allowed_host_step_id),
+                    claim_host=claim_host,
+                    on_success=on_success,
+                )
             except data_entry_flow.AbortFlow:
                 raise
             except _InvalidApiCredentials:
@@ -772,7 +761,7 @@ class TokenFlowMixin:
         await _async_save_token(self.hass, host, username, previous)
 
 
-class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
+class ConfigFlow(NewInverterMixin, TokenFlowMixin, domain=DOMAIN):
     """Handle a config flow."""
 
     VERSION = 1
@@ -793,34 +782,11 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
             return None
         return self.hass.config_entries.async_get_entry(self.context["entry_id"])
 
-    async def _async_claim_new_host(self, settings: dict[str, Any]) -> None:
-        unique_id = entry_unique_id(settings)
-        # A card for this host gives way to the owner adding it by hand; two
-        # flows adding it by hand still stop each other.
-        for card in self._async_in_progress(match_context={"unique_id": unique_id}):
-            if card["context"]["source"] == config_entries.SOURCE_ZEROCONF:
-                self.hass.config_entries.flow.async_abort(card["flow_id"])
-        await self.async_set_unique_id(unique_id)
-        self._abort_if_host_held()
-
-    def _abort_if_host_held(self) -> None:
-        """Abort for a host another entry holds, with or without a unique id."""
-        # Home Assistant lets a host whose card was ignored be set up by hand.
-        self._abort_if_unique_id_configured()
-        if host_without_unique_id(self.hass, str(self.unique_id)) is not None:
-            raise data_entry_flow.AbortFlow("already_configured")
-
     async def _async_claim_reconfigured_host(self, settings: dict[str, Any]) -> None:
         await self._async_claim_entry_host(self._get_reconfigure_entry(), settings)
 
-    async def _async_finish_user(self, settings, info, previous_host):
-        del previous_host
-        await self.async_set_unique_id(entry_unique_id(settings))
-        self._abort_if_host_held()
-        return self.async_create_entry(
-            title=info["title"],
-            data=_entry_payload(settings, reconfigure_required=False),
-        )
+    async def _async_check_inverter(self, settings: dict[str, Any]) -> dict[str, Any]:
+        return await _validate_input(self.hass, settings)
 
     async def _async_finish_reconfigure(self, settings, info, previous_host):
         del info
@@ -844,8 +810,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
         # address cannot be.
         if discovery_info.ip_address.version != 4:
             return self.async_abort(reason="not_ipv4_address")
-        await self.async_set_unique_id(entry_unique_id({CONF_HOST: host}))
-        self._abort_if_host_held()
+        await self._async_claim_unique_id({CONF_HOST: host, CONF_DATAMANAGER: False})
         self._discovered_host = host
         self.context["title_placeholders"] = {
             "name": discovered_model(discovery_info.name)

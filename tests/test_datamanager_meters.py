@@ -11,7 +11,9 @@ from custom_components.fronius_modbus.datamanager import (
     Site,
     SolarApiMeter,
     meter_topology,
+    read_inverter_units,
     read_site,
+    unit_of,
 )
 from custom_components.fronius_modbus.web_errors import FroniusWebUnreachable
 
@@ -118,6 +120,58 @@ def test_an_unreachable_device_is_no_site(monkeypatch):
     monkeypatch.setattr(datamanager, "_http", _unreachable)
 
     assert read_site(HOST) is None
+
+
+@pytest.mark.parametrize(
+    ("number", "unit"),
+    [
+        ("1", 1),
+        ("55", 55),
+        ("99", 99),
+        # Unit 0 is everyone's in Modbus; the Datamanager serves number 00 on 100.
+        ("0", 100),
+        ("00", 100),
+        # Seen in a listing: no inverter has this number, a meter answers on the unit.
+        ("240", None),
+        ("100", None),
+        ("-1", None),
+        ("1.0", None),
+        ("", None),
+        ("inverter", None),
+        ("٣", None),
+    ],
+)
+def test_the_unit_of_an_inverter_number(number, unit):
+    assert unit_of(number) == unit
+
+
+@pytest.mark.parametrize(
+    ("listed", "units"),
+    [
+        ({"1": {}, "2": {}}, (1, 2)),
+        ({"55": {}, "3": {}, "1": {}}, (1, 3, 55)),
+        ({"1": {}, "0": {}}, (1, 100)),
+        ({"1": {}, "240": {}, "x": {}}, (1,)),
+        ({}, ()),
+        ([], ()),
+        (None, ()),
+        ("1", ()),
+    ],
+)
+def test_the_units_of_the_listed_inverters(monkeypatch, listed, units):
+    asked = serve(monkeypatch, {}, listed)
+
+    assert read_inverter_units(HOST) == units
+    assert asked == [INVERTERS_URL]
+
+
+def test_an_unreachable_device_lists_no_inverter(monkeypatch):
+    def _unreachable(method: str, url: str, **options: Any) -> requests.Response:
+        raise FroniusWebUnreachable("ConnectTimeout")
+
+    monkeypatch.setattr(datamanager, "_http", _unreachable)
+
+    assert read_inverter_units(HOST) == ()
 
 
 def site(*meters: tuple[str, int | None], inverters: int = 1) -> Site:

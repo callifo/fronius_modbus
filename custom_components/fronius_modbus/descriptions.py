@@ -79,6 +79,9 @@ class FroniusSelectDescription(SelectEntityDescription, FroniusDescriptionMixin)
 
     options_map: dict[int, str]
     set_fn: Callable[[FroniusRuntimeData, int], Awaitable[None]]
+    # What the select keeps across a restart, and handing it back after one.
+    saved_fn: Callable[[FroniusRuntimeData], dict[str, Any] | None] | None = None
+    restore_fn: Callable[[FroniusRuntimeData, dict[str, Any]], None] | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

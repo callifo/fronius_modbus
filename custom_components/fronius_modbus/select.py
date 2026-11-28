@@ -6,6 +6,7 @@ from homeassistant.components.select import SelectEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.restore_state import RestoredExtraData, RestoreEntity
 
 from .const import DOMAIN
 from .coordinator import FroniusConfigEntry
@@ -16,10 +17,28 @@ from .entity import FroniusEntity
 PARALLEL_UPDATES = 1
 
 
-class FroniusSelect(FroniusEntity, SelectEntity):
+class FroniusSelect(FroniusEntity, SelectEntity, RestoreEntity):
     """A select whose option is its description's value_fn."""
 
     entity_description: FroniusSelectDescription
+
+    async def async_added_to_hass(self) -> None:
+        """Hand what the select kept before a restart to the description's restore_fn."""
+        await super().async_added_to_hass()
+        restore_fn = self.entity_description.restore_fn
+        last = await self.async_get_last_extra_data()
+        if restore_fn is None or last is None:
+            return
+        # Entities that depend on the option and started first follow with the
+        # next poll: notifying them now handed the energy totals one poll twice.
+        restore_fn(self._runtime, last.as_dict())
+
+    @property
+    def extra_restore_state_data(self) -> RestoredExtraData | None:
+        """What the description keeps across a restart, if anything."""
+        saved_fn = self.entity_description.saved_fn
+        saved = None if saved_fn is None else saved_fn(self._runtime)
+        return None if saved is None else RestoredExtraData(saved)
 
     @property
     def current_option(self) -> str | None:

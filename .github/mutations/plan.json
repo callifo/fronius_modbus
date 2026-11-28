@@ -4982,5 +4982,110 @@
     "old": "FLOAT_INVERTER_MODEL_IDS = (111, 113)\n",
     "new": "FLOAT_INVERTER_MODEL_IDS = (113,)\n",
     "tests": "confirmed_switch_is_two_writes"
+  },
+  {
+    "label": "storage: no mode is saved while a write runs",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        unconfirmed = self._write_lock.locked() or self._unconfirmed_polls is not None\n",
+    "new": "        unconfirmed = self._unconfirmed_polls is not None\n",
+    "tests": "nothing_is_saved_while_a_write_runs"
+  },
+  {
+    "label": "storage: no mode is saved before a poll showed it",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        unconfirmed = self._write_lock.locked() or self._unconfirmed_polls is not None\n",
+    "new": "        unconfirmed = self._write_lock.locked()\n",
+    "tests": "a_0_w_no_poll_showed_yet_is_not_saved"
+  },
+  {
+    "label": "storage: a mode its registers name alone is not saved",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        if _derive_extended_mode(*image) is mode:\n            return None\n        return {",
+    "new": "        return {",
+    "tests": "a_mode_its_registers_name_alone_saves_nothing"
+  },
+  {
+    "label": "storage: a kept mode claims only the image of the first full read",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        if image != self._start_image or not _registers_fit(mode, *image):\n",
+    "new": "        if not _registers_fit(mode, *image):\n",
+    "tests": "a_restore_after_a_change_since_the_first_read_is_ignored or a_mode_chosen_before_the_restore_wins or a_limit_set_before_the_restore_wins"
+  },
+  {
+    "label": "storage: a kept mode must fit the registers it claims",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        if image != self._start_image or not _registers_fit(mode, *image):\n",
+    "new": "        if image != self._start_image:\n",
+    "tests": "saved_data_that_names_no_mode_of_these_registers_is_ignored"
+  },
+  {
+    "label": "storage: the first full read is the image a kept mode may claim",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            self._start_image = image\n",
+    "new": "",
+    "tests": "a_mode_at_0_w_is_kept_across_a_restart_on_unchanged_registers"
+  },
+  {
+    "label": "storage: a mode saved before the first full read waits for it",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            if waiting is not None:\n                self._take_back(*waiting)\n",
+    "new": "",
+    "tests": "a_mode_saved_before_the_first_full_read_waits_for_it"
+  },
+  {
+    "label": "storage: a change the polls show ends a kept mode for good",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            self._start_image = None\n            self._written = {}\n",
+    "new": "            self._start_image = None\n",
+    "tests": "a_kept_mode_lapses_for_good_once_the_registers_change"
+  },
+  {
+    "label": "storage: a mode chosen since the start ends the claim of its first read",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            self._written = written\n            self._start_image = None\n",
+    "new": "            self._written = written\n",
+    "tests": "a_mode_chosen_before_the_restore_wins"
+  },
+  {
+    "label": "storage: a limit set since the start ends the claim of its first read",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            self._unconfirmed_polls = 0\n            self._start_image = None\n",
+    "new": "            self._unconfirmed_polls = 0\n",
+    "tests": "a_limit_set_before_the_restore_wins"
+  },
+  {
+    "label": "storage: a kept mode refuses a limit while the registers cannot be read",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        if image is None and self._holds_a_kept_mode:\n            raise _kept_mode_unverified()\n",
+    "new": "",
+    "tests": "a_kept_mode_refuses_a_command_while_the_registers_cannot_be_read"
+  },
+  {
+    "label": "storage: saved data names a mode",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "    if not isinstance(name, str) or name not in ExtendedMode.__members__:\n        return None\n",
+    "new": "",
+    "tests": "saved_data_that_names_no_mode_of_these_registers_is_ignored"
+  },
+  {
+    "label": "storage: saved data holds whole base modes and numeric rates",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "    if type(mode) is not int or not (_is_rate(in_rate) and _is_rate(out_rate)):\n        return None\n",
+    "new": "",
+    "tests": "saved_data_that_names_no_mode_of_these_registers_is_ignored"
+  },
+  {
+    "label": "select: the saved data is handed on",
+    "path": "custom_components/fronius_modbus/select.py",
+    "old": "        restore_fn(self._runtime, last.as_dict())\n",
+    "new": "",
+    "tests": "stays_after_a_restart_without_a_write or set_up_before_the_select or stays_after_a_reload"
+  },
+  {
+    "label": "select: the description's data is kept",
+    "path": "custom_components/fronius_modbus/select.py",
+    "old": "        return None if saved is None else RestoredExtraData(saved)\n",
+    "new": "        return None\n",
+    "tests": "stays_after_a_reload"
   }
 ]

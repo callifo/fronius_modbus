@@ -1348,6 +1348,8 @@ def _select(
     exists_fn: Callable[[FroniusRuntimeData], bool] = lambda runtime: True,
     available_fn: Callable[[FroniusRuntimeData], bool] = lambda runtime: True,
     report_name: str | None = None,
+    saved_fn: Callable[[FroniusRuntimeData], dict[str, Any] | None] | None = None,
+    restore_fn: Callable[[FroniusRuntimeData, dict[str, Any]], None] | None = None,
 ) -> FroniusSelectDescription:
     return FroniusSelectDescription(
         key=key,
@@ -1361,6 +1363,8 @@ def _select(
         exists_fn=exists_fn,
         available_fn=available_fn,
         options=list(options_map.values()),
+        saved_fn=saved_fn,
+        restore_fn=restore_fn,
     )
 
 
@@ -1375,6 +1379,8 @@ _SELECT_DESCRIPTIONS: tuple[FroniusSelectDescription, ...] = (
             assume_present(r.storage_control).extended_mode.value,
         ),
         set_fn=lambda r, code: r.async_set_extended_mode(code),
+        saved_fn=lambda r: assume_present(r.storage_control).saved(),
+        restore_fn=lambda r, saved: assume_present(r.storage_control).restore(saved),
         exists_fn=_storage_present,
         # Unread registers showed Auto, or the last mode, as if reported.
         available_fn=lambda r: (

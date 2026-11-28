@@ -5,17 +5,19 @@ integration exposes eight "extended" modes on top (charge from grid, block
 discharging, ...), each a fixed combination of mode and rates. The device
 cannot name the extended mode, so it is re-derived from the registers on
 every poll; a written mode is only held over the few polls the device needs
-to apply it.
+to apply it. A mode at 0 W shares its registers with a block mode; across a
+restart it is kept only while the registers hold exactly what a poll showed.
 """
 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from enum import IntEnum
 import logging
+from typing import Any
 
-from .exceptions import ControlRefused
+from .exceptions import ControlRefused, ControlUnavailable
 from .sunspec_models import Storage
 from .writes import register_value, registers_holding, written_value
 
@@ -133,6 +135,34 @@ def _registers_fit(
     return in_fits and out_fits
 
 
+type _Image = tuple[int, float, float]
+
+
+def _is_rate(value: object) -> bool:
+    return isinstance(value, int | float) and not isinstance(value, bool)
+
+
+def _kept_from(saved: Mapping[str, Any]) -> tuple[ExtendedMode, _Image] | None:
+    """The mode and register image saved() wrote, or None for anything else."""
+    name, image = saved.get("mode"), saved.get("image")
+    if not isinstance(name, str) or name not in ExtendedMode.__members__:
+        return None
+    if not isinstance(image, list | tuple) or len(image) != len(_IMAGE_FIELDS):
+        return None
+    mode, in_rate, out_rate = image
+    if type(mode) is not int or not (_is_rate(in_rate) and _is_rate(out_rate)):
+        return None
+    return ExtendedMode[name], (mode, float(in_rate), float(out_rate))
+
+
+def _kept_mode_unverified() -> ControlUnavailable:
+    return ControlUnavailable(
+        "storage_mode_unverified",
+        "The storage registers could not be read to confirm the storage mode "
+        "kept across the restart",
+    )
+
+
 def _mode_left() -> ControlRefused:
     return ControlRefused(
         "storage_mode_left",
@@ -166,6 +196,59 @@ class StorageControl:
         # InWRte and OutWRte as Home Assistant last wrote them, as the
         # registers hold them: the owner of an image two modes share.
         self._written: dict[str, float] = {}
+        # The image of the first full read, until a poll shows another one or
+        # Home Assistant writes: the only image a mode kept across a restart
+        # may claim (issue 187). A 0 W that returns after a change may be
+        # another controller's hold.
+        self._start_image: _Image | None = None
+        # A mode kept across a restart that came before the first full read.
+        self._waiting: tuple[ExtendedMode, _Image] | None = None
+
+    def saved(self) -> dict[str, Any] | None:
+        """The mode to keep across a restart, with the registers a poll showed it on.
+
+        Only a mode whose registers another mode shares needs keeping; the
+        registers name every other one on their own. None while a write
+        runs or waits for a poll to show it.
+        """
+        unconfirmed = self._write_lock.locked() or self._unconfirmed_polls is not None
+        if unconfirmed or not self._written:
+            return None
+        mode = self.extended_mode
+        image = (
+            _MODE_TABLE[mode][0],
+            self._written["in_w_rte"],
+            self._written["out_w_rte"],
+        )
+        if _derive_extended_mode(*image) is mode:
+            return None
+        return {"mode": mode.name, "image": list(image)}
+
+    def restore(self, saved: Mapping[str, Any]) -> None:
+        """Take back what saved() kept, if the first full read showed exactly its registers.
+
+        Judged once: a mode chosen since the start, or any change the polls
+        showed, leaves the mode to the registers.
+        """
+        kept = _kept_from(saved)
+        if kept is None:
+            return
+        if self._extended_mode is None:
+            self._waiting = kept
+            return
+        self._take_back(*kept)
+
+    def _take_back(self, mode: ExtendedMode, image: _Image) -> None:
+        if image != self._start_image or not _registers_fit(mode, *image):
+            return
+        self._extended_mode = mode
+        self._unconfirmed_polls = None
+        self._written = {"in_w_rte": image[1], "out_w_rte": image[2]}
+
+    @property
+    def _holds_a_kept_mode(self) -> bool:
+        """Whether the mode rests on rates kept across a restart, not on a write since."""
+        return self._start_image is not None and bool(self._written)
 
     def sync_from_device(self) -> None:
         """Reconcile the extended mode with the registers of the last poll.
@@ -188,7 +271,15 @@ class StorageControl:
         derived = _derive_extended_mode(mode, in_rate, out_rate)
         if self._extended_mode is None:
             self._extended_mode = derived
+            self._start_image = image
+            waiting, self._waiting = self._waiting, None
+            if waiting is not None:
+                self._take_back(*waiting)
             return
+        if self._start_image is not None and image != self._start_image:
+            # Nothing written since the start: these are the kept rates.
+            self._start_image = None
+            self._written = {}
         if self._holds_selected(self.extended_mode, mode, in_rate, out_rate):
             self._unconfirmed_polls = None
             return
@@ -222,7 +313,8 @@ class StorageControl:
         another mode at a rate of 0 (PV Charge Limit at 0 W reads as Block
         Charging), and is the selected mode's only while it holds the rates
         Home Assistant wrote: evcc's hold charge writes the same registers
-        (callifo 141). Nothing written since a restart: the registers decide.
+        (callifo 141). Nothing written or kept since a restart: the registers
+        decide.
         """
         # Another controller may write the same mode on another base mode
         # (evcc holds with StorCtl_Mod 2 where this integration writes 3).
@@ -344,6 +436,7 @@ class StorageControl:
             self._extended_mode = mode
             self._unconfirmed_polls = 0
             self._written = written
+            self._start_image = None
 
     async def set_charge_limit_w(self, watts: float) -> None:
         """Write InWRte from watts, clamped to the charge rate maximum."""
@@ -460,6 +553,7 @@ class StorageControl:
             # image before it: until one confirms, that is no outside change.
             self._written = {"in_w_rte": in_rate, "out_w_rte": out_rate}
             self._unconfirmed_polls = 0
+            self._start_image = None
 
     async def _grid_power_kept(
         self, mode: ExtendedMode
@@ -489,9 +583,12 @@ class StorageControl:
         A limit mode leaves both sides to the user, so its table says nothing
         about them, and a schedule or another controller may
         have changed the mode since the last poll. Unreadable
-        for a moment right after a write, the mode's table stands in.
+        for a moment right after a write, the mode's table stands in; a mode
+        kept across a restart wrote nothing, so only a live read confirms it.
         """
         image = await self._live_image()
+        if image is None and self._holds_a_kept_mode:
+            raise _kept_mode_unverified()
         if image is None:
             return _MODE_TABLE[self.extended_mode]
         if not self._holds_selected(self.extended_mode, *image):

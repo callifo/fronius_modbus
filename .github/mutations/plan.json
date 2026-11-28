@@ -4986,22 +4986,22 @@
   {
     "label": "storage: only the poll confirming a write leaves evidence",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "        if self._unconfirmed_polls is not None and shared:\n",
+    "old": "        if self._confirmable and shared:\n",
     "new": "        if shared:\n",
     "tests": "repeated_zero_lets_no_foreign_zero_be_saved or a_0_w_that_returns_after_a_change_is_not_saved"
   },
   {
     "label": "storage: no mode is saved over a newer read",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "        if evidence is None or self._applied_image != evidence[1]:\n",
-    "new": "        if evidence is None:\n",
-    "tests": "a_change_read_but_not_judged_yet_saves_nothing"
+    "old": "        if cached is not None:\n            self._observe(cached)\n",
+    "new": "",
+    "tests": "a_change_read_but_not_judged_yet_saves_nothing or a_read_no_poll_judged_still_ends_a_saved_zero"
   },
   {
     "label": "storage: a mode its registers name alone is not saved",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "        if self._unconfirmed_polls is not None and shared:\n",
-    "new": "        if self._unconfirmed_polls is not None:\n",
+    "old": "        if self._confirmable and shared:\n",
+    "new": "        if self._confirmable:\n",
     "tests": "a_mode_its_registers_name_alone_saves_nothing"
   },
   {
@@ -5042,9 +5042,9 @@
   {
     "label": "storage: a mode chosen since the start ends the claim of its first read",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "            start = self._start_image\n            if start is not None and self._leave_the_start():\n                self._yield_a_kept_mode(start)\n",
-    "new": "            start = self._start_image\n",
-    "tests": "a_mode_chosen_before_the_restore_wins or a_mode_change_that_fails_half_way_ends_the_kept_mode"
+    "old": "            self._begin_a_write()\n            for field_name, value in writes:\n",
+    "new": "            for field_name, value in writes:\n",
+    "tests": "a_mode_chosen_before_the_restore_wins or failed_mode_change_leaves_no_confirmed_zero_to_save or a_mode_change_that_fails_half_way_ends_the_kept_mode"
   },
   {
     "label": "storage: a change the polls show ends a kept mode for good",
@@ -5056,9 +5056,9 @@
   {
     "label": "storage: a live read that disproves a kept mode ends it",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "        if self._see(image):\n            self._yield_a_kept_mode(image)\n",
-    "new": "",
-    "tests": "refused_command_leaves_no_kept_mode_for_an_unreadable_retry or another_controller_s_grid_image_ends_the_kept_zero or a_live_read_that_disproves_a_kept_mode_ends_it"
+    "old": "        self._observe(image)\n        if not self._holds_selected(selected, *image):\n",
+    "new": "        if not self._holds_selected(selected, *image):\n",
+    "tests": "refused_command_leaves_no_kept_mode_for_an_unreadable_retry or another_controller_s_grid_image_ends_the_kept_zero or a_live_read_that_disproves_a_kept_mode_ends_it or a_live_read_that_disproves_a_confirmed_zero"
   },
   {
     "label": "storage: another image in a read ends the evidence",
@@ -5068,32 +5068,67 @@
     "tests": "a_0_w_that_returns_after_a_change_is_not_saved or a_live_read_that_disproves_a_confirmed_zero_leaves_nothing_to_save"
   },
   {
-    "label": "storage: a failed mode change leaves the registers' mode",
+    "label": "storage: a write that may fail yields a kept mode to the registers",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "                self._yield_a_kept_mode(start)\n",
-    "new": "                pass\n",
-    "tests": "failed_mode_change_leaves_no_kept_mode_for_an_unreadable_retry"
+    "old": "        if self._leave_the_start() and start is not None:\n            self._yield_a_kept_mode(start)\n",
+    "new": "        self._leave_the_start()\n",
+    "tests": "failed_mode_change_leaves_no_kept_mode_for_an_unreadable_retry or lost_reply_to_a_limit_ends_the_kept_mode"
   },
   {
-    "label": "storage: a waiting mode a newer read contradicts is not saved",
+    "label": "storage: a read that contradicts a waiting mode ends it",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "        if waiting is None or cached not in (None, waiting[1]):\n",
-    "new": "        if waiting is None:\n",
-    "tests": "a_waiting_mode_is_saved_again_unless_a_read_contradicts_it"
+    "old": "        if waiting is not None and cached not in (None, waiting[1]):\n            self._waiting = None\n",
+    "new": "",
+    "tests": "waiting_mode_is_saved_again_unless_a_read_contradicts_it or no_poll_judged_still_ends_a_waiting_mode"
   },
   {
-    "label": "storage: a mode chosen ends the evidence before its first write",
+    "label": "storage: a write ends the evidence before it starts",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "            self._evidence = None\n            start = self._start_image\n",
-    "new": "            start = self._start_image\n",
-    "tests": "failed_mode_change_leaves_no_confirmed_zero_to_save or a_mode_chosen_over_a_saved_one_waits_for_a_poll"
+    "old": "        self._evidence = None\n        self._confirmable = False\n",
+    "new": "        self._confirmable = False\n",
+    "tests": "failed_mode_change_leaves_no_confirmed_zero_to_save or a_mode_chosen_over_a_saved_one_waits_for_a_poll or a_limit_set_over_a_saved_zero"
   },
   {
-    "label": "storage: a limit set ends the evidence before its write",
+    "label": "storage: a failed write leaves nothing to confirm",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "            self._evidence = None\n            if field_name not in holding:\n",
-    "new": "            if field_name not in holding:\n",
-    "tests": "a_limit_set_over_a_saved_zero_leaves_nothing_until_a_poll"
+    "old": "        self._confirmable = False\n        # A kept mode",
+    "new": "        # A kept mode",
+    "tests": "failed_write_leaves_no_earlier_request_to_confirm"
+  },
+  {
+    "label": "storage: a settled write confirms nothing more",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        self._confirmable = False\n        self._unconfirmed_polls = None\n",
+    "new": "        self._unconfirmed_polls = None\n",
+    "tests": "a_0_w_that_returns_after_a_change_is_not_saved or repeated_zero_lets_no_foreign_zero_be_saved"
+  },
+  {
+    "label": "storage: a write that went through may be confirmed",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            self._written = written\n            self._confirmable = True\n",
+    "new": "            self._written = written\n",
+    "tests": "a_0_w_found_in_place_is_not_saved_before_a_poll"
+  },
+  {
+    "label": "storage: a limit set keeps the mode it was admitted for",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            self._extended_mode = admitted\n",
+    "new": "",
+    "tests": "a_mode_at_0_w_is_kept_across_a_restart_on_unchanged_registers"
+  },
+  {
+    "label": "storage: a grid reselection sees what it read",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        self._observe(image)\n        if self._holds_selected(mode, *image):\n",
+    "new": "        if self._holds_selected(mode, *image):\n",
+    "tests": "failed_grid_reselection_follows_the_registers_it_read or grid_reselection_that_read_another_mode_leaves_nothing_to_save"
+  },
+  {
+    "label": "storage: a read outside a poll yields a kept mode it ends",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        if self._see(image):\n            self._yield_a_kept_mode(image)\n",
+    "new": "        self._see(image)\n",
+    "tests": "refused_command_leaves_no_kept_mode_for_an_unreadable_retry or no_poll_judged_still_ends"
   },
   {
     "label": "storage: a kept mode is its own evidence",
@@ -5105,7 +5140,7 @@
   {
     "label": "storage: a mode waiting for the first full read is saved again",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "        if self._extended_mode is None:\n            return self._saved_waiting()\n",
+    "old": "        if self._extended_mode is None:\n            return self._saved_waiting(cached)\n",
     "new": "",
     "tests": "a_mode_waiting_for_the_first_full_read_is_saved_again"
   },
@@ -5126,9 +5161,9 @@
   {
     "label": "storage: a limit set since the start ends the claim of its first read",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
-    "old": "            self._unconfirmed_polls = 0\n            self._start_image = None\n",
-    "new": "            self._unconfirmed_polls = 0\n",
-    "tests": "a_limit_set_before_the_restore_wins"
+    "old": "            self._begin_a_write()\n            if field_name not in holding:\n",
+    "new": "            if field_name not in holding:\n",
+    "tests": "a_limit_set_before_the_restore_wins or lost_reply_to_a_limit_ends_the_kept_mode or a_limit_set_over_a_saved_zero"
   },
   {
     "label": "storage: a kept mode refuses a limit while the registers cannot be read",

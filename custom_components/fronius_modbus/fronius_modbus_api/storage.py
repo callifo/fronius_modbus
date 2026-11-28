@@ -216,6 +216,10 @@ class StorageControl:
         # a live read, ends it for good; a 0 W that returns may be another
         # controller's hold.
         self._evidence: tuple[ExtendedMode, _Image] | None = None
+        # Whether the last write went through and no poll settled it yet:
+        # a write that failed may have left anything, so only then may a
+        # poll leave evidence.
+        self._confirmable = False
 
     def saved(self) -> dict[str, Any] | None:
         """The mode to keep across a restart, with the registers a poll showed it on.
@@ -226,22 +230,25 @@ class StorageControl:
         a write ends it before it starts. A mode kept for the first full read
         is kept as it came.
         """
-        if self._extended_mode is None:
-            return self._saved_waiting()
-        evidence = self._evidence
-        # The coordinator judges the storage after the whole poll; the newest
-        # read may already hold another image.
-        if evidence is None or self._applied_image != evidence[1]:
-            return None
-        return _record(*evidence)
-
-    def _saved_waiting(self) -> dict[str, Any] | None:
-        """A mode kept for the first full read, unless a read not judged yet differs."""
-        waiting = self._waiting
+        # The coordinator judges the storage after the whole poll, and a part
+        # read after it may fail: the newest read counts as seen here.
         cached = self._applied_image
-        if waiting is None or cached not in (None, waiting[1]):
+        if cached is not None:
+            self._observe(cached)
+        if self._extended_mode is None:
+            return self._saved_waiting(cached)
+        if self._evidence is None:
             return None
-        return _record(*waiting)
+        return _record(*self._evidence)
+
+    def _saved_waiting(self, cached: _Image | None) -> dict[str, Any] | None:
+        """A mode kept for the first full read; a read that differs ends it."""
+        waiting = self._waiting
+        if waiting is not None and cached not in (None, waiting[1]):
+            self._waiting = None
+        if self._waiting is None:
+            return None
+        return _record(*self._waiting)
 
     def restore(self, saved: object) -> None:
         """Take back what saved() kept, if the first full read showed exactly its registers.
@@ -291,13 +298,28 @@ class StorageControl:
         self._extended_mode = _derive_extended_mode(*image)
         self._unconfirmed_polls = None
 
+    def _observe(self, image: _Image) -> None:
+        """A read outside a poll showed ``image``."""
+        if self._see(image):
+            self._yield_a_kept_mode(image)
+
+    def _begin_a_write(self) -> None:
+        """A write may reach the device even when it fails: nothing seen before it confirms it."""
+        self._evidence = None
+        self._confirmable = False
+        # A kept mode still holds here only while every read showed the start.
+        start = self._start_image
+        if self._leave_the_start() and start is not None:
+            self._yield_a_kept_mode(start)
+
     def _settle_a_write(self, image: _Image) -> None:
         """The poll that shows a write in place: the only one that leaves evidence for saved()."""
         # Registers that hold the selected mode but read as another one hold
         # exactly the rates Home Assistant wrote (_holds_selected).
         shared = _derive_extended_mode(*image) is not self.extended_mode
-        if self._unconfirmed_polls is not None and shared:
+        if self._confirmable and shared:
             self._evidence = (self.extended_mode, image)
+        self._confirmable = False
         self._unconfirmed_polls = None
 
     def sync_from_device(self) -> None:
@@ -477,17 +499,14 @@ class StorageControl:
             }
             if kept[0] is not None:
                 written[kept[0]] = kept[1]
-            # A write that fails half way may have reached the device already.
-            self._evidence = None
-            start = self._start_image
-            if start is not None and self._leave_the_start():
-                self._yield_a_kept_mode(start)
+            self._begin_a_write()
             for field_name, value in writes:
                 if field_name not in holding:
                     await self._storage.write(field_name, value)
             self._extended_mode = mode
             self._unconfirmed_polls = 0
             self._written = written
+            self._confirmable = True
 
     async def set_charge_limit_w(self, watts: float) -> None:
         """Write InWRte from watts, clamped to the charge rate maximum."""
@@ -567,6 +586,7 @@ class StorageControl:
         async with self._write_lock:
             if not allowed():
                 raise refusal
+            admitted = self.extended_mode
             value = await written_value(self._storage, field_name, percent())
             mode, in_rate, out_rate = await self._image_for_a_rate()
             # A rate StorCtl_Mod keeps off is ignored by the device; another
@@ -596,16 +616,17 @@ class StorageControl:
                     "select the storage mode again",
                 )
             holding = await registers_holding(self._storage, {field_name: value})
-            self._evidence = None
+            self._begin_a_write()
             if field_name not in holding:
                 await self._storage.write(field_name, value)
             if switched_on != mode:
                 await self._storage.write("stor_ctl_mod", switched_on)
             # A poll that read the registers before this write judges the
             # image before it: until one confirms, that is no outside change.
+            self._extended_mode = admitted
             self._written = {"in_w_rte": in_rate, "out_w_rte": out_rate}
             self._unconfirmed_polls = 0
-            self._start_image = None
+            self._confirmable = True
 
     async def _grid_power_kept(
         self, mode: ExtendedMode
@@ -625,6 +646,7 @@ class StorageControl:
         # Unreadable for a moment right after a write: the power just set stays.
         if image is None:
             return field_name, self._written.get(field_name, 0.0)
+        self._observe(image)
         if self._holds_selected(mode, *image):
             return field_name, image[1 if field_name == "in_w_rte" else 2]
         return None, None
@@ -644,8 +666,7 @@ class StorageControl:
         if image is None:
             return _MODE_TABLE[self.extended_mode]
         selected = self.extended_mode
-        if self._see(image):
-            self._yield_a_kept_mode(image)
+        self._observe(image)
         if not self._holds_selected(selected, *image):
             raise _mode_left()
         return image

@@ -1,7 +1,9 @@
 """The export limit of a Datamanager, read with the technician's login."""
 
+import asyncio
 from datetime import timedelta
 import logging
+import threading
 
 import pytest
 import requests
@@ -10,21 +12,28 @@ from custom_components.fronius_modbus.const import (
     CONF_DATAMANAGER,
     CONF_INVERTER_UNIT_ID,
     DOMAIN,
+    entity_prefix,
 )
-from custom_components.fronius_modbus.datamanager_client import EXPORT_LIMIT_PATH
+from custom_components.fronius_modbus.datamanager_client import (
+    EXPORT_LIMIT_PATH,
+    DatamanagerClient,
+)
+from custom_components.fronius_modbus.datamanager_web import _write_turn
 from custom_components.fronius_modbus.diagnostics import (
     async_get_config_entry_diagnostics,
 )
 from custom_components.fronius_modbus.fronius_modbus_api.storage import ExtendedMode
 from custom_components.fronius_modbus.token_store import async_get_token_store
 from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
 from .conftest import INVERTER_UNIT_ID
 from .fake_datamanager import HOST, answer_body, minted, serve_datamanager
 from .ha_test_plugin import async_fire_time_changed
 from .test_datamanager_entry import registered_keys, reload_entry
-from .test_e2e import make_entry, setup_entry, state_of
+from .test_e2e import entity_id_for, make_entry, setup_entry, state_of
 from .test_hybrid_storage import EMPTY, serve_hybrid
 
 pytestmark = [pytest.mark.e2e, pytest.mark.timeout(120)]
@@ -296,3 +305,274 @@ async def test_the_diagnostics_hold_the_limits(hass, device):
 
     assert data["export_limits"]["soft_w"] == 14500.0
     assert data["web"] is None
+
+
+# -- the soft limit as a number -------------------------------------------------------
+
+
+async def number_entry(hass):
+    """An entry whose soft limit number the owner switched on."""
+    await log_in(hass)
+    entry = technician_entry(hass)
+    er.async_get(hass).async_get_or_create(
+        "number",
+        DOMAIN,
+        f"{entity_prefix(entry.entry_id)}_export_soft_limit",
+        config_entry=entry,
+        disabled_by=None,
+    )
+    await setup_entry(hass, entry)
+    return entry
+
+
+async def set_number(hass, entry, value: float) -> None:
+    await hass.services.async_call(
+        "number",
+        "set_value",
+        {
+            "entity_id": entity_id_for(hass, entry, "number", "export_soft_limit"),
+            "value": value,
+        },
+        blocking=True,
+    )
+
+
+async def test_the_soft_limit_number_is_off_until_it_is_switched_on(hass, device):
+    """Nobody has seen this write on a device yet."""
+    await log_in(hass)
+    entry = technician_entry(hass)
+
+    await setup_entry(hass, entry)
+
+    row = er.async_get(hass).async_get(
+        entity_id_for(hass, entry, "number", "export_soft_limit")
+    )
+    assert row.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+
+
+async def test_the_soft_limit_is_set_and_shown(hass, device):
+    entry = await number_entry(hass)
+    assert state_of(hass, entry, "export_soft_limit", "number") == "14500.0"
+
+    await set_number(hass, entry, 9000)
+
+    assert state_of(hass, entry, "export_soft_limit", "number") == "9000.0"
+    assert state_of(hass, entry, "export_soft_limit") == "9000.0"
+    assert len(device.written) == 1
+
+
+async def test_the_number_ends_at_the_highest_soft_limit(hass, device):
+    entry = await number_entry(hass)
+    state = hass.states.get(entity_id_for(hass, entry, "number", "export_soft_limit"))
+
+    assert (state.attributes["min"], state.attributes["max"]) == (0, 18200)
+    with pytest.raises(ServiceValidationError):
+        await set_number(hass, entry, 18201)
+    assert device.written == []
+
+
+async def test_the_number_ends_below_an_enabled_hard_limit(hass, device):
+    active = device.body["Body"]["Data"]["powerLimits"]["exportLimits"]["activePower"]
+    active["hardLimit"] = {"enabled": True, "powerLimit": 8000}
+    entry = await number_entry(hass)
+    state = hass.states.get(entity_id_for(hass, entry, "number", "export_soft_limit"))
+
+    assert state.attributes["max"] == 7999
+
+
+async def test_an_enabled_hard_limit_of_0_leaves_the_number_unavailable(hass, device):
+    active = device.body["Body"]["Data"]["powerLimits"]["exportLimits"]["activePower"]
+    active["hardLimit"] = {"enabled": True, "powerLimit": 0}
+    entry = await number_entry(hass)
+
+    assert state_of(hass, entry, "export_soft_limit", "number") == "unavailable"
+
+
+async def test_a_form_nobody_has_seen_cannot_be_written(hass, device):
+    active = device.body["Body"]["Data"]["powerLimits"]["exportLimits"]["activePower"]
+    entry = await number_entry(hass)
+    active["mode"] = "perPhase"
+
+    with pytest.raises(ServiceValidationError) as refused:
+        await set_number(hass, entry, 9000)
+
+    assert refused.value.translation_key == "export_limit_unknown_form"
+    await entry.runtime_data.datamanager_web.async_refresh()
+    await hass.async_block_till_done()
+    assert state_of(hass, entry, "export_soft_limit", "number") == "unavailable"
+
+
+def soft_limit_on(device) -> float:
+    active = device.body["Body"]["Data"]["powerLimits"]["exportLimits"]["activePower"]
+    return active["softLimit"]["powerLimit"]
+
+
+class HeldWrite:
+    """The write of 9000 W waits outside the client's lock until it is let go."""
+
+    def __init__(self, monkeypatch) -> None:
+        self.released, self.finished = threading.Event(), threading.Event()
+        write = DatamanagerClient.set_soft_limit
+
+        def held(client, watts):
+            if watts != 9000:
+                return write(client, watts)
+            self.released.wait(5)
+            try:
+                return write(client, watts)
+            finally:
+                self.finished.set()
+
+        monkeypatch.setattr(DatamanagerClient, "set_soft_limit", held)
+
+    async def let_go(self, hass) -> None:
+        self.released.set()
+        await hass.async_add_executor_job(self.finished.wait, 5)
+
+
+async def test_the_last_value_asked_for_is_the_one_kept(hass, device, monkeypatch):
+    entry = await number_entry(hass)
+    held = HeldWrite(monkeypatch)
+
+    first = hass.async_create_task(set_number(hass, entry, 9000))
+    await asyncio.sleep(0.05)
+    second = hass.async_create_task(set_number(hass, entry, 8000))
+    await asyncio.sleep(0.05)
+    await held.let_go(hass)
+    await asyncio.gather(first, second)
+
+    assert soft_limit_on(device) == 8000
+    assert state_of(hass, entry, "export_soft_limit", "number") == "8000.0"
+
+
+async def test_a_write_given_up_by_its_caller_still_goes_first(
+    hass, device, monkeypatch
+):
+    entry = await number_entry(hass)
+    held = HeldWrite(monkeypatch)
+
+    first = hass.async_create_task(set_number(hass, entry, 9000))
+    await asyncio.sleep(0.05)
+    first.cancel()
+    second = hass.async_create_task(set_number(hass, entry, 8000))
+    await asyncio.sleep(0.05)
+    await held.let_go(hass)
+    await second
+
+    assert soft_limit_on(device) == 8000
+    assert state_of(hass, entry, "export_soft_limit", "number") == "8000.0"
+
+
+@pytest.mark.parametrize("spelling", ["DM.EXAMPLE", "http://dm.Example"])
+async def test_one_host_spelled_another_way_shares_its_write_turn(hass, spelling):
+    """Reconfigured with another spelling, the reloaded entry would write first."""
+    assert _write_turn(hass, spelling) is _write_turn(hass, "dm.example")
+
+
+async def test_a_write_from_before_a_reload_goes_first(hass, device, monkeypatch):
+    """The reloaded entry has a new coordinator; the old write was still on its way."""
+    entry = await number_entry(hass)
+    held = HeldWrite(monkeypatch)
+
+    first = hass.async_create_task(set_number(hass, entry, 9000))
+    await asyncio.sleep(0.05)
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    second = hass.async_create_task(set_number(hass, entry, 8000))
+    await asyncio.sleep(0.05)
+    await held.let_go(hass)
+    await asyncio.gather(first, second, return_exceptions=True)
+    await hass.async_block_till_done()
+
+    assert soft_limit_on(device) == 8000
+
+
+async def test_a_given_up_write_that_fails_names_no_address(
+    hass, device, monkeypatch, caplog
+):
+    """Nobody waits for it, so its error reaches the log on its own."""
+    entry = await number_entry(hass)
+    held = HeldWrite(monkeypatch)
+    first = hass.async_create_task(set_number(hass, entry, 9000))
+    await asyncio.sleep(0.05)
+    first.cancel()
+    send = requests.adapters.HTTPAdapter.send
+
+    def unreachable(*_args, **_options):
+        raise requests.ConnectionError(f"Max retries exceeded: http://{HOST}/config/")
+
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", unreachable)
+    await held.let_go(hass)
+    await hass.async_block_till_done()
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", send)
+
+    await set_number(hass, entry, 8000)
+
+    format_record = logging.Formatter().format
+    reported = [
+        format_record(record)
+        for record in caplog.records
+        if record.levelno >= logging.ERROR
+        or record.name.startswith("custom_components.fronius_modbus")
+    ]
+    assert not [text for text in reported if HOST in text]
+    assert any("gave up" in text for text in reported)
+    assert soft_limit_on(device) == 8000
+
+
+async def test_an_unconfirmed_write_says_so(hass, device):
+    """Taken, but with an error: the device is shown as it is now."""
+    entry = await number_entry(hass)
+    device.write_answer = {"Head": {"Status": {"Code": 255}}}
+
+    with pytest.raises(HomeAssistantError) as unconfirmed:
+        await set_number(hass, entry, 9000)
+
+    assert unconfirmed.value.translation_key == "export_limit_unconfirmed"
+    assert state_of(hass, entry, "export_soft_limit", "number") == "9000.0"
+
+
+async def test_a_login_refused_at_a_write_is_asked_for(hass, device):
+    entry = await number_entry(hass)
+    device.password = "changed"
+
+    with pytest.raises(HomeAssistantError) as refused:
+        await set_number(hass, entry, 9000)
+
+    assert refused.value.translation_key == "web_api_auth_failed"
+    assert logins_asked(hass) == [entry.entry_id]
+    assert device.written == []
+    tries = len(device.logins)
+    await after(hass, minutes=30)
+    assert len(device.logins) == tries
+
+
+@pytest.mark.parametrize("status", [401, 403])
+async def test_a_write_refused_after_the_login_asks_for_no_new_login(
+    hass, device, status
+):
+    """The read before it was let in: the password is right, the write is not."""
+    entry = await number_entry(hass)
+    device.write_status = status
+
+    with pytest.raises(HomeAssistantError) as refused:
+        await set_number(hass, entry, 9000)
+
+    assert refused.value.translation_key == "write_failed"
+    assert logins_asked(hass) == []
+    assert len(device.written) == 1
+    await after(hass, minutes=2)
+    assert logins_asked(hass) == []
+    assert state_of(hass, entry, "export_soft_limit") != "unavailable"
+
+
+async def test_a_device_off_at_a_write_is_unreachable(hass, device, monkeypatch):
+    entry = await number_entry(hass)
+
+    def refuse(*_args, **_options):
+        raise requests.ConnectionError
+
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", refuse)
+    with pytest.raises(HomeAssistantError) as unreachable:
+        await set_number(hass, entry, 9000)
+
+    assert unreachable.value.translation_key == "web_api_unreachable"

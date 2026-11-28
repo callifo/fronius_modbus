@@ -3343,7 +3343,7 @@
     "path": "custom_components/fronius_modbus/inverter_choice.py",
     "old": "        # owner while a form was open.\n        check_login_on_owner(self.hass, settings, None)\n",
     "new": "        # owner while a form was open.\n",
-    "tests": "second_inverter_cannot_take_the_technician_role or while_the_password_is_asked"
+    "tests": "second_inverter_cannot_take_the_technician_role or while_the_password_is_asked or technician_beside_the_owner_is_refused_before or owner_set_up_while_the_switch_is_asked"
   },
   {
     "label": "technician: an existing entry beside the owner is refused",
@@ -4461,22 +4461,36 @@
   {
     "label": "service login: a forbidden login is not sent again",
     "path": "custom_components/fronius_modbus/datamanager_client.py",
-    "old": "        if second.status_code in REFUSED:\n",
-    "new": "        if second.status_code == HTTPStatus.UNAUTHORIZED:\n",
+    "old": "        if second.status_code not in REFUSED:\n",
+    "new": "        if second.status_code != HTTPStatus.UNAUTHORIZED:\n",
     "tests": "forbidden_login_is_not_sent_again"
+  },
+  {
+    "label": "service login: a refused write keeps the login",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "        elif request.method == \"GET\":\n",
+    "new": "        else:\n",
+    "tests": "refused_write_keeps_the_login or write_refused_after_the_login"
+  },
+  {
+    "label": "soft limit: a refused write is a failed write",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "            except FroniusWebAuthError as err:\n                raise ControlUnavailable(\n                    \"write_failed\",",
+    "new": "            except KeyError as err:\n                raise ControlUnavailable(\n                    \"write_failed\",",
+    "tests": "refused_write_keeps_the_login or write_refused_after_the_login"
   },
   {
     "label": "export limit page: an answer with an error has no values",
     "path": "custom_components/fronius_modbus/datamanager_client.py",
-    "old": "    if isinstance(status, bool) or status != 0:\n        return None\n",
-    "new": "",
+    "old": "    return not isinstance(status, bool) and status == 0\n",
+    "new": "    return True\n",
     "tests": "page_of_another_form_has"
   },
   {
     "label": "export limit page: an answer that is no JSON has no values",
     "path": "custom_components/fronius_modbus/datamanager_client.py",
-    "old": "        except ValueError:\n            payload = None\n",
-    "new": "        except KeyError:\n            payload = None\n",
+    "old": "    except ValueError:\n        return None\n",
+    "new": "    except KeyError:\n        return None\n",
     "tests": "page_of_another_form_has"
   },
   {
@@ -4611,5 +4625,362 @@
     "old": "        if state is not None and state.settings.get(CONF_DATAMANAGER):\n",
     "new": "        if state is not None:\n",
     "tests": "the_config_flow_creates_an_entry"
+  },
+  {
+    "label": "soft limit: only a known form is written",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "        return self.mode == MODE_ENTIRE_SYSTEM and None not in seen\n",
+    "new": "        return True\n",
+    "tests": "form_nobody_has_seen"
+  },
+  {
+    "label": "soft limit: the mode has to be the one seen",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "        return self.mode == MODE_ENTIRE_SYSTEM and None not in seen\n",
+    "new": "        return None not in seen\n",
+    "tests": "form_nobody_has_seen_is_not_written"
+  },
+  {
+    "label": "soft limit: every field of the form has to be read",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "        return self.mode == MODE_ENTIRE_SYSTEM and None not in seen\n",
+    "new": "        return self.mode == MODE_ENTIRE_SYSTEM\n",
+    "tests": "form_nobody_has_seen_is_not_written"
+  },
+  {
+    "label": "soft limit: nothing below 0",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "    if not 0 <= watts <= highest:\n",
+    "new": "    if not watts <= highest:\n",
+    "tests": "out_of_range_is_refused"
+  },
+  {
+    "label": "soft limit: nothing above the ceiling",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "    if not 0 <= watts <= highest:\n",
+    "new": "    if not 0 <= watts:\n",
+    "tests": "out_of_range_is_refused"
+  },
+  {
+    "label": "soft limit: without a ceiling the site's counts",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "    highest = SITE_POWER_CEILING_W if ceiling is None else ceiling\n",
+    "new": "    highest = 18200 if ceiling is None else ceiling\n",
+    "tests": "without_a_reference"
+  },
+  {
+    "label": "soft limit: a reference of 0 is none",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "        if self.reference_w is not None and self.reference_w > 0:\n",
+    "new": "        if self.reference_w is not None:\n",
+    "tests": "highest_soft_limit or without_a_reference"
+  },
+  {
+    "label": "soft limit: an enabled hard limit bounds it",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "        if self.hard_enabled and self.hard_w is not None:\n",
+    "new": "        if False:\n",
+    "tests": "highest_soft_limit or out_of_range_is_refused"
+  },
+  {
+    "label": "soft limit: a disabled hard limit does not",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "        if self.hard_enabled and self.hard_w is not None:\n",
+    "new": "        if self.hard_w is not None:\n",
+    "tests": "highest_soft_limit or the_whole_range"
+  },
+  {
+    "label": "soft limit: the value held is not written",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "            if limits.soft_enabled and limits.soft_w == watts:\n                return limits\n",
+    "new": "",
+    "tests": "held_already_is_not_written"
+  },
+  {
+    "label": "soft limit: a value held while off is written",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "            if limits.soft_enabled and limits.soft_w == watts:\n",
+    "new": "            if limits.soft_w == watts:\n",
+    "tests": "switches_it_on"
+  },
+  {
+    "label": "soft limit: it is switched on",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "            soft[\"enabled\"], soft[\"powerLimit\"] = True, watts\n",
+    "new": "            soft[\"powerLimit\"] = watts\n",
+    "tests": "switches_it_on or the_only_change"
+  },
+  {
+    "label": "soft limit: the whole page is sent back",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "{\"powerLimits\": changed}",
+    "new": "{\"powerLimits\": {\"exportLimits\": changed[\"exportLimits\"]}}",
+    "tests": "the_only_change"
+  },
+  {
+    "label": "soft limit: written to the save query",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "SAVE_QUERY = \"?method=save\"",
+    "new": "SAVE_QUERY = \"\"",
+    "tests": "the_only_change"
+  },
+  {
+    "label": "soft limit: the answer has to report success",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "            if not (_reports_success(_json(answer)) and taken):\n",
+    "new": "            if not taken:\n",
+    "tests": "nobody_confirmed"
+  },
+  {
+    "label": "soft limit: the value has to be shown again",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "            if not (_reports_success(_json(answer)) and taken):\n",
+    "new": "            if not _reports_success(_json(answer)):\n",
+    "tests": "not_shown_again"
+  },
+  {
+    "label": "soft limit: shown again switched on",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "            taken = shown.soft_enabled is True and shown.soft_w == watts\n",
+    "new": "            taken = shown.soft_w == watts\n",
+    "tests": "not_shown_again"
+  },
+  {
+    "label": "soft limit: a failed read after the write is unconfirmed",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "                shown = self.read_export_limits()\n            except (\n                FroniusWebAuthError,\n",
+    "new": "                shown = self.read_export_limits()\n            except (\n                KeyError,\n",
+    "tests": "read_that_fails_after_the_write"
+  },
+  {
+    "label": "soft limit: a lost write is unconfirmed",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "            except (FroniusWebUnreachable, FroniusWebResponseError) as err:\n                raise _unconfirmed() from err\n            try:\n",
+    "new": "            except KeyError as err:\n                raise _unconfirmed() from err\n            try:\n",
+    "tests": "nobody_confirmed"
+  },
+  {
+    "label": "soft limit: the number is off by default",
+    "path": "custom_components/fronius_modbus/datamanager_entities.py",
+    "old": "    entity_registry_enabled_default=False,\n)\n\n\ndef number_descriptions(",
+    "new": "    entity_registry_enabled_default=True,\n)\n\n\ndef number_descriptions(",
+    "tests": "off_until_it_is_switched_on"
+  },
+  {
+    "label": "soft limit: the number ends at the ceiling",
+    "path": "custom_components/fronius_modbus/datamanager_entities.py",
+    "old": "    max_fn=lambda runtime: _limits(runtime).ceiling_w,\n",
+    "new": "",
+    "tests": "ends_at_the_highest"
+  },
+  {
+    "label": "soft limit: a form nobody has seen leaves the number unavailable",
+    "path": "custom_components/fronius_modbus/datamanager_entities.py",
+    "old": "    available_fn=lambda runtime: _limits(runtime).takes_a_soft_limit,\n",
+    "new": "",
+    "tests": "form_nobody_has_seen_cannot_be_written"
+  },
+  {
+    "label": "soft limit: it stays below an enabled hard limit",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "            bounds.append(math.ceil(self.hard_w) - 1)\n",
+    "new": "            bounds.append(math.ceil(self.hard_w))\n",
+    "tests": "highest_soft_limit or at_an_enabled_hard_limit_is_refused"
+  },
+  {
+    "label": "soft limit: a fractional hard limit leaves the whole watt below",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "            bounds.append(math.ceil(self.hard_w) - 1)\n",
+    "new": "            bounds.append(self.hard_w - 1)\n",
+    "tests": "highest_soft_limit"
+  },
+  {
+    "label": "soft limit: no room below a hard limit of 0 leaves the number unavailable",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "        return self.is_writable and (ceiling is None or ceiling >= 0)\n",
+    "new": "        return self.is_writable\n",
+    "tests": "hard_limit_of_0_leaves_the_number_unavailable"
+  },
+  {
+    "label": "soft limit: the number exists with the login only",
+    "path": "custom_components/fronius_modbus/datamanager_entities.py",
+    "old": "    return [] if runtime.datamanager_web is None else [_SOFT_LIMIT]\n",
+    "new": "    return [_SOFT_LIMIT]\n",
+    "tests": "without_the_login_its_page or entry_without_its_login"
+  },
+  {
+    "label": "soft limit: what the device holds is shown after a write",
+    "path": "custom_components/fronius_modbus/datamanager_web.py",
+    "old": "        self.async_set_updated_data(limits)\n",
+    "new": "",
+    "tests": "set_and_shown"
+  },
+  {
+    "label": "soft limit: an unconfirmed write shows the device again",
+    "path": "custom_components/fronius_modbus/datamanager_web.py",
+    "old": "            # Show what the device holds now.\n            await self.async_refresh()\n",
+    "new": "",
+    "tests": "unconfirmed_write_says_so"
+  },
+  {
+    "label": "soft limit: a refused login at a write asks for a new one",
+    "path": "custom_components/fronius_modbus/datamanager_web.py",
+    "old": "            # The poll asks for the new login; the refused one is not sent again.\n            await self.async_refresh()\n",
+    "new": "",
+    "tests": "login_refused_at_a_write"
+  },
+  {
+    "label": "soft limit: writes go out in the order asked for",
+    "path": "custom_components/fronius_modbus/datamanager_web.py",
+    "old": "        async with self._write_turn:\n            await self._async_write(watts)\n",
+    "new": "        await self._async_write(watts)\n",
+    "tests": "last_value_asked_for_is_the_one_kept"
+  },
+  {
+    "label": "soft limit: a write given up by its caller runs to its end",
+    "path": "custom_components/fronius_modbus/datamanager_web.py",
+    "old": "            await asyncio.wait([write])\n",
+    "new": "            await write\n",
+    "tests": "write_given_up_by_its_caller_still_goes_first"
+  },
+  {
+    "label": "soft limit: the order of writes outlasts a reload",
+    "path": "custom_components/fronius_modbus/datamanager_web.py",
+    "old": "        self._write_turn = _write_turn(hass, host)\n",
+    "new": "        self._write_turn = asyncio.Lock()\n",
+    "tests": "write_from_before_a_reload_goes_first"
+  },
+  {
+    "label": "soft limit: a given up write reports its failure itself",
+    "path": "custom_components/fronius_modbus/datamanager_web.py",
+    "old": "            write.add_done_callback(_report_a_write_nobody_waits_for)\n",
+    "new": "",
+    "tests": "given_up_write_that_fails_names_no_address"
+  },
+  {
+    "label": "soft limit: every spelling of a host shares one write turn",
+    "path": "custom_components/fronius_modbus/datamanager_web.py",
+    "old": "    return turns.setdefault(canonical_host(host), asyncio.Lock())\n",
+    "new": "    return turns.setdefault(host, asyncio.Lock())\n",
+    "tests": "spelled_another_way_shares_its_write_turn"
+  },
+  {
+    "label": "model type: int is told",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        if chain.first(*INVERTER_MODEL_IDS) is not None:\n            return \"int\"\n",
+    "new": "",
+    "tests": "model_type_a_unit_serves or int_is_not_asked"
+  },
+  {
+    "label": "model type: float is told",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        return None if chain.first(*FLOAT_INVERTER_MODEL_IDS) is None else \"float\"\n",
+    "new": "        return \"float\"\n",
+    "tests": "meter_has_no_inverter_model"
+  },
+  {
+    "label": "model type: the type is written",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        await unit.write_register(MODEL_TYPE_ADDRESS, MODEL_TYPE_INT_SF)\n",
+    "new": "",
+    "tests": "confirmed_switch_is_two_writes"
+  },
+  {
+    "label": "model type: the write is confirmed",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        await unit.write_register(MODEL_TYPE_ADDRESS, MODEL_TYPE_CONFIRMATION)\n",
+    "new": "",
+    "tests": "confirmed_switch_is_two_writes"
+  },
+  {
+    "label": "model type: int + SF is 2",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/fronius_registers.py",
+    "old": "MODEL_TYPE_INT_SF = 2\n",
+    "new": "MODEL_TYPE_INT_SF = 1\n",
+    "tests": "confirmed_switch_is_two_writes"
+  },
+  {
+    "label": "model type: register 216",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/fronius_registers.py",
+    "old": "MODEL_TYPE_ADDRESS = 215\n",
+    "new": "MODEL_TYPE_ADDRESS = 216\n",
+    "tests": "confirmed_switch_is_two_writes"
+  },
+  {
+    "label": "model type: only float is asked about",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "        if await async_model_type(self.hass, settings) != \"float\":\n",
+    "new": "        if await async_model_type(self.hass, settings) is None:\n",
+    "tests": "int_is_not_asked"
+  },
+  {
+    "label": "model type: only a Datamanager is asked about",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "        return await self._async_model_type_question(settings) if found else None\n",
+    "new": "        return await self._async_model_type_question(settings)\n",
+    "tests": "another_device_is_never_switched"
+  },
+  {
+    "label": "model type: the chosen inverter is asked about",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "            question = await self._async_model_type_question(settings)\n            if question is not None:\n                return question\n",
+    "new": "",
+    "tests": "chosen_inverter_is_the_one_written"
+  },
+  {
+    "label": "model type: a refused write is no switch",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "        _LOGGER.warning(\"The model type was not switched: %s\", error_text(err))\n        return False\n",
+    "new": "        _LOGGER.warning(\"The model type was not switched: %s\", error_text(err))\n        return True\n",
+    "tests": "refused_write_creates_nothing"
+  },
+  {
+    "label": "model type: the host is claimed before the write",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "            await self._async_claim_new_host(settings)\n            if await async_switch_to_int(",
+    "new": "            if await async_switch_to_int(",
+    "tests": "taken_while_the_question_is_open"
+  },
+  {
+    "label": "model type: after the switch the login follows",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "                return await self._async_set_up_inverter(settings)\n            errors[\"base\"] = \"model_type_not_switched\"\n",
+    "new": "                return await self._async_finish_user(settings, {\"title\": \"\"}, None)\n            errors[\"base\"] = \"model_type_not_switched\"\n",
+    "tests": "login_comes_after_the_switch"
+  },
+  {
+    "label": "model type: a failed read is no answer",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "    except MODBUS_ERRORS as err:\n        _LOGGER.debug(\"The model type was not read: %s\", error_text(err))\n        return None\n",
+    "new": "    except KeyError as err:\n        _LOGGER.debug(\"The model type was not read: %s\", error_text(err))\n        return None\n",
+    "tests": "silent_unit_is_no_float"
+  },
+  {
+    "label": "model type: an int read has to hold beyond the reset",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "    await asyncio.sleep(MODEL_TYPE_HOLD_SECONDS)\n    return await async_model_type(hass, settings) == \"int\"\n",
+    "new": "    return True\n",
+    "tests": "switch_taken_back_after_a_few_seconds"
+  },
+  {
+    "label": "model type: the hold outlasts the reset",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "MODEL_TYPE_HOLD_SECONDS = 12.0\n",
+    "new": "MODEL_TYPE_HOLD_SECONDS = 5.0\n",
+    "tests": "hold_outlasts_the_reset_the_manual_names"
+  },
+  {
+    "label": "model type: a split-phase float device is not switched",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/sunspec_models.py",
+    "old": "FLOAT_INVERTER_MODEL_IDS = (111, 113)\n",
+    "new": "FLOAT_INVERTER_MODEL_IDS = (111, 112, 113)\n",
+    "tests": "split_phase_float_device_is_not_offered"
+  },
+  {
+    "label": "model type: a single-phase float device is switched",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/sunspec_models.py",
+    "old": "FLOAT_INVERTER_MODEL_IDS = (111, 113)\n",
+    "new": "FLOAT_INVERTER_MODEL_IDS = (113,)\n",
+    "tests": "confirmed_switch_is_two_writes"
   }
 ]

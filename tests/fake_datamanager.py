@@ -59,6 +59,12 @@ class FakeDatamanager:
         self.same_nonce = False
         # What a request without a login gets instead of the challenge.
         self.unsigned_status: int | None = None
+        # What a write does: the body it sent, and the answer to it.
+        self.written: list[Any] = []
+        self.takes_writes = True
+        self.write_answer: Any = {"Body": {}, "Head": {"Status": {"Code": 0}}}
+        self.write_status = 200
+        self.lost_after_write = False
         self._asked = 0
 
     def _accepts(self, request: requests.PreparedRequest, header: str) -> bool:
@@ -75,6 +81,15 @@ class FakeDatamanager:
             md5(signed),
         )
 
+    def _write(self, request: requests.PreparedRequest) -> tuple[int, Any]:
+        sent = json.loads(request.body)
+        self.written.append(sent)
+        if self.takes_writes:
+            self.body["Body"]["Data"] = copy.deepcopy(sent)
+        if self.lost_after_write:
+            raise requests.ConnectionError
+        return self.write_status, self.write_answer
+
     def send(self, adapter, request, **_options) -> requests.Response:
         self.calls.append((request.method, request.path_url))
         response = requests.Response()
@@ -83,7 +98,10 @@ class FakeDatamanager:
         header = request.headers.get("Authorization")
         if header is not None and self._accepts(request, header):
             response.status_code = self.status
-            text = self.body if isinstance(self.body, str) else json.dumps(self.body)
+            body = self.body
+            if request.method == "POST":
+                response.status_code, body = self._write(request)
+            text = body if isinstance(body, str) else json.dumps(body)
             response._content = text.encode()
             return response
         if self.unsigned_status is not None:

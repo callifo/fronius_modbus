@@ -179,6 +179,10 @@ CONTROL_STATUS = {
     1: "enabled",
 }
 
+# The export limit and the target feed-in count at the grid meter, where other
+# generation adds up, and the inverter caps neither (issue 154); no site reaches 1 MW.
+SITE_POWER_CEILING_W = 1_000_000
+
 # As a Datamanager names it; another one has not been seen.
 EXPORT_LIMIT_MODES = {"entireSystem": "entire_system"}
 

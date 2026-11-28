@@ -8,7 +8,7 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 
 from .const import CONF_API_PASSWORD, entry_title_after
-from .flow_settings import _entry_payload
+from .flow_settings import _entry_payload, check_login_on_owner, device_answer
 from .flow_state import _AlreadyConfigured
 from .host_sharing import host_holder, unique_id_for
 from .token_store import async_forget_unused_tokens
@@ -25,6 +25,9 @@ def _claim_host(
     """
     if host_holder(hass, settings, entry) is not None:
         raise _AlreadyConfigured
+    # Again right before the change: another entry may have become the owner
+    # while the form was open.
+    check_login_on_owner(hass, settings, entry)
     return unique_id_for(hass, settings, entry)
 
 
@@ -38,7 +41,8 @@ async def async_update_entry_from_input(
     """Write a reconfigure or reauth into the entry, and reload it once."""
     unique_id = _claim_host(hass, entry, validated_input)
     updated_payload = _entry_payload(validated_input, reconfigure_required=False)
-    new_data = {**entry.data, **updated_payload}
+    answer = device_answer(entry, validated_input)
+    new_data = {**entry.data, **updated_payload, **answer}
     new_options = {**entry.options, **updated_payload}
     new_data.pop(CONF_API_PASSWORD, None)
     new_options.pop(CONF_API_PASSWORD, None)

@@ -55,8 +55,16 @@ class _AddressesNotUnique(exceptions.HomeAssistantError):
     """Error to indicate that the modbus addresses are not unique."""
 
 
-class _DatamanagerFound(exceptions.HomeAssistantError):
-    """A role was chosen for a Datamanager, which has other logins."""
+class _DatamanagerCustomer(exceptions.HomeAssistantError):
+    """The customer role was chosen for a Datamanager, where it opens nothing."""
+
+
+class _DatamanagerLoginOnOwner(exceptions.HomeAssistantError):
+    """Another entry reads what the Datamanager shows behind its login."""
+
+
+class _DatamanagerPageMissing(exceptions.HomeAssistantError):
+    """The Datamanager answered, but has no page for the export limit."""
 
 
 class _AlreadyConfigured(exceptions.HomeAssistantError):

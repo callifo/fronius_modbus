@@ -20,7 +20,7 @@ from homeassistant.components.switch import SwitchEntityDescription
 from .coordinator import FroniusRuntimeData
 from .event_entities import CUSTOMER, EventAudience
 
-type Source = Literal["modbus", "web"]
+type Source = Literal["modbus", "web", "datamanager"]
 type WebClientKind = Literal["public", "customer", "technician"]
 type DeviceKind = Literal["inverter", "storage", "meter"]
 

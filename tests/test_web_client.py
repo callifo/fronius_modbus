@@ -386,6 +386,23 @@ def test_the_meter_at_location_zero_becomes_the_primary_one():
     assert info["locations_by_unit_id"] == {200: 0, 201: 1}
 
 
+def test_the_consumption_meter_leads_a_sub_meter_without_a_grid_meter():
+    """A sub-meter measures one circuit; the consumption meter measures the house."""
+    payload = {
+        "Body": {
+            "Data": {
+                "1": meter_node("1", **{"meter-location": "256"}),
+                "2": meter_node("2", **{"meter-location": "1"}),
+            }
+        }
+    }
+
+    info = _parse_power_meter_info(payload, 200)
+
+    assert info["primary_unit_id"] == 201
+    assert info["unit_ids"] == [201, 200]
+
+
 def test_nodes_that_are_not_power_meters_are_left_out():
     payload = {
         "Body": {

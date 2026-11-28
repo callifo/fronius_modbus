@@ -60,17 +60,42 @@ def async_claim_site(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     go on with the meter under new entities. A deleted owner leaves it to the
     lowest inverter that can be set up.
     """
-    entries = host_entries(hass, str(_settings(entry).get(CONF_HOST, "")))
-    marked = [other for other in entries if other.data.get(CONF_SITE_OWNER)]
-    able = [other for other in entries if _can_own_a_site(other)]
-    owner = min(marked or able, key=lambda other: (_unit(other), other.entry_id))
-    if owner is not entry:
+    if site_owner(hass, str(_settings(entry).get(CONF_HOST, ""))) is not entry:
         return False
     if not entry.data.get(CONF_SITE_OWNER):
         hass.config_entries.async_update_entry(
             entry, data={**entry.data, CONF_SITE_OWNER: True}
         )
     return True
+
+
+def site_owner(hass: HomeAssistant, host: str) -> ConfigEntry | None:
+    """The entry that reads what the inverters of the Datamanager at ``host`` share."""
+    entries = host_entries(hass, host)
+    marked = [other for other in entries if other.data.get(CONF_SITE_OWNER)]
+    able = [other for other in entries if _can_own_a_site(other)]
+    candidates = marked or able
+    if not candidates:
+        return None
+    return min(candidates, key=lambda other: (_unit(other), other.entry_id))
+
+
+def would_own_site(
+    hass: HomeAssistant, settings: Mapping[str, Any], entry: ConfigEntry | None
+) -> bool:
+    """Whether an entry with these settings reads what its Datamanager's inverters share.
+
+    The rule of ``async_claim_site``, for ``entry`` or a new one, marking nothing.
+    """
+    if entry is not None and entry.data.get(CONF_SITE_OWNER):
+        return True
+    host = str(settings.get(CONF_HOST, ""))
+    others = [other for other in host_entries(hass, host) if other is not entry]
+    if any(other.data.get(CONF_SITE_OWNER) for other in others):
+        return False
+    unit = int(settings.get(CONF_INVERTER_UNIT_ID, DEFAULT_INVERTER_UNIT_ID))
+    # Two entries on one host never share a number.
+    return all(unit < _unit(other) for other in others if _can_own_a_site(other))
 
 
 def _can_own_a_site(entry: ConfigEntry) -> bool:

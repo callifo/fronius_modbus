@@ -1,8 +1,9 @@
 """What the inverters of one Datamanager share: one entry has it, the others do not."""
 
-from modbus_connection import ModbusTimeoutError
+from modbus_connection import ModbusConnectionError, ModbusTimeoutError
 import pytest
 
+from custom_components.fronius_modbus import migrations
 from custom_components.fronius_modbus.const import (
     CONF_DATAMANAGER,
     CONF_INVERTER_UNIT_ID,
@@ -12,6 +13,7 @@ from custom_components.fronius_modbus.const import (
     instance_key,
 )
 from custom_components.fronius_modbus.datamanager import DeviceFamily
+from custom_components.fronius_modbus.fronius_modbus_api.device import FroniusInverter
 from homeassistant.config_entries import ConfigEntryDisabler, ConfigEntryState
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 
@@ -205,6 +207,108 @@ async def test_the_load_stays_unknown_with_two_entries(hass, site, monkeypatch):
     await start(hass, first, second)
 
     assert state_of(hass, first, "load") == "unknown"
+
+
+async def test_the_load_turns_unknown_when_a_second_inverter_joins(
+    hass, site, monkeypatch
+):
+    """The owner added its own inverter alone to the grid meter's power."""
+    answer_site(monkeypatch, ("A1", 0), inverters=1)
+    first = add_inverter(hass, 1)
+    await start(hass, first)
+    assert state_of(hass, first, "load") not in ("unknown", "unavailable")
+
+    second = add_inverter(hass, SECOND_UNIT_ID)
+    assert await hass.config_entries.async_setup(second.entry_id)
+    await hass.async_block_till_done()
+
+    assert state_of(hass, first, "load") == "unknown"
+    assert first.runtime_data.several_inverters is True
+
+
+async def test_the_load_turns_unknown_when_a_second_inverter_joins_the_search(
+    hass, site, monkeypatch
+):
+    """The owner had counted the entries before its search; nobody told it later."""
+    answer_site(monkeypatch, ("A1", 0), inverters=1)
+    first = add_inverter(hass, 1)
+    probe = FroniusInverter.async_probe_meter
+    joined = []
+
+    async def set_up_the_second_meanwhile(unit):
+        if not joined:
+            joined.append(add_inverter(hass, SECOND_UNIT_ID))
+            assert await hass.config_entries.async_setup(joined[0].entry_id)
+        return await probe(unit)
+
+    monkeypatch.setattr(
+        FroniusInverter, "async_probe_meter", staticmethod(set_up_the_second_meanwhile)
+    )
+
+    assert await hass.config_entries.async_setup(first.entry_id)
+    await hass.async_block_till_done()
+
+    assert joined[0].state is ConfigEntryState.LOADED
+    assert state_of(hass, first, "load") == "unknown"
+
+
+async def test_the_load_turns_unknown_when_an_inverter_joins_the_migrations(
+    hass, site, monkeypatch
+):
+    """The owner had counted again before them; nobody told it later."""
+    answer_site(monkeypatch, ("A1", 0), inverters=1)
+    first = add_inverter(hass, 1)
+    remove = migrations.async_remove_legacy_devices
+    joined = []
+
+    async def set_up_the_second_meanwhile(hass, entry):
+        if not joined and entry is first:
+            joined.append(add_inverter(hass, SECOND_UNIT_ID))
+            assert await hass.config_entries.async_setup(joined[0].entry_id)
+        await remove(hass, entry)
+
+    monkeypatch.setattr(
+        migrations, "async_remove_legacy_devices", set_up_the_second_meanwhile
+    )
+
+    assert await hass.config_entries.async_setup(first.entry_id)
+    await hass.async_block_till_done()
+
+    assert joined[0].state is ConfigEntryState.LOADED
+    assert state_of(hass, first, "load") == "unknown"
+
+
+async def test_a_link_lost_in_the_owner_s_search_still_counts_the_entries(
+    hass, site, monkeypatch
+):
+    """Without the count the owner restarted at the end of every such setup."""
+    probe = FroniusInverter.async_probe_meter
+    looked_at = []
+
+    async def lose_the_link_at_the_second_unit(unit):
+        looked_at.append(unit)
+        if len(looked_at) == 2:
+            raise ModbusConnectionError("link lost")
+        return await probe(unit)
+
+    monkeypatch.setattr(
+        FroniusInverter,
+        "async_probe_meter",
+        staticmethod(lose_the_link_at_the_second_unit),
+    )
+    asked_the_site = []
+    monkeypatch.setattr(
+        "custom_components.fronius_modbus.datamanager.read_site",
+        asked_the_site.append,
+    )
+    first, second = add_inverter(hass, 1), add_inverter(hass, SECOND_UNIT_ID)
+
+    await start(hass, first, second)
+
+    assert first.runtime_data.several_inverters is True
+    assert len(looked_at) == 2
+    # Over a lost link its Solar API would only add a timeout.
+    assert asked_the_site == []
 
 
 @pytest.mark.parametrize("answers", [True, False])

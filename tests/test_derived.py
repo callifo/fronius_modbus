@@ -63,11 +63,16 @@ def test_a_meter_at_another_location_gives_no_load():
     assert _load(meter_location=3) is None
 
 
-@pytest.mark.parametrize("location", [1, 256, 511])
-def test_a_consumption_meter_reports_its_own_power_signed(location):
+def test_a_consumption_meter_reports_its_own_power_signed():
     """A consumption-path meter reports load directly, generation in that path included."""
-    assert _load(meter_location=location, meter_power_w=-450.0) == 450.0
-    assert _load(meter_location=location, meter_power_w=200.0) == -200.0
+    assert _load(meter_location=1, meter_power_w=-450.0) == 450.0
+    assert _load(meter_location=1, meter_power_w=200.0) == -200.0
+
+
+@pytest.mark.parametrize("location", [256, 300, 511])
+def test_a_subload_meter_gives_no_load(location):
+    """A meter on one circuit (a heat pump, a wallbox) measures that circuit only."""
+    assert _load(meter_location=location, meter_power_w=-450.0) is None
 
 
 def test_a_feed_in_pair_read_up_to_the_window_apart_is_one_moment():

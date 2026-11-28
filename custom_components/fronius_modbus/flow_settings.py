@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from http import HTTPStatus
 from typing import Any
 
 from homeassistant import config_entries
@@ -33,7 +35,15 @@ from .const import (
     WEB_API_DISABLED,
     ModbusRestriction,
 )
-from .flow_state import _DatamanagerFound
+from .datamanager_client import DatamanagerClient
+from .flow_state import (
+    _CannotConnect,
+    _DatamanagerCustomer,
+    _DatamanagerLoginOnOwner,
+    _DatamanagerPageMissing,
+)
+from .host_sharing import is_datamanager_host, would_own_site
+from .web_errors import FroniusWebResponseError
 
 
 def _default_payload() -> dict[str, Any]:
@@ -91,9 +101,8 @@ def _entry_payload(
     payload.pop(CONF_API_PASSWORD, None)
     payload.pop("meter_modbus_unit_id", None)
     payload.pop("meter_modbus_unit_ids", None)
-    # Kept as the answer it is; a missing key means no.
-    if not payload.get(CONF_DATAMANAGER):
-        payload.pop(CONF_DATAMANAGER, None)
+    # What the device answered is kept apart from the settings.
+    payload.pop(CONF_DATAMANAGER, None)
     payload[CONF_RECONFIGURE_REQUIRED] = reconfigure_required
     return payload
 
@@ -141,13 +150,76 @@ def _should_apply_modbus_config(
     )
 
 
-async def async_check_role(hass: HomeAssistant, settings: dict[str, Any]) -> None:
-    """Refuse a role on a Datamanager: none of our logins works there."""
-    if settings[CONF_API_USERNAME] == WEB_API_DISABLED:
+async def async_look_at_device(hass: HomeAssistant, settings: dict[str, Any]) -> bool:
+    """Put into the settings whether the host is a Datamanager; refuse its customer.
+
+    A Datamanager that does not answer now is known from its entries.
+    """
+    host = settings[CONF_HOST]
+    family = await datamanager.async_identify(hass, host)
+    silent = family is datamanager.DeviceFamily.UNKNOWN
+    found = family is datamanager.DeviceFamily.DATAMANAGER or (
+        silent and is_datamanager_host(hass, host)
+    )
+    if found and settings[CONF_API_USERNAME] == API_USERNAME:
+        raise _DatamanagerCustomer
+    settings[CONF_DATAMANAGER] = found
+    return found
+
+
+async def async_datamanager_login(
+    hass: HomeAssistant,
+    host: str,
+    *,
+    password: str = "",
+    token: Mapping[str, str] | None = None,
+) -> dict[str, str] | None:
+    """The token the service login leaves; None when the device refuses it."""
+    client = DatamanagerClient(host, password=password, token=token)
+    try:
+        return await hass.async_add_executor_job(client.login)
+    except FroniusWebResponseError as err:
+        # Its firmware may have no such page; the password can be right.
+        if err.status_code == HTTPStatus.NOT_FOUND:
+            raise _DatamanagerPageMissing from err
+        raise _CannotConnect from err
+    except Exception as err:
+        raise _CannotConnect from err
+
+
+def check_login_on_owner(
+    hass: HomeAssistant,
+    settings: dict[str, Any],
+    entry: config_entries.ConfigEntry | None,
+) -> None:
+    """Refuse a login on a Datamanager entry that would read nothing behind it."""
+    login = settings[CONF_API_USERNAME] != WEB_API_DISABLED
+    if not (login and settings.get(CONF_DATAMANAGER)):
         return
-    family = await datamanager.async_identify(hass, settings[CONF_HOST])
-    if family is datamanager.DeviceFamily.DATAMANAGER:
-        raise _DatamanagerFound
+    if not would_own_site(hass, settings, entry):
+        raise _DatamanagerLoginOnOwner
+
+
+async def async_check_role(
+    hass: HomeAssistant,
+    settings: dict[str, Any],
+    entry: config_entries.ConfigEntry | None,
+) -> None:
+    """Check an existing entry's role against its device; without one nothing is asked."""
+    if settings[CONF_API_USERNAME] != WEB_API_DISABLED:
+        await async_look_at_device(hass, settings)
+        check_login_on_owner(hass, settings, entry)
+
+
+def device_answer(
+    entry: config_entries.ConfigEntry, settings: dict[str, Any]
+) -> dict[str, bool]:
+    """What a flow learned about the device and the entry does not hold yet."""
+    found = settings.get(CONF_DATAMANAGER)
+    # A missing key means no already; most entries never get one.
+    if found is None or found == bool(entry.data.get(CONF_DATAMANAGER)):
+        return {}
+    return {CONF_DATAMANAGER: found}
 
 
 def defaults_after(

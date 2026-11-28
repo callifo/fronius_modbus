@@ -70,9 +70,16 @@ def answer(
         # A GEN24 refuses the request in the body, with HTTP 200.
         (solar_api({"Data": {}}, code=11), 200, DeviceFamily.OTHER),
         (logger_info("something-else"), 200, DeviceFamily.OTHER),
-        (logger_info(7), 200, DeviceFamily.OTHER),
-        (solar_api({"LoggerInfo": ["card"]}), 200, DeviceFamily.OTHER),
-        (solar_api(None), 200, DeviceFamily.OTHER),
+        # An answer that names no product, or another error, may be a
+        # Datamanager's: it is no proof of another device.
+        (logger_info(7), 200, DeviceFamily.UNKNOWN),
+        (logger_info(None), 200, DeviceFamily.UNKNOWN),
+        (logger_info(""), 200, DeviceFamily.UNKNOWN),
+        (logger_info("  "), 200, DeviceFamily.UNKNOWN),
+        (solar_api({"LoggerInfo": ["card"]}), 200, DeviceFamily.UNKNOWN),
+        (solar_api(None), 200, DeviceFamily.UNKNOWN),
+        (solar_api({}, code=8), 200, DeviceFamily.UNKNOWN),
+        (solar_api({"Data": {}}, code=255), 200, DeviceFamily.UNKNOWN),
         (logger_info("fronius-datamanager-card"), 404, DeviceFamily.UNKNOWN),
         (logger_info("fronius-datamanager-card"), 503, DeviceFamily.UNKNOWN),
         (HTML, 404, DeviceFamily.UNKNOWN),

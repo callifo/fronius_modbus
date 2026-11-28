@@ -201,6 +201,22 @@ def site(*meters: tuple[str, int | None], inverters: int = 1) -> Site:
             241,
             {240: 256, 241: GRID},
         ),
+        # The grid meter leads the consumption meter too.
+        (
+            {240: "A1", 241: "B2"},
+            site(("A1", LOAD), ("B2", GRID)),
+            [240, 241],
+            241,
+            {240: LOAD, 241: GRID},
+        ),
+        # Without a grid meter the consumption meter leads, not a sub-meter.
+        (
+            {240: "A1", 241: "B2"},
+            site(("A1", 256), ("B2", LOAD)),
+            [240, 241],
+            241,
+            {240: 256, 241: LOAD},
+        ),
         # Two meters and no matching number: nothing is guessed.
         ({240: "", 241: ""}, site(("A1", GRID), ("B2", 256)), [240, 241], 240, {}),
         ({240: "A1", 241: ""}, site(("A1", 256)), [240, 241], 240, {240: 256}),
@@ -224,6 +240,14 @@ def test_the_meters_and_where_they_are(found, known, unit_ids, primary, location
     # Exception 11 does not prove that a meter is gone.
     assert topology.confirmed is False
     assert topology.reported_unit_ids == ()
+
+
+def test_a_unit_that_did_not_answer_clearly_is_asked_again():
+    """A busy meter at the start would be left out until a reload."""
+    topology = meter_topology({240: "A1"}, site(("A1", GRID)), open_units={242})
+
+    assert topology.unit_ids == [240, 242]
+    assert topology.primary_unit_id == 240
 
 
 @pytest.mark.parametrize("inverters", [0, 2])

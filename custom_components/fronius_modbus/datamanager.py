@@ -6,16 +6,18 @@ than a GEN24.
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from http import HTTPStatus
+import logging
 from typing import Any
 
-from modbus_connection import ModbusConnectionError, ModbusTcpParams
+from modbus_connection import ModbusConnectionError, ModbusError, ModbusTcpParams
 
 from homeassistant.components.modbus import async_get_unit
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
+from homeassistant.core import HomeAssistant, callback
 
 from .const import (
     CONF_DATAMANAGER,
@@ -25,10 +27,10 @@ from .const import (
     entry_unique_id,
     web_api_disabled,
 )
-from .derived import METER_LOCATION_FEED_IN
+from .derived import METER_LOCATION_CONSUMPTION, METER_LOCATION_FEED_IN
 from .fronius_modbus_api.device import FroniusInverter
 from .froniuswebclient import _base_url, _http
-from .host_sharing import async_claim_site, host_entries
+from .host_sharing import async_claim_site, host_entries, site_owner
 from .meter_topology import MeterTopology
 from .web_errors import FroniusWebUnreachable
 
@@ -37,6 +39,8 @@ LOGGER_INFO_PATH = "/solar_api/v1/GetLoggerInfo.cgi"
 # Answers without a login on a GEN24, also with its Solar API off; a
 # Datamanager does not have it.
 GEN24_PATH = "/api/status/common"
+# A GEN24 answers GetLoggerInfo with this code: it has no such request.
+GEN24_REFUSAL_CODE = 11
 # Seen are fronius-datamanager-card, whose box is expected to start the same way,
 # and fronius-hybrid on a Symo Hybrid, whose manager has another name.
 DATAMANAGER_PRODUCT_PREFIXES = ("fronius-datamanager", "fronius-hybrid")
@@ -51,6 +55,9 @@ HIGHEST_INVERTER_NUMBER = 99
 SOLAR_API_TIMEOUT = (4.0, 10.0)
 # What the Solar API shows for a meter without a serial number.
 NO_SERIAL = "n.a."
+_FOLLOWED_UNITS_DATA_KEY = "datamanager_open_units_followed"
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class DeviceFamily(StrEnum):
@@ -84,13 +91,23 @@ class Site:
 
 
 def _family(payload: Any) -> DeviceFamily:
-    """The family a GetLoggerInfo body shows."""
-    if not isinstance(payload, dict) or not isinstance(payload.get("Head"), dict):
+    """The family a GetLoggerInfo body shows.
+
+    Only a product name, or the GEN24's refusal, tells: another error or an
+    answer without a product proves no other device.
+    """
+    head = payload.get("Head") if isinstance(payload, dict) else None
+    if not isinstance(head, dict):
         return DeviceFamily.UNKNOWN
+    status = head.get("Status")
+    if isinstance(status, dict) and status.get("Code") == GEN24_REFUSAL_CODE:
+        return DeviceFamily.OTHER
     body = payload.get("Body")
     logger_info = body.get("LoggerInfo") if isinstance(body, dict) else None
     product = logger_info.get("ProductID") if isinstance(logger_info, dict) else None
-    if isinstance(product, str) and product.startswith(DATAMANAGER_PRODUCT_PREFIXES):
+    if not isinstance(product, str) or not product.strip():
+        return DeviceFamily.UNKNOWN
+    if product.startswith(DATAMANAGER_PRODUCT_PREFIXES):
         return DeviceFamily.DATAMANAGER
     return DeviceFamily.OTHER
 
@@ -129,11 +146,12 @@ async def async_on_datamanager(
     """Whether the entry's device is a Datamanager, remembered from its last clear answer.
 
     A Datamanager can be asleep when Home Assistant starts. An entry with a role
-    is not asked: a Datamanager accepts none of them.
+    is not asked: the flow that took the role did.
     """
-    if not web_api_disabled({**entry.data, **entry.options}):
-        return False
     remembered = entry.data.get(CONF_DATAMANAGER)
+    if not web_api_disabled({**entry.data, **entry.options}):
+        _follow_with_the_unique_id(hass, entry, bool(remembered))
+        return bool(remembered)
     family = await async_identify(hass, host)
     if family is DeviceFamily.UNKNOWN:
         return bool(remembered)
@@ -200,7 +218,8 @@ def unit_of(number: str) -> int | None:
     """The Modbus unit of the inverter with this number; None where there is none.
 
     Number 00 is on a unit of its own, 0 being every device's (Fronius' manual
-    42,0410,2049). A listing can hold a meter's number too.
+    42,0410,2049). The Solar API's listing can name another device too, as
+    240 in one published answer: above the highest number, it is no inverter.
     """
     if not (number.isascii() and number.isdigit()):
         return None
@@ -252,17 +271,26 @@ def _locations(found: dict[int, str], site: Site) -> dict[int, int]:
     }
 
 
-def meter_topology(found: dict[int, str], site: Site | None) -> MeterTopology:
+def meter_topology(
+    found: dict[int, str], site: Site | None, open_units: Collection[int] = ()
+) -> MeterTopology:
     """The meters of a Datamanager, from the units that answered and the Solar API.
 
-    The first unit is always listed: a meter silent now is asked again with
-    every poll. Never confirmed: no answer does not prove that a meter is gone.
+    The first unit is always listed, and so are the units that gave no clear
+    answer: a meter silent now is asked again with every poll. Never confirmed:
+    no answer does not prove that a meter is gone.
     """
     locations = _locations(found, site) if site is not None else {}
     grid_meters = [
         unit for unit in sorted(locations) if locations[unit] == METER_LOCATION_FEED_IN
     ]
-    primary = next(iter([*grid_meters, *sorted(found)]), METER_UNIT_IDS[0])
+    consumption_meters = [
+        unit
+        for unit in sorted(locations)
+        if locations[unit] == METER_LOCATION_CONSUMPTION
+    ]
+    leading = [*grid_meters, *consumption_meters, *sorted(found)]
+    primary = next(iter(leading), METER_UNIT_IDS[0])
     if site is not None and site.inverters != 1:
         # The load adds the one inverter read here to the grid meter's power.
         for unit in grid_meters:
@@ -270,12 +298,15 @@ def meter_topology(found: dict[int, str], site: Site | None) -> MeterTopology:
     if site is not None and site.has_grid_meter and not grid_meters:
         # Its power would pass for the whole load while the grid meter is silent.
         locations.pop(primary, None)
+    unit_ids = sorted({METER_UNIT_IDS[0], *found, *open_units})
     return MeterTopology(
-        unit_ids=sorted({METER_UNIT_IDS[0], *found}),
+        unit_ids=unit_ids,
         primary_unit_id=primary,
         locations=locations,
         confirmed=False,
         several_inverters=site is not None and site.inverters > 1,
+        # The first unit too: it is listed whether its meter answered or not.
+        open_unit_ids=tuple(unit for unit in unit_ids if unit not in found),
     )
 
 
@@ -287,30 +318,85 @@ async def async_meter_topology(
     No meter when another entry reads them.
     """
     if not async_claim_site(hass, entry):
+        _async_tell_the_owner(hass, params.host)
         # Nothing is asked, so nothing is known to be gone.
         return MeterTopology(
             [], METER_UNIT_IDS[0], {}, confirmed=False, several_inverters=True
         )
     entries = len(host_entries(hass, params.host))
-    found: dict[int, str] = {}
-    try:
-        for unit_id in METER_UNIT_IDS:
-            unit = async_get_unit(hass, entry, params, unit_id)
-            identity = await FroniusInverter.async_probe_meter(unit)
-            if identity is not None:
-                found[unit_id] = identity.serial.strip()
-    except ModbusConnectionError:
-        # The first poll reports it and has the setup tried again.
-        return meter_topology(found, None)
-    site = await hass.async_add_executor_job(read_site, params.host)
+    found, open_units, link_lost = await _async_look_for_meters(hass, entry, params)
+    site = None
+    if not link_lost:
+        site = await hass.async_add_executor_job(read_site, params.host)
     if site is not None:
         known = _known_inverters(hass, entry, site.inverters)
         # Unread inverters stay unknown beside a single entry.
         site = replace(site, inverters=max(known, entries) if entries > 1 else known)
-    topology = meter_topology(found, site)
+    topology = meter_topology(found, site, open_units)
+    # Without the Solar API's answer even a meter found has no place yet.
+    unplaced = topology.unit_ids if link_lost else topology.open_unit_ids
     return replace(
-        topology, several_inverters=topology.several_inverters or entries > 1
+        topology,
+        several_inverters=topology.several_inverters or entries > 1,
+        open_unit_ids=tuple(unplaced),
     )
+
+
+async def _async_look_for_meters(
+    hass: HomeAssistant, entry: ConfigEntry, params: ModbusTcpParams
+) -> tuple[dict[int, str], set[int], bool]:
+    """The serials of the meters that answered, the units left open, and a lost link."""
+    found: dict[int, str] = {}
+    open_units: set[int] = set()
+    for position, unit_id in enumerate(METER_UNIT_IDS):
+        unit = async_get_unit(hass, entry, params, unit_id)
+        try:
+            identity = await FroniusInverter.async_probe_meter(unit)
+        except ModbusConnectionError:
+            # The first poll reports it and has the setup tried again.
+            open_units.update(METER_UNIT_IDS[position:])
+            return found, open_units, True
+        except ModbusError:
+            open_units.add(unit_id)
+            continue
+        if identity is not None:
+            found[unit_id] = identity.serial.strip()
+    return found, open_units, False
+
+
+def followed_meter_units(hass: HomeAssistant, entry: ConfigEntry) -> set[int]:
+    """The meter units a Datamanager entry has reloaded for in this run.
+
+    Each gets one automatic reload: a meter busy at every search and silent at
+    every first poll would otherwise reload the entry after each setup.
+    """
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    by_entry: dict[str, set[int]] = domain_data.setdefault(_FOLLOWED_UNITS_DATA_KEY, {})
+    return by_entry.setdefault(entry.entry_id, set())
+
+
+@callback
+def _async_tell_the_owner(hass: HomeAssistant, host: str) -> None:
+    """Restart the owner that counted its own inverter alone into the load."""
+    owner = site_owner(hass, host)
+    if owner is None or owner.state is not ConfigEntryState.LOADED:
+        return
+    if not owner.runtime_data.several_inverters:
+        hass.config_entries.async_schedule_reload(owner.entry_id)
+
+
+@callback
+def async_recount_the_site(hass: HomeAssistant, entry: ConfigEntry, host: str) -> None:
+    """Restart the owner when an entry was set up during its own setup.
+
+    That entry found the owner still starting, so nothing told it.
+    """
+    if not entry.data.get(CONF_DATAMANAGER) or site_owner(hass, host) is not entry:
+        return
+    if entry.runtime_data.several_inverters:
+        return
+    if len(host_entries(hass, host)) > 1:
+        hass.config_entries.async_schedule_reload(entry.entry_id)
 
 
 def _known_inverters(hass: HomeAssistant, entry: ConfigEntry, listed: int) -> int:

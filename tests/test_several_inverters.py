@@ -9,7 +9,9 @@ from custom_components import fronius_modbus
 from custom_components.fronius_modbus import config_flow, datamanager, discovery
 from custom_components.fronius_modbus.const import (
     CONF_DATAMANAGER,
+    CONF_DATAMANAGER_INVERTERS,
     CONF_INVERTER_UNIT_ID,
+    CONF_SITE_OWNER,
     DOMAIN,
     entry_title,
     entry_title_after,
@@ -474,14 +476,14 @@ async def test_another_device_at_a_datamanager_s_address_is_not_added(
 
 
 @pytest.mark.parametrize("family", [DeviceFamily.DATAMANAGER, DeviceFamily.UNKNOWN])
-async def test_a_role_for_a_second_inverter_is_refused_like_for_the_first(
+async def test_the_customer_is_refused_for_a_second_inverter_too(
     hass, new_inverter, family
 ):
     add_datamanager_entry(hass, 1)
 
     result = await new_inverter(1, 2, family=family, role="customer")
 
-    assert result["errors"] == {"api_username": "datamanager_no_login"}
+    assert result["errors"] == {"api_username": "datamanager_customer"}
 
 
 async def test_the_question_without_its_settings_starts_over(hass, new_inverter):
@@ -504,6 +506,8 @@ async def test_the_question_names_its_device(hass, new_inverter):
 async def test_an_existing_inverter_is_not_asked_for_again(hass, new_inverter, kind):
     add_datamanager_entry(hass, 1)
     second = add_datamanager_entry(hass, 2)
+    remembered = {CONF_SITE_OWNER: True, CONF_DATAMANAGER_INVERTERS: 2}
+    hass.config_entries.async_update_entry(second, data={**second.data, **remembered})
     flow = hass.config_entries.flow
     if kind == "reconfigure":
         form = await second.start_reconfigure_flow(hass)
@@ -525,7 +529,8 @@ async def test_an_existing_inverter_is_not_asked_for_again(hass, new_inverter, k
     assert second.unique_id == f"{HOST}#2"
     assert second.title == f"Fronius {HOST} #2"
     assert second.data[CONF_DATAMANAGER] is True
-    assert CONF_DATAMANAGER not in second.options
+    assert not {CONF_DATAMANAGER, *remembered} & set(second.options)
+    assert second.data[CONF_SITE_OWNER] is True
 
 
 @pytest.mark.parametrize("numbered", [True, False])

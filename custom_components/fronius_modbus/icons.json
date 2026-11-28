@@ -247,6 +247,21 @@
       },
       "active_service_events": {
         "default": "mdi:counter"
+      },
+      "export_soft_limit_state": {
+        "default": "mdi:transmission-tower-export"
+      },
+      "export_hard_limit": {
+        "default": "mdi:transmission-tower-export"
+      },
+      "export_hard_limit_state": {
+        "default": "mdi:transmission-tower-export"
+      },
+      "export_limit_mode": {
+        "default": "mdi:transmission-tower-export"
+      },
+      "export_fail_safe": {
+        "default": "mdi:shield-check"
       }
     },
     "switch": {

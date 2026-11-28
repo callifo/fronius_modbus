@@ -1,10 +1,13 @@
 """An entry on a Datamanager, end to end, with the registers of issue 110."""
 
+import logging
+
 from modbus_connection import (
     GatewayTargetError,
     IllegalDataAddressError,
     ModbusConnectionError,
     ModbusTimeoutError,
+    ServerDeviceBusyError,
 )
 import pytest
 
@@ -15,11 +18,13 @@ from custom_components.fronius_modbus.const import (
     DOMAIN,
     entity_prefix,
 )
+from custom_components.fronius_modbus.coordinator import FroniusModbusCoordinator
 from custom_components.fronius_modbus.datamanager import (
     DeviceFamily,
     Site,
     SolarApiMeter,
 )
+from custom_components.fronius_modbus.fronius_modbus_api.device import FroniusInverter
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 
@@ -375,6 +380,23 @@ async def test_a_meter_silent_at_the_start_is_read_once_it_answers(
     assert state_of(hass, entry, "load") == "627.0"
 
 
+@pytest.mark.parametrize("silence", [ServerDeviceBusyError, ModbusTimeoutError])
+async def test_a_second_meter_busy_at_the_start_is_read_once_it_answers(
+    hass, datamanager_modbus, datamanager_entry, monkeypatch, silence
+):
+    add_meter(datamanager_modbus, 241, "B2")
+    answer_site(monkeypatch, ("B2", 0))
+    datamanager_modbus.fail_requests(241, silence())
+    entry = datamanager_entry
+    await setup_entry(hass, entry)
+    datamanager_modbus.fail_requests(241, None)
+
+    await entry.runtime_data.modbus.async_refresh()
+    await hass.async_block_till_done()
+
+    assert state_of(hass, entry, "meter_241_power") == "30.0"
+
+
 async def test_a_sub_meter_is_no_load_while_the_grid_meter_is_silent(
     hass, datamanager_modbus, datamanager_entry, monkeypatch
 ):
@@ -414,6 +436,211 @@ async def test_a_datamanager_gone_during_the_search_is_tried_again(
     await hass.async_block_till_done()
 
     assert entry.state is ConfigEntryState.SETUP_RETRY
+
+
+async def test_the_units_not_asked_before_a_lost_link_stay_listed(
+    hass, datamanager_entry, monkeypatch
+):
+    """The link came back before the first poll, and they were never asked."""
+    probe = FroniusInverter.async_probe_meter
+    looked_at = []
+
+    async def lose_the_link_at_the_second_unit(unit):
+        looked_at.append(unit)
+        if len(looked_at) == 2:
+            raise ModbusConnectionError("link lost")
+        return await probe(unit)
+
+    monkeypatch.setattr(
+        FroniusInverter,
+        "async_probe_meter",
+        staticmethod(lose_the_link_at_the_second_unit),
+    )
+    entry = datamanager_entry
+    await setup_entry(hass, entry)
+
+    assert entry.runtime_data.device.meter_unit_ids == tuple(DATAMANAGER_METER_UNIT_IDS)
+
+
+async def test_a_grid_meter_busy_only_at_the_search_leads_after_it(
+    hass, datamanager_modbus, datamanager_entry, monkeypatch
+):
+    """It answered the first poll, so no later answer looked new to reload for."""
+    add_meter(datamanager_modbus, 241, "B2")
+    answer_site(monkeypatch, ("B2", 0))
+    probe = FroniusInverter.async_probe_meter
+    looked_at = []
+
+    async def busy_once_at_the_second_unit(unit):
+        looked_at.append(unit)
+        if len(looked_at) == 2:
+            raise ServerDeviceBusyError
+        return await probe(unit)
+
+    monkeypatch.setattr(
+        FroniusInverter, "async_probe_meter", staticmethod(busy_once_at_the_second_unit)
+    )
+    entry = datamanager_entry
+    await setup_entry(hass, entry)
+    assert state_of(hass, entry, "meter_241_power") == "30.0"
+
+    await entry.runtime_data.modbus.async_refresh()
+    await hass.async_block_till_done()
+
+    assert entry.runtime_data.primary_meter_unit_id == 241
+    assert entry.runtime_data.meter_locations == {241: 0}
+    assert state_of(hass, entry, "load") == "627.0"
+
+
+async def test_a_meter_busy_at_every_search_reloads_the_entry_once(
+    hass, datamanager_modbus, datamanager_entry, monkeypatch, caplog
+):
+    """It answers every poll, so each first answer would reload once more."""
+    add_meter(datamanager_modbus, 241, "B2")
+    answer_site(monkeypatch, ("B2", 0))
+    probe = FroniusInverter.async_probe_meter
+    searches = []
+
+    async def busy_at_every_search(unit):
+        if len(searches) % len(DATAMANAGER_METER_UNIT_IDS) == 1:
+            searches.append(unit)
+            raise ServerDeviceBusyError
+        searches.append(unit)
+        return await probe(unit)
+
+    monkeypatch.setattr(
+        FroniusInverter, "async_probe_meter", staticmethod(busy_at_every_search)
+    )
+    entry = datamanager_entry
+    await setup_entry(hass, entry)
+    caplog.set_level(logging.INFO)
+
+    for _ in range(3):
+        await entry.runtime_data.modbus.async_refresh()
+        await hass.async_block_till_done()
+
+    assert len(searches) == 2 * len(DATAMANAGER_METER_UNIT_IDS)
+    assert state_of(hass, entry, "meter_241_power") == "30.0"
+    assert "meter_241 answered late again" in caplog.text
+
+
+async def test_a_meter_silent_until_after_every_first_poll_reloads_once(
+    hass, datamanager_modbus, datamanager_entry, monkeypatch, caplog
+):
+    """Its later answer took the reload for a new sub-system after every setup."""
+    add_meter(datamanager_modbus, 241, "B2")
+    answer_site(monkeypatch, ("B2", 0))
+    probe = FroniusInverter.async_probe_meter
+    searches = []
+
+    async def busy_at_every_search(unit):
+        searches.append(unit)
+        if len(searches) % len(DATAMANAGER_METER_UNIT_IDS) == 2:
+            raise ServerDeviceBusyError
+        return await probe(unit)
+
+    first_refresh = FroniusModbusCoordinator.async_config_entry_first_refresh
+
+    async def silent_through_the_first_poll(coordinator):
+        datamanager_modbus.fail_requests(241, ServerDeviceBusyError())
+        try:
+            await first_refresh(coordinator)
+        finally:
+            datamanager_modbus.fail_requests(241, None)
+
+    monkeypatch.setattr(
+        FroniusInverter, "async_probe_meter", staticmethod(busy_at_every_search)
+    )
+    monkeypatch.setattr(
+        FroniusModbusCoordinator,
+        "async_config_entry_first_refresh",
+        silent_through_the_first_poll,
+    )
+    entry = datamanager_entry
+    await setup_entry(hass, entry)
+    caplog.set_level(logging.INFO)
+
+    for _ in range(4):
+        await entry.runtime_data.modbus.async_refresh()
+        await hass.async_block_till_done()
+
+    assert len(searches) == 2 * len(DATAMANAGER_METER_UNIT_IDS)
+    assert entry.state is ConfigEntryState.LOADED
+    assert "meter_241" in caplog.text
+
+
+async def test_a_retried_setup_still_reloads_for_a_meter_busy_at_its_search(
+    hass, datamanager_modbus, datamanager_entry, monkeypatch
+):
+    """The first try failed before any reload; the meter was not followed yet."""
+    add_meter(datamanager_modbus, 241, "B2")
+    answer_site(monkeypatch, ("B2", 0))
+    probe = FroniusInverter.async_probe_meter
+    calls = []
+
+    async def busy_at_the_first_two_searches(unit):
+        calls.append(unit)
+        units = len(DATAMANAGER_METER_UNIT_IDS)
+        if len(calls) % units == 2 and len(calls) <= 2 * units:
+            raise ServerDeviceBusyError
+        return await probe(unit)
+
+    monkeypatch.setattr(
+        FroniusInverter,
+        "async_probe_meter",
+        staticmethod(busy_at_the_first_two_searches),
+    )
+    datamanager_modbus.fail_requests(INVERTER_UNIT_ID, ModbusTimeoutError())
+    entry = datamanager_entry
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+    datamanager_modbus.fail_requests(INVERTER_UNIT_ID, None)
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    for _ in range(2):
+        await entry.runtime_data.modbus.async_refresh()
+        await hass.async_block_till_done()
+
+    assert entry.runtime_data.meter_locations == {241: 0}
+
+
+@pytest.mark.parametrize(
+    ("at", "failure"),
+    [
+        # The first unit answers exception 11 only while it is searched.
+        (1, None),
+        # The link is lost right after the meter was found.
+        (2, ModbusConnectionError),
+    ],
+)
+async def test_a_grid_meter_whose_place_the_search_missed_gets_it(
+    hass, datamanager_modbus, datamanager_entry, monkeypatch, at, failure
+):
+    add_meter(datamanager_modbus, 240, "A1")
+    answer_site(monkeypatch, ("A1", 0))
+    probe = FroniusInverter.async_probe_meter
+    looked_at = []
+
+    async def fail_once(unit):
+        looked_at.append(unit)
+        if len(looked_at) != at:
+            return await probe(unit)
+        if failure is None:
+            return None
+        raise failure
+
+    monkeypatch.setattr(FroniusInverter, "async_probe_meter", staticmethod(fail_once))
+    entry = datamanager_entry
+    await setup_entry(hass, entry)
+    assert state_of(hass, entry, "meter_240_power") == "30.0"
+
+    await entry.runtime_data.modbus.async_refresh()
+    await hass.async_block_till_done()
+
+    assert entry.runtime_data.meter_locations == {240: 0}
+    assert state_of(hass, entry, "load") == "627.0"
 
 
 async def test_a_gen24_is_not_asked_on_a_datamanagers_units(

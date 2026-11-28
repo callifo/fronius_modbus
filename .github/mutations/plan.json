@@ -814,8 +814,8 @@
   {
     "label": "config flow: a minted token is kept only after the check",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "                        self.hass, state.settings[CONF_HOST], password, username\n                    )\n                try:\n                    info = await _validate_input(\n                        self.hass,\n                        state.settings,\n",
-    "new": "                        self.hass, state.settings[CONF_HOST], password, username\n                    )\n                await _async_save_token(\n                    self.hass, state.settings[CONF_HOST], username, token\n                )\n                try:\n                    info = await _validate_input(\n                        self.hass,\n                        state.settings,\n",
+    "old": "                        on_datamanager=bool(state.settings.get(CONF_DATAMANAGER)),\n                    )\n",
+    "new": "                        on_datamanager=bool(state.settings.get(CONF_DATAMANAGER)),\n                    )\n                await async_get_token_store(self.hass).async_save_token(\n                    state.settings[CONF_HOST], user=username, **token\n                )\n",
     "tests": "a_token_whose_setup_fails_is_not_kept"
   },
   {
@@ -898,7 +898,7 @@
   {
     "label": "config flow: an aborted flow restores the token held before",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "            return\n        await _async_save_token(self.hass, host, username, previous)\n",
+    "old": "            return\n        await store.async_save_token(host, user=username, **previous)\n",
     "new": "            return\n",
     "tests": "a_duplicate_flow_leaves_the_existing_entrys_token_alone"
   },
@@ -1115,8 +1115,8 @@
   {
     "label": "config flow: without the web API no password is asked for",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "                if settings[CONF_API_USERNAME] == WEB_API_DISABLED:\n",
-    "new": "                if False:\n",
+    "old": "        if settings[CONF_API_USERNAME] == WEB_API_DISABLED:\n",
+    "new": "        if False:\n",
     "tests": "entry_without_the_web_api_needs_no_password"
   },
   {
@@ -1136,8 +1136,8 @@
   {
     "label": "setup: an entry without the web API gets the public client",
     "path": "custom_components/fronius_modbus/__init__.py",
-    "old": "    if migrations.web_api_disabled(entry) and not on_datamanager:\n",
-    "new": "    if False:\n",
+    "old": "    if migrations.web_api_disabled(entry):\n        return None, FroniusWebClient",
+    "new": "    if False:\n        return None, FroniusWebClient",
     "tests": "entry_without_the_web_api_reads_the_public_endpoints"
   },
   {
@@ -1752,8 +1752,8 @@
   {
     "label": "config flow: the settings step asks before switching",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "                return await self._async_use_stored_token(\n                    state,\n                    token,\n                    step_ids=(sunspec_step_id, allowed_host_step_id),\n",
-    "new": "                return await self._async_use_stored_token(\n                    state,\n                    token,\n                    step_ids=(\"user\", allowed_host_step_id),\n",
+    "old": "                    password_step_id=password_step_id,\n                    step_ids=(sunspec_step_id, allowed_host_step_id),\n                    claim_host=claim_host,\n",
+    "new": "                    password_step_id=password_step_id,\n                    step_ids=(\"user\", allowed_host_step_id),\n                    claim_host=claim_host,\n",
     "tests": "stored_token_asks_before_switching_too"
   },
   {
@@ -2249,8 +2249,8 @@
   {
     "label": "coordinator: an entry without the web API leaves the toggles alone",
     "path": "custom_components/fronius_modbus/coordinator.py",
-    "old": "        if mode is not ExtendedMode.CHARGE_FROM_GRID or web_api_disabled(\n",
-    "new": "        if mode is not ExtendedMode.CHARGE_FROM_GRID or False and web_api_disabled(\n",
+    "old": "        if mode is not ExtendedMode.CHARGE_FROM_GRID or _has_no_web_control(entry):\n",
+    "new": "        if mode is not ExtendedMode.CHARGE_FROM_GRID:\n",
     "tests": "grid_charging_without_the_web_api_is_no_error or select_changes_the_storage_mode"
   },
   {
@@ -3047,8 +3047,8 @@
   {
     "label": "device: a meter model in an incomplete chain is placed",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
-    "old": "        if model is None and not complete:\n",
-    "new": "        if not complete:\n",
+    "old": "        if model is None and not complete:\n            raise IncompleteChainError(f\"meter {unit_id}",
+    "new": "        if not complete:\n            raise IncompleteChainError(f\"meter {unit_id}",
     "tests": "meter_model_in_an_incomplete_chain_is_placed"
   },
   {
@@ -3207,7 +3207,7 @@
   },
   {
     "label": "config flow: the request asks only with the restriction to this Home Assistant",
-    "path": "custom_components/fronius_modbus/config_flow.py",
+    "path": "custom_components/fronius_modbus/flow_forms.py",
     "old": "    return requested and restricted\n",
     "new": "    return requested\n",
     "tests": "request_without_the_restriction"
@@ -3236,15 +3236,43 @@
   {
     "label": "datamanager: another product is another device",
     "path": "custom_components/fronius_modbus/datamanager.py",
-    "old": "    return DeviceFamily.OTHER\n",
-    "new": "    return DeviceFamily.DATAMANAGER\n",
+    "old": "        return DeviceFamily.DATAMANAGER\n    return DeviceFamily.OTHER\n",
+    "new": "        return DeviceFamily.DATAMANAGER\n    return DeviceFamily.DATAMANAGER\n",
+    "tests": "family_an_answer_shows"
+  },
+  {
+    "label": "datamanager: the GEN24's refusal is another device",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "== GEN24_REFUSAL_CODE:",
+    "new": "== -1:",
+    "tests": "family_an_answer_shows"
+  },
+  {
+    "label": "datamanager: another error is no other device",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if isinstance(status, dict) and status.get(\"Code\") == GEN24_REFUSAL_CODE:\n",
+    "new": "    if isinstance(status, dict) and status.get(\"Code\"):\n",
+    "tests": "family_an_answer_shows"
+  },
+  {
+    "label": "datamanager: an answer without a product shows nothing",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if not isinstance(product, str) or not product.strip():\n        return DeviceFamily.UNKNOWN\n",
+    "new": "    if not isinstance(product, str):\n        return DeviceFamily.OTHER\n",
+    "tests": "family_an_answer_shows"
+  },
+  {
+    "label": "datamanager: a blank product shows nothing",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if not isinstance(product, str) or not product.strip():\n",
+    "new": "    if not isinstance(product, str):\n",
     "tests": "family_an_answer_shows"
   },
   {
     "label": "datamanager: an answer without a head shows nothing",
     "path": "custom_components/fronius_modbus/datamanager.py",
-    "old": " or not isinstance(payload.get(\"Head\"), dict)",
-    "new": "",
+    "old": "    if not isinstance(head, dict):\n        return DeviceFamily.UNKNOWN\n",
+    "new": "    if not isinstance(head, dict):\n        return DeviceFamily.OTHER\n",
     "tests": "family_an_answer_shows"
   },
   {
@@ -3257,7 +3285,7 @@
   {
     "label": "datamanager: a product that is no text is no match",
     "path": "custom_components/fronius_modbus/datamanager.py",
-    "old": "isinstance(product, str) and ",
+    "old": "    if not isinstance(product, str) or not product.strip():\n        return DeviceFamily.UNKNOWN\n",
     "new": "",
     "tests": "family_an_answer_shows"
   },
@@ -3278,15 +3306,15 @@
   {
     "label": "datamanager: only an entry without the web API is asked",
     "path": "custom_components/fronius_modbus/datamanager.py",
-    "old": "    if not web_api_disabled({**entry.data, **entry.options}):\n        return False\n",
-    "new": "",
-    "tests": "role_is_not_asked_for_its_family"
+    "old": "    if not web_api_disabled({**entry.data, **entry.options}):\n",
+    "new": "    if False:\n",
+    "tests": "role_is_not_asked_for_its_family or login_tells_a_datamanager"
   },
   {
     "label": "datamanager: without an answer the last one counts",
     "path": "custom_components/fronius_modbus/datamanager.py",
-    "old": "        return bool(remembered)\n",
-    "new": "        return False\n",
+    "old": "    if family is DeviceFamily.UNKNOWN:\n        return bool(remembered)\n",
+    "new": "    if family is DeviceFamily.UNKNOWN:\n        return False\n",
     "tests": "asleep_at_the_start"
   },
   {
@@ -3299,44 +3327,100 @@
   {
     "label": "setup: a Datamanager gets no public client",
     "path": "custom_components/fronius_modbus/__init__.py",
-    "old": "    if migrations.web_api_disabled(entry) and not on_datamanager:\n",
-    "new": "    if migrations.web_api_disabled(entry):\n",
+    "old": "        if on_datamanager\n        else _web_clients(",
+    "new": "        if False\n        else _web_clients(",
     "tests": "sends_no_web_request"
   },
   {
     "label": "config flow: a role on a Datamanager is refused",
     "path": "custom_components/fronius_modbus/config_flow.py",
-    "old": "        await async_check_role(self.hass, settings)\n",
+    "old": "        await async_check_role(self.hass, settings, self._flow_entry())\n",
     "new": "        return\n",
-    "tests": "role_on_a_datamanager"
+    "tests": "customer_on_a_datamanager"
+  },
+  {
+    "label": "technician: a new inverter beside the owner is refused",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "        # owner while a form was open.\n        check_login_on_owner(self.hass, settings, None)\n",
+    "new": "        # owner while a form was open.\n",
+    "tests": "second_inverter_cannot_take_the_technician_role or while_the_password_is_asked"
+  },
+  {
+    "label": "technician: an existing entry beside the owner is refused",
+    "path": "custom_components/fronius_modbus/flow_settings.py",
+    "old": "        check_login_on_owner(hass, settings, entry)\n",
+    "new": "",
+    "tests": "entry_that_is_not_the_owner_cannot_take_the_role"
+  },
+  {
+    "label": "technician: the owner's mark keeps the role",
+    "path": "custom_components/fronius_modbus/host_sharing.py",
+    "old": "    if entry is not None and entry.data.get(CONF_SITE_OWNER):\n        return True\n",
+    "new": "",
+    "tests": "owner_takes_the_role_beside_another"
+  },
+  {
+    "label": "technician: another owner's mark takes the role",
+    "path": "custom_components/fronius_modbus/host_sharing.py",
+    "old": "    if any(other.data.get(CONF_SITE_OWNER) for other in others):\n        return False\n",
+    "new": "",
+    "tests": "lower_inverter_cannot_take_the_role_from_the_owner"
+  },
+  {
+    "label": "technician: a lower inverter would own",
+    "path": "custom_components/fronius_modbus/host_sharing.py",
+    "old": "    return all(unit < _unit(other) for other in others if _can_own_a_site(other))\n",
+    "new": "    return True\n",
+    "tests": "second_inverter_cannot_take_the_technician_role or entry_that_is_not_the_owner"
+  },
+  {
+    "label": "technician: only a login is checked",
+    "path": "custom_components/fronius_modbus/flow_settings.py",
+    "old": "    if not (login and settings.get(CONF_DATAMANAGER)):\n",
+    "new": "    if not settings.get(CONF_DATAMANAGER):\n",
+    "tests": "first_inverter_is_left_as_it_is"
+  },
+  {
+    "label": "technician: the owner is checked again when the entry is created",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "        # token saved for this one is rolled back with the refusal.\n        check_login_on_owner(self.hass, settings, None)\n",
+    "new": "        # token saved for this one is rolled back with the refusal.\n",
+    "tests": "while_the_login_is_checked"
+  },
+  {
+    "label": "technician: an existing entry is checked again when it is changed",
+    "path": "custom_components/fronius_modbus/flow_entry.py",
+    "old": "    check_login_on_owner(hass, settings, entry)\n",
+    "new": "",
+    "tests": "while_an_entry_asks_its_password"
   },
   {
     "label": "config flow: without the web API no family is asked for",
     "path": "custom_components/fronius_modbus/flow_settings.py",
-    "old": "    if settings[CONF_API_USERNAME] == WEB_API_DISABLED:\n        return\n    family",
-    "new": "    family",
+    "old": "    if settings[CONF_API_USERNAME] != WEB_API_DISABLED:\n        await",
+    "new": "    if True:\n        await",
     "tests": "only_a_new_entry_asks_for_the_family"
   },
   {
     "label": "config flow: only a Datamanager refuses the role",
     "path": "custom_components/fronius_modbus/flow_settings.py",
-    "old": "    if family is datamanager.DeviceFamily.DATAMANAGER:\n",
-    "new": "    if family is not datamanager.DeviceFamily.OTHER:\n",
-    "tests": "only_a_datamanager_refuses"
+    "old": "    if found and settings[CONF_API_USERNAME] == API_USERNAME:\n",
+    "new": "    if settings[CONF_API_USERNAME] == API_USERNAME:\n",
+    "tests": "any_other_answer"
   },
   {
     "label": "config flow: a refused role is not offered again",
     "path": "custom_components/fronius_modbus/flow_settings.py",
     "old": "    return {**typed, CONF_API_USERNAME: WEB_API_DISABLED}\n",
     "new": "    return typed\n",
-    "tests": "role_on_a_datamanager"
+    "tests": "customer_on_a_datamanager"
   },
   {
     "label": "config flow: a refused role keeps what was typed",
     "path": "custom_components/fronius_modbus/flow_settings.py",
     "old": "    typed = _expand_settings_input(user_input, defaults)\n",
     "new": "    typed = defaults\n",
-    "tests": "role_on_a_datamanager"
+    "tests": "customer_on_a_datamanager"
   },
   {
     "label": "config flow: other errors keep the form's defaults",
@@ -3369,8 +3453,8 @@
   {
     "label": "setup: a Datamanager's meters are looked for",
     "path": "custom_components/fronius_modbus/__init__.py",
-    "old": "        if on_datamanager\n",
-    "new": "        if False\n",
+    "old": "        if on_datamanager\n        else await",
+    "new": "        if False\n        else await",
     "tests": "meter_of_a_datamanager_is_read"
   },
   {
@@ -3383,16 +3467,44 @@
   {
     "label": "datamanager: the first meter unit is always listed",
     "path": "custom_components/fronius_modbus/datamanager.py",
-    "old": "sorted({METER_UNIT_IDS[0], *found})",
-    "new": "sorted(found) or [METER_UNIT_IDS[0]]",
+    "old": "sorted({METER_UNIT_IDS[0], *found, *open_units})",
+    "new": "sorted({*found, *open_units}) or [METER_UNIT_IDS[0]]",
     "tests": "meters_and_where_they_are"
   },
   {
     "label": "datamanager: the grid meter leads",
     "path": "custom_components/fronius_modbus/datamanager.py",
-    "old": "next(iter([*grid_meters, *sorted(found)]), METER_UNIT_IDS[0])",
-    "new": "next(iter(sorted(found)), METER_UNIT_IDS[0])",
+    "old": "leading = [*grid_meters, *consumption_meters, *sorted(found)]",
+    "new": "leading = [*consumption_meters, *sorted(found)]",
     "tests": "meters_and_where_they_are"
+  },
+  {
+    "label": "datamanager: the grid meter leads the consumption meter",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "leading = [*grid_meters, *consumption_meters, *sorted(found)]",
+    "new": "leading = [*consumption_meters, *grid_meters, *sorted(found)]",
+    "tests": "meters_and_where_they_are"
+  },
+  {
+    "label": "datamanager: the consumption meter leads a sub-meter",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "leading = [*grid_meters, *consumption_meters, *sorted(found)]",
+    "new": "leading = [*grid_meters, *sorted(found)]",
+    "tests": "meters_and_where_they_are"
+  },
+  {
+    "label": "derived: a sub-meter gives no load",
+    "path": "custom_components/fronius_modbus/derived.py",
+    "old": "    if meter_location == METER_LOCATION_CONSUMPTION:\n",
+    "new": "    if meter_location == METER_LOCATION_CONSUMPTION or meter_location >= 256:\n",
+    "tests": "subload_meter_gives_no_load"
+  },
+  {
+    "label": "web client: the consumption meter leads a sub-meter",
+    "path": "custom_components/fronius_modbus/froniuswebclient.py",
+    "old": "            meter[\"location\"] != METER_LOCATION_CONSUMPTION,\n",
+    "new": "",
+    "tests": "consumption_meter_leads_a_sub_meter"
   },
   {
     "label": "datamanager: no load beside other inverters",
@@ -3472,16 +3584,121 @@
     "tests": "no_answer_is_no_site"
   },
   {
-    "label": "datamanager: a lost connection ends the search",
+    "label": "datamanager: the units not asked before a lost link stay listed",
     "path": "custom_components/fronius_modbus/datamanager.py",
-    "old": "    except ModbusConnectionError:\n",
-    "new": "    except KeyError:\n",
-    "tests": "gone_during_the_search"
+    "old": "            open_units.update(METER_UNIT_IDS[position:])\n",
+    "new": "",
+    "tests": "not_asked_before_a_lost_link"
+  },
+  {
+    "label": "datamanager: a lost link in the search still counts the entries",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "        several_inverters=topology.several_inverters or entries > 1,\n",
+    "new": "        several_inverters=topology.several_inverters or (entries > 1 and not link_lost),\n",
+    "tests": "link_lost_in_the_owner_s_search"
+  },
+  {
+    "label": "datamanager: a lost link asks the Solar API nothing",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if not link_lost:\n        site = await",
+    "new": "    if True:\n        site = await",
+    "tests": "link_lost_in_the_owner_s_search or not_asked_before_a_lost_link or gone_during_the_search"
+  },
+  {
+    "label": "datamanager: a busy meter unit stays listed",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "            open_units.add(unit_id)\n",
+    "new": "            pass\n",
+    "tests": "busy_at_the_start_is_read_once"
+  },
+  {
+    "label": "datamanager: the open units reach the topology",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    topology = meter_topology(found, site, open_units)\n",
+    "new": "    topology = meter_topology(found, site)\n",
+    "tests": "busy_at_the_start_is_read_once"
+  },
+  {
+    "label": "coordinator: an open meter's first answer reloads",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "            self._built_for = answered - self._open_meters\n",
+    "new": "            self._built_for = answered\n",
+    "tests": "busy_only_at_the_search_leads_after_it"
+  },
+  {
+    "label": "coordinator: a late meter reloads the entry once per run",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "        again = frozenset(name for name, unit in late.items() if unit in followed)\n",
+    "new": "        again: frozenset[str] = frozenset()\n",
+    "tests": "busy_at_every_search_reloads_the_entry_once or silent_until_after_every_first_poll"
+  },
+  {
+    "label": "coordinator: a late meter's reload is noted",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "        followed.update(unit for name, unit in late.items() if name not in again)\n",
+    "new": "",
+    "tests": "busy_at_every_search_reloads_the_entry_once or silent_until_after_every_first_poll"
+  },
+  {
+    "label": "coordinator: the late answers after their reload are held back",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "        new = answered - self._built_for - self._late_again(answered)\n",
+    "new": "        new = answered - self._built_for\n",
+    "tests": "busy_at_every_search_reloads_the_entry_once or silent_until_after_every_first_poll"
+  },
+  {
+    "label": "datamanager: the open units reach the setup",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "        open_unit_ids=tuple(unplaced),\n",
+    "new": "",
+    "tests": "busy_only_at_the_search_leads_after_it or place_the_search_missed"
+  },
+  {
+    "label": "datamanager: the first unit unanswered awaits its place",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "        open_unit_ids=tuple(unit for unit in unit_ids if unit not in found),\n",
+    "new": "        open_unit_ids=tuple(sorted(set(open_units) - set(found))),\n",
+    "tests": "place_the_search_missed"
+  },
+  {
+    "label": "datamanager: after a lost link every meter awaits its place",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    unplaced = topology.unit_ids if link_lost else topology.open_unit_ids\n",
+    "new": "    unplaced = topology.open_unit_ids\n",
+    "tests": "place_the_search_missed"
+  },
+  {
+    "label": "setup: the open meters reach the coordinator",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "        open_meter_unit_ids=topology.open_unit_ids,\n",
+    "new": "",
+    "tests": "busy_only_at_the_search_leads_after_it"
+  },
+  {
+    "label": "device: exception 11 is no meter on a look",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        except (*ABSENCE_ERRORS, GatewayTargetError) as err:\n",
+    "new": "        except ABSENCE_ERRORS as err:\n",
+    "tests": "without_a_device_has_no_meter_on_a_look"
+  },
+  {
+    "label": "device: a look at a busy meter stays open",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "        except (*ABSENCE_ERRORS, GatewayTargetError) as err:\n",
+    "new": "        except ModbusError as err:\n",
+    "tests": "busy_meter_leaves_a_look_open"
+  },
+  {
+    "label": "device: a broken chain leaves a look open",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "            raise IncompleteChainError(\"a meter unit answered an incomplete chain\")\n",
+    "new": "            return None\n",
+    "tests": "broken_before_any_meter_leaves_a_look_open"
   },
   {
     "label": "device: a silent meter unit has no meter now",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
-    "old": "        except ModbusError as err:\n            _LOGGER.debug(\"No meter found on a unit: %s\", error_text(err))\n            return None\n",
+    "old": "        except (*ABSENCE_ERRORS, GatewayTargetError) as err:\n            _LOGGER.debug(\"No meter found on a unit: %s\", error_text(err))\n            return None\n",
     "new": "        except KeyError:\n            return None\n",
     "tests": "silent_at_the_start or datamanager_without_a_meter"
   },
@@ -3544,7 +3761,7 @@
   {
     "label": "device: only a Datamanager is asked for its site totals",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
-    "old": "        if self._site_totals:\n            components[REPORT_SITE]",
+    "old": "        if self.reads_site_totals:\n            components[REPORT_SITE]",
     "new": "        if True:\n            components[REPORT_SITE]",
     "tests": "no_other_inverter_is_asked"
   },
@@ -3887,30 +4104,23 @@
   {
     "label": "choice: the inverter has to answer",
     "path": "custom_components/fronius_modbus/inverter_choice.py",
-    "old": "            info = await self._async_check_inverter(settings)\n",
-    "new": "            info = {\"title\": \"\"}\n",
-    "tests": "does_not_answer_creates_nothing"
-  },
-  {
-    "label": "choice: a role on a known Datamanager is refused",
-    "path": "custom_components/fronius_modbus/inverter_choice.py",
-    "old": "        if found and settings[CONF_API_USERNAME] != WEB_API_DISABLED:\n            raise _DatamanagerFound\n",
+    "old": "            await self._async_check_inverter(\n                {**settings, CONF_API_USERNAME: WEB_API_DISABLED}\n            )\n",
     "new": "",
-    "tests": "role_for_a_second_inverter or role_on_a_datamanager"
+    "tests": "inverter_that_does_not_answer_asks_for_no_password"
   },
   {
     "label": "choice: a silent Datamanager is known from its entries",
-    "path": "custom_components/fronius_modbus/inverter_choice.py",
-    "old": "            family is datamanager.DeviceFamily.UNKNOWN and remembered\n",
-    "new": "            False and remembered\n",
+    "path": "custom_components/fronius_modbus/flow_settings.py",
+    "old": "        silent and is_datamanager_host(hass, host)\n",
+    "new": "        False\n",
     "tests": "silent_datamanager_is_known"
   },
   {
     "label": "choice: only an unclear answer falls back to the entries",
-    "path": "custom_components/fronius_modbus/inverter_choice.py",
-    "old": "            family is datamanager.DeviceFamily.UNKNOWN and remembered\n",
-    "new": "            remembered\n",
-    "tests": "not_added"
+    "path": "custom_components/fronius_modbus/flow_settings.py",
+    "old": "        silent and is_datamanager_host(hass, host)\n",
+    "new": "        is_datamanager_host(hass, host)\n",
+    "tests": "not_added or gen24_in_its_place"
   },
   {
     "label": "choice: the host alone is not yet a claim on a Datamanager",
@@ -3922,8 +4132,8 @@
   {
     "label": "choice: an existing entry is not asked for its inverter",
     "path": "custom_components/fronius_modbus/inverter_choice.py",
-    "old": "        if self._flow_entry() is not None:\n",
-    "new": "        if False:\n",
+    "old": "        if (entry := self._flow_entry()) is not None:\n",
+    "new": "        if (entry := self._flow_entry()) is None and False:\n",
     "tests": "only_a_new_entry_asks or not_asked_for_again"
   },
   {
@@ -3935,9 +4145,9 @@
   },
   {
     "label": "flows: no other device gets the key",
-    "path": "custom_components/fronius_modbus/flow_settings.py",
-    "old": "    if not payload.get(CONF_DATAMANAGER):\n",
-    "new": "    if False:\n",
+    "path": "custom_components/fronius_modbus/inverter_choice.py",
+    "old": "            | ({CONF_DATAMANAGER: True} if settings.get(CONF_DATAMANAGER) else {}),\n",
+    "new": "            | {CONF_DATAMANAGER: settings.get(CONF_DATAMANAGER)},\n",
     "tests": "another_device_is_asked_nothing"
   },
   {
@@ -3985,9 +4195,30 @@
   {
     "label": "owner: the mark decides before the number",
     "path": "custom_components/fronius_modbus/host_sharing.py",
-    "old": "    owner = min(marked or able,",
-    "new": "    owner = min(able,",
+    "old": "    candidates = marked or able\n",
+    "new": "    candidates = able\n",
     "tests": "lower_inverter_added_later or disabled_keeps_it"
+  },
+  {
+    "label": "owner: a joining inverter restarts an owner that was alone",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "        hass.config_entries.async_schedule_reload(owner.entry_id)\n",
+    "new": "        pass\n",
+    "tests": "load_turns_unknown_when_a_second_inverter_joins"
+  },
+  {
+    "label": "owner: an inverter set up during the owner's setup restarts it",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "    if len(host_entries(hass, host)) > 1:\n        hass.config_entries.async_schedule_reload(entry.entry_id)\n",
+    "new": "    if False:\n        hass.config_entries.async_schedule_reload(entry.entry_id)\n",
+    "tests": "joins_the_search or joins_the_migrations"
+  },
+  {
+    "label": "setup: the owner counts the site again at its end",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "    async_recount_the_site(hass, entry, host)\n",
+    "new": "",
+    "tests": "joins_the_search or joins_the_migrations"
   },
   {
     "label": "owner: without a mark the lowest number has it",
@@ -4034,8 +4265,8 @@
   {
     "label": "owner: the site totals are on with two entries",
     "path": "custom_components/fronius_modbus/datamanager.py",
-    "old": "        topology, several_inverters=topology.several_inverters or entries > 1\n",
-    "new": "        topology, several_inverters=topology.several_inverters\n",
+    "old": "        several_inverters=topology.several_inverters or entries > 1,\n",
+    "new": "        several_inverters=topology.several_inverters,\n",
     "tests": "on_with_two_entries"
   },
   {
@@ -4046,10 +4277,339 @@
     "tests": "follows_its_own_announcement"
   },
   {
-    "label": "choice: only a Datamanager refuses the role",
-    "path": "custom_components/fronius_modbus/inverter_choice.py",
-    "old": "        if found and settings[CONF_API_USERNAME]",
-    "new": "        if settings[CONF_API_USERNAME]",
-    "tests": "only_a_datamanager_refuses"
+    "label": "config flow: a Datamanager refuses the customer alone",
+    "path": "custom_components/fronius_modbus/flow_settings.py",
+    "old": "    if found and settings[CONF_API_USERNAME] == API_USERNAME:\n",
+    "new": "    if found and settings[CONF_API_USERNAME] != WEB_API_DISABLED:\n",
+    "tests": "technician_logs_in_to_a_datamanager"
+  },
+  {
+    "label": "flows: what the device answered is no option of a flow",
+    "path": "custom_components/fronius_modbus/flow_settings.py",
+    "old": "    payload.pop(CONF_DATAMANAGER, None)\n",
+    "new": "",
+    "tests": "technician_logs_in_to_a_datamanager"
+  },
+  {
+    "label": "flows: an entry that never had the key gets none",
+    "path": "custom_components/fronius_modbus/flow_settings.py",
+    "old": "    if found is None or found == bool(entry.data.get(CONF_DATAMANAGER)):\n",
+    "new": "    if found is None:\n",
+    "tests": "gen24_in_its_place"
+  },
+  {
+    "label": "flows: a reconfigure keeps what the device answered",
+    "path": "custom_components/fronius_modbus/flow_entry.py",
+    "old": "    answer = device_answer(entry, validated_input)\n",
+    "new": "    answer: dict[str, bool] = {}\n",
+    "tests": "login_tells_a_datamanager"
+  },
+  {
+    "label": "flows: the options keep what the device answered",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "                **device_answer(self.config_entry, settings),\n",
+    "new": "",
+    "tests": "login_tells_a_datamanager"
+  },
+  {
+    "label": "flows: a new login keeps what the device answered",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "            current[CONF_DATAMANAGER] = settings[CONF_DATAMANAGER]\n",
+    "new": "            pass\n",
+    "tests": "login_tells_a_datamanager"
+  },
+  {
+    "label": "flows: a Datamanager's password is checked there",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "    if on_datamanager:\n",
+    "new": "    if False:\n",
+    "tests": "technician_logs_in_to_a_datamanager"
+  },
+  {
+    "label": "flows: no setting of a GEN24 is asked on a Datamanager",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "    if data.get(CONF_DATAMANAGER):\n",
+    "new": "    if False:\n",
+    "tests": "technician_logs_in_to_a_datamanager"
+  },
+  {
+    "label": "flows: a stored login a Datamanager refuses is asked again",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "        if not await async_datamanager_login(hass, data[CONF_HOST], token=api_token):\n            raise _InvalidApiCredentials\n",
+    "new": "        await async_datamanager_login(hass, data[CONF_HOST], token=api_token)\n",
+    "tests": "stored_login_the_device_refuses"
+  },
+  {
+    "label": "flows: a missing export limit page is named",
+    "path": "custom_components/fronius_modbus/flow_settings.py",
+    "old": "        if err.status_code == HTTPStatus.NOT_FOUND:\n            raise _DatamanagerPageMissing from err\n",
+    "new": "",
+    "tests": "without_the_export_limit_page_says_so"
+  },
+  {
+    "label": "flows: a stored login without the page names it",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "        _InvalidApiCredentials,\n        _DatamanagerPageMissing,\n        _AlreadyConfigured,\n",
+    "new": "        _InvalidApiCredentials,\n        _AlreadyConfigured,\n",
+    "tests": "stored_login_kept_without_the_page or stored_login_tried_without_the_page"
+  },
+  {
+    "label": "datamanager: an entry with a login gets its number",
+    "path": "custom_components/fronius_modbus/datamanager.py",
+    "old": "        _follow_with_the_unique_id(hass, entry, bool(remembered))\n",
+    "new": "",
+    "tests": "with_a_login_gets_its_number"
+  },
+  {
+    "label": "service login: the user is service",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "SERVICE_USER = \"service\"",
+    "new": "SERVICE_USER = \"admin\"",
+    "tests": "right_password_leaves"
+  },
+  {
+    "label": "service login: a refused login is not sent again",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "            self._password, self.token = \"\", None\n",
+    "new": "            pass\n",
+    "tests": "tried_once or does_not_fit"
+  },
+  {
+    "label": "service login: a token of another realm is not sent",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "        if self.token is None or self.token.get(\"realm\") != realm:\n",
+    "new": "        if self.token is None:\n",
+    "tests": "does_not_fit"
+  },
+  {
+    "label": "service login: an unknown challenge is no refused login",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "            self.unknown_challenge = True\n",
+    "new": "            pass\n",
+    "tests": "another_kind_is_no_refused_login"
+  },
+  {
+    "label": "service login: only qop auth is answered",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "    return QOP in offered and algorithm",
+    "new": "    return algorithm",
+    "tests": "another_kind_is_no_refused_login"
+  },
+  {
+    "label": "service login: only MD5 is answered",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "    return QOP in offered and algorithm.casefold() == ALGORITHM\n",
+    "new": "    return QOP in offered\n",
+    "tests": "another_kind_is_no_refused_login"
+  },
+  {
+    "label": "service login: a challenge needs realm and nonce",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "    if not (challenge.get(\"realm\") and challenge.get(\"nonce\")):\n",
+    "new": "    if False:\n",
+    "tests": "another_kind_is_no_refused_login"
+  },
+  {
+    "label": "service login: a nonce used again is counted",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "        self._nonce_count = self._nonce_count + 1 if nonce == self._nonce else 1\n",
+    "new": "        self._nonce_count = 1\n",
+    "tests": "nonce_used_again"
+  },
+  {
+    "label": "service login: a new nonce starts the count",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "        self._nonce_count = self._nonce_count + 1 if nonce == self._nonce else 1\n",
+    "new": "        self._nonce_count += 1\n",
+    "tests": "new_nonce_starts"
+  },
+  {
+    "label": "service login: the opaque value is sent back",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "        if challenge.get(\"opaque\"):\n",
+    "new": "        if False:\n",
+    "tests": "spellings_of_a_known"
+  },
+  {
+    "label": "service login: an error status is an error",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "        if response.status_code != HTTPStatus.OK:\n",
+    "new": "        if False:\n",
+    "tests": "error_status_is_an_error"
+  },
+  {
+    "label": "service login: a forbidden page is a refused login",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "        forbidden_login = status == HTTPStatus.FORBIDDEN and signed\n",
+    "new": "        forbidden_login = False\n",
+    "tests": "error_status_is_an_error"
+  },
+  {
+    "label": "service login: a page forbidden before the login is no refused login",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "        forbidden_login = status == HTTPStatus.FORBIDDEN and signed\n",
+    "new": "        forbidden_login = status == HTTPStatus.FORBIDDEN\n",
+    "tests": "forbidden_before_the_login"
+  },
+  {
+    "label": "service login: an unanswered challenge is a refused login",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "            status == HTTPStatus.UNAUTHORIZED and not self._digest.unknown_challenge\n",
+    "new": "            status == HTTPStatus.UNAUTHORIZED and False\n",
+    "tests": "nothing_is_sent_without_credentials or wrong_password_is_tried_once"
+  },
+  {
+    "label": "service login: a forbidden login is not sent again",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "        if second.status_code in REFUSED:\n",
+    "new": "        if second.status_code == HTTPStatus.UNAUTHORIZED:\n",
+    "tests": "forbidden_login_is_not_sent_again"
+  },
+  {
+    "label": "export limit page: an answer with an error has no values",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "    if isinstance(status, bool) or status != 0:\n        return None\n",
+    "new": "",
+    "tests": "page_of_another_form_has"
+  },
+  {
+    "label": "export limit page: an answer that is no JSON has no values",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "        except ValueError:\n            payload = None\n",
+    "new": "        except KeyError:\n            payload = None\n",
+    "tests": "page_of_another_form_has"
+  },
+  {
+    "label": "export limit page: a flag is true or false",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "    return value if isinstance(value, bool) else None\n",
+    "new": "    return value\n",
+    "tests": "value_of_another_form"
+  },
+  {
+    "label": "export limit page: watts are a number",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "    return float(value) if _is_number(value) else None\n",
+    "new": "    return value\n",
+    "tests": "value_of_another_form"
+  },
+  {
+    "label": "export limit page: the mode is a text",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "        mode=mode if isinstance(mode, str) else None,\n",
+    "new": "        mode=mode,\n",
+    "tests": "value_of_another_form"
+  },
+  {
+    "label": "export limit page: a part that is no object is left out",
+    "path": "custom_components/fronius_modbus/datamanager_client.py",
+    "old": "    part = node.get(key) if isinstance(node, dict) else None\n",
+    "new": "    part = node.get(key)\n",
+    "tests": "page_of_another_form_has or value_of_another_form or no_answer_at_all"
+  },
+  {
+    "label": "battery: a Datamanager's login opens no web control",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "    return web_api_disabled(values) or bool(entry.data.get(CONF_DATAMANAGER))\n",
+    "new": "    return web_api_disabled(values)\n",
+    "tests": "written_over_modbus_alone"
+  },
+  {
+    "label": "export limit: without a login its page is not asked",
+    "path": "custom_components/fronius_modbus/datamanager_web.py",
+    "old": "    if token is None:\n        return None\n",
+    "new": "",
+    "tests": "without_the_login_its_page or entry_without_its_login"
+  },
+  {
+    "label": "export limit: one inverter reads it",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "        api_token if device.reads_site_totals else None,\n",
+    "new": "        api_token if on_datamanager else None,\n",
+    "tests": "one_inverter_of_a_datamanager_reads_it"
+  },
+  {
+    "label": "export limit: a GEN24's login is not sent to this page",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "        api_token if device.reads_site_totals else None,\n",
+    "new": "        api_token,\n",
+    "tests": "one_inverter_of_a_datamanager_reads_it"
+  },
+  {
+    "label": "export limit: every minute at most",
+    "path": "custom_components/fronius_modbus/datamanager_web.py",
+    "old": "seconds=max(interval_seconds, MINIMUM_INTERVAL_SECONDS)",
+    "new": "seconds=interval_seconds",
+    "tests": "read_every_minute_at_most"
+  },
+  {
+    "label": "export limit: a refused login ends the polls",
+    "path": "custom_components/fronius_modbus/datamanager_web.py",
+    "old": "            raise ConfigEntryAuthFailed(",
+    "new": "            raise UpdateFailed(",
+    "tests": "refused_login_is_sent_once or login_refused_later"
+  },
+  {
+    "label": "export limit: a refused login is forgotten",
+    "path": "custom_components/fronius_modbus/datamanager_web.py",
+    "old": "            await async_get_token_store(self.hass).async_delete_token(\n                self._host, self._role\n            )\n",
+    "new": "",
+    "tests": "refused_login_is_sent_once"
+  },
+  {
+    "label": "export limit: an outage is no error",
+    "path": "custom_components/fronius_modbus/datamanager_web.py",
+    "old": "            raise DeviceUnreachable(",
+    "new": "            raise UpdateFailed(",
+    "tests": "outage_is_one_line"
+  },
+  {
+    "label": "export limit: a server error is no refused login",
+    "path": "custom_components/fronius_modbus/datamanager_web.py",
+    "old": "        except FroniusWebResponseError as err:\n            raise UpdateFailed(",
+    "new": "        except FroniusWebResponseError as err:\n            raise ConfigEntryAuthFailed(",
+    "tests": "server_error_is_no_refused_login"
+  },
+  {
+    "label": "export limit: stale values are not shown",
+    "path": "custom_components/fronius_modbus/entity.py",
+    "old": "            return datamanager_web is not None and datamanager_web.last_update_success\n",
+    "new": "            return datamanager_web is not None\n",
+    "tests": "outage_is_one_line or refused_login_is_sent_once"
+  },
+  {
+    "label": "export limit: a mode not seen yet is unknown",
+    "path": "custom_components/fronius_modbus/datamanager_entities.py",
+    "old": "    return EXPORT_LIMIT_MODES.get(limits.mode, UNKNOWN_STATE)\n",
+    "new": "    return \"entire_system\"\n",
+    "tests": "mode_nobody_has_seen"
+  },
+  {
+    "label": "export limit: an unread flag is unknown",
+    "path": "custom_components/fronius_modbus/datamanager_entities.py",
+    "old": "    return None if flag is None else CONTROL_STATUS[int(flag)]\n",
+    "new": "    return CONTROL_STATUS[int(flag or 0)]\n",
+    "tests": "page_of_another_form_is_unknown"
+  },
+  {
+    "label": "setup: the login of a Datamanager is not asked for again",
+    "path": "custom_components/fronius_modbus/__init__.py",
+    "old": "    has_token = on_datamanager and api_token is not None\n",
+    "new": "    has_token = False\n",
+    "tests": "export_limit_is_shown or one_inverter_of"
+  },
+  {
+    "label": "password step: a Datamanager's login has its own text",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "        if state is not None and state.settings.get(CONF_DATAMANAGER):\n",
+    "new": "        if False:\n",
+    "tests": "names_the_service_login"
+  },
+  {
+    "label": "password step: a GEN24 keeps its text",
+    "path": "custom_components/fronius_modbus/config_flow.py",
+    "old": "        if state is not None and state.settings.get(CONF_DATAMANAGER):\n",
+    "new": "        if state is not None:\n",
+    "tests": "the_config_flow_creates_an_entry"
   }
 ]

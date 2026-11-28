@@ -26,8 +26,13 @@ from .const import (
     inverter_number,
 )
 from .flow_forms import _set_form_error
-from .flow_settings import _entry_payload, async_check_role
-from .flow_state import _CannotConnectModbus, _DatamanagerFound
+from .flow_settings import (
+    _entry_payload,
+    async_check_role,
+    async_look_at_device,
+    check_login_on_owner,
+)
+from .flow_state import _CannotConnectModbus
 from .host_sharing import host_holder, is_datamanager_host, taken_units, unique_id_for
 
 
@@ -74,6 +79,12 @@ class NewInverterMixin(config_entries.ConfigFlow):
         """Read the inverter the settings name; raises when it does not answer."""
         raise NotImplementedError
 
+    async def _async_set_up_inverter(
+        self, settings: dict[str, Any]
+    ) -> config_entries.ConfigFlowResult:
+        """Go on with the chosen inverter: to its login, or to the end."""
+        raise NotImplementedError
+
     async def _async_claim_new_host(self, settings: dict[str, Any]) -> None:
         unique_id = entry_unique_id({CONF_HOST: settings[CONF_HOST]})
         # A card for this host gives way to the owner adding it by hand; two
@@ -82,6 +93,9 @@ class NewInverterMixin(config_entries.ConfigFlow):
             if card["context"]["source"] == config_entries.SOURCE_ZEROCONF:
                 self.hass.config_entries.flow.async_abort(card["flow_id"])
         await self._async_claim_unique_id(settings)
+        # Again before each step that acts: another flow may have set up the
+        # owner while a form was open.
+        check_login_on_owner(self.hass, settings, None)
 
     async def _async_claim_unique_id(self, settings: dict[str, Any]) -> None:
         """Abort for a host another entry keeps these settings off."""
@@ -100,27 +114,23 @@ class NewInverterMixin(config_entries.ConfigFlow):
     ) -> config_entries.ConfigFlowResult:
         del previous_host
         await self._async_claim_unique_id(settings)
+        # The login took a while: another flow may have set up the owner. The
+        # token saved for this one is rolled back with the refusal.
+        check_login_on_owner(self.hass, settings, None)
         return self.async_create_entry(
             title=info["title"],
-            data=_entry_payload(settings, reconfigure_required=False),
+            data=_entry_payload(settings, reconfigure_required=False)
+            | ({CONF_DATAMANAGER: True} if settings.get(CONF_DATAMANAGER) else {}),
         )
 
     async def _async_look_at_device(
         self, settings: dict[str, Any]
     ) -> config_entries.ConfigFlowResult | None:
         """Ask a new entry's device what it is, and which of its inverters is meant."""
-        if self._flow_entry() is not None:
-            await async_check_role(self.hass, settings)
+        if (entry := self._flow_entry()) is not None:
+            await async_check_role(self.hass, settings, entry)
             return None
-        host = settings[CONF_HOST]
-        family = await datamanager.async_identify(self.hass, host)
-        remembered = is_datamanager_host(self.hass, host)
-        found = family is datamanager.DeviceFamily.DATAMANAGER or (
-            family is datamanager.DeviceFamily.UNKNOWN and remembered
-        )
-        if found and settings[CONF_API_USERNAME] != WEB_API_DISABLED:
-            raise _DatamanagerFound
-        settings[CONF_DATAMANAGER] = found
+        found = await async_look_at_device(self.hass, settings)
         question = await self._async_inverter_question(settings) if found else None
         if question is None:
             await self._async_claim_new_host(settings)
@@ -169,8 +179,11 @@ class NewInverterMixin(config_entries.ConfigFlow):
         settings = {**self._inverter_settings, CONF_INVERTER_UNIT_ID: unit_id}
         try:
             await self._async_claim_new_host(settings)
-            info = await self._async_check_inverter(settings)
-            return await self._async_finish_user(settings, info, None)
+            # Over Modbus alone: the login, if any, comes after it.
+            await self._async_check_inverter(
+                {**settings, CONF_API_USERNAME: WEB_API_DISABLED}
+            )
+            return await self._async_set_up_inverter(settings)
         except data_entry_flow.AbortFlow:
             raise
         except _CannotConnectModbus:

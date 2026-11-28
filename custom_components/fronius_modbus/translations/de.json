@@ -96,6 +96,27 @@
         "data": {
           "inverter_modbus_unit_id": "Nummer des Wechselrichters"
         }
+      },
+      "user_password_service": {
+        "title": "Passwort des Datamanagers",
+        "description": "Gib das Passwort der Anmeldung **service** des Datamanagers für {entry_title} ({host}) ein. Sie öffnet die Einspeisebegrenzung. Das Passwort wird nicht im Konfigurationseintrag gespeichert, nur ein daraus erzeugter Token.",
+        "data": {
+          "api_password": "Passwort"
+        }
+      },
+      "reconfigure_password_service": {
+        "title": "Passwort des Datamanagers",
+        "description": "Gib das Passwort der Anmeldung **service** des Datamanagers für {entry_title} ({host}) ein. Sie öffnet die Einspeisebegrenzung. Das Passwort wird nicht im Konfigurationseintrag gespeichert, nur ein daraus erzeugter Token.",
+        "data": {
+          "api_password": "Passwort"
+        }
+      },
+      "reauth_password_service": {
+        "title": "Passwort des Datamanagers",
+        "description": "Gib das Passwort der Anmeldung **service** des Datamanagers für {entry_title} ({host}) ein. Sie öffnet die Einspeisebegrenzung. Das Passwort wird nicht im Konfigurationseintrag gespeichert, nur ein daraus erzeugter Token.",
+        "data": {
+          "api_password": "Passwort"
+        }
       }
     },
     "abort": {
@@ -120,7 +141,9 @@
       "invalid_api_credentials": "Anmeldung für die ausgewählte Web-API-Rolle fehlgeschlagen.",
       "already_configured": "Ein anderer Eintrag verwendet diesen Host bereits.",
       "invalid_allowed_host": "Gib die IPv4-Adresse eines Geräts in deinem Netzwerk ein, zum Beispiel 192.168.1.20.",
-      "datamanager_no_login": "Das ist ein Datamanager oder Hybridmanager (SnapINverter, Symo Hybrid). Seine Anmeldung wird nicht unterstützt. Wähle „Ohne Web-API (nur Modbus)“.",
+      "datamanager_customer": "Das ist ein Datamanager oder Hybridmanager (SnapINverter, Symo Hybrid). Die Kundenanmeldung öffnet dort nichts. Wähle „Techniker“ (die Anmeldung „service“) oder „Ohne Web-API (nur Modbus)“.",
+      "datamanager_page_missing": "Dieser Datamanager antwortet, hat aber keine Seite für die Einspeisegrenze. Seine Firmware bietet sie vielleicht nicht an. Wähle „Ohne Web-API (nur Modbus)“.",
+      "datamanager_login_on_owner": "Ein anderer Eintrag dieses Datamanagers liest, was seine Wechselrichter teilen (Zähler, Summen der Anlage, Einspeisegrenze), darum kann sich nur dieser Eintrag als Techniker anmelden. Richte diesen Wechselrichter ohne Web-API (nur Modbus) ein.",
       "invalid_inverter_number": "Gib die Nummer des Wechselrichters ein, 00 bis 99.",
       "inverter_not_found": "Unter dieser Nummer hat kein Wechselrichter über Modbus geantwortet. Vielleicht schläft er, oder Modbus TCP ist aus oder nicht auf int + SF eingestellt."
     }
@@ -859,6 +882,36 @@
       },
       "active_service_events": {
         "name": "Aktive Service-Ereignisse"
+      },
+      "export_soft_limit_state": {
+        "name": "Weiche Einspeisebegrenzung aktiv",
+        "state": {
+          "disabled": "Deaktiviert",
+          "enabled": "Aktiviert"
+        }
+      },
+      "export_hard_limit": {
+        "name": "Harte Einspeisebegrenzung"
+      },
+      "export_hard_limit_state": {
+        "name": "Harte Einspeisebegrenzung aktiv",
+        "state": {
+          "disabled": "Deaktiviert",
+          "enabled": "Aktiviert"
+        }
+      },
+      "export_limit_mode": {
+        "name": "Modus der Einspeisebegrenzung",
+        "state": {
+          "entire_system": "Gesamtes System"
+        }
+      },
+      "export_fail_safe": {
+        "name": "Fail-Safe der Einspeisebegrenzung",
+        "state": {
+          "disabled": "Deaktiviert",
+          "enabled": "Aktiviert"
+        }
       }
     },
     "switch": {
@@ -984,6 +1037,13 @@
         "data": {
           "allowed_host": "Zu erlaubende Adresse"
         }
+      },
+      "password_service": {
+        "title": "Passwort des Datamanagers",
+        "description": "Gib das Passwort der Anmeldung **service** des Datamanagers für {entry_title} ({host}) ein. Sie öffnet die Einspeisebegrenzung. Das Passwort wird nicht im Konfigurationseintrag gespeichert, nur ein daraus erzeugter Token. Leer lassen behält den gespeicherten Token.",
+        "data": {
+          "api_password": "Passwort"
+        }
       }
     },
     "error": {
@@ -1000,7 +1060,9 @@
       "invalid_api_credentials": "Anmeldung für die ausgewählte Web-API-Rolle fehlgeschlagen.",
       "already_configured": "Ein anderer Eintrag verwendet diesen Host bereits.",
       "invalid_allowed_host": "Gib die IPv4-Adresse eines Geräts in deinem Netzwerk ein, zum Beispiel 192.168.1.20.",
-      "datamanager_no_login": "Das ist ein Datamanager oder Hybridmanager (SnapINverter, Symo Hybrid). Seine Anmeldung wird nicht unterstützt. Wähle „Ohne Web-API (nur Modbus)“."
+      "datamanager_customer": "Das ist ein Datamanager oder Hybridmanager (SnapINverter, Symo Hybrid). Die Kundenanmeldung öffnet dort nichts. Wähle „Techniker“ (die Anmeldung „service“) oder „Ohne Web-API (nur Modbus)“.",
+      "datamanager_page_missing": "Dieser Datamanager antwortet, hat aber keine Seite für die Einspeisegrenze. Seine Firmware bietet sie vielleicht nicht an. Wähle „Ohne Web-API (nur Modbus)“.",
+      "datamanager_login_on_owner": "Ein anderer Eintrag dieses Datamanagers liest, was seine Wechselrichter teilen (Zähler, Summen der Anlage, Einspeisegrenze), darum kann sich nur dieser Eintrag als Techniker anmelden. Richte diesen Wechselrichter ohne Web-API (nur Modbus) ein."
     }
   },
   "selector": {

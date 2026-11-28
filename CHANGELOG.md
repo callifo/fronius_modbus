@@ -3,17 +3,19 @@
 ## Unreleased
 
 ### Added
-- The smart meters of a Datamanager (SnapINverter, Symo Hybrid) are read, on Modbus units 240 to 244. This follows Fronius' manual and is not confirmed on a device yet (issue 110). `Load` is unknown while several inverters share the Datamanager, as one entry reads one of them.
+- The smart meters of a Datamanager (SnapINverter, Symo Hybrid) are read, on Modbus units 240 to 244. This follows Fronius' manual and is not confirmed on a device yet (issue 110). `Load` is unknown while several inverters share the Datamanager, as one entry reads one of them, unless the meter is installed in the consumption path.
 - On a Datamanager (SnapINverter): `State code`, the number the inverter's manual explains, and `Site power` and `Site energy` (today, this year, total) over every inverter on it. The site sensors are off by default unless several inverters share the Datamanager. This follows Fronius' manual and is not confirmed on a device yet (issue 110).
 - Several inverters on one Datamanager: set up its address once for each of them. The setup asks for the inverter's number when there are several, or when the only one has another number than 1. The meters, `Load` and the site sensors belong to the entry that has them first; if you delete it, another entry takes them over at its next start, as new entities. This is not confirmed on a device yet (issue 110).
+- On a Datamanager, the technician role shows the export limit: the soft and the hard limit with their states, the mode and the fail-safe mode. Enter the password of the Datamanager's `service` login. Only the entry that has the meters can use this role; set up the other inverters of the Datamanager without the web API. The values are read every 60 seconds at most. This follows one user's dump and is not confirmed on a device yet (issue 110).
 
 ### Changed
-- With a role chosen for a Datamanager (SnapINverter, Symo Hybrid), the setup recognizes it and asks to choose *Without the web API*. Until now it reported a failed login, whatever the password (issue 110).
+- With the customer role chosen for a Datamanager (SnapINverter, Symo Hybrid), the setup recognizes it and asks to choose *Technician* or *Without the web API*. Until now it reported a failed login, whatever the password (issue 110).
 - An entry without the web API on a Datamanager no longer requests pages the Datamanager does not have, and no longer creates event entities that stay empty. Event entities such an entry already has stay without a value, and you can delete them.
 - `tools/inverter_dump.bat` also replaces the city of the time zone.
 - On a Datamanager, `tools/inverter_dump.bat` also reads its own Modbus registers: the state code, the model type and the site totals.
 
 ### Fixed
+- `Load` no longer shows the power of a sub-meter, a meter on one circuit such as a heat pump or a wallbox. Without a grid meter, `Load` uses the meter in the consumption path, also when a sub-meter has the lower address. This was wrong since callifo 0.3.0.
 - A Symo Hybrid with a battery got no sensors at all. Its second input is now shown as the battery, charging or discharging as the battery's status says, and no longer counts as PV. This follows Fronius' manual and the registers a user published, and is not confirmed on a device yet.
 
 ## 1.4.2

@@ -47,9 +47,9 @@ from .flow_entry import (
 )
 from .flow_forms import (
     CONF_ALLOWED_HOST,
-    CONF_CHANGE_ALLOWED_HOST,
     _set_form_error,
     allowed_host_schema,
+    asks_for_the_address,
     checked_allowed_host,
     password_schema,
     role_schema,
@@ -61,7 +61,9 @@ from .flow_settings import (
     _expand_settings_input,
     _should_apply_modbus_config,
     async_check_role,
+    async_datamanager_login,
     defaults_after,
+    device_answer,
     entry_defaults,
 )
 from .flow_state import (
@@ -70,6 +72,7 @@ from .flow_state import (
     _AlreadyConfigured,
     _CannotConnect,
     _CannotConnectModbus,
+    _DatamanagerPageMissing,
     _InvalidApiCredentials,
     _InvalidHost,
     _InvalidPort,
@@ -110,13 +113,6 @@ type _FlowRestartCallback = Callable[[], Awaitable[Any]]
 type _HostClaim = Callable[[dict[str, Any]], Awaitable[None]]
 
 
-def _asks_for_the_address(user_input: dict[str, Any], settings: dict[str, Any]) -> bool:
-    """The owner asked to see the address, and the restriction is to allow one."""
-    requested = bool(user_input.get(CONF_CHANGE_ALLOWED_HOST, False))
-    restricted = settings[CONF_MODBUS_RESTRICTION] == ModbusRestriction.HOME_ASSISTANT
-    return requested and restricted
-
-
 def _validate_static_input(data: dict[str, Any]) -> None:
     if len(data[CONF_HOST]) < 3:
         raise _InvalidHost
@@ -136,42 +132,27 @@ def _validate_static_input(data: dict[str, Any]) -> None:
         raise _AddressesNotUnique
 
 
-async def _async_load_token(
-    hass: HomeAssistant, host: str, username: str
-) -> dict[str, str] | None:
-    return await async_get_token_store(hass).async_load_token(host, username)
-
-
-async def _async_save_token(
-    hass: HomeAssistant, host: str, username: str, token: dict[str, str]
-) -> None:
-    await async_get_token_store(hass).async_save_token(
-        host,
-        realm=token["realm"],
-        token=token["token"],
-        user=username,
-    )
-
-
 async def _async_mint_token(
     hass: HomeAssistant,
     host: str,
     password: str,
     username: str = API_USERNAME,
+    *,
+    on_datamanager: bool = False,
 ) -> dict[str, str]:
     password = str(password).strip()
     if password == "":
         raise _MissingApiPassword
 
-    try:
-        token = await hass.async_add_executor_job(
-            mint_token,
-            host,
-            username,
-            password,
-        )
-    except Exception as err:
-        raise _CannotConnect from err
+    if on_datamanager:
+        token = await async_datamanager_login(hass, host, password=password)
+    else:
+        try:
+            token = await hass.async_add_executor_job(
+                mint_token, host, username, password
+            )
+        except Exception as err:
+            raise _CannotConnect from err
 
     if not token:
         raise _InvalidApiCredentials
@@ -218,6 +199,10 @@ async def _async_prepare_web_api(
     entry can take the host while the token is minted or the login runs, and
     the settings would then change on an inverter this flow does not own.
     """
+    if data.get(CONF_DATAMANAGER):
+        if not await async_datamanager_login(hass, data[CONF_HOST], token=api_token):
+            raise _InvalidApiCredentials
+        return
     client = FroniusWebClient(
         host=data[CONF_HOST],
         username=data[CONF_API_USERNAME],
@@ -286,6 +271,7 @@ async def _validate_input(
             identity = await FroniusInverter.async_probe(unit)
     except (
         _InvalidApiCredentials,
+        _DatamanagerPageMissing,
         _AlreadyConfigured,
         _SunSpecSwitchNeeded,
         _AllowedHostNeeded,
@@ -324,7 +310,7 @@ class TokenFlowMixin:
 
     async def _async_look_at_device(self, settings: dict[str, Any]):
         """Check the role against the device; a question it raises is shown first."""
-        await async_check_role(self.hass, settings)
+        await async_check_role(self.hass, settings, self._flow_entry())
 
     async def _async_show_password_step(
         self,
@@ -334,6 +320,9 @@ class TokenFlowMixin:
     ):
         state = self._pending_flow_state
         placeholders = None
+        # A step of its own: the role is called technician, its login service.
+        if state is not None and state.settings.get(CONF_DATAMANAGER):
+            step_id = f"{step_id}{SERVICE_LOGIN_STEP}"
         if state is not None:
             placeholders = {
                 "entry_title": entry_title(state.settings),
@@ -536,6 +525,41 @@ class TokenFlowMixin:
 
         return await self._async_show_allowed_host_step(step_id=step_id, errors=errors)
 
+    async def _async_log_in(
+        self,
+        state: _PendingFlowState,
+        *,
+        always_ask_password: bool = False,
+        password_step_id: str,
+        step_ids: tuple[str, str],
+        claim_host: _HostClaim,
+        on_success: _FlowFinishCallback,
+    ):
+        """Finish without the web API or with the stored token; ask for the password else."""
+        settings = state.settings
+        if settings[CONF_API_USERNAME] == WEB_API_DISABLED:
+            info = await _validate_input(self.hass, settings)
+            self._pending_flow_state = None
+            return await on_success(settings, info, state.previous_host)
+        token = await async_get_token_store(self.hass).async_load_token(
+            settings[CONF_HOST], settings[CONF_API_USERNAME]
+        )
+        if token is None or always_ask_password:
+            state.existing_token = token
+            self._pending_flow_state = state
+            return await self._async_show_password_step(step_id=password_step_id)
+        try:
+            return await self._async_use_stored_token(
+                state,
+                token,
+                step_ids=step_ids,
+                claim_host=claim_host,
+                on_success=on_success,
+            )
+        except _InvalidApiCredentials:
+            self._pending_flow_state = state
+            return await self._async_show_password_step(step_id=password_step_id)
+
     async def _async_use_stored_token(
         self,
         state: _PendingFlowState,
@@ -590,7 +614,7 @@ class TokenFlowMixin:
                 await claim_host(settings)
                 if (question := await self._async_look_at_device(settings)) is not None:
                     return question
-                ask_allowed_host = _asks_for_the_address(user_input, settings)
+                ask_allowed_host = asks_for_the_address(user_input, settings)
                 # The question comes only with a write: Configure writes
                 # unchanged settings only when asked to.
                 apply_modbus_config = (
@@ -601,42 +625,21 @@ class TokenFlowMixin:
                         previous_settings,
                     )
                 )
-                if settings[CONF_API_USERNAME] == WEB_API_DISABLED:
-                    info = await _validate_input(self.hass, settings)
-                    self._pending_flow_state = None
-                    return await on_success(settings, info, previous_host)
-                token = await _async_load_token(
-                    self.hass, settings[CONF_HOST], settings[CONF_API_USERNAME]
-                )
-                state = _PendingFlowState(
-                    settings,
-                    previous_host,
-                    apply_modbus_config,
-                    ask_allowed_host=ask_allowed_host,
-                )
-                if token is None or always_ask_password:
-                    state.existing_token = token
-                    self._pending_flow_state = state
-                    return await self._async_show_password_step(
-                        step_id=password_step_id
-                    )
-                return await self._async_use_stored_token(
-                    state,
-                    token,
+                return await self._async_log_in(
+                    _PendingFlowState(
+                        settings,
+                        previous_host,
+                        apply_modbus_config,
+                        ask_allowed_host=ask_allowed_host,
+                    ),
+                    always_ask_password=always_ask_password,
+                    password_step_id=password_step_id,
                     step_ids=(sunspec_step_id, allowed_host_step_id),
                     claim_host=claim_host,
                     on_success=on_success,
                 )
             except data_entry_flow.AbortFlow:
                 raise
-            except _InvalidApiCredentials:
-                self._pending_flow_state = _PendingFlowState(
-                    settings,
-                    previous_host,
-                    apply_modbus_config,
-                    ask_allowed_host=ask_allowed_host,
-                )
-                return await self._async_show_password_step(step_id=password_step_id)
             except Exception as err:  # pylint: disable=broad-except
                 _set_form_error(errors, err)
 
@@ -673,7 +676,11 @@ class TokenFlowMixin:
                 token = state.existing_token
                 if minted:
                     token = await _async_mint_token(
-                        self.hass, state.settings[CONF_HOST], password, username
+                        self.hass,
+                        state.settings[CONF_HOST],
+                        password,
+                        username,
+                        on_datamanager=bool(state.settings.get(CONF_DATAMANAGER)),
                     )
                 try:
                     info = await _validate_input(
@@ -727,7 +734,7 @@ class TokenFlowMixin:
         store = async_get_token_store(self.hass)
         previous = await store.async_load_token(host, username)
         try:
-            await _async_save_token(self.hass, host, username, minted)
+            await store.async_save_token(host, user=username, **minted)
             return await on_success(state.settings, info, state.previous_host)
         except BaseException:
             if not self._flow_entry_logs_in_with(host, username):
@@ -758,7 +765,11 @@ class TokenFlowMixin:
         if previous is None:
             await store.async_delete_token(host, username)
             return
-        await _async_save_token(self.hass, host, username, previous)
+        await store.async_save_token(host, user=username, **previous)
+
+
+# The password step for a Datamanager's login, after the step it stands for.
+SERVICE_LOGIN_STEP = "_service"
 
 
 class ConfigFlow(NewInverterMixin, TokenFlowMixin, domain=DOMAIN):
@@ -787,6 +798,15 @@ class ConfigFlow(NewInverterMixin, TokenFlowMixin, domain=DOMAIN):
 
     async def _async_check_inverter(self, settings: dict[str, Any]) -> dict[str, Any]:
         return await _validate_input(self.hass, settings)
+
+    async def _async_set_up_inverter(self, settings: dict[str, Any]):
+        return await self._async_log_in(
+            _PendingFlowState(settings, None, apply_modbus_config=False),
+            password_step_id="user_password",
+            step_ids=("user_sunspec", "user_allowed_host"),
+            claim_host=self._async_claim_new_host,
+            on_success=self._async_finish_user,
+        )
 
     async def _async_finish_reconfigure(self, settings, info, previous_host):
         del info
@@ -842,6 +862,8 @@ class ConfigFlow(NewInverterMixin, TokenFlowMixin, domain=DOMAIN):
             on_success=self._async_finish_user,
         )
 
+    async_step_user_password_service = async_step_user_password
+
     async def async_step_user_sunspec(self, user_input=None):
         return await self._async_handle_sunspec_step(
             user_input=user_input,
@@ -889,6 +911,8 @@ class ConfigFlow(NewInverterMixin, TokenFlowMixin, domain=DOMAIN):
             on_success=self._async_finish_reconfigure,
         )
 
+    async_step_reconfigure_password_service = async_step_reconfigure_password
+
     async def async_step_reconfigure_sunspec(self, user_input=None):
         return await self._async_handle_sunspec_step(
             user_input=user_input,
@@ -925,6 +949,8 @@ class ConfigFlow(NewInverterMixin, TokenFlowMixin, domain=DOMAIN):
         # now, not what it held when the flow began.
         current = entry_defaults(entry)
         current[CONF_API_USERNAME] = settings[CONF_API_USERNAME]
+        if CONF_DATAMANAGER in settings:
+            current[CONF_DATAMANAGER] = settings[CONF_DATAMANAGER]
         await async_update_entry_from_input(
             self.hass, entry, current, previous_host=previous_host
         )
@@ -961,6 +987,8 @@ class ConfigFlow(NewInverterMixin, TokenFlowMixin, domain=DOMAIN):
             claim_host=self._async_claim_reauth_host,
             on_success=self._async_finish_reauth,
         )
+
+    async_step_reauth_password_service = async_step_reauth_password
 
     async def async_step_reauth_sunspec(self, user_input=None):
         return await self._async_handle_sunspec_step(
@@ -1007,6 +1035,10 @@ class FroniusModbusOptionsFlow(TokenFlowMixin, config_entries.OptionsFlow):
                 {**self.config_entry.data, **self.config_entry.options},
                 settings,
             ),
+            data={
+                **self.config_entry.data,
+                **device_answer(self.config_entry, settings),
+            },
             options=options,
         )
         await async_forget_unused_tokens(self.hass, previous_host)
@@ -1043,6 +1075,8 @@ class FroniusModbusOptionsFlow(TokenFlowMixin, config_entries.OptionsFlow):
             claim_host=self._async_claim_host,
             on_success=self._async_finish_options,
         )
+
+    async_step_password_service = async_step_password
 
     async def async_step_sunspec(self, user_input=None):
         return await self._async_handle_sunspec_step(

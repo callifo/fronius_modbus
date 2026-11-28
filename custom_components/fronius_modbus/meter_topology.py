@@ -27,6 +27,9 @@ class MeterTopology:
     answered: bool = False
     # Several inverters answer at this address, each on its own unit.
     several_inverters: bool = False
+    # Listed units the search could not tell: a meter there answering later is
+    # read once the entry starts again, with its place.
+    open_unit_ids: tuple[int, ...] = ()
 
     @property
     def reported_unit_ids(self) -> tuple[int, ...]:

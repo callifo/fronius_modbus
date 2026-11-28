@@ -17,6 +17,7 @@ from requests.utils import parse_dict_header
 
 from .component_readings import flag_value, json_object, take_readings
 from .const import API_USERNAME, ModbusRestriction
+from .derived import METER_LOCATION_CONSUMPTION
 from .export_limit import require_power_control, soft_limit_location
 from .fronius_modbus_api.exceptions import ControlRefused
 from .web_errors import (
@@ -322,8 +323,14 @@ def _parse_power_meter_info(
     if not meters:
         return result
 
+    # Without a grid meter the consumption meter measures the house, not a sub-meter.
     meters.sort(
-        key=lambda meter: (not meter["is_primary"], meter["rtu_addr"], meter["unit_id"])
+        key=lambda meter: (
+            not meter["is_primary"],
+            meter["location"] != METER_LOCATION_CONSUMPTION,
+            meter["rtu_addr"],
+            meter["unit_id"],
+        )
     )
     seen: set[int] = set()
     unit_ids: list[int] = []
@@ -335,12 +342,9 @@ def _parse_power_meter_info(
         unit_ids.append(unit_id)
         if meter["location"] >= 0:
             result["locations_by_unit_id"][unit_id] = meter["location"]
-        if result["primary_unit_id"] is None and meter["is_primary"]:
-            result["primary_unit_id"] = unit_id
 
     result["unit_ids"] = unit_ids
-    if result["primary_unit_id"] is None and unit_ids:
-        result["primary_unit_id"] = unit_ids[0]
+    result["primary_unit_id"] = unit_ids[0]
     return result
 
 

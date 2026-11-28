@@ -22,7 +22,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .component_readings import limits_reached
-from .const import DOMAIN, web_api_disabled
+from .const import CONF_DATAMANAGER, DOMAIN, web_api_disabled
+from .datamanager import followed_meter_units
 from .derived import grid_status, household_load, throttle_reason
 from .fronius_modbus_api.controls import InverterControls
 from .fronius_modbus_api.device import (
@@ -40,6 +41,7 @@ from .froniuswebclient import FroniusWebUnreachable
 from .web_control import soc_minimum_login_lost
 
 if TYPE_CHECKING:
+    from .datamanager_web import DatamanagerWebCoordinator
     from .web_control import FroniusWebControl, WebData
 
 _LOGGER = logging.getLogger(__name__)
@@ -59,7 +61,7 @@ NO_ANSWER = (
 )
 
 
-class _OfflineIsNotAnError(logging.Filter):
+class OfflineIsNotAnError(logging.Filter):
     """Log an expected outage at info, the way the quality scale asks for.
 
     DataUpdateCoordinator logs the outage at error and the recovery at info
@@ -70,6 +72,7 @@ class _OfflineIsNotAnError(logging.Filter):
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
+        """Lower the level of an expected outage; nothing is left out."""
         expected_outage = record.levelno == logging.ERROR and any(
             isinstance(argument, DeviceUnreachable) for argument in record.args or ()
         )
@@ -81,7 +84,7 @@ class _OfflineIsNotAnError(logging.Filter):
 
 # On this logger, not a parent: a filter never sees a child logger's records,
 # and this is the one both coordinators are built with.
-_LOGGER.addFilter(_OfflineIsNotAnError())
+_LOGGER.addFilter(OfflineIsNotAnError())
 
 
 def assume_present[Subsystem](subsystem: Subsystem | None) -> Subsystem:
@@ -128,6 +131,15 @@ class ModbusPoll:
     retained: bool = False
 
 
+def _has_no_web_control(entry: ConfigEntry) -> bool:
+    """Whether the battery is written over Modbus alone.
+
+    The login of a Datamanager opens its export limit only.
+    """
+    values = {**entry.data, **entry.options}
+    return web_api_disabled(values) or bool(entry.data.get(CONF_DATAMANAGER))
+
+
 @dataclass
 class FroniusRuntimeData:
     """What a loaded entry carries."""
@@ -136,6 +148,8 @@ class FroniusRuntimeData:
     modbus: FroniusModbusCoordinator
     web: FroniusWebCoordinator | None
     web_control: FroniusWebControl | None
+    # The web interface of a Datamanager, where the technician logs in.
+    datamanager_web: DatamanagerWebCoordinator | None = None
     meter_locations: dict[int, int] = field(default_factory=dict)
     meter_power: FroniusMeterPowerCoordinator | None = None
     primary_meter_unit_id: int = 200
@@ -193,7 +207,7 @@ class FroniusRuntimeData:
         percent = int(round(value))
         storage = assume_present(self.storage_control)
         entry = assume_present(self.modbus.config_entry)
-        if web_api_disabled({**entry.data, **entry.options}):
+        if _has_no_web_control(entry):
             await storage.set_minimum_reserve(percent)
             return
         web_control = self.web_control
@@ -208,9 +222,7 @@ class FroniusRuntimeData:
         mode = ExtendedMode(code)
         await assume_present(self.storage_control).set_mode(mode)
         entry = assume_present(self.modbus.config_entry)
-        if mode is not ExtendedMode.CHARGE_FROM_GRID or web_api_disabled(
-            {**entry.data, **entry.options}
-        ):
+        if mode is not ExtendedMode.CHARGE_FROM_GRID or _has_no_web_control(entry):
             return
         web_control = self.web_control
         if web_control is None or not web_control.configured:
@@ -250,6 +262,7 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
         interval: timedelta,
         primary_meter_unit_id: int,
         meter_locations: dict[int, int],
+        open_meter_unit_ids: tuple[int, ...] = (),
     ) -> None:
         """Bind to the device and the entry the poll results are reloaded through."""
         super().__init__(
@@ -270,6 +283,11 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
         # by the first refresh. One that answers only later has no entities
         # yet, so the entry reloads once to build them.
         self._built_for: frozenset[str] | None = None
+        # A meter the search could not tell has no place yet: its first answer,
+        # in the first refresh too, reloads the entry to find it.
+        self._open_meters = frozenset(
+            meter_report_name(unit_id) for unit_id in open_meter_unit_ids
+        )
         # Set by an outage: a firmware update restarts the inverter, so the
         # identity read at setup is read again once it answers.
         self._identity_check_due = False
@@ -363,19 +381,46 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
     def _reload_for_new_sub_systems(self, report: UpdateReport) -> None:
         answered = frozenset(report.updated)
         if self._built_for is None:
-            self._built_for = answered
+            self._built_for = answered - self._open_meters
             return
-        new = answered - self._built_for
+        new = answered - self._built_for - self._late_again(answered)
         if not new:
             return
+        entry = assume_present(self.config_entry)
         _LOGGER.info(
             "%s answered for the first time; reloading the entry to add its entities",
             ", ".join(sorted(new)),
         )
         self._built_for = self._built_for | new
-        self.hass.config_entries.async_schedule_reload(
-            assume_present(self.config_entry).entry_id
-        )
+        self.hass.config_entries.async_schedule_reload(entry.entry_id)
+
+    def _late_again(self, answered: frozenset[str]) -> frozenset[str]:
+        """The Datamanager meters that answered late after their one reload.
+
+        They are counted as built: their entities and their place come with the
+        next reload of the entry, not with another automatic one. The other late
+        meters are noted, as this answer is their one reload.
+        """
+        entry = assume_present(self.config_entry)
+        if not entry.data.get(CONF_DATAMANAGER) or self._built_for is None:
+            return frozenset()
+        followed = followed_meter_units(self.hass, entry)
+        names = {meter_report_name(unit): unit for unit in self.device.meter_unit_ids}
+        late = {
+            name: unit
+            for name, unit in names.items()
+            if name in answered and name not in self._built_for
+        }
+        again = frozenset(name for name, unit in late.items() if unit in followed)
+        for name in sorted(again):
+            _LOGGER.info(
+                "%s answered late again after its automatic reload; its entities "
+                "and its place come with the next reload of the entry",
+                name,
+            )
+        self._built_for |= again
+        followed.update(unit for name, unit in late.items() if name not in again)
+        return again
 
     async def _reload_for_a_new_identity(self) -> None:
         if not self._identity_check_due:

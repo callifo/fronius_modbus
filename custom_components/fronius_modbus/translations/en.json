@@ -96,6 +96,27 @@
         "data": {
           "inverter_modbus_unit_id": "Inverter number"
         }
+      },
+      "user_password_service": {
+        "title": "Datamanager password",
+        "description": "Enter the password of the Datamanager's **service** login for {entry_title} ({host}). It opens the export limit. The password is not stored in the config entry, only a token made from it.",
+        "data": {
+          "api_password": "Password"
+        }
+      },
+      "reconfigure_password_service": {
+        "title": "Datamanager password",
+        "description": "Enter the password of the Datamanager's **service** login for {entry_title} ({host}). It opens the export limit. The password is not stored in the config entry, only a token made from it.",
+        "data": {
+          "api_password": "Password"
+        }
+      },
+      "reauth_password_service": {
+        "title": "Datamanager password",
+        "description": "Enter the password of the Datamanager's **service** login for {entry_title} ({host}). It opens the export limit. The password is not stored in the config entry, only a token made from it.",
+        "data": {
+          "api_password": "Password"
+        }
       }
     },
     "abort": {
@@ -120,7 +141,9 @@
       "invalid_api_credentials": "Login failed for the selected Web API role.",
       "already_configured": "Another entry already uses this host.",
       "invalid_allowed_host": "Enter the IPv4 address of a device on your network, for example 192.168.1.20.",
-      "datamanager_no_login": "This is a Datamanager or Hybridmanager (SnapINverter, Symo Hybrid). Its login is not supported. Choose Without the web API (Modbus only).",
+      "datamanager_customer": "This is a Datamanager or Hybridmanager (SnapINverter, Symo Hybrid). The customer login opens nothing there. Choose Technician (its service login) or Without the web API (Modbus only).",
+      "datamanager_page_missing": "This Datamanager answers, but has no page for the export limit. Its firmware may not offer it. Choose Without the web API (Modbus only).",
+      "datamanager_login_on_owner": "Another entry of this Datamanager reads what its inverters share (meters, site totals, export limit), so only that entry can log in as Technician. Set this inverter up without the web API (Modbus only).",
       "invalid_inverter_number": "Enter the number of the inverter, 00 to 99.",
       "inverter_not_found": "No inverter with this number answered over Modbus. It may be asleep, or Modbus TCP is off or not set to int + SF."
     }
@@ -859,6 +882,36 @@
       },
       "active_service_events": {
         "name": "Active service events"
+      },
+      "export_soft_limit_state": {
+        "name": "Export soft limit state",
+        "state": {
+          "disabled": "Disabled",
+          "enabled": "Enabled"
+        }
+      },
+      "export_hard_limit": {
+        "name": "Export hard limit"
+      },
+      "export_hard_limit_state": {
+        "name": "Export hard limit state",
+        "state": {
+          "disabled": "Disabled",
+          "enabled": "Enabled"
+        }
+      },
+      "export_limit_mode": {
+        "name": "Export limit mode",
+        "state": {
+          "entire_system": "Entire system"
+        }
+      },
+      "export_fail_safe": {
+        "name": "Export limit fail-safe mode",
+        "state": {
+          "disabled": "Disabled",
+          "enabled": "Enabled"
+        }
       }
     },
     "switch": {
@@ -984,6 +1037,13 @@
         "data": {
           "allowed_host": "Address to allow"
         }
+      },
+      "password_service": {
+        "title": "Datamanager password",
+        "description": "Enter the password of the Datamanager's **service** login for {entry_title} ({host}). It opens the export limit. The password is not stored in the config entry, only a token made from it. Leave it empty to keep the stored token.",
+        "data": {
+          "api_password": "Password"
+        }
       }
     },
     "error": {
@@ -1000,7 +1060,9 @@
       "invalid_api_credentials": "Login failed for the selected Web API role.",
       "already_configured": "Another entry already uses this host.",
       "invalid_allowed_host": "Enter the IPv4 address of a device on your network, for example 192.168.1.20.",
-      "datamanager_no_login": "This is a Datamanager or Hybridmanager (SnapINverter, Symo Hybrid). Its login is not supported. Choose Without the web API (Modbus only)."
+      "datamanager_customer": "This is a Datamanager or Hybridmanager (SnapINverter, Symo Hybrid). The customer login opens nothing there. Choose Technician (its service login) or Without the web API (Modbus only).",
+      "datamanager_page_missing": "This Datamanager answers, but has no page for the export limit. Its firmware may not offer it. Choose Without the web API (Modbus only).",
+      "datamanager_login_on_owner": "Another entry of this Datamanager reads what its inverters share (meters, site totals, export limit), so only that entry can log in as Technician. Set this inverter up without the web API (Modbus only)."
     }
   },
   "selector": {

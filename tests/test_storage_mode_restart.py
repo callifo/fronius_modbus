@@ -385,6 +385,31 @@ async def test_a_0_w_found_in_place_is_not_saved_before_a_poll(inverter_unit):
     }
 
 
+async def test_a_mode_chosen_over_a_saved_one_waits_for_a_poll(inverter_unit):
+    """Discharge to Grid writes nothing over PV Charge Limit at 0 W."""
+    control = await _control(inverter_unit)
+    await control.set_mode(ExtendedMode.PV_CHARGE_LIMIT)
+    await control.set_charge_limit_w(0)
+    await _poll(control)
+    assert control.saved() is not None
+
+    await control.set_mode(ExtendedMode.DISCHARGE_TO_GRID)
+
+    assert control.saved() is None
+
+
+async def test_a_limit_read_but_not_judged_yet_is_not_saved(inverter_unit):
+    control = await _control(inverter_unit)
+    await control.set_mode(ExtendedMode.PV_CHARGE_LIMIT)
+    await control.set_charge_limit_w(HALF_W)
+    await _poll(control)
+    await control.set_charge_limit_w(0)
+
+    await control._storage.async_update()
+
+    assert control.saved() is None
+
+
 async def test_a_change_read_but_not_judged_yet_saves_nothing(inverter_unit):
     """The coordinator judges the storage after the whole poll; a save may come between."""
     control = await _control(inverter_unit)
@@ -516,6 +541,7 @@ async def test_a_kept_mode_is_saved_again_for_the_next_restart(inverter_unit):
     )
     restarted = await _control(inverter_unit)
     restarted.restore(saved)
+    assert restarted.saved() == saved
     await _poll(restarted)
 
     assert restarted.saved() == saved

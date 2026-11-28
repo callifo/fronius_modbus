@@ -263,6 +263,25 @@ async def test_a_0_w_no_poll_showed_yet_is_not_saved(inverter_unit):
     assert control.saved() is None
 
 
+async def test_a_0_w_the_polls_showed_only_as_the_old_rate_is_not_saved(
+    inverter_unit,
+):
+    """A late poll with the old rate still reads as the mode and confirmed the write.
+
+    Saved anyway, a restart took the image for Home Assistant's own although
+    no poll had shown it: the inverter may never have applied it.
+    """
+    control = await _control(inverter_unit)
+    await control.set_mode(ExtendedMode.PV_CHARGE_LIMIT)
+    await _poll(control)
+    await control.set_charge_limit_w(0)
+    inverter_unit.holding[IN_W_RTE] = FULL
+    await _poll(control, 1)
+
+    assert control.extended_mode is ExtendedMode.PV_CHARGE_LIMIT
+    assert control.saved() is None
+
+
 async def test_a_mode_its_registers_name_alone_saves_nothing(inverter_unit):
     control = await _control(inverter_unit)
     await control.set_mode(ExtendedMode.PV_CHARGE_LIMIT)

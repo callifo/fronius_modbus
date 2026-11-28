@@ -19,6 +19,7 @@
 ### Fixed
 - `Load` no longer shows the power of a sub-meter, a meter on one circuit such as a heat pump or a wallbox. Without a grid meter, `Load` uses the meter in the consumption path, also when a sub-meter has the lower address. This was wrong since callifo 0.3.0.
 - A Symo Hybrid with a battery got no sensors at all. Its second input is now shown as the battery, charging or discharging as the battery's status says, and no longer counts as PV. This follows Fronius' manual and the registers a user published, and is not confirmed on a device yet.
+- A storage mode with a limit of 0 W, such as *PV Charge Limit* at 0 W, showed as *Block Charging* or *Block Discharging* after a restart of Home Assistant or a reload of the entry, and its limit showed as unavailable. The mode now stays as long as the inverter still holds exactly the values it had before. If another program such as evcc changed them in the meantime, the inverter's values decide as before. The *Storage Control Mode* select keeps the mode, so it has to be enabled. If a restart already changed your mode, select it again after the update and set its limits again: *PV Charge Limit* and *Discharge Limit* start at the maximum, *PV Charge and Discharge Limit* with both limits at the maximum (issue 187).
 
 ## 1.4.2
 

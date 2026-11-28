@@ -1096,6 +1096,9 @@
     "grid_power_beyond_window": {
       "message": "The inverter holds a combined charge and discharge limit, for example from another controller, that this grid power would exceed. Select the storage mode again to set the power freely."
     },
+    "storage_mode_unverified": {
+      "message": "The inverter's storage settings could not be read to confirm the storage mode kept across the restart. Try again."
+    },
     "storage_mode_left": {
       "message": "The inverter is no longer in the selected storage mode, for example after a schedule or another controller changed it. Select the mode again."
     },

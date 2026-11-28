@@ -5,17 +5,19 @@ integration exposes eight "extended" modes on top (charge from grid, block
 discharging, ...), each a fixed combination of mode and rates. The device
 cannot name the extended mode, so it is re-derived from the registers on
 every poll; a written mode is only held over the few polls the device needs
-to apply it.
+to apply it. A mode at 0 W shares its registers with a block mode; across a
+restart it is kept only while the registers hold exactly what a poll showed.
 """
 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from enum import IntEnum
 import logging
+from typing import Any
 
-from .exceptions import ControlRefused
+from .exceptions import ControlRefused, ControlUnavailable
 from .sunspec_models import Storage
 from .writes import register_value, registers_holding, written_value
 
@@ -133,6 +135,42 @@ def _registers_fit(
     return in_fits and out_fits
 
 
+type _Image = tuple[int, float, float]
+
+
+def _is_rate(value: object) -> bool:
+    if not isinstance(value, int | float) or isinstance(value, bool):
+        return False
+    return -FULL_RATE_PCT <= value <= FULL_RATE_PCT
+
+
+def _kept_from(saved: object) -> tuple[ExtendedMode, _Image] | None:
+    """The mode and register image saved() wrote, or None for anything else."""
+    if not isinstance(saved, Mapping):
+        return None
+    name, image = saved.get("mode"), saved.get("image")
+    if not isinstance(name, str) or name not in ExtendedMode.__members__:
+        return None
+    if not isinstance(image, list | tuple) or len(image) != len(_IMAGE_FIELDS):
+        return None
+    mode, in_rate, out_rate = image
+    if type(mode) is not int or not (_is_rate(in_rate) and _is_rate(out_rate)):
+        return None
+    return ExtendedMode[name], (mode, float(in_rate), float(out_rate))
+
+
+def _record(mode: ExtendedMode, image: _Image) -> dict[str, Any]:
+    return {"mode": mode.name, "image": list(image)}
+
+
+def _kept_mode_unverified() -> ControlUnavailable:
+    return ControlUnavailable(
+        "storage_mode_unverified",
+        "The storage registers could not be read to confirm the storage mode "
+        "kept across the restart",
+    )
+
+
 def _mode_left() -> ControlRefused:
     return ControlRefused(
         "storage_mode_left",
@@ -166,6 +204,123 @@ class StorageControl:
         # InWRte and OutWRte as Home Assistant last wrote them, as the
         # registers hold them: the owner of an image two modes share.
         self._written: dict[str, float] = {}
+        # The image of the first full read, until a read shows another one or
+        # Home Assistant writes: the only image a mode kept across a restart
+        # may claim (issue 187). A 0 W that returns after a change may be
+        # another controller's hold.
+        self._start_image: _Image | None = None
+        # A mode kept across a restart that came before the first full read.
+        self._waiting: tuple[ExtendedMode, _Image] | None = None
+        # The mode and image the poll confirming Home Assistant's last write
+        # showed: what saved() keeps. A write, or another image in a poll or
+        # a live read, ends it for good; a 0 W that returns may be another
+        # controller's hold.
+        self._evidence: tuple[ExtendedMode, _Image] | None = None
+        # Whether the last write went through and no poll settled it yet:
+        # a write that failed may have left anything, so only then may a
+        # poll leave evidence.
+        self._confirmable = False
+
+    def saved(self) -> dict[str, Any] | None:
+        """The mode to keep across a restart, with the registers a poll showed it on.
+
+        Only a mode whose registers another mode shares needs keeping; the
+        registers name every other one on their own. None for anything but
+        the image the poll confirming the last write showed, unchanged since;
+        a write ends it before it starts. A mode kept for the first full read
+        is kept as it came.
+        """
+        # The coordinator judges the storage after the whole poll, and a part
+        # read after it may fail: the newest read counts as seen here.
+        cached = self._applied_image
+        if cached is not None:
+            self._observe(cached)
+        if self._extended_mode is None:
+            return self._saved_waiting(cached)
+        if self._evidence is None:
+            return None
+        return _record(*self._evidence)
+
+    def _saved_waiting(self, cached: _Image | None) -> dict[str, Any] | None:
+        """A mode kept for the first full read; a read that differs ends it."""
+        waiting = self._waiting
+        if waiting is not None and cached not in (None, waiting[1]):
+            self._waiting = None
+        if self._waiting is None:
+            return None
+        return _record(*self._waiting)
+
+    def restore(self, saved: object) -> None:
+        """Take back what saved() kept, if the first full read showed exactly its registers.
+
+        Judged once: a mode chosen since the start, or any change the polls
+        showed, leaves the mode to the registers.
+        """
+        kept = _kept_from(saved)
+        if kept is None:
+            return
+        if self._extended_mode is None:
+            self._waiting = kept
+            return
+        self._take_back(*kept)
+
+    def _take_back(self, mode: ExtendedMode, image: _Image) -> None:
+        if image != self._start_image or not _registers_fit(mode, *image):
+            return
+        self._extended_mode = mode
+        self._unconfirmed_polls = None
+        self._written = {"in_w_rte": image[1], "out_w_rte": image[2]}
+        self._evidence = (mode, image)
+
+    @property
+    def _holds_a_kept_mode(self) -> bool:
+        """Whether the mode rests on rates kept across a restart, not on a write since."""
+        return self._start_image is not None and bool(self._written)
+
+    def _leave_the_start(self) -> bool:
+        """End what the first full read allowed; True when a kept mode lost its rates."""
+        kept = self._holds_a_kept_mode
+        if kept:
+            self._written = {}
+        self._start_image = None
+        return kept
+
+    def _see(self, image: _Image) -> bool:
+        """A read showed ``image``; True when that ended a mode kept across a restart."""
+        if self._evidence is not None and image != self._evidence[1]:
+            self._evidence = None
+        if self._start_image is None or image == self._start_image:
+            return False
+        return self._leave_the_start()
+
+    def _yield_a_kept_mode(self, image: _Image) -> None:
+        """A kept mode that lost its rates outside a poll: the registers name the mode."""
+        self._extended_mode = _derive_extended_mode(*image)
+        self._unconfirmed_polls = None
+
+    def _observe(self, image: _Image) -> None:
+        """A read outside a poll showed ``image``."""
+        if self._see(image):
+            self._yield_a_kept_mode(image)
+
+    def _begin_a_write(self) -> None:
+        """A write may reach the device even when it fails: nothing seen before it confirms it."""
+        self._evidence = None
+        self._confirmable = False
+        # A kept mode still holds here only while every read showed the start.
+        start = self._start_image
+        if self._leave_the_start() and start is not None:
+            self._yield_a_kept_mode(start)
+
+    def _settle_a_write(self, image: _Image) -> None:
+        """The poll that shows a write in place: the only one that leaves evidence for saved()."""
+        # Registers that hold the selected mode but read as another one hold
+        # exactly the rates Home Assistant wrote (_holds_selected).
+        shared = _derive_extended_mode(*image) is not self.extended_mode
+        if self._confirmable and shared:
+            self._evidence = (self.extended_mode, image)
+        self._confirmable = False
+        self._unconfirmed_polls = None
 
     def sync_from_device(self) -> None:
         """Reconcile the extended mode with the registers of the last poll.
@@ -188,9 +343,14 @@ class StorageControl:
         derived = _derive_extended_mode(mode, in_rate, out_rate)
         if self._extended_mode is None:
             self._extended_mode = derived
+            self._start_image = image
+            waiting, self._waiting = self._waiting, None
+            if waiting is not None:
+                self._take_back(*waiting)
             return
+        self._see(image)
         if self._holds_selected(self.extended_mode, mode, in_rate, out_rate):
-            self._unconfirmed_polls = None
+            self._settle_a_write(image)
             return
         if self._unconfirmed_polls is not None:
             self._unconfirmed_polls += 1
@@ -222,7 +382,8 @@ class StorageControl:
         another mode at a rate of 0 (PV Charge Limit at 0 W reads as Block
         Charging), and is the selected mode's only while it holds the rates
         Home Assistant wrote: evcc's hold charge writes the same registers
-        (callifo 141). Nothing written since a restart: the registers decide.
+        (callifo 141). Nothing written or kept since a restart: the registers
+        decide.
         """
         # Another controller may write the same mode on another base mode
         # (evcc holds with StorCtl_Mod 2 where this integration writes 3).
@@ -338,12 +499,14 @@ class StorageControl:
             }
             if kept[0] is not None:
                 written[kept[0]] = kept[1]
+            self._begin_a_write()
             for field_name, value in writes:
                 if field_name not in holding:
                     await self._storage.write(field_name, value)
             self._extended_mode = mode
             self._unconfirmed_polls = 0
             self._written = written
+            self._confirmable = True
 
     async def set_charge_limit_w(self, watts: float) -> None:
         """Write InWRte from watts, clamped to the charge rate maximum."""
@@ -423,6 +586,7 @@ class StorageControl:
         async with self._write_lock:
             if not allowed():
                 raise refusal
+            admitted = self.extended_mode
             value = await written_value(self._storage, field_name, percent())
             mode, in_rate, out_rate = await self._image_for_a_rate()
             # A rate StorCtl_Mod keeps off is ignored by the device; another
@@ -452,14 +616,17 @@ class StorageControl:
                     "select the storage mode again",
                 )
             holding = await registers_holding(self._storage, {field_name: value})
+            self._begin_a_write()
             if field_name not in holding:
                 await self._storage.write(field_name, value)
             if switched_on != mode:
                 await self._storage.write("stor_ctl_mod", switched_on)
             # A poll that read the registers before this write judges the
             # image before it: until one confirms, that is no outside change.
+            self._extended_mode = admitted
             self._written = {"in_w_rte": in_rate, "out_w_rte": out_rate}
             self._unconfirmed_polls = 0
+            self._confirmable = True
 
     async def _grid_power_kept(
         self, mode: ExtendedMode
@@ -479,6 +646,7 @@ class StorageControl:
         # Unreadable for a moment right after a write: the power just set stays.
         if image is None:
             return field_name, self._written.get(field_name, 0.0)
+        self._observe(image)
         if self._holds_selected(mode, *image):
             return field_name, image[1 if field_name == "in_w_rte" else 2]
         return None, None
@@ -489,12 +657,17 @@ class StorageControl:
         A limit mode leaves both sides to the user, so its table says nothing
         about them, and a schedule or another controller may
         have changed the mode since the last poll. Unreadable
-        for a moment right after a write, the mode's table stands in.
+        for a moment right after a write, the mode's table stands in; a mode
+        kept across a restart wrote nothing, so only a live read confirms it.
         """
         image = await self._live_image()
+        if image is None and self._holds_a_kept_mode:
+            raise _kept_mode_unverified()
         if image is None:
             return _MODE_TABLE[self.extended_mode]
-        if not self._holds_selected(self.extended_mode, *image):
+        selected = self.extended_mode
+        self._observe(image)
+        if not self._holds_selected(selected, *image):
             raise _mode_left()
         return image
 

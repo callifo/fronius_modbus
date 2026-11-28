@@ -1096,6 +1096,9 @@
     "grid_power_beyond_window": {
       "message": "Der Wechselrichter hält eine kombinierte Lade- und Entladegrenze, etwa von einer anderen Steuerung, die diese Netzleistung überschreiten würde. Den Speichermodus erneut wählen, um die Leistung frei zu setzen."
     },
+    "storage_mode_unverified": {
+      "message": "Die Speichereinstellungen des Wechselrichters ließen sich nicht lesen, um den über den Neustart behaltenen Speichermodus zu bestätigen. Bitte erneut versuchen."
+    },
     "storage_mode_left": {
       "message": "Der Wechselrichter ist nicht mehr im gewählten Speichermodus, etwa nach einem Zeitplan oder einer anderen Steuerung. Bitte den Modus erneut wählen."
     },

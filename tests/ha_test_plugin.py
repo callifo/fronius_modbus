@@ -16,12 +16,19 @@ if LEGACY_PLUGIN_INSTALLED:
         MockConfigEntry,
         async_capture_events,
         async_fire_time_changed,
+        mock_restore_cache_with_extra_data,
     )
 else:
     from pytest_homeassistant.common import (
         MockConfigEntry,
         async_capture_events,
         async_fire_time_changed,
+        mock_restore_cache_with_extra_data,
     )
 
-__all__ = ["MockConfigEntry", "async_capture_events", "async_fire_time_changed"]
+__all__ = [
+    "MockConfigEntry",
+    "async_capture_events",
+    "async_fire_time_changed",
+    "mock_restore_cache_with_extra_data",
+]

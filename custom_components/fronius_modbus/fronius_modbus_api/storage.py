@@ -220,6 +220,9 @@ class StorageControl:
             self._written["in_w_rte"],
             self._written["out_w_rte"],
         )
+        # A late poll with the old rate still reads as the mode and confirms it.
+        if self._applied_image != image:
+            return None
         if _derive_extended_mode(*image) is mode:
             return None
         return {"mode": mode.name, "image": list(image)}

@@ -4998,6 +4998,13 @@
     "tests": "a_0_w_no_poll_showed_yet_is_not_saved"
   },
   {
+    "label": "storage: a mode at 0 W is saved only on the registers a poll showed",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "        if self._applied_image != image:\n            return None\n",
+    "new": "",
+    "tests": "a_0_w_the_polls_showed_only_as_the_old_rate_is_not_saved"
+  },
+  {
     "label": "storage: a mode its registers name alone is not saved",
     "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
     "old": "        if _derive_extended_mode(*image) is mode:\n            return None\n        return {",

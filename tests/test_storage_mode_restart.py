@@ -330,6 +330,196 @@ async def test_a_0_w_no_poll_showed_yet_is_not_saved(inverter_unit):
     assert control.saved() is None
 
 
+def _fail_the_mode_write(control) -> object:
+    """Let the StorCtl_Mod write fail after the rates went through; returns the real writer."""
+    write = control._storage.write
+
+    async def mode_write_fails(name, value):
+        if name == "stor_ctl_mod":
+            raise ServerDeviceFailureError
+        await write(name, value)
+
+    control._storage.write = mode_write_fails
+    return write
+
+
+@pytest.mark.parametrize(
+    ("mode", "setter", "image", "shared", "foreign"), AT_ZERO, ids=AT_ZERO_IDS
+)
+async def test_a_refused_command_leaves_no_kept_mode_for_an_unreadable_retry(
+    inverter_unit, mode, setter, image, shared, foreign
+):
+    """The kept mode stayed selected without its rates, and its table stood in."""
+    saved = await _saved_at_zero(inverter_unit, mode, setter)
+    restarted = await _control(inverter_unit)
+    restarted.restore(saved)
+    _hold(inverter_unit.holding, foreign)
+    with pytest.raises(ControlRefused):
+        await getattr(restarted, setter)(HALF_W)
+    inverter_unit.fail_read(STOR_CTL_MOD, ServerDeviceFailureError())
+    writes = _writes(inverter_unit)
+
+    with pytest.raises((ControlRefused, ControlUnavailable)):
+        await getattr(restarted, setter)(HALF_W)
+    assert writes == []
+
+
+@pytest.mark.parametrize(
+    ("mode", "setter", "image", "shared", "foreign"), AT_ZERO, ids=AT_ZERO_IDS
+)
+async def test_a_failed_mode_change_leaves_no_kept_mode_for_an_unreadable_retry(
+    inverter_unit, mode, setter, image, shared, foreign
+):
+    saved = await _saved_at_zero(inverter_unit, mode, setter)
+    restarted = await _control(inverter_unit)
+    restarted.restore(saved)
+    write = _fail_the_mode_write(restarted)
+    with pytest.raises(ServerDeviceFailureError):
+        await restarted.set_mode(ExtendedMode.AUTO)
+    restarted._storage.write = write
+    _hold(inverter_unit.holding, image)
+    inverter_unit.fail_read(STOR_CTL_MOD, ServerDeviceFailureError())
+    writes = _writes(inverter_unit)
+
+    with pytest.raises((ControlRefused, ControlUnavailable)):
+        await getattr(restarted, setter)(HALF_W)
+    assert writes == []
+
+
+@pytest.mark.parametrize(
+    ("mode", "setter", "image", "shared", "foreign"), AT_ZERO, ids=AT_ZERO_IDS
+)
+async def test_a_failed_mode_change_leaves_no_confirmed_zero_to_save(
+    inverter_unit, mode, setter, image, shared, foreign
+):
+    """The rates may be on the device already; the last poll still showed the zero."""
+    control = await _control(inverter_unit)
+    await control.set_mode(mode)
+    await getattr(control, setter)(0)
+    await _poll(control)
+    assert control.saved() is not None
+    _fail_the_mode_write(control)
+
+    with pytest.raises(ServerDeviceFailureError):
+        await control.set_mode(ExtendedMode.AUTO)
+
+    assert control.saved() is None
+
+
+@pytest.mark.parametrize(
+    ("mode", "setter", "image", "shared", "foreign"), AT_ZERO, ids=AT_ZERO_IDS
+)
+async def test_a_live_read_that_disproves_a_confirmed_zero_leaves_nothing_to_save(
+    inverter_unit, mode, setter, image, shared, foreign
+):
+    control = await _control(inverter_unit)
+    await control.set_mode(mode)
+    await getattr(control, setter)(0)
+    await _poll(control)
+    _hold(inverter_unit.holding, foreign)
+
+    with pytest.raises(ControlRefused):
+        await getattr(control, setter)(HALF_W)
+
+    _hold(inverter_unit.holding, image)
+    assert control.saved() is None
+
+
+@pytest.mark.parametrize(
+    ("mode", "setter", "image", "shared", "foreign"), AT_ZERO, ids=AT_ZERO_IDS
+)
+async def test_a_repeated_zero_lets_no_foreign_zero_be_saved(
+    inverter_unit, mode, setter, image, shared, foreign
+):
+    """Nothing to write, the repeat reset what the polls had shown of the zero."""
+    control = await _control(inverter_unit)
+    await control.set_mode(mode)
+    await getattr(control, setter)(0)
+    await _poll(control)
+    await getattr(control, setter)(0)
+    zero_rate = _zero_rate(image)
+    inverter_unit.holding[zero_rate] = _KEPT_MODE_CHANGE[mode] & 0xFFFF
+    await _poll(control, 1)
+    inverter_unit.holding[zero_rate] = 0
+    await _poll(control)
+
+    assert control.saved() is None
+
+
+async def test_a_repeated_zero_a_poll_shows_again_is_saved(inverter_unit):
+    control = await _control(inverter_unit)
+    await control.set_mode(ExtendedMode.PV_CHARGE_LIMIT)
+    await control.set_charge_limit_w(0)
+    await _poll(control)
+    await control.set_charge_limit_w(0)
+
+    await _poll(control, 1)
+
+    assert control.saved() == {
+        "mode": "PV_CHARGE_LIMIT",
+        "image": [1, 0.0, FULL_RATE_PCT],
+    }
+
+
+# A kept grid mode at 0 W, another controller's grid image with an opposing
+# limit the power then exceeds, and the setter.
+_GRID_WINDOWS = [
+    (
+        ExtendedMode.DISCHARGE_TO_GRID,
+        "set_grid_discharge_power_w",
+        (1, 0, FULL),
+        (3, -FULL // 10, FULL // 5),
+    ),
+    (
+        ExtendedMode.CHARGE_FROM_GRID,
+        "set_grid_charge_power_w",
+        (2, FULL, 0),
+        (3, FULL // 5, -FULL // 10),
+    ),
+]
+
+
+@pytest.mark.parametrize(("mode", "setter", "image", "other"), _GRID_WINDOWS)
+async def test_another_controller_s_grid_image_ends_the_kept_zero(
+    inverter_unit, mode, setter, image, other
+):
+    """Admitted on its own mode and refused by the window, the read still disproved the zero."""
+    saved = await _saved_at_zero(inverter_unit, mode, setter)
+    restarted = await _control(inverter_unit)
+    restarted.restore(saved)
+    _hold(inverter_unit.holding, other)
+    with pytest.raises(ControlRefused) as refused:
+        await getattr(restarted, setter)(HALF_W)
+    assert refused.value.key == "grid_power_beyond_window"
+    _hold(inverter_unit.holding, image)
+    writes = _writes(inverter_unit)
+
+    with pytest.raises(ControlRefused):
+        await getattr(restarted, setter)(1024)
+    assert writes == []
+
+
+# The storage cache at a second unload while a kept mode waits for the first
+# judged read: nothing read, the kept registers, or another image.
+_WAITING_CACHE = [(None, True), ((1, 0, FULL), True), ((3, 0, FULL), False)]
+
+
+@pytest.mark.parametrize(("cached", "kept"), _WAITING_CACHE)
+async def test_a_waiting_mode_is_saved_again_unless_a_read_contradicts_it(
+    inverter_unit, cached, kept
+):
+    saved = await _saved_at_zero(
+        inverter_unit, ExtendedMode.PV_CHARGE_LIMIT, "set_charge_limit_w"
+    )
+    restarted = await _control(inverter_unit, read=False)
+    restarted.restore(saved)
+    if cached is not None:
+        _hold(inverter_unit.holding, cached)
+        await restarted._storage.async_update()
+
+    assert (restarted.saved() == saved) is kept
+
+
 async def test_a_0_w_the_polls_showed_only_as_the_old_rate_is_not_saved(
     inverter_unit,
 ):

@@ -1,8 +1,11 @@
 """What the inverters of one Datamanager share: one entry has it, the others do not."""
 
+import asyncio
+
 from modbus_connection import ModbusConnectionError, ModbusTimeoutError
 import pytest
 
+from custom_components import fronius_modbus
 from custom_components.fronius_modbus import migrations
 from custom_components.fronius_modbus.const import (
     CONF_DATAMANAGER,
@@ -70,6 +73,26 @@ async def start(hass, *entries) -> None:
     assert [entry.state for entry in entries] == [ConfigEntryState.LOADED] * len(
         entries
     )
+
+
+def hold_the_restart(monkeypatch, entry) -> asyncio.Event:
+    """Keep the entry's second setup, its restart, waiting until the event is set.
+
+    A busy runner was still restarting the owner when its first setup answered.
+    """
+    original = fronius_modbus.async_setup_entry
+    release = asyncio.Event()
+    setups = []
+
+    async def held(hass, setting_up):
+        if setting_up is entry:
+            setups.append(setting_up)
+            if len(setups) == 2:
+                await release.wait()
+        return await original(hass, setting_up)
+
+    monkeypatch.setattr(fronius_modbus, "async_setup_entry", held)
+    return release
 
 
 def owns(hass, entry) -> bool:
@@ -244,10 +267,14 @@ async def test_the_load_turns_unknown_when_a_second_inverter_joins_the_search(
     monkeypatch.setattr(
         FroniusInverter, "async_probe_meter", staticmethod(set_up_the_second_meanwhile)
     )
+    release = hold_the_restart(monkeypatch, first)
 
-    assert await hass.config_entries.async_setup(first.entry_id)
+    # Its answer is the state at that moment, which the restart may have left.
+    await hass.config_entries.async_setup(first.entry_id)
+    release.set()
     await hass.async_block_till_done()
 
+    assert first.state is ConfigEntryState.LOADED
     assert joined[0].state is ConfigEntryState.LOADED
     assert state_of(hass, first, "load") == "unknown"
 
@@ -270,10 +297,14 @@ async def test_the_load_turns_unknown_when_an_inverter_joins_the_migrations(
     monkeypatch.setattr(
         migrations, "async_remove_legacy_devices", set_up_the_second_meanwhile
     )
+    release = hold_the_restart(monkeypatch, first)
 
-    assert await hass.config_entries.async_setup(first.entry_id)
+    # Its answer is the state at that moment, which the restart may have left.
+    await hass.config_entries.async_setup(first.entry_id)
+    release.set()
     await hass.async_block_till_done()
 
+    assert first.state is ConfigEntryState.LOADED
     assert joined[0].state is ConfigEntryState.LOADED
     assert state_of(hass, first, "load") == "unknown"
 

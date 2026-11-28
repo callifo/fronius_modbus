@@ -333,6 +333,19 @@ async def test_a_mode_chosen_before_the_restore_wins(inverter_unit):
     assert restarted.extended_mode is ExtendedMode.DISCHARGE_TO_GRID
 
 
+async def test_a_limit_set_before_the_restore_wins(inverter_unit):
+    """A restore judged before the next poll took the old registers for its own."""
+    saved = await _saved_at_zero(
+        inverter_unit, ExtendedMode.PV_CHARGE_LIMIT, "set_charge_limit_w"
+    )
+    restarted = await _control(inverter_unit)
+    await restarted.set_discharge_limit_w(HALF_W)
+
+    restarted.restore(saved)
+
+    assert restarted.extended_mode is ExtendedMode.BLOCK_CHARGING
+
+
 async def test_a_restore_after_a_change_since_the_first_read_is_ignored(
     inverter_unit,
 ):

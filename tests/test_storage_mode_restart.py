@@ -588,6 +588,21 @@ async def test_a_mode_chosen_over_a_saved_one_waits_for_a_poll(inverter_unit):
     assert control.saved() is None
 
 
+async def test_a_limit_set_over_a_saved_zero_leaves_nothing_until_a_poll(
+    inverter_unit,
+):
+    """The last poll still shows the zero the new limit replaced."""
+    control = await _control(inverter_unit)
+    await control.set_mode(ExtendedMode.PV_CHARGE_LIMIT)
+    await control.set_charge_limit_w(0)
+    await _poll(control)
+    assert control.saved() is not None
+
+    await control.set_charge_limit_w(HALF_W)
+
+    assert control.saved() is None
+
+
 async def test_a_limit_read_but_not_judged_yet_is_not_saved(inverter_unit):
     control = await _control(inverter_unit)
     await control.set_mode(ExtendedMode.PV_CHARGE_LIMIT)

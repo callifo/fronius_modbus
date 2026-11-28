@@ -1,6 +1,6 @@
 """Issue 187: a storage mode with a limit of 0 W read like a block mode after a restart."""
 
-from modbus_connection import ServerDeviceFailureError
+from modbus_connection import ModbusTimeoutError, ServerDeviceFailureError
 from modbus_connection.model.sunspec import scan
 import pytest
 
@@ -9,6 +9,9 @@ from custom_components.fronius_modbus.const import (
     DOMAIN,
     STORAGE_EXT_CONTROL_MODE,
     entity_prefix,
+)
+from custom_components.fronius_modbus.fronius_modbus_api import (
+    storage as storage_module,
 )
 from custom_components.fronius_modbus.fronius_modbus_api.exceptions import (
     ControlRefused,
@@ -518,6 +521,166 @@ async def test_a_waiting_mode_is_saved_again_unless_a_read_contradicts_it(
         await restarted._storage.async_update()
 
     assert (restarted.saved() == saved) is kept
+
+
+@pytest.mark.parametrize(
+    ("mode", "setter", "image", "shared", "foreign"), AT_ZERO, ids=AT_ZERO_IDS
+)
+async def test_a_lost_reply_to_a_limit_ends_the_kept_mode(
+    inverter_unit, mode, setter, image, shared, foreign
+):
+    """The inverter took the limit, the reply never came; the kept 0 W is no longer there."""
+    saved = await _saved_at_zero(inverter_unit, mode, setter)
+    restarted = await _control(inverter_unit)
+    restarted.restore(saved)
+    write = restarted._storage.write
+
+    async def applied_reply_lost(name, value):
+        await write(name, value)
+        raise ModbusTimeoutError
+
+    restarted._storage.write = applied_reply_lost
+    with pytest.raises(ModbusTimeoutError):
+        await getattr(restarted, setter)(2 * HALF_W // 5)
+    restarted._storage.write = write
+    _hold(inverter_unit.holding, image)
+    writes = _writes(inverter_unit)
+
+    with pytest.raises(ControlRefused):
+        await getattr(restarted, setter)(1024)
+    assert writes == []
+
+
+# A kept grid mode at 0 W, another controller's block mode on the other
+# base, and the limit that block holds at 0 W.
+_FOREIGN_BLOCKS = [
+    (
+        ExtendedMode.DISCHARGE_TO_GRID,
+        "set_grid_discharge_power_w",
+        (2, FULL, 0),
+        "set_discharge_limit_w",
+    ),
+    (
+        ExtendedMode.CHARGE_FROM_GRID,
+        "set_grid_charge_power_w",
+        (1, 0, FULL),
+        "set_charge_limit_w",
+    ),
+]
+
+
+@pytest.mark.parametrize(("mode", "setter", "block", "limit"), _FOREIGN_BLOCKS)
+async def test_a_failed_grid_reselection_follows_the_registers_it_read(
+    inverter_unit, mode, setter, block, limit
+):
+    """The failed choice fell back to the start image and opened the other block's limit."""
+    saved = await _saved_at_zero(inverter_unit, mode, setter)
+    restarted = await _control(inverter_unit)
+    restarted.restore(saved)
+    _hold(inverter_unit.holding, block)
+    write = restarted._storage.write
+
+    async def first_write_fails(name, value):
+        raise ServerDeviceFailureError
+
+    restarted._storage.write = first_write_fails
+    with pytest.raises(ServerDeviceFailureError):
+        await restarted.set_mode(mode)
+    restarted._storage.write = write
+    inverter_unit.fail_read(STOR_CTL_MOD, ServerDeviceFailureError())
+    writes = _writes(inverter_unit)
+
+    with pytest.raises((ControlRefused, ControlUnavailable)):
+        await getattr(restarted, limit)(1024)
+    assert writes == []
+
+
+@pytest.mark.parametrize(("mode", "setter", "block", "limit"), _FOREIGN_BLOCKS)
+async def test_a_grid_reselection_that_read_another_mode_leaves_nothing_to_save(
+    inverter_unit, monkeypatch, mode, setter, block, limit
+):
+    saved = await _saved_at_zero(inverter_unit, mode, setter)
+    restarted = await _control(inverter_unit)
+    restarted.restore(saved)
+    _hold(inverter_unit.holding, block)
+    saved_meanwhile = []
+    holding = storage_module.registers_holding
+
+    async def save_then_read(component, values):
+        saved_meanwhile.append(restarted.saved())
+        return await holding(component, values)
+
+    monkeypatch.setattr(storage_module, "registers_holding", save_then_read)
+    await restarted.set_mode(mode)
+
+    assert saved_meanwhile == [None]
+
+
+@pytest.mark.parametrize(
+    ("mode", "setter", "image", "shared", "foreign"), AT_ZERO, ids=AT_ZERO_IDS
+)
+async def test_a_read_no_poll_judged_still_ends_a_saved_zero(
+    inverter_unit, mode, setter, image, shared, foreign
+):
+    """A later part of the poll failed, so it never judged the storage it read."""
+    control = await _control(inverter_unit)
+    await control.set_mode(mode)
+    await getattr(control, setter)(0)
+    await _poll(control)
+    _hold(inverter_unit.holding, foreign)
+    await control._storage.async_update()
+    assert control.saved() is None
+    _hold(inverter_unit.holding, image)
+
+    await _poll(control)
+
+    assert control.saved() is None
+
+
+@pytest.mark.parametrize(
+    ("mode", "setter", "image", "shared", "foreign"), AT_ZERO, ids=AT_ZERO_IDS
+)
+async def test_a_read_no_poll_judged_still_ends_a_waiting_mode(
+    inverter_unit, mode, setter, image, shared, foreign
+):
+    saved = await _saved_at_zero(inverter_unit, mode, setter)
+    restarted = await _control(inverter_unit, read=False)
+    restarted.restore(saved)
+    _hold(inverter_unit.holding, foreign)
+    await restarted._storage.async_update()
+    assert restarted.saved() is None
+    _hold(inverter_unit.holding, image)
+
+    await _poll(restarted)
+
+    assert restarted.extended_mode is shared
+
+
+# A grid mode at half power, its setter, and the rate Auto writes first.
+_GRID_AT_HALF = [
+    (ExtendedMode.DISCHARGE_TO_GRID, "set_grid_discharge_power_w", (1, 0, FULL)),
+    (ExtendedMode.CHARGE_FROM_GRID, "set_grid_charge_power_w", (2, FULL, 0)),
+]
+
+
+@pytest.mark.parametrize(("mode", "setter", "image"), _GRID_AT_HALF)
+async def test_a_failed_write_leaves_no_earlier_request_to_confirm(
+    inverter_unit, mode, setter, image
+):
+    """Auto overwrote the rate before it failed; another controller's 0 then confirmed the 0 W."""
+    control = await _control(inverter_unit)
+    await control.set_mode(mode)
+    await getattr(control, setter)(HALF_W)
+    await _poll(control)
+    await getattr(control, setter)(0)
+    _fail_the_mode_write(control)
+    with pytest.raises(ServerDeviceFailureError):
+        await control.set_mode(ExtendedMode.AUTO)
+    _hold(inverter_unit.holding, image)
+
+    await _poll(control)
+
+    assert control.saved() is None
 
 
 async def test_a_0_w_the_polls_showed_only_as_the_old_rate_is_not_saved(
